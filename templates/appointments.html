@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}Appointments{% endblock %}
+
+{% block content %}
+<section class="section-head">
+    <div>
+        <p class="eyebrow">Care coordination</p>
+        <h1>Appointments</h1>
+    </div>
+</section>
+
+<section class="grid two">
+    <form class="panel" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <h2>Request Appointment</h2>
+        <label>Provider Email
+            <input name="provider_email" type="email" placeholder="doctor@example.com">
+        </label>
+        <label>Provider Name
+            <input name="provider_name" placeholder="Provider or clinic name">
+        </label>
+        <label>Date And Time
+            <input name="scheduled_for" type="datetime-local" required>
+        </label>
+        <label>Reason
+            <textarea name="reason" rows="4" required></textarea>
+        </label>
+        <button type="submit">Save Appointment</button>
+    </form>
+
+    <div class="panel">
+        <h2>Appointment List</h2>
+        {% if appointments %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Patient</th>
+                        <th>Provider</th>
+                        <th>When</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for appointment in appointments %}
+                        <tr>
+                            <td>{{ appointment.patient_name }}</td>
+                            <td>{{ appointment.provider_display }}</td>
+                            <td>{{ appointment.scheduled_for }}</td>
+                            <td>
+                                {% if current_user.role in ['doctor', 'hospital', 'admin'] %}
+                                    <form method="POST" action="{{ url_for('update_appointment_status', appointment_id=appointment.id) }}" class="inline-form">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                        <select name="status">
+                                            {% for status in ['requested', 'confirmed', 'completed', 'cancelled'] %}
+                                                <option value="{{ status }}" {% if status == appointment.status %}selected{% endif %}>{{ status }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        <button type="submit">Update</button>
+                                    </form>
+                                {% else %}
+                                    {{ appointment.status }}
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p>No appointments saved yet.</p>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}ZENDOC Healthcare Platform{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <div>
+        <p class="eyebrow">AI-powered healthcare ecosystem</p>
+        <h1>ZENDOC</h1>
+        <p class="subtitle">Diagnosis support, appointments, medical records, mental health support, and mobile-ready healthcare workflows.</p>
+    </div>
+</section>
+
+<section class="grid two">
+    <div class="panel">
+        <h2>Login</h2>
+        <div class="button-list">
+            <a href="{{ url_for('login', user='patient') }}">Patients</a>
+            <a href="{{ url_for('login', user='doctor') }}">Doctors</a>
+            <a href="{{ url_for('login', user='hospital') }}">Hospitals</a>
+            <a href="{{ url_for('login', user='pharmacy') }}">Pharmacy</a>
+            <a href="{{ url_for('login', user='government') }}">Government / Research</a>
+            <a href="{{ url_for('login', user='admin') }}">Admin</a>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h2>Register</h2>
+        <div class="button-list">
+            <a href="{{ url_for('register', user='patient') }}">Patient Register</a>
+            <a href="{{ url_for('register', user='doctor') }}">Doctor Register</a>
+            <a href="{{ url_for('register', user='hospital') }}">Hospital Register</a>
+            <a href="{{ url_for('register', user='pharmacy') }}">Pharmacy Register</a>
+            <a href="{{ url_for('register', user='government') }}">Government Register</a>
+        </div>
+    </div>
+</section>
+{% endblock %}

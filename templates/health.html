@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}Health Monitoring{% endblock %}
+
+{% block content %}
+<section class="section-head">
+    <div>
+        <p class="eyebrow">Vitals and monitoring</p>
+        <h1>Health Monitoring</h1>
+    </div>
+</section>
+
+<section class="grid two">
+    <form class="panel" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <h2>Add Metric</h2>
+        <label>Metric Type
+            <input name="metric_type" placeholder="Blood pressure, glucose, weight" required>
+        </label>
+        <label>Value
+            <input name="metric_value" placeholder="120/80, 96, 72" required>
+        </label>
+        <label>Unit
+            <input name="unit" placeholder="mmHg, mg/dL, kg">
+        </label>
+        <button type="submit">Save Metric</button>
+    </form>
+
+    <div class="panel">
+        <h2>Recent Metrics</h2>
+        {% if metrics %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Type</th>
+                        <th>Value</th>
+                        <th>Unit</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for metric in metrics %}
+                        <tr>
+                            <td>{{ metric.metric_type }}</td>
+                            <td>{{ metric.metric_value }}</td>
+                            <td>{{ metric.unit }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p>No health metrics saved yet.</p>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

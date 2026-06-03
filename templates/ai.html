@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}AI Center{% endblock %}
+
+{% block content %}
+<section class="section-head">
+    <div>
+        <p class="eyebrow">Clinical decision support architecture</p>
+        <h1>AI Center</h1>
+    </div>
+</section>
+
+{% if result %}
+    <section class="result">
+        <strong>Risk: {{ result.risk }}</strong>
+        <p class="ai-output">{{ result.text }}</p>
+    </section>
+{% endif %}
+
+<section class="grid three">
+    <form class="panel" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="feature" value="doctor">
+        <h2>AI Doctor ML Triage</h2>
+        <label>Symptoms
+            <textarea name="symptoms" rows="5" placeholder="Example: fever, cough, chest pain, duration, age, severity" required></textarea>
+        </label>
+        <button type="submit">Predict</button>
+    </form>
+
+    <form class="panel" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="feature" value="assistant">
+        <h2>ML Smart Assistant</h2>
+        <label>Question
+            <textarea name="message" rows="5" placeholder="Ask about appointments, records, login, emergency help, or ZENDOC owner" required></textarea>
+        </label>
+        <button type="submit">Ask</button>
+    </form>
+
+    <form class="panel" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="feature" value="mental_health">
+        <h2>Mental Health AI</h2>
+        <label>Age Group
+            <select name="age_group">
+                <option value="student">Student</option>
+                <option value="working professional">Working Professional</option>
+                <option value="elderly">Elderly</option>
+                <option value="adult">Adult</option>
+            </select>
+        </label>
+        <label>Stress Level
+            <input name="stress_level" type="number" min="0" max="10" value="5">
+        </label>
+        <label>Context
+            <textarea name="context" rows="4" placeholder="Work, study, sleep, mood, family, health concerns"></textarea>
+        </label>
+        <button type="submit">Analyze</button>
+    </form>
+</section>
+
+<section class="panel">
+    <h2>Recent AI Interactions</h2>
+    {% if history %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Feature</th>
+                    <th>Risk</th>
+                    <th>Output</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in history %}
+                    <tr>
+                        <td>{{ item.feature }}</td>
+                        <td>{{ item.risk_level }}</td>
+                        <td>{{ item.output_text }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>No AI interactions yet.</p>
+    {% endif %}
+</section>
+{% endblock %}

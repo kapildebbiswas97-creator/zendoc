@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard{% endblock %}
+
+{% block content %}
+<section class="section-head">
+    <div>
+        <p class="eyebrow">Operations</p>
+        <h1>Admin Dashboard</h1>
+    </div>
+</section>
+
+<section class="stats">
+    {% for label, value in stats.items() %}
+        <article>
+            <span>{{ label.replace('_', ' ').title() }}</span>
+            <strong>{{ value }}</strong>
+        </article>
+    {% endfor %}
+</section>
+
+<section class="panel">
+    <h2>ZENDOC Owner</h2>
+    <p><strong>{{ owner_name }}</strong> is configured as the owner/admin for this local ZENDOC installation.</p>
+    <p>Owner email: {{ owner_email }}</p>
+</section>
+
+<section class="panel">
+    <h2>Production Readiness Notes</h2>
+    <p>Admin controls now read live database statistics. Public users must register normally, while the owner/admin account is seeded automatically by the app.</p>
+</section>
+{% endblock %}

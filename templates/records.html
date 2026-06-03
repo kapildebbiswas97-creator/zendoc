@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Medical Records{% endblock %}
+
+{% block content %}
+<section class="section-head">
+    <div>
+        <p class="eyebrow">Reports and documents</p>
+        <h1>Medical Records</h1>
+    </div>
+</section>
+
+<section class="grid two">
+    <form class="panel" method="POST" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <h2>Upload Record</h2>
+        <label>Title
+            <input name="title" placeholder="Blood test, prescription, scan report" required>
+        </label>
+        <label>Category
+            <input name="category" placeholder="Lab, Imaging, Prescription, General" required>
+        </label>
+        <label>File
+            <input name="record_file" type="file" required>
+        </label>
+        <button type="submit">Upload</button>
+    </form>
+
+    <div class="panel">
+        <h2>Available Records</h2>
+        {% if records %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Title</th>
+                        <th>Category</th>
+                        <th>File</th>
+                        <th>Download</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for record in records %}
+                        <tr>
+                            <td>{{ record.title }}</td>
+                            <td>{{ record.category }}</td>
+                            <td>{{ record.original_filename }}</td>
+                            <td><a href="{{ url_for('download_record', record_id=record.id) }}">Download</a></td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p>No records uploaded yet.</p>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

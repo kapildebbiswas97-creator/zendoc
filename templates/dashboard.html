@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}{{ user }} Dashboard{% endblock %}
+
+{% block content %}
+<section class="section-head">
+    <div>
+        <p class="eyebrow">{{ user }} Dashboard</p>
+        <h1>Welcome {{ name }}</h1>
+    </div>
+    <a class="primary-action" href="{{ url_for('ai_center') }}">Open AI Center</a>
+</section>
+
+<section class="stats">
+    {% for label, value in stats.items() %}
+        <article>
+            <span>{{ label.replace('_', ' ').title() }}</span>
+            <strong>{{ value }}</strong>
+        </article>
+    {% endfor %}
+</section>
+
+<section class="quick-actions">
+    <a href="{{ url_for('appointments') }}">Manage Appointments</a>
+    <a href="{{ url_for('records') }}">Medical Records</a>
+    <a href="{{ url_for('health_monitoring') }}">Health Monitoring</a>
+    <a href="{{ url_for('ai_center') }}">AI Doctor And Assistant</a>
+</section>
+
+<section class="panel">
+    <h2>Recent Appointments</h2>
+    {% if appointments %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Patient</th>
+                    <th>Provider</th>
+                    <th>Schedule</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for appointment in appointments %}
+                    <tr>
+                        <td>{{ appointment.patient_name }}</td>
+                        <td>{{ appointment.provider_display }}</td>
+                        <td>{{ appointment.scheduled_for }}</td>
+                        <td>{{ appointment.status }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>No appointments yet.</p>
+    {% endif %}
+</section>
+{% endblock %}
