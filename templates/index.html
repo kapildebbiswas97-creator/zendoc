@@ -7,11 +7,43 @@
     <div>
         <p class="eyebrow">AI-powered healthcare ecosystem</p>
         <h1>ZENDOC</h1>
-        <p class="subtitle">Diagnosis support, appointments, medical records, mental health support, and mobile-ready healthcare workflows.</p>
+        <p class="subtitle">A connected care platform for AI-guided triage, appointments, medical records, health intelligence, and mental wellness.</p>
+        <div class="hero-actions">
+            <a class="primary-action" href="{{ url_for('login', user='patient') }}">Patient Login</a>
+            <a class="secondary-action" href="{{ url_for('register', user='patient') }}">Create Account</a>
+        </div>
+    </div>
+    <div class="hero-card">
+        <span>Live Care Modules</span>
+        <strong>AI Doctor 2.0</strong>
+        <p>Consultation-style guidance with urgency detection, confidence, and next actions.</p>
     </div>
 </section>
 
-<section class="grid two">
+<section class="feature-strip">
+    <article>
+        <span>01</span>
+        <strong>Clinical Guidance</strong>
+        <p>Human, contextual triage and care preparation.</p>
+    </article>
+    <article>
+        <span>02</span>
+        <strong>Health Intelligence</strong>
+        <p>BMI, risk score, trends, and recommendations.</p>
+    </article>
+    <article>
+        <span>03</span>
+        <strong>Mental Wellness</strong>
+        <p>Mood tracking, breathing, journaling, and support plans.</p>
+    </article>
+    <article>
+        <span>04</span>
+        <strong>Care Operations</strong>
+        <p>Records, appointments, role dashboards, and analytics.</p>
+    </article>
+</section>
+
+<section class="grid two auth-grid">
     <div class="panel">
         <h2>Login</h2>
         <div class="button-list">

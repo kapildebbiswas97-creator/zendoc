@@ -5,8 +5,9 @@
 {% block content %}
 <section class="section-head">
     <div>
-        <p class="eyebrow">Operations</p>
+        <p class="eyebrow">Operations intelligence</p>
         <h1>Admin Dashboard</h1>
+        <p class="subtitle">Growth, engagement, usage, and patient-safety signals for investor and operator review.</p>
     </div>
 </section>
 
@@ -19,6 +20,52 @@
     {% endfor %}
 </section>
 
+<section class="grid three">
+    <div class="panel metric-panel">
+        <h2>Growth</h2>
+        <strong>{{ analytics.growth_metrics.registered_users }}</strong>
+        <span>registered users</span>
+        <p>{{ analytics.growth_metrics.record_uploads }} medical records uploaded.</p>
+    </div>
+    <div class="panel metric-panel">
+        <h2>Engagement</h2>
+        <strong>{{ analytics.engagement_metrics.ai_engagement_rate }}%</strong>
+        <span>AI engagement rate</span>
+        <p>{{ analytics.engagement_metrics.ai_active_users }} users have used AI features.</p>
+    </div>
+    <div class="panel metric-panel">
+        <h2>Care Flow</h2>
+        <strong>{{ analytics.engagement_metrics.care_completion_rate }}%</strong>
+        <span>appointment completion</span>
+        <p>{{ analytics.patient_insights.high_risk_ai_events }} high-risk AI events flagged.</p>
+    </div>
+</section>
+
+<section class="grid two">
+    <div class="panel">
+        <h2>Role Mix</h2>
+        <div class="bar-list">
+            {% for item in analytics.growth_metrics.role_mix %}
+                <div>
+                    <span>{{ item.label }}</span>
+                    <strong>{{ item.value }}</strong>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+    <div class="panel">
+        <h2>AI Feature Usage</h2>
+        <div class="bar-list">
+            {% for item in analytics.engagement_metrics.feature_usage %}
+                <div>
+                    <span>{{ item.label }}</span>
+                    <strong>{{ item.value }}</strong>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+
 <section class="panel">
     <h2>ZENDOC Owner</h2>
     <p><strong>{{ owner_name }}</strong> is configured as the owner/admin for this local ZENDOC installation.</p>
@@ -27,6 +74,6 @@
 
 <section class="panel">
     <h2>Production Readiness Notes</h2>
-    <p>Admin controls now read live database statistics. Public users must register normally, while the owner/admin account is seeded automatically by the app.</p>
+    <p>Admin controls read live database statistics, AI safety events, appointment flow, role mix, and engagement. Owner credentials are now environment-driven or bootstrapped locally outside source code.</p>
 </section>
 {% endblock %}

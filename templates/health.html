@@ -5,9 +5,28 @@
 {% block content %}
 <section class="section-head">
     <div>
-        <p class="eyebrow">Vitals and monitoring</p>
+        <p class="eyebrow">Health intelligence</p>
         <h1>Health Monitoring</h1>
+        <p class="subtitle">Track vitals, mood, and lifestyle signals so ZENDOC can summarize trends and suggest next steps.</p>
     </div>
+</section>
+
+<section class="insight-band">
+    <article>
+        <span>Health Score</span>
+        <strong>{{ intelligence.health_score }}</strong>
+        <progress value="{{ intelligence.health_score }}" max="100"></progress>
+    </article>
+    <article>
+        <span>Risk Score</span>
+        <strong>{{ intelligence.risk_score }}</strong>
+        <progress class="risk" value="{{ intelligence.risk_score }}" max="100"></progress>
+    </article>
+    <article>
+        <span>BMI</span>
+        <strong>{{ intelligence.bmi or 'Pending' }}</strong>
+        <p>Add height and weight to calculate BMI.</p>
+    </article>
 </section>
 
 <section class="grid two">
@@ -15,7 +34,16 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <h2>Add Metric</h2>
         <label>Metric Type
-            <input name="metric_type" placeholder="Blood pressure, glucose, weight" required>
+            <select name="metric_type" required>
+                <option value="Weight">Weight</option>
+                <option value="Height">Height</option>
+                <option value="Blood pressure">Blood pressure</option>
+                <option value="Glucose">Glucose</option>
+                <option value="Heart rate">Heart rate</option>
+                <option value="Sleep">Sleep</option>
+                <option value="Stress">Stress</option>
+                <option value="Mood">Mood</option>
+            </select>
         </label>
         <label>Value
             <input name="metric_value" placeholder="120/80, 96, 72" required>
@@ -26,6 +54,23 @@
         <button type="submit">Save Metric</button>
     </form>
 
+    <div class="panel">
+        <h2>Intelligence Summary</h2>
+        <ul class="clean-list">
+            {% for insight in intelligence.insights %}
+                <li>{{ insight }}</li>
+            {% endfor %}
+        </ul>
+        <h3>Personalized Recommendations</h3>
+        <ul class="clean-list">
+            {% for recommendation in intelligence.recommendations %}
+                <li>{{ recommendation }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+</section>
+
+<section class="grid two">
     <div class="panel">
         <h2>Recent Metrics</h2>
         {% if metrics %}
@@ -49,6 +94,32 @@
             </table>
         {% else %}
             <p>No health metrics saved yet.</p>
+        {% endif %}
+    </div>
+
+    <div class="panel">
+        <h2>Mood Tracking</h2>
+        {% if moods %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Mood</th>
+                        <th>Stress</th>
+                        <th>Wellness</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for mood in moods %}
+                        <tr>
+                            <td>{{ mood.mood.title() }}</td>
+                            <td>{{ mood.stress_level }}/10</td>
+                            <td>{{ mood.wellness_score }}/100</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p>No mood entries yet. Use Mental Wellness in AI Care Studio to start tracking.</p>
         {% endif %}
     </div>
 </section>

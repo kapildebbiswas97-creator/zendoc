@@ -6,7 +6,8 @@
 <section class="section-head">
     <div>
         <p class="eyebrow">{{ user }} Dashboard</p>
-        <h1>Welcome {{ name }}</h1>
+        <h1>Welcome, {{ name }}</h1>
+        <p class="subtitle">Your care activity, health intelligence, and AI guidance in one command center.</p>
     </div>
     <a class="primary-action" href="{{ url_for('ai_center') }}">Open AI Center</a>
 </section>
@@ -20,6 +21,24 @@
     {% endfor %}
 </section>
 
+<section class="insight-band">
+    <article>
+        <span>Health Score</span>
+        <strong>{{ intelligence.health_score }}</strong>
+        <progress value="{{ intelligence.health_score }}" max="100"></progress>
+    </article>
+    <article>
+        <span>Risk Score</span>
+        <strong>{{ intelligence.risk_score }}</strong>
+        <progress class="risk" value="{{ intelligence.risk_score }}" max="100"></progress>
+    </article>
+    <article>
+        <span>BMI</span>
+        <strong>{{ intelligence.bmi or 'Add data' }}</strong>
+        <p>{{ intelligence.summary }}</p>
+    </article>
+</section>
+
 <section class="quick-actions">
     <a href="{{ url_for('appointments') }}">Manage Appointments</a>
     <a href="{{ url_for('records') }}">Medical Records</a>
@@ -27,31 +46,46 @@
     <a href="{{ url_for('ai_center') }}">AI Doctor And Assistant</a>
 </section>
 
-<section class="panel">
-    <h2>Recent Appointments</h2>
-    {% if appointments %}
-        <table>
-            <thead>
-                <tr>
-                    <th>Patient</th>
-                    <th>Provider</th>
-                    <th>Schedule</th>
-                    <th>Status</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for appointment in appointments %}
+<section class="grid two">
+    <div class="panel">
+        <h2>Health Insights</h2>
+        <ul class="clean-list">
+            {% for insight in intelligence.insights %}
+                <li>{{ insight }}</li>
+            {% endfor %}
+        </ul>
+        <h3>Recommendations</h3>
+        <ul class="clean-list">
+            {% for recommendation in intelligence.recommendations %}
+                <li>{{ recommendation }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <div class="panel">
+        <h2>Recent Appointments</h2>
+        {% if appointments %}
+            <table>
+                <thead>
                     <tr>
-                        <td>{{ appointment.patient_name }}</td>
-                        <td>{{ appointment.provider_display }}</td>
-                        <td>{{ appointment.scheduled_for }}</td>
-                        <td>{{ appointment.status }}</td>
+                        <th>Patient</th>
+                        <th>Provider</th>
+                        <th>Status</th>
                     </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    {% else %}
-        <p>No appointments yet.</p>
-    {% endif %}
+                </thead>
+                <tbody>
+                    {% for appointment in appointments %}
+                        <tr>
+                            <td>{{ appointment.patient_name }}</td>
+                            <td>{{ appointment.provider_display }}</td>
+                            <td><span class="status">{{ appointment.status }}</span></td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p>No appointments yet.</p>
+        {% endif %}
+    </div>
 </section>
 {% endblock %}

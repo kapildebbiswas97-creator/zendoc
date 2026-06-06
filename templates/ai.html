@@ -5,15 +5,41 @@
 {% block content %}
 <section class="section-head">
     <div>
-        <p class="eyebrow">Clinical decision support architecture</p>
-        <h1>AI Center</h1>
+        <p class="eyebrow">Care intelligence</p>
+        <h1>AI Care Studio</h1>
+        <p class="subtitle">Consultation-style guidance, health navigation, and mental wellness support that remembers this session.</p>
     </div>
 </section>
 
 {% if result %}
-    <section class="result">
-        <strong>Risk: {{ result.risk }}</strong>
+    <section class="result risk-{{ result.risk }}">
+        {% if result.banner %}
+            <div class="warning-banner">{{ result.banner }}</div>
+        {% endif %}
+        <div class="result-meta">
+            <span class="pill">Risk: {{ result.risk.title() }}</span>
+            <span class="pill">Confidence: {{ result.confidence }}%</span>
+            {% if result.wellness_score %}
+                <span class="pill">Wellness: {{ result.wellness_score }}/100</span>
+            {% endif %}
+        </div>
         <p class="ai-output">{{ result.text }}</p>
+        {% if result.next_actions %}
+            <h3>Next Actions</h3>
+            <ul class="clean-list">
+                {% for action in result.next_actions %}
+                    <li>{{ action }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+        {% if result.questions %}
+            <h3>Follow-Up Questions</h3>
+            <ul class="clean-list">
+                {% for question in result.questions %}
+                    <li>{{ question }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
     </section>
 {% endif %}
 
@@ -21,27 +47,30 @@
     <form class="panel" method="POST">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="feature" value="doctor">
-        <h2>AI Doctor ML Triage</h2>
+        <h2>AI Doctor 2.0</h2>
+        <p class="microcopy">Describe the concern as you would to a clinician.</p>
         <label>Symptoms
-            <textarea name="symptoms" rows="5" placeholder="Example: fever, cough, chest pain, duration, age, severity" required></textarea>
+            <textarea name="symptoms" rows="6" placeholder="Example: 32 years old, fever since yesterday, dry cough, chest tightness, severity 6/10" required></textarea>
         </label>
-        <button type="submit">Predict</button>
+        <button type="submit">Start Consultation</button>
     </form>
 
     <form class="panel" method="POST">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="feature" value="assistant">
-        <h2>ML Smart Assistant</h2>
+        <h2>Smart Assistant 2.0</h2>
+        <p class="microcopy">A healthcare copilot for care tasks and daily decisions.</p>
         <label>Question
-            <textarea name="message" rows="5" placeholder="Ask about appointments, records, login, emergency help, or ZENDOC owner" required></textarea>
+            <textarea name="message" rows="6" placeholder="Ask about appointments, records, medicine reminders, nutrition, lifestyle, or daily coaching" required></textarea>
         </label>
-        <button type="submit">Ask</button>
+        <button type="submit">Ask Copilot</button>
     </form>
 
     <form class="panel" method="POST">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="feature" value="mental_health">
-        <h2>Mental Health AI</h2>
+        <h2>Mental Wellness</h2>
+        <p class="microcopy">Mood tracking, wellness score, breathing reset, and support planning.</p>
         <label>Age Group
             <select name="age_group">
                 <option value="student">Student</option>
@@ -50,13 +79,23 @@
                 <option value="adult">Adult</option>
             </select>
         </label>
+        <label>Mood
+            <select name="mood">
+                <option value="steady">Steady</option>
+                <option value="stressed">Stressed</option>
+                <option value="anxious">Anxious</option>
+                <option value="lonely">Lonely</option>
+                <option value="drained">Drained</option>
+                <option value="hopeful">Hopeful</option>
+            </select>
+        </label>
         <label>Stress Level
             <input name="stress_level" type="number" min="0" max="10" value="5">
         </label>
         <label>Context
             <textarea name="context" rows="4" placeholder="Work, study, sleep, mood, family, health concerns"></textarea>
         </label>
-        <button type="submit">Analyze</button>
+        <button type="submit">Create Support Plan</button>
     </form>
 </section>
 

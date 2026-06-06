@@ -1,62 +1,55 @@
 # ZENDOC Production Roadmap
 
-## Phase 1: MVP Foundation
+## Phase 1: MVP Hardening
 
-- Add persistent database storage.
-- Replace plain-text passwords with strong password hashes.
-- Add secure sessions, route guards, role guards, and CSRF protection.
-- Add functional dashboards for core roles.
-- Add appointment, medical record, notification, and health metric tables.
-- Add basic mobile-ready JSON APIs.
-- Add upload validation and controlled download routes.
+- Move the database from SQLite to Postgres with migrations.
+- Add automated tests for auth, appointments, uploads, AI outputs, API auth, and role authorization.
+- Add rate limiting, password reset, email verification, MFA for admin, and API token expiry/revocation.
+- Add OpenAPI documentation for mobile and partner integrations.
+- Add structured logs, error tracking, uptime checks, and deployment health probes.
 
-## Phase 2: Core Healthcare Workflows
+## Phase 2: Healthcare Data Protection
 
-- Patient profile and medical history.
-- Doctor appointment queue and status updates.
-- Hospital/provider directory.
-- Medical record categorization and timeline.
-- Notification preferences and delivery channels.
-- Admin dashboard for user, appointment, record, and AI usage statistics.
+- Add consent records, privacy settings, and patient data export/delete workflows.
+- Add a full audit dashboard for record access, downloads, login events, and AI interactions.
+- Move uploads to encrypted object storage with malware scanning and signed downloads.
+- Add data retention policies by record type and user role.
+- Complete HIPAA/GDPR-aligned review based on launch geography.
 
-## Phase 3: AI Doctor And Assistant Architecture
+## Phase 3: Clinical AI Governance
 
-- Create a prediction service interface with pluggable providers.
-- Start with deterministic triage and symptom mapping.
-- Add dataset ingestion and model training pipeline.
-- Store model metadata, version, confidence, and evaluation metrics.
-- Add clinical safety rules, disclaimers, and emergency escalation.
-- Add human review workflows for high-risk outputs.
+- Create a pluggable AI provider interface for future LLM and medical model integrations.
+- Store AI prompt versions, response versions, confidence, risk class, and clinician-review status.
+- Add safety review queues for high-risk AI events.
+- Add medical disclaimer, emergency escalation localization, and clinician-approved response templates.
+- Evaluate AI outputs with expert-reviewed test cases before each release.
 
-## Phase 4: Mental Health AI
+## Phase 4: Product Depth
 
-- Age-aware support flows for students, working professionals, and elderly users.
-- Stress scoring architecture.
-- Mood and risk tracking.
-- Escalation paths for crisis keywords.
-- Clinical review and localization support.
+- Add patient profiles, allergies, medications, conditions, family history, and care goals.
+- Add provider directory, appointment availability, reminders, and follow-up workflows.
+- Add report explanation from uploaded files with clinician-friendly summaries.
+- Add medication reminder schedules and adherence tracking.
+- Add nutrition plans, daily coaching, habit streaks, and personalized wellness programs.
 
-## Phase 5: Flutter/FlutterFlow Integration
+## Phase 5: Mobile And API Scale
 
-- Stabilize `/api/v1` endpoints.
-- Add token-based mobile auth.
-- Add OpenAPI documentation.
-- Add pagination, filtering, and structured error responses.
-- Add media upload endpoints compatible with mobile clients.
+- Add pagination, filtering, and stable resource schemas for all `/api/v1` endpoints.
+- Add mobile upload endpoints, push-notification hooks, and device/session management.
+- Add OAuth-compatible auth or short-lived JWT access tokens with refresh tokens.
+- Add API monitoring, request IDs, and versioned client compatibility testing.
 
-## Phase 6: Production Engineering
+## Phase 6: Investor-Ready Operations
 
-- Move secrets to environment variables.
-- Add migrations, test suite, CI/CD, logging, monitoring, backups, and rate limits.
-- Add deployment profiles for staging and production.
-- Add object storage for medical files.
-- Add queue workers for notifications, report processing, and AI jobs.
+- Expand analytics into funnels: registration, activation, AI usage, record upload, appointment request, completion, and retention.
+- Add cohort metrics, daily/weekly active users, engagement frequency, and care-outcome proxies.
+- Add admin segmentation by role, geography, risk level, feature usage, and care pathway.
+- Add exportable investor metrics and board-report snapshots.
 
-## Phase 7: Healthcare Compliance And Scale
+## Phase 7: Cloud Production
 
-- Add consent management, audit trails, access logs, and retention controls.
-- Perform security review and threat modeling.
-- Prepare HIPAA/GDPR-aligned operational processes based on launch geography.
-- Add data residency strategy.
-- Add clinical governance for AI model release and monitoring.
-
+- Deploy with a production WSGI server, managed database, object storage, backups, and secrets manager.
+- Add CI/CD with staging and production environments.
+- Add horizontal scaling behind a load balancer.
+- Add background workers for notifications, file processing, AI review, and analytics aggregation.
+- Add disaster recovery, backup restore drills, and incident response runbooks.
