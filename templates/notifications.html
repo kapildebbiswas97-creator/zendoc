@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block title %}Notifications{% endblock %}
+{% block content %}
+<section class="section-head"><div><p class="eyebrow">Updates</p><h1>Notifications</h1></div></section>
+<section class="panel">{% if notifications %}{% for item in notifications %}<article class="notice"><strong>{{ item.title }}</strong><p>{{ item.message }}</p><span>{{ item.created_at }}</span></article>{% endfor %}{% else %}<p>No notifications.</p>{% endif %}</section>
+{% endblock %}

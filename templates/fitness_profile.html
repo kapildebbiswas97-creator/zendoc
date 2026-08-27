@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}Fitness Profile — ZENDOC{% endblock %}
+
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Personalisation</p>
+    <h1>Fitness Profile</h1>
+    <p class="section-copy">Configure your preferences and constraints so ZENDOC can build tailored workout plans. Your fitness profile remains private to your account.</p>
+  </div>
+  <a href="{{ url_for('fitness.overview') }}" class="secondary-action">Back to Overview</a>
+</section>
+
+<div class="auth-panel" style="width:100%; max-width:800px; margin:0 auto;">
+  <form method="post" action="{{ url_for('fitness.profile_page') }}" class="profile-form">
+    <fieldset>
+      <legend>Goal &amp; Experience</legend>
+      <div class="form-grid">
+        <label>Primary Fitness Goal
+          <select name="fitness_goal" required>
+            <option value="" disabled {% if not profile.fitness_goal %}selected{% endif %}>Select Goal...</option>
+            <option value="general_fitness" {% if profile.fitness_goal == 'general_fitness' %}selected{% endif %}>General Fitness &amp; Wellbeing</option>
+            <option value="fat_loss" {% if profile.fitness_goal == 'fat_loss' %}selected{% endif %}>Fat Loss / Weight Management</option>
+            <option value="strength" {% if profile.fitness_goal == 'strength' %}selected{% endif %}>Build Strength</option>
+            <option value="muscle_building" {% if profile.fitness_goal == 'muscle_building' %}selected{% endif %}>Muscle Building (Hypertrophy)</option>
+            <option value="mobility" {% if profile.fitness_goal == 'mobility' %}selected{% endif %}>Mobility &amp; Joint Health</option>
+            <option value="flexibility" {% if profile.fitness_goal == 'flexibility' %}selected{% endif %}>Flexibility &amp; Stretching</option>
+            <option value="cardio" {% if profile.fitness_goal == 'cardio' %}selected{% endif %}>Cardiovascular Endurance</option>
+          </select>
+        </label>
+
+        <label>Experience Level
+          <select name="experience_level" required>
+            <option value="beginner" {% if profile.experience_level == 'beginner' or not profile.experience_level %}selected{% endif %}>Beginner (new or returning)</option>
+            <option value="intermediate" {% if profile.experience_level == 'intermediate' %}selected{% endif %}>Intermediate (consistent 6+ months)</option>
+            <option value="advanced" {% if profile.experience_level == 'advanced' %}selected{% endif %}>Advanced (experienced training)</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="form-grid" style="margin-top: 14px;">
+        <label>Preferred Workout Type
+          <select name="preferred_workout_type">
+            <option value="mixed" {% if profile.preferred_workout_type == 'mixed' or not profile.preferred_workout_type %}selected{% endif %}>Mixed (Strength + Cardio)</option>
+            <option value="strength" {% if profile.preferred_workout_type == 'strength' %}selected{% endif %}>Strength Training</option>
+            <option value="cardio" {% if profile.preferred_workout_type == 'cardio' %}selected{% endif %}>Cardio Focus</option>
+            <option value="yoga" {% if profile.preferred_workout_type == 'yoga' %}selected{% endif %}>Yoga &amp; Mobility</option>
+          </select>
+        </label>
+
+        <label>Workout Location
+          <select name="workout_location">
+            <option value="home" {% if profile.workout_location == 'home' or not profile.workout_location %}selected{% endif %}>Home</option>
+            <option value="gym" {% if profile.workout_location == 'gym' %}selected{% endif %}>Gym</option>
+            <option value="both" {% if profile.workout_location == 'both' %}selected{% endif %}>Both Home &amp; Gym</option>
+          </select>
+        </label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Available Equipment</legend>
+      <p class="form-note">Select all equipment you have access to. If none selected, bodyweight exercises will be used.</p>
+      <div class="checkbox-grid">
+        {% set eq_list = profile.equipment or [] %}
+        <label class="check-option"><input type="checkbox" name="equipment" value="dumbbell" {% if 'dumbbell' in eq_list %}checked{% endif %}> Dumbbells</label>
+        <label class="check-option"><input type="checkbox" name="equipment" value="resistance_band" {% if 'resistance_band' in eq_list %}checked{% endif %}> Resistance Bands</label>
+        <label class="check-option"><input type="checkbox" name="equipment" value="pull_up_bar" {% if 'pull_up_bar' in eq_list %}checked{% endif %}> Pull-Up Bar</label>
+        <label class="check-option"><input type="checkbox" name="equipment" value="barbell" {% if 'barbell' in eq_list %}checked{% endif %}> Barbell</label>
+        <label class="check-option"><input type="checkbox" name="equipment" value="kettlebell" {% if 'kettlebell' in eq_list %}checked{% endif %}> Kettlebell</label>
+        <label class="check-option"><input type="checkbox" name="equipment" value="bench" {% if 'bench' in eq_list %}checked{% endif %}> Workout Bench</label>
+        <label class="check-option"><input type="checkbox" name="equipment" value="cable" {% if 'cable' in eq_list %}checked{% endif %}> Cable Machine</label>
+        <label class="check-option"><input type="checkbox" name="equipment" value="machine" {% if 'machine' in eq_list %}checked{% endif %}> Gym Machines</label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Schedule &amp; Time Constraints</legend>
+      <div class="form-grid">
+        <label>Available Session Length (minutes)
+          <input type="number" name="available_minutes" value="{{ profile.available_minutes or 45 }}" min="5" max="300" required>
+        </label>
+      </div>
+      <label style="margin-top:12px;">Preferred Workout Days</label>
+      <div class="checkbox-grid">
+        {% set days = profile.preferred_days or [] %}
+        <label class="check-option"><input type="checkbox" name="preferred_days" value="Monday" {% if 'Monday' in days or 'monday' in days %}checked{% endif %}> Monday</label>
+        <label class="check-option"><input type="checkbox" name="preferred_days" value="Tuesday" {% if 'Tuesday' in days or 'tuesday' in days %}checked{% endif %}> Tuesday</label>
+        <label class="check-option"><input type="checkbox" name="preferred_days" value="Wednesday" {% if 'Wednesday' in days or 'wednesday' in days %}checked{% endif %}> Wednesday</label>
+        <label class="check-option"><input type="checkbox" name="preferred_days" value="Thursday" {% if 'Thursday' in days or 'thursday' in days %}checked{% endif %}> Thursday</label>
+        <label class="check-option"><input type="checkbox" name="preferred_days" value="Friday" {% if 'Friday' in days or 'friday' in days %}checked{% endif %}> Friday</label>
+        <label class="check-option"><input type="checkbox" name="preferred_days" value="Saturday" {% if 'Saturday' in days or 'saturday' in days %}checked{% endif %}> Saturday</label>
+        <label class="check-option"><input type="checkbox" name="preferred_days" value="Sunday" {% if 'Sunday' in days or 'sunday' in days %}checked{% endif %}> Sunday</label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Optional Physical Parameters &amp; Limitations</legend>
+      <div class="form-grid">
+        <label>Height (cm)
+          <input type="number" step="0.1" name="height_cm" value="{{ profile.height_cm or '' }}" placeholder="e.g. 175">
+        </label>
+        <label>Current Weight (kg)
+          <input type="number" step="0.1" name="weight_kg" value="{{ profile.weight_kg or '' }}" placeholder="e.g. 72.5">
+        </label>
+      </div>
+      <div class="form-grid" style="margin-top:12px;">
+        <label>Target Weight (kg)
+          <input type="number" step="0.1" name="target_weight_kg" value="{{ profile.target_weight_kg or '' }}" placeholder="e.g. 68.0">
+        </label>
+      </div>
+      <label style="margin-top:12px;">Injuries / Physical Limitations / Notes
+        <textarea name="limitations" rows="3" placeholder="e.g. Previous knee injury, avoid heavy jumping. Sensitive lower back.">{{ profile.limitations or '' }}</textarea>
+      </label>
+    </fieldset>
+
+    <div class="form-actions" style="margin-top:18px;">
+      <button type="submit" class="primary-action">Save Fitness Profile</button>
+      <a href="{{ url_for('fitness.overview') }}" class="secondary-action">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

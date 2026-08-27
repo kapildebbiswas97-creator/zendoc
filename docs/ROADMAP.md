@@ -1,55 +1,50 @@
-# ZENDOC Production Roadmap
+# ZENDOC Roadmap To Full Healthcare Ecosystem
 
-## Phase 1: MVP Hardening
+## Milestones 1-4: Platform And Health Memory
 
-- Move the database from SQLite to Postgres with migrations.
-- Add automated tests for auth, appointments, uploads, AI outputs, API auth, and role authorization.
-- Add rate limiting, password reset, email verification, MFA for admin, and API token expiry/revocation.
-- Add OpenAPI documentation for mobile and partner integrations.
-- Add structured logs, error tracking, uptime checks, and deployment health probes.
+Complete in this codebase: security and authentication hardening, central AI safety and intent routing, verified provider discovery, connected appointments, private health profiles, longitudinal timeline, structured reports, measurements, trends, scoped consent, and mobile APIs.
 
-## Phase 2: Healthcare Data Protection
+## Milestone 5: Fitness And Nutrition
 
-- Add consent records, privacy settings, and patient data export/delete workflows.
-- Add a full audit dashboard for record access, downloads, login events, and AI interactions.
-- Move uploads to encrypted object storage with malware scanning and signed downloads.
-- Add data retention policies by record type and user role.
-- Complete HIPAA/GDPR-aligned review based on launch geography.
+- Fitness plan service with safe personalization boundaries.
+- Exercise education and legitimate video-provider integrations.
+- General wellness nutrition logging and goals.
+- Progress tracking connected to Health Memory with explicit consent.
 
-## Phase 3: Clinical AI Governance
+## Milestone 6: Camera Pose Coach
 
-- Create a pluggable AI provider interface for future LLM and medical model integrations.
-- Store AI prompt versions, response versions, confidence, risk class, and clinician-review status.
-- Add safety review queues for high-risk AI events.
-- Add medical disclaimer, emergency escalation localization, and clinician-approved response templates.
-- Evaluate AI outputs with expert-reviewed test cases before each release.
+- Permission-based pose estimation for supported exercises.
+- Rep counting, bounded form feedback, and session summaries.
+- Device performance and privacy testing.
 
-## Phase 4: Product Depth
+## Milestone 7: Mental Wellness
 
-- Add patient profiles, allergies, medications, conditions, family history, and care goals.
-- Add provider directory, appointment availability, reminders, and follow-up workflows.
-- Add report explanation from uploaded files with clinician-friendly summaries.
-- Add medication reminder schedules and adherence tracking.
-- Add nutrition plans, daily coaching, habit streaks, and personalized wellness programs.
+- Context-aware check-ins, journaling, breathing, sleep, and stress tracking.
+- Strong crisis escalation and age/context-appropriate support.
 
-## Phase 5: Mobile And API Scale
+## Milestone 8: Medicine And Pharmacy
 
-- Add pagination, filtering, and stable resource schemas for all `/api/v1` endpoints.
-- Add mobile upload endpoints, push-notification hooks, and device/session management.
-- Add OAuth-compatible auth or short-lived JWT access tokens with refresh tokens.
-- Add API monitoring, request IDs, and versioned client compatibility testing.
+- Medicine information, medication list, reminders, and prescription storage.
+- Pharmacy discovery and future inventory/order boundaries without AI prescribing.
 
-## Phase 6: Investor-Ready Operations
+## Milestone 9: Admin, Analytics, And Notifications
 
-- Expand analytics into funnels: registration, activation, AI usage, record upload, appointment request, completion, and retention.
-- Add cohort metrics, daily/weekly active users, engagement frequency, and care-outcome proxies.
-- Add admin segmentation by role, geography, risk level, feature usage, and care pathway.
-- Add exportable investor metrics and board-report snapshots.
+- Unified notification delivery architecture.
+- AI safety/usage analytics, moderation, error operations, and expanded audit reporting.
 
-## Phase 7: Cloud Production
+## Milestone 10: Mobile And Production Hardening
 
-- Deploy with a production WSGI server, managed database, object storage, backups, and secrets manager.
-- Add CI/CD with staging and production environments.
-- Add horizontal scaling behind a load balancer.
-- Add background workers for notifications, file processing, AI review, and analytics aggregation.
-- Add disaster recovery, backup restore drills, and incident response runbooks.
+- PostgreSQL migrations.
+- S3-compatible file storage.
+- Redis/worker queue for notifications, extraction, and AI jobs.
+- OpenAPI schema and generated Flutter client models.
+- Structured logs, monitoring, backups, CI/CD, penetration testing, and distributed rate limiting.
+- Data deletion, retention, recovery, and incident response workflows.
+
+## Compliance And Clinical Governance
+
+- Legal review of consent, privacy notices, and regional obligations.
+- Clinical safety review, model evaluation, and human escalation processes.
+- Data retention and deletion policy.
+- Security review and threat modeling.
+- Region-specific HIPAA/GDPR/DPDP alignment.

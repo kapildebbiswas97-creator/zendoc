@@ -1,12 +1,20 @@
 services:
   - type: web
     name: zendoc
-    runtime: python
+    env: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app
+    startCommand: gunicorn run:app --bind 0.0.0.0:$PORT
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.12.4
+      - key: ZENDOC_ENV
+        value: production
       - key: ZENDOC_SECRET_KEY
-        generateValue: true
+        sync: false
+      - key: ZENDOC_ADMIN_EMAIL
+        sync: false
+      - key: ZENDOC_ADMIN_PASSWORD
+        sync: false
+      - key: ZENDOC_MAX_UPLOAD_BYTES
+        value: "10485760"
+      - key: ZENDOC_RATE_LIMIT_PER_MINUTE
+        value: "120"

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}My Health Profile{% endblock %}
+{% block content %}
+<section class="section-head"><div><p class="eyebrow">ZENDOC Health Memory</p><h1>My Health Profile</h1><p class="section-copy">Optional health information you control. Your account name, email, and login details remain separate.</p></div><a class="secondary-action" href="{{ url_for('main.profile') }}">Account Profile</a></section>
+<form class="profile-form" method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <section class="panel"><h2>Clinical Basics</h2><div class="form-grid">
+    <label>Date of birth <input name="date_of_birth" type="date" value="{{ health_profile.date_of_birth or '' }}"></label>
+    <label>Sex for clinical care (optional)<select name="sex_at_birth"><option value="">Not provided</option>{% for option in sex_options %}<option value="{{ option }}" {% if health_profile.sex_at_birth == option %}selected{% endif %}>{{ option.replace('_',' ').title() }}</option>{% endfor %}</select></label>
+    <label>Blood group <select name="blood_group"><option value="">Not provided</option>{% for group in blood_groups %}<option value="{{ group }}" {% if health_profile.blood_group == group %}selected{% endif %}>{{ group }}</option>{% endfor %}</select></label>
+    <label>Height (cm) <input name="height_cm" type="number" min="20" max="300" step="0.1" value="{{ health_profile.height_cm or '' }}"></label>
+    <label>Profile weight (kg) <input name="baseline_weight_kg" type="number" min="1" max="500" step="0.1" value="{{ health_profile.baseline_weight_kg or '' }}"></label>
+  </div></section>
+  <section class="panel"><h2>Known Health Information</h2><div class="form-grid">
+    <label>Allergies <textarea name="allergies" rows="4" placeholder="One item per line">{{ health_profile.allergies|join('\n') }}</textarea></label>
+    <label>Current medications <textarea name="current_medications" rows="4" placeholder="One item per line">{{ health_profile.current_medications|join('\n') }}</textarea></label>
+    <label>Chronic conditions <textarea name="chronic_conditions" rows="4" placeholder="One item per line">{{ health_profile.chronic_conditions|join('\n') }}</textarea></label>
+    <label>Previous conditions <textarea name="previous_conditions" rows="4" placeholder="One item per line">{{ health_profile.previous_conditions|join('\n') }}</textarea></label>
+    <label>Surgeries or procedures <textarea name="surgeries" rows="4" placeholder="One item per line">{{ health_profile.surgeries|join('\n') }}</textarea></label>
+    <label>Vaccination history <textarea name="vaccinations" rows="4" placeholder="One item per line">{{ health_profile.vaccinations|join('\n') }}</textarea></label>
+  </div></section>
+  <section class="grid two"><div class="panel"><h2>Wellness</h2><label>Health goals <textarea name="health_goals" rows="4" placeholder="One item per line">{{ health_profile.health_goals|join('\n') }}</textarea></label><label>Lifestyle notes <textarea name="lifestyle_notes" rows="4">{{ health_profile.lifestyle_notes or '' }}</textarea></label></div><div class="panel"><h2>Emergency Contact</h2><label>Name <input name="emergency_contact_name" value="{{ health_profile.emergency_contact_name or '' }}"></label><label>Phone <input name="emergency_contact_phone" value="{{ health_profile.emergency_contact_phone or '' }}"></label><label>Relationship <input name="emergency_contact_relationship" value="{{ health_profile.emergency_contact_relationship or '' }}"></label></div></section>
+  <div class="form-actions"><button type="submit">Save Health Profile</button><a class="secondary-action" href="{{ url_for('health_memory.health_access_page') }}">Privacy and Access</a></div>
+</form>
+{% endblock %}

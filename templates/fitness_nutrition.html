@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}Nutrition Tracker — ZENDOC Fitness{% endblock %}
+
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">General Wellness Nutrition</p>
+    <h1>Nutrition Coach &amp; Log</h1>
+    <p class="section-copy">Track daily food and meal entries for general wellness. Calorie and macro values are only stored when provided by you — never fabricated.</p>
+  </div>
+  <a href="{{ url_for('fitness.overview') }}" class="secondary-action">Overview</a>
+</section>
+
+<!-- Daily Summary Panel -->
+<article class="panel" style="margin-bottom:24px;">
+  <div class="panel-head">
+    <div>
+      <h2>Daily Summary — {{ summary.date }}</h2>
+      <p style="margin:4px 0 0;color:var(--muted);">Logged Entries: <strong>{{ summary.entries }}</strong></p>
+    </div>
+    <div style="display:flex;gap:18px;">
+      <div>
+        <span style="color:var(--muted);font-size:12px;">Calories</span>
+        <h3 style="margin:0;">{% if summary.total_calories_kcal %}{{ summary.total_calories_kcal }} <small style="font-size:12px;">kcal</small>{% else %}N/A{% endif %}</h3>
+      </div>
+      <div>
+        <span style="color:var(--muted);font-size:12px;">Protein</span>
+        <h3 style="margin:0;">{% if summary.total_protein_g %}{{ summary.total_protein_g }} <small style="font-size:12px;">g</small>{% else %}N/A{% endif %}</h3>
+      </div>
+      <div>
+        <span style="color:var(--muted);font-size:12px;">Carbs</span>
+        <h3 style="margin:0;">{% if summary.total_carbs_g %}{{ summary.total_carbs_g }} <small style="font-size:12px;">g</small>{% else %}N/A{% endif %}</h3>
+      </div>
+      <div>
+        <span style="color:var(--muted);font-size:12px;">Fat</span>
+        <h3 style="margin:0;">{% if summary.total_fat_g %}{{ summary.total_fat_g }} <small style="font-size:12px;">g</small>{% else %}N/A{% endif %}</h3>
+      </div>
+    </div>
+  </div>
+</article>
+
+<div class="grid two">
+  <!-- Left column: Food Logger Form -->
+  <article class="panel">
+    <h2>Log Food / Meal</h2>
+    <form method="post" action="{{ url_for('fitness.nutrition_page') }}">
+      <input type="hidden" name="action" value="log_food">
+      <label>Food / Meal Name
+        <input type="text" name="food_name" placeholder="e.g. Oatmeal with berries &amp; protein powder" required>
+      </label>
+
+      <div class="form-grid">
+        <label>Meal Type
+          <select name="meal_type">
+            <option value="breakfast">Breakfast</option>
+            <option value="lunch">Lunch</option>
+            <option value="dinner">Dinner</option>
+            <option value="post_workout">Post-Workout</option>
+            <option value="morning_snack">Morning Snack</option>
+            <option value="afternoon_snack">Afternoon Snack</option>
+            <option value="other" selected>Other</option>
+          </select>
+        </label>
+        <label>Quantity / Portion (g)
+          <input type="number" step="0.1" name="quantity_g" placeholder="e.g. 250">
+        </label>
+      </div>
+
+      <div class="form-grid" style="margin-top:12px;">
+        <label>Calories (kcal) — optional
+          <input type="number" step="0.1" name="calories_kcal" placeholder="e.g. 450">
+        </label>
+        <label>Protein (g) — optional
+          <input type="number" step="0.1" name="protein_g" placeholder="e.g. 30">
+        </label>
+      </div>
+
+      <div class="form-grid" style="margin-top:12px;">
+        <label>Carbs (g) — optional
+          <input type="number" step="0.1" name="carbs_g" placeholder="e.g. 55">
+        </label>
+        <label>Fat (g) — optional
+          <input type="number" step="0.1" name="fat_g" placeholder="e.g. 12">
+        </label>
+      </div>
+
+      <label style="margin-top:12px;">Notes (optional)
+        <textarea name="notes" rows="2" placeholder="e.g. Ate 30 min after workout"></textarea>
+      </label>
+
+      <button type="submit" class="primary-action" style="margin-top:14px;">Log Meal Entry</button>
+    </form>
+  </article>
+
+  <!-- Right column: Today's Food Logs -->
+  <article class="panel">
+    <h2>Today's Food Entries</h2>
+    {% if logs %}
+      <div class="summary-block">
+        {% for item in logs %}
+          <div class="summary-row">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <strong>{{ item.food_name }}</strong>
+              <span class="status-badge active" style="font-size:11px;">{{ item.meal_type.replace('_', ' ').title() }}</span>
+            </div>
+            <span>
+              {% if item.calories_kcal %}{{ item.calories_kcal }} kcal &bull; {% endif %}
+              {% if item.protein_g %}Protein: {{ item.protein_g }}g &bull; {% endif %}
+              {{ item.logged_at[11:16] if item.logged_at else '' }}
+            </span>
+            {% if item.notes %}<p style="margin:2px 0 0;font-size:12px;color:var(--muted);">{{ item.notes }}</p>{% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <p>No food entries logged for today yet.</p>
+      </div>
+    {% endif %}
+
+    <div class="privacy-banner" style="margin-top:20px;background:#fff9ed;border-color:var(--warning);color:#7a4d00;">
+      <strong>Wellness Disclaimer:</strong> {{ summary.wellness_disclaimer }}
+    </div>
+  </article>
+</div>
+{% endblock %}

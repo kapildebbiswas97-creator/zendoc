@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Hydration Tracker — ZENDOC Fitness{% endblock %}
+
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">General Wellness Hydration</p>
+    <h1>Hydration Tracker</h1>
+    <p class="section-copy">Track your daily water intake. Water guidelines are general wellness suggestions, not medical prescriptions.</p>
+  </div>
+  <a href="{{ url_for('fitness.overview') }}" class="secondary-action">Overview</a>
+</section>
+
+<!-- Hydration Progress Card -->
+<article class="panel" style="margin-bottom:24px;">
+  <div class="panel-head">
+    <div>
+      <h2>Water Consumed Today: <span style="color:var(--primary);">{{ summary.total_litres }} Litres</span> ({{ summary.total_ml }} ml)</h2>
+      <p style="margin:4px 0 0;color:var(--muted);">General wellness suggestion: 2.0 Litres (2000 ml) &bull; Progress: <strong>{{ summary.percentage_of_suggestion }}%</strong></p>
+    </div>
+    <div>
+      <span class="status-badge active" style="font-size:16px;">{{ summary.entries }} Logs Today</span>
+    </div>
+  </div>
+
+  <!-- Progress Bar -->
+  <div style="width:100%;height:18px;background:var(--line);border-radius:999px;overflow:hidden;margin-top:14px;">
+    <div style="width:{{ [summary.percentage_of_suggestion, 100]|min }}%;height:100%;background:var(--primary);border-radius:999px;transition:width 0.3s;"></div>
+  </div>
+</article>
+
+<div class="grid two">
+  <!-- Quick Log Form -->
+  <article class="panel">
+    <h2>Log Water Intake</h2>
+    <form method="post" action="{{ url_for('fitness.hydration_page') }}">
+      <label>Amount (ml)
+        <input type="number" name="ml" value="250" min="1" max="5000" step="50" required>
+      </label>
+
+      <!-- Quick Preset Buttons -->
+      <div style="display:flex;gap:8px;margin:10px 0;">
+        <button type="button" onclick="document.querySelector('[name=ml]').value=250" class="secondary-action" style="flex:1;min-height:36px;font-size:13px;">Glass (250 ml)</button>
+        <button type="button" onclick="document.querySelector('[name=ml]').value=500" class="secondary-action" style="flex:1;min-height:36px;font-size:13px;">Bottle (500 ml)</button>
+        <button type="button" onclick="document.querySelector('[name=ml]').value=750" class="secondary-action" style="flex:1;min-height:36px;font-size:13px;">Large (750 ml)</button>
+      </div>
+
+      <button type="submit" class="primary-action" style="margin-top:8px;">Add Water Log</button>
+    </form>
+  </article>
+
+  <!-- Today's Logs -->
+  <article class="panel">
+    <h2>Today's Water Entries</h2>
+    {% if logs %}
+      <div class="summary-block">
+        {% for item in logs %}
+          <div class="summary-row" style="display:flex;justify-content:space-between;align-items:center;">
+            <strong>+{{ item.ml }} ml</strong>
+            <span style="color:var(--muted);font-size:13px;">{{ item.logged_at[11:16] if item.logged_at else '' }}</span>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <p>No water logs recorded for today yet.</p>
+      </div>
+    {% endif %}
+
+    <div class="privacy-banner" style="margin-top:20px;">
+      <strong>Wellness Note:</strong> {{ summary.wellness_note }}
+    </div>
+  </article>
+</div>
+{% endblock %}

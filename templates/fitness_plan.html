@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}My Workout Plan — ZENDOC{% endblock %}
+
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Personalised Engine</p>
+    <h1>Workout Plan</h1>
+    <p class="section-copy">Structured workout programmes generated based on your fitness profile and constraints.</p>
+  </div>
+  <div class="form-actions">
+    <form method="post" action="{{ url_for('fitness.generate_plan_web') }}" style="display:inline;">
+      <button type="submit" class="primary-action">Generate New Plan</button>
+    </form>
+    <a href="{{ url_for('fitness.overview') }}" class="secondary-action">Overview</a>
+  </div>
+</section>
+
+{% if plan %}
+<article class="panel" style="margin-bottom: 24px;">
+  <div class="panel-head">
+    <div>
+      <h2>{{ plan.name }}</h2>
+      <p style="margin:4px 0 0; color:var(--muted);">
+        Goal: <strong>{{ plan.goal.replace('_', ' ').title() }}</strong> &bull;
+        Level: <strong>{{ plan.experience_level.title() }}</strong> &bull;
+        Location: <strong>{{ plan.workout_location.title() }}</strong> &bull;
+        Est. Time: <strong>{{ plan.estimated_minutes }} min/session</strong>
+      </p>
+    </div>
+    <form method="post" action="{{ url_for('fitness.workout_page') }}">
+      <input type="hidden" name="action" value="start">
+      <input type="hidden" name="plan_id" value="{{ plan.id }}">
+      <button type="submit" class="primary-action">Start Today's Session</button>
+    </form>
+  </div>
+</article>
+
+<!-- Days & Exercises -->
+{% set days = plan.plan_data.days if plan.plan_data else [] %}
+{% for day in days %}
+  <article class="panel" style="margin-bottom: 18px;">
+    <h3 style="margin-top:0;">{{ day.label }} — Session {{ day.day }}</h3>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:40px;">#</th>
+          <th>Exercise</th>
+          <th>Target Sets</th>
+          <th>Reps / Duration</th>
+          <th>Rest</th>
+          <th>Instructions &amp; Video</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in day.exercises %}
+          <tr>
+            <td>{{ item.order }}</td>
+            <td>
+              <strong>{{ item.name }}</strong><br>
+              <small style="color:var(--muted);">{{ item.category.title() }} &bull; {{ item.muscle_group }}</small>
+            </td>
+            <td><strong>{{ item.sets }}</strong> sets</td>
+            <td>{{ item.reps }}</td>
+            <td>{{ item.rest_seconds }}s</td>
+            <td>
+              <a href="{{ url_for('fitness.exercise_detail_page', exercise_id=item.exercise_id) }}" class="secondary-action" style="padding:4px 8px;min-height:auto;font-size:12px;">Instructions</a>
+              <a href="{{ url_for('fitness.videos_page', q=item.name) }}" class="secondary-action" style="padding:4px 8px;min-height:auto;font-size:12px;">Tutorial Video</a>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </article>
+{% endfor %}
+
+{% if plan.plan_data and plan.plan_data.disclaimer %}
+<div class="privacy-banner" style="background:#fff9ed;border-color:var(--warning);color:#7a4d00;">
+  <strong>Disclaimer:</strong> {{ plan.plan_data.disclaimer }}
+</div>
+{% endif %}
+
+{% else %}
+<article class="panel">
+  <div class="empty-state">
+    <h2>No Active Workout Plan</h2>
+    <p>Generate a plan based on your fitness profile, or set up your profile first if you haven't already.</p>
+    <div style="margin-top:14px;display:flex;gap:10px;justify-content:center;">
+      <form method="post" action="{{ url_for('fitness.generate_plan_web') }}">
+        <button type="submit" class="primary-action">Generate Personalised Plan</button>
+      </form>
+      <a href="{{ url_for('fitness.profile_page') }}" class="secondary-action">Setup Profile First</a>
+    </div>
+  </div>
+</article>
+{% endif %}
+
+{% if all_plans and all_plans|length > 1 %}
+<article class="panel" style="margin-top: 24px;">
+  <h3>Plan History</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Plan Name</th>
+        <th>Goal</th>
+        <th>Level</th>
+        <th>Created</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in all_plans %}
+        <tr>
+          <td><strong>{{ p.name }}</strong></td>
+          <td>{{ p.goal.replace('_', ' ').title() }}</td>
+          <td>{{ p.experience_level.title() }}</td>
+          <td>{{ p.created_at[:10] }}</td>
+          <td><a href="{{ url_for('fitness.plan_page', id=p.id) }}" class="text-link">View Plan &rarr;</a></td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</article>
+{% endif %}
+{% endblock %}

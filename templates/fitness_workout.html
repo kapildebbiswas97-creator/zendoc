@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Workout Session — ZENDOC{% endblock %}
+
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Interactive Session</p>
+    <h1>Workout Session</h1>
+    <p class="section-copy">Track completed sets, reps, and notes during your training. Completed sessions are saved automatically to your Health Timeline.</p>
+  </div>
+  <a href="{{ url_for('fitness.overview') }}" class="secondary-action">Overview</a>
+</section>
+
+{% if session and session.status == 'active' %}
+<!-- Active Workout Interface -->
+<article class="panel" style="border-left: 4px solid var(--primary); margin-bottom: 24px;">
+  <div class="panel-head">
+    <div>
+      <span class="status-badge active">Active Workout</span>
+      <h2 style="margin-top:6px;">{{ session.name }}</h2>
+      <p style="margin:4px 0 0; color:var(--muted);">Started at {{ session.started_at[:16] }}</p>
+    </div>
+    <form method="post" action="{{ url_for('fitness.workout_page') }}">
+      <input type="hidden" name="action" value="finish">
+      <input type="hidden" name="session_id" value="{{ session.id }}">
+      <label style="margin-bottom:6px;">Session Notes (optional)
+        <input type="text" name="session_notes" placeholder="e.g. Felt great, increased weight on squats">
+      </label>
+      <button type="submit" class="primary-action danger-button" style="width:100%;">Finish Workout</button>
+    </form>
+  </div>
+</article>
+
+<h3>Session Exercises</h3>
+{% if session.items %}
+  {% for item in session.items %}
+    <article class="panel" style="margin-bottom: 16px;">
+      <div class="panel-head">
+        <div>
+          <h4>{{ item.exercise_name }}</h4>
+          <p style="margin:2px 0 0; color:var(--muted); font-size:13px;">
+            Target: {{ item.planned_sets or 3 }} sets &bull; {{ item.planned_reps or '10' }} reps &bull; Rest {{ item.rest_seconds or 60 }}s
+            {% if item.camera_ready %}&bull; <span style="color:var(--success);font-weight:900;">M6 Camera Ready</span>{% endif %}
+          </p>
+        </div>
+        <div>
+          <strong style="font-size:18px;">{{ item.completed_sets }}</strong> / {{ item.planned_sets or 3 }} sets completed
+        </div>
+      </div>
+
+      <!-- Quick Set Logger Form -->
+      <form method="post" action="{{ url_for('fitness.workout_page') }}" class="inline-form" style="margin-top:14px;align-items:center;">
+        <input type="hidden" name="action" value="log_set">
+        <input type="hidden" name="session_id" value="{{ session.id }}">
+        <input type="hidden" name="exercise_id" value="{{ item.exercise_id }}">
+        <label style="flex:1;min-width:120px;">Reps Completed
+          <input type="number" name="completed_reps" value="10" min="1" max="500" required>
+        </label>
+        <label style="flex:2;min-width:160px;">Set Notes (optional)
+          <input type="text" name="notes" placeholder="e.g. 15 kg dumbbells">
+        </label>
+        <button type="submit" class="primary-action" style="align-self:end;">Log Set +1</button>
+      </form>
+
+      <div style="margin-top:10px;">
+        <a href="{{ url_for('fitness.exercise_detail_page', exercise_id=item.exercise_id) }}" class="secondary-action" style="padding:4px 8px;min-height:auto;font-size:12px;">Instructions</a>
+        <a href="{{ url_for('fitness.videos_page', q=item.exercise_name) }}" class="secondary-action" style="padding:4px 8px;min-height:auto;font-size:12px;">Tutorial Video</a>
+      </div>
+    </article>
+  {% endfor %}
+{% else %}
+  <p class="empty-state">No exercises pre-populated in this session.</p>
+{% endif %}
+
+{% else %}
+<!-- Start New Workout Interface -->
+<article class="panel" style="max-width:600px; margin:0 auto;">
+  <h2>Start a New Workout</h2>
+  <form method="post" action="{{ url_for('fitness.workout_page') }}">
+    <input type="hidden" name="action" value="start">
+    <label>Workout Name
+      <input type="text" name="name" value="{% if latest_plan %}{{ latest_plan.name }}{% else %}Quick Workout{% endif %}" required>
+    </label>
+    {% if latest_plan %}
+      <input type="hidden" name="plan_id" value="{{ latest_plan.id }}">
+      <p class="form-note">Exercises will be pre-populated from your active plan (<strong>{{ latest_plan.name }}</strong>).</p>
+    {% else %}
+      <p class="form-note">No active plan found. An ad-hoc session will be started.</p>
+    {% endif %}
+    <div class="form-actions" style="margin-top:14px;">
+      <button type="submit" class="primary-action">Start Workout Now</button>
+      <a href="{{ url_for('fitness.plan_page') }}" class="secondary-action">View Plans</a>
+    </div>
+  </form>
+</article>
+{% endif %}
+{% endblock %}

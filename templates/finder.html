@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Find Care{% endblock %}
+{% block content %}
+<section class="section-head"><div><p class="eyebrow">Healthcare discovery</p><h1>Find Care</h1></div></section>
+<section class="grid two">
+  <form class="panel" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <h2>Search</h2>
+    <label>Category
+      <select name="category">
+        {% for category in ['doctor','hospital','clinic','pharmacy','diagnostic_centre','laboratory','emergency'] %}
+          <option value="{{ category }}" {% if query.category == category %}selected{% endif %}>{{ category.replace('_',' ').title() }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Specialty <input name="specialty" value="{{ query.specialty }}" placeholder="Cardiology, Dermatology, General Medicine"></label>
+    <label>Manual Location <input name="location" value="{{ query.location }}" placeholder="City, area, PIN, address"></label>
+    <div class="grid two">
+      <label>Latitude <input name="latitude" value="{{ query.latitude or '' }}" placeholder="Optional"></label>
+      <label>Longitude <input name="longitude" value="{{ query.longitude or '' }}" placeholder="Optional"></label>
+    </div>
+    <label>Radius KM <input name="radius_km" type="number" min="1" max="50" value="{{ query.radius_km }}"></label>
+    <button type="submit">Search Healthcare</button>
+    <button type="button" id="use-location">Use My Location</button>
+    <p id="location-status" class="muted">Location is requested only when you choose to use it.</p>
+  </form>
+  <div class="panel">
+    <h2>Results</h2>
+    {% if result %}
+      {% if result.message %}<p>{{ result.message }}</p>{% endif %}
+      {% if result.results %}
+        {% for item in result.results %}
+          <article class="notice provider-card">
+            <strong>{{ item.name }}</strong>
+            <p>{{ item.category }}{% if item.specialty %} · {{ item.specialty }}{% endif %}</p>
+            <p>{{ item.address }} {{ item.city }} {{ item.state }} {{ item.postal_code }}</p>
+            {% if item.phone %}<p>Call: {{ item.phone }}</p>{% endif %}
+            {% if item.id and item.source == 'zendoc_provider_network' %}
+              <a href="{{ url_for('main.appointments') }}?provider_profile_id={{ item.id }}">Book Appointment</a>
+            {% endif %}
+          </article>
+        {% endfor %}
+      {% endif %}
+    {% else %}
+      <p>Search by category and manual location, or choose to use browser location.</p>
+    {% endif %}
+  </div>
+</section>
+<script src="{{ url_for('static', filename='finder.js') }}"></script>
+{% endblock %}

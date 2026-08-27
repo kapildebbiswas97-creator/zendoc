@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}Fitness Overview — ZENDOC{% endblock %}
+
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">AI Fitness &amp; Lifestyle Intelligence</p>
+    <h1>Fitness Overview</h1>
+    <p class="section-copy">Personalised exercise coaching, workout tracking, video tutorials, and nutrition connected to your ZENDOC Health Memory.</p>
+  </div>
+  <div class="form-actions">
+    <a href="{{ url_for('fitness.workout_page') }}" class="primary-action">Start Workout</a>
+    <a href="{{ url_for('fitness.plan_page') }}" class="secondary-action">My Plan</a>
+  </div>
+</section>
+
+<!-- Fitness Stats Header -->
+<section class="stats">
+  <article>
+    <span>30-Day Workouts</span>
+    <strong>{{ progress.workouts_completed }}</strong>
+  </article>
+  <article>
+    <span>Current Streak</span>
+    <strong>{{ progress.current_streak_days }} <small style="font-size:16px;font-weight:normal;">days</small></strong>
+  </article>
+  <article>
+    <span>Total Time</span>
+    <strong>{{ progress.total_duration_minutes }} <small style="font-size:16px;font-weight:normal;">min</small></strong>
+  </article>
+  <article>
+    <span>Water Today</span>
+    <strong>{{ hydration.total_litres }} <small style="font-size:16px;font-weight:normal;">L</small></strong>
+  </article>
+</section>
+
+{% if active_session %}
+<div class="result" style="border-left-color: var(--success); margin-bottom: 22px;">
+  <h2>Workout In Progress</h2>
+  <p><strong>{{ active_session.name }}</strong> — started at {{ active_session.started_at[:16] }}</p>
+  <a href="{{ url_for('fitness.workout_page', id=active_session.id) }}" class="primary-action">Continue Workout Session</a>
+</div>
+{% endif %}
+
+<!-- Quick Navigation Sub-bar -->
+<nav class="chips" style="margin-bottom: 24px;">
+  <a href="{{ url_for('fitness.overview') }}" class="secondary-action" style="background:var(--primary);color:#fff;">Overview</a>
+  <a href="{{ url_for('fitness.plan_page') }}" class="secondary-action">My Plan</a>
+  <a href="{{ url_for('fitness.workout_page') }}" class="secondary-action">Start Workout</a>
+  <a href="{{ url_for('fitness.exercises_page') }}" class="secondary-action">Exercise Library</a>
+  <a href="{{ url_for('fitness.videos_page') }}" class="secondary-action">Videos</a>
+  <a href="{{ url_for('fitness.progress_page') }}" class="secondary-action">Progress</a>
+  <a href="{{ url_for('fitness.nutrition_page') }}" class="secondary-action">Nutrition</a>
+  <a href="{{ url_for('fitness.hydration_page') }}" class="secondary-action">Hydration</a>
+  <a href="{{ url_for('fitness.profile_page') }}" class="secondary-action">Setup Profile</a>
+</nav>
+
+<div class="grid two">
+  <!-- Left column: Profile & Plan summary -->
+  <article class="panel">
+    <h2>Fitness Setup</h2>
+    {% if profile.fitness_goal %}
+      <dl class="detail-list">
+        <dt>Goal</dt>
+        <dd>{{ profile.fitness_goal.replace('_', ' ').title() }}</dd>
+        <dt>Level</dt>
+        <dd>{{ profile.experience_level.title() }}</dd>
+        <dt>Location</dt>
+        <dd>{{ profile.workout_location.title() }}</dd>
+        <dt>Equipment</dt>
+        <dd>{% if profile.equipment %}{{ profile.equipment|join(', ') }}{% else %}Bodyweight / None{% endif %}</dd>
+        <dt>Time/Session</dt>
+        <dd>{{ profile.available_minutes }} minutes</dd>
+      </dl>
+      <div style="margin-top: 14px;">
+        <a href="{{ url_for('fitness.profile_page') }}" class="text-link">Edit Fitness Profile &rarr;</a>
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <h3>No fitness profile set</h3>
+        <p>Set up your profile to receive personalised workout plans and exercise guidance.</p>
+        <a href="{{ url_for('fitness.profile_page') }}" class="primary-action" style="margin-top: 10px;">Setup Profile Now</a>
+      </div>
+    {% endif %}
+  </article>
+
+  <!-- Right column: Recent Workout Activity -->
+  <article class="panel">
+    <h2>Recent Workouts</h2>
+    {% if recent_sessions %}
+      <div class="summary-block">
+        {% for session in recent_sessions %}
+          <div class="summary-row">
+            <strong>{{ session.name }}</strong>
+            <span>{{ session.started_at[:10] }} &bull; {{ session.duration_minutes or 0 }} min &bull; {{ session.status.title() }}</span>
+          </div>
+        {% endfor %}
+      </div>
+      <div style="margin-top: 14px;">
+        <a href="{{ url_for('fitness.progress_page') }}" class="text-link">View Full Activity &rarr;</a>
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <p>No workouts recorded yet. Start your first workout to build your fitness history!</p>
+        <a href="{{ url_for('fitness.workout_page') }}" class="primary-action" style="margin-top: 10px;">Start First Workout</a>
+      </div>
+    {% endif %}
+  </article>
+</div>
+
+<!-- Bottom Section: Nutrition & Hydration Snapshots -->
+<div class="grid two" style="margin-top: 24px;">
+  <article class="panel">
+    <div class="panel-head">
+      <h2>Nutrition Today</h2>
+      <a href="{{ url_for('fitness.nutrition_page') }}" class="secondary-action">Log Food</a>
+    </div>
+    <p>Logged Entries: <strong>{{ nutrition.entries }}</strong></p>
+    <p>Total Calories: <strong>{% if nutrition.total_calories_kcal %}{{ nutrition.total_calories_kcal }} kcal{% else %}N/A{% endif %}</strong></p>
+    <p>Total Protein: <strong>{% if nutrition.total_protein_g %}{{ nutrition.total_protein_g }} g{% else %}N/A{% endif %}</strong></p>
+    <small style="color:var(--muted);">General wellness tracking. Values are only summed when entered.</small>
+  </article>
+
+  <article class="panel">
+    <div class="panel-head">
+      <h2>Hydration Today</h2>
+      <a href="{{ url_for('fitness.hydration_page') }}" class="secondary-action">Log Water</a>
+    </div>
+    <p>Water Consumed: <strong>{{ hydration.total_litres }} L</strong> ({{ hydration.total_ml }} ml)</p>
+    <p>Progress: <strong>{{ hydration.percentage_of_suggestion }}%</strong> of general suggestion (2.0 L)</p>
+    <small style="color:var(--muted);">General wellness guideline, not a medical prescription.</small>
+  </article>
+</div>
+{% endblock %}

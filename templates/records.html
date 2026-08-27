@@ -1,57 +1,31 @@
 {% extends "base.html" %}
-
 {% block title %}Medical Records{% endblock %}
-
 {% block content %}
-<section class="section-head">
-    <div>
-        <p class="eyebrow">Reports and documents</p>
-        <h1>Medical Records</h1>
-    </div>
-</section>
-
+<section class="section-head"><div><p class="eyebrow">Private documents</p><h1>Medical Records</h1></div><a class="secondary-action" href="{{ url_for('health_memory.timeline_page') if current_user.role == 'patient' else url_for('main.dashboard') }}">Health Timeline</a></section>
 <section class="grid two">
-    <form class="panel" method="POST" enctype="multipart/form-data">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <h2>Upload Record</h2>
-        <label>Title
-            <input name="title" placeholder="Blood test, prescription, scan report" required>
-        </label>
-        <label>Category
-            <input name="category" placeholder="Lab, Imaging, Prescription, General" required>
-        </label>
-        <label>File
-            <input name="record_file" type="file" required>
-        </label>
-        <button type="submit">Upload</button>
-    </form>
-
-    <div class="panel">
-        <h2>Available Records</h2>
-        {% if records %}
-            <table>
-                <thead>
-                    <tr>
-                        <th>Title</th>
-                        <th>Category</th>
-                        <th>File</th>
-                        <th>Download</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for record in records %}
-                        <tr>
-                            <td>{{ record.title }}</td>
-                            <td>{{ record.category }}</td>
-                            <td>{{ record.original_filename }}</td>
-                            <td><a href="{{ url_for('download_record', record_id=record.id) }}">Download</a></td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        {% else %}
-            <p>No records uploaded yet.</p>
-        {% endif %}
-    </div>
+  <form class="panel" method="post" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <h2>Upload Report</h2>
+    <label>Title <input name="title" required></label>
+    <label>Document category <input name="category" value="Medical report" required></label>
+    <label>Report type
+      <select name="report_type">{% for report_type in report_types %}<option value="{{ report_type }}">{{ report_type.replace('_',' ').title() }}</option>{% endfor %}</select>
+    </label>
+    <label>Document date <input name="document_date" type="date"></label>
+    <label>Provider or clinician <input name="provider_name" maxlength="160"></label>
+    <label>Lab or facility <input name="lab_name" maxlength="160"></label>
+    <label>Description <textarea name="description" rows="3"></textarea></label>
+    <label>File <input name="record_file" type="file" accept=".pdf,.png,.jpg,.jpeg,.txt,.doc,.docx" required></label>
+    <button type="submit">Upload</button>
+    <p class="form-note">Files are stored privately. Automatic extraction is only shown when it actually succeeds.</p>
+  </form>
+  <div class="panel">
+    <h2>Records</h2>
+    {% if records %}
+    <table><thead><tr><th>Title</th><th>Type</th><th>Date</th><th>File</th><th></th></tr></thead><tbody>
+      {% for item in records %}<tr><td><a href="{{ url_for('health_memory.report_detail_page', record_id=item.id) }}">{{ item.title }}</a></td><td>{{ (item.report_type or item.category).replace('_',' ').title() }}</td><td>{{ (item.document_date or item.created_at)[:10] }}</td><td>{{ item.original_filename }}</td><td><a href="{{ url_for('main.download_record', record_id=item.id) }}">Download</a></td></tr>{% endfor %}
+    </tbody></table>
+    {% else %}<div class="empty-state"><h3>No medical reports yet</h3><p>Upload your first medical report when you are ready.</p></div>{% endif %}
+  </div>
 </section>
 {% endblock %}

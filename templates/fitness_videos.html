@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Educational Videos — ZENDOC Fitness{% endblock %}
+
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Video Discovery</p>
+    <h1>Educational Fitness Videos</h1>
+    <p class="section-copy">Discover legitimate educational tutorials and workout demonstrations for proper form and exercise techniques.</p>
+  </div>
+  <a href="{{ url_for('fitness.overview') }}" class="secondary-action">Overview</a>
+</section>
+
+<!-- Search bar -->
+<form method="get" action="{{ url_for('fitness.videos_page') }}" class="filter-bar">
+  <label style="grid-column: 1 / -2;">Search Tutorials &amp; Workouts
+    <input type="text" name="q" value="{{ q }}" placeholder="e.g. squat technique, home chest workout, beginner yoga" required>
+  </label>
+  <button type="submit" class="primary-action">Search Videos</button>
+</form>
+
+{% if video_data.available and video_data.results %}
+  <p style="color:var(--muted);margin-bottom:18px;">Showing video search results for <strong>"{{ q }}"</strong> (Source: {{ video_data.provider.title() }})</p>
+
+  <div class="grid two">
+    {% for vid in video_data.results %}
+      <article class="panel" style="display:flex;flex-direction:column;justify-content:space-between;">
+        <div>
+          {% if vid.thumbnail_url %}
+            <img src="{{ vid.thumbnail_url }}" alt="{{ vid.title }}" style="width:100%;height:180px;object-fit:cover;border-radius:6px;margin-bottom:12px;">
+          {% endif %}
+          <h3 style="margin-top:0;">{{ vid.title }}</h3>
+          <p style="color:var(--muted);font-size:13px;">Channel: <strong>{{ vid.channel }}</strong> &bull; Provider: {{ vid.provider.title() }}</p>
+        </div>
+        <div style="margin-top:14px;">
+          <a href="{{ vid.url }}" target="_blank" rel="noopener" class="primary-action" style="width:100%;text-align:center;">Watch on {{ vid.provider.title() }} &rarr;</a>
+        </div>
+      </article>
+    {% endfor %}
+  </div>
+{% else %}
+  <article class="panel">
+    <div class="empty-state">
+      <h2>Video Search Status</h2>
+      <p>{% if video_data.reason %}{{ video_data.reason }}{% else %}No video results found for "{{ q }}". Try searching for specific exercise names like squat, push-up, or deadlift.{% endif %}</p>
+
+      <div style="margin-top:18px;padding:14px;background:var(--bg);border-radius:6px;text-align:left;">
+        <strong>Note on Video Discovery:</strong>
+        <p style="margin:6px 0 0;font-size:13px;color:var(--muted);">
+          ZENDOC never invents fake video links. When YouTube API credentials are configured via environment variables (<code>ZENDOC_VIDEO_PROVIDER=youtube</code> and <code>ZENDOC_YOUTUBE_API_KEY</code>), live API search results are fetched and displayed. Without credentials, structured exercise instructions remain available in the <a href="{{ url_for('fitness.exercises_page') }}">Exercise Library</a>.
+        </p>
+      </div>
+
+      <div style="margin-top:18px;">
+        <a href="{{ url_for('fitness.exercises_page') }}" class="primary-action">Browse Exercise Library Instructions</a>
+      </div>
+    </div>
+  </article>
+{% endif %}
+{% endblock %}

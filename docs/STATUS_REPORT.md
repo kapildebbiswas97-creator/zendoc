@@ -1,42 +1,43 @@
-# ZENDOC Status Report
+# ZENDOC Launch Status Report
 
-## Executive Summary
+## Current Phase
 
-ZENDOC has been upgraded from a simple healthcare prototype into a stronger MVP foundation with secure authentication, protected forms, upload controls, API-first endpoints, session-aware healthcare AI experiences, health intelligence, mood tracking, and an investor-facing analytics dashboard.
+Milestones 1 through 4 are implemented and tested. ZENDOC is an advanced MVP foundation, not a certified medical product. The application now connects private health profiles, appointments, reports, structured results, measurements, relevant AI activity, and scoped provider access into ZENDOC Health Memory.
 
-Current phase: **production-oriented MVP foundation**.
+## Implemented
 
-The platform is still not a regulated clinical system. Before real patient launch, it needs clinical governance, consent workflows, audit review, observability, deployment hardening, and jurisdiction-specific compliance work.
+- Flask application package with app factory.
+- SQLite schema for users, appointments, records, health metrics, notifications, AI logs, API tokens, and audit logs.
+- Password hashing and session-based web login.
+- CSRF checks for web forms.
+- Token-based API login for mobile apps and FlutterFlow.
+- AI Doctor rules engine with emergency-risk handling and ML-ready service boundary.
+- Smart Assistant and Mental Health AI support architecture.
+- Admin dashboard with live statistics, user verification, and audit log.
+- Upload/download flow with file type validation.
+- Separate account and patient health profiles with optional health fields.
+- Paginated, searchable, filterable health timeline derived from existing records.
+- Structured report metadata and manually verified laboratory result storage.
+- Truthful report explanation fallback when extraction is unavailable.
+- Source-aware measurements and unit-safe 7/30/90-day trends.
+- Patient-controlled provider grants with scope, expiration, and revocation.
+- Patient JSON export without storage paths.
+- Authorized provider summary view and cross-user/IDOR tests.
+- Central AI actions for timeline, report history, report explanation, trends, and medications.
+- Smoke tests for critical web and API flows.
+- Production configuration now requires real secrets instead of relying on source-code credentials.
 
-## Completed In This Upgrade
+## Not Yet Production-Certified
 
-- Replaced exposed rule-style AI copy with consultation-style AI Doctor responses.
-- Added session context for AI Doctor and Smart Assistant conversations.
-- Added urgency banners, confidence scores, plain-language reasoning, follow-up questions, and next actions.
-- Expanded Smart Assistant into a healthcare copilot for appointments, records, medication routines, nutrition, lifestyle, mental wellness, and coaching.
-- Added Mental Wellness support with mood, stress level, wellness score, pressure detection, breathing exercise, journaling prompt, and crisis escalation language.
-- Added `mood_entries` and `audit_events` database tables.
-- Added BMI, health score, risk score, trend analysis, insights, and recommendations.
-- Added investor analytics for growth, engagement, usage, care completion, and high-risk AI events.
-- Reworked the dashboard, AI Care Studio, Health Monitoring, Admin, and home UI with a more premium healthcare interface.
-- Removed hard-coded admin password behavior. Owner password is now environment-driven or locally bootstrapped outside source code.
-- Added hashed API token storage.
-- Added security headers, CSRF-protected forms, stricter input validation, MIME-aware uploads, empty-file rejection, safer filenames, and record download audit events.
-- Added appointment status authorization so providers cannot freely update unrelated appointments.
+- No HIPAA/GDPR/DPDP legal review.
+- No clinical validation or medical-device certification.
+- No external ML model training pipeline yet.
+- No OCR/document extraction provider or clinically validated report interpretation.
+- Consent controls are a technical foundation, not a legal compliance certification.
+- No payment, insurance, medicine delivery, or telemedicine video module.
+- SQLite and local file storage remain unsuitable for scaled production health data.
+- No object storage, queue worker, background extraction job, or cloud deployment automation.
 
-## Remaining Risks
+## Launch Recommendation
 
-- SQLite is acceptable for local MVP validation but should move to managed Postgres for production.
-- File uploads still use local disk. Production should use object storage with malware scanning and signed URLs.
-- AI logic is deterministic and local. Production should introduce a governed model-provider interface, clinical evaluation, prompt/version logging, and human review workflows.
-- No consent management, PHI retention controls, breach workflow, or full access-audit review UI yet.
-- No automated test suite or CI/CD pipeline yet.
-- No rate limiter, email/SMS verification, password reset, or MFA yet.
-- No OpenAPI schema or mobile SDK contract yet.
-
-## Verification
-
-- `python -m py_compile app.py` passed.
-- Flask test client successfully rendered `/`, `/login/patient`, `/register/patient`, `/api/v1/health`, `/dashboard/admin`, `/ai`, `/health`, `/appointments`, `/records`, and `/admin`.
-- Flask test client successfully posted AI Doctor, Smart Assistant, and Mental Wellness requests.
-- Foreground Flask startup succeeded on port `5000`; background launch was blocked by the local PowerShell/job environment.
+Launch only as a controlled internal or closed beta after infrastructure and security review. ZENDOC provides healthcare organization and decision support, not final diagnosis, clinical certification, or emergency care.

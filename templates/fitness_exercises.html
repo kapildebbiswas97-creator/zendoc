@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Exercise Library — ZENDOC{% endblock %}
+
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Exercise Catalogue</p>
+    <h1>Exercise Library</h1>
+    <p class="section-copy">Browse safe, structured exercises with step-by-step instructions, technique advice, and variations.</p>
+  </div>
+  <a href="{{ url_for('fitness.overview') }}" class="secondary-action">Overview</a>
+</section>
+
+<!-- Filter & Search Bar -->
+<form method="get" action="{{ url_for('fitness.exercises_page') }}" class="filter-bar">
+  <label>Search
+    <input type="text" name="q" value="{{ q or '' }}" placeholder="e.g. squat, chest, dumbbell">
+  </label>
+
+  <label>Category
+    <select name="category" onchange="this.form.submit()">
+      <option value="">All Categories</option>
+      <option value="strength" {% if selected_category == 'strength' %}selected{% endif %}>Strength</option>
+      <option value="cardio" {% if selected_category == 'cardio' %}selected{% endif %}>Cardio</option>
+      <option value="core" {% if selected_category == 'core' %}selected{% endif %}>Core</option>
+      <option value="mobility" {% if selected_category == 'mobility' %}selected{% endif %}>Mobility</option>
+      <option value="flexibility" {% if selected_category == 'flexibility' %}selected{% endif %}>Flexibility</option>
+      <option value="yoga" {% if selected_category == 'yoga' %}selected{% endif %}>Yoga</option>
+    </select>
+  </label>
+
+  <label>Equipment
+    <select name="equipment" onchange="this.form.submit()">
+      <option value="">All Equipment</option>
+      <option value="bodyweight" {% if selected_equipment == 'bodyweight' %}selected{% endif %}>Bodyweight</option>
+      <option value="dumbbell" {% if selected_equipment == 'dumbbell' %}selected{% endif %}>Dumbbell</option>
+      <option value="resistance_band" {% if selected_equipment == 'resistance_band' %}selected{% endif %}>Resistance Band</option>
+      <option value="barbell" {% if selected_equipment == 'barbell' %}selected{% endif %}>Barbell</option>
+      <option value="pull_up_bar" {% if selected_equipment == 'pull_up_bar' %}selected{% endif %}>Pull-Up Bar</option>
+    </select>
+  </label>
+
+  <button type="submit" class="primary-action">Filter</button>
+</form>
+
+<p style="color:var(--muted);margin-bottom:18px;">Showing <strong>{{ total }}</strong> exercise{% if total != 1 %}s{% endif %}</p>
+
+<div class="grid three">
+  {% for ex in exercises %}
+    <article class="panel" style="display:flex;flex-direction:column;justify-content:space-between;">
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:start;gap:8px;">
+          <span class="status-badge active" style="font-size:11px;">{{ ex.category }}</span>
+          <span class="status-badge" style="font-size:11px;background:var(--bg);padding:2px 6px;border-radius:4px;">{{ ex.difficulty }}</span>
+        </div>
+        <h3 style="margin:10px 0 6px;">{{ ex.name }}</h3>
+        <p style="color:var(--muted);font-size:13px;margin:0 0 10px;">
+          <strong>Target:</strong> {{ ex.muscle_group }}<br>
+          <strong>Equipment:</strong> {{ ex.equipment.replace('_', ' ').title() }}
+        </p>
+        <p style="font-size:13px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;">
+          {{ ex.instructions }}
+        </p>
+      </div>
+
+      <div style="margin-top:14px;display:flex;gap:6px;flex-wrap:wrap;">
+        <a href="{{ url_for('fitness.exercise_detail_page', exercise_id=ex.id) }}" class="primary-action" style="flex:1;min-height:36px;font-size:13px;">View Detail &rarr;</a>
+        <a href="{{ url_for('fitness.videos_page', q=ex.name) }}" class="secondary-action" style="min-height:36px;font-size:13px;">Videos</a>
+      </div>
+    </article>
+  {% else %}
+    <div class="empty-state" style="grid-column: 1 / -1;">
+      <h3>No exercises found</h3>
+      <p>Try broadening your search or clear the filters.</p>
+      <a href="{{ url_for('fitness.exercises_page') }}" class="secondary-action">Clear Filters</a>
+    </div>
+  {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Profile{% endblock %}
+{% block content %}
+<section class="auth-panel">
+  <h1>Profile</h1>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Name <input name="name" value="{{ current_user.name }}" required></label>
+    <label>Phone <input name="phone" value="{{ current_user.phone or '' }}"></label>
+    <label>Age <input name="age" type="number" value="{{ current_user.age or '' }}"></label>
+    <label>Gender <input name="gender" value="{{ current_user.gender or '' }}"></label>
+    <label>City <input name="city" value="{{ current_user.city or '' }}"></label>
+    <label>Emergency Contact <input name="emergency_contact" value="{{ current_user.emergency_contact or '' }}"></label>
+    <button type="submit">Save Profile</button>
+  </form>
+</section>
+{% endblock %}

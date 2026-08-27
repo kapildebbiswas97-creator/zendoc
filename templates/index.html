@@ -1,70 +1,27 @@
 {% extends "base.html" %}
-
-{% block title %}ZENDOC Healthcare Platform{% endblock %}
-
+{% block title %}ZENDOC Launch MVP{% endblock %}
 {% block content %}
 <section class="hero">
-    <div>
-        <p class="eyebrow">AI-powered healthcare ecosystem</p>
-        <h1>ZENDOC</h1>
-        <p class="subtitle">A connected care platform for AI-guided triage, appointments, medical records, health intelligence, and mental wellness.</p>
-        <div class="hero-actions">
-            <a class="primary-action" href="{{ url_for('login', user='patient') }}">Patient Login</a>
-            <a class="secondary-action" href="{{ url_for('register', user='patient') }}">Create Account</a>
-        </div>
-    </div>
-    <div class="hero-card">
-        <span>Live Care Modules</span>
-        <strong>AI Doctor 2.0</strong>
-        <p>Consultation-style guidance with urgency detection, confidence, and next actions.</p>
-    </div>
+  <p class="eyebrow">Global AI healthcare ecosystem</p>
+  <h1>ZENDOC</h1>
+  <p>Appointments, medical records, health monitoring, AI Doctor, Smart Assistant, mental health support, admin operations, and mobile-ready APIs.</p>
 </section>
-
-<section class="feature-strip">
-    <article>
-        <span>01</span>
-        <strong>Clinical Guidance</strong>
-        <p>Human, contextual triage and care preparation.</p>
-    </article>
-    <article>
-        <span>02</span>
-        <strong>Health Intelligence</strong>
-        <p>BMI, risk score, trends, and recommendations.</p>
-    </article>
-    <article>
-        <span>03</span>
-        <strong>Mental Wellness</strong>
-        <p>Mood tracking, breathing, journaling, and support plans.</p>
-    </article>
-    <article>
-        <span>04</span>
-        <strong>Care Operations</strong>
-        <p>Records, appointments, role dashboards, and analytics.</p>
-    </article>
-</section>
-
-<section class="grid two auth-grid">
-    <div class="panel">
-        <h2>Login</h2>
-        <div class="button-list">
-            <a href="{{ url_for('login', user='patient') }}">Patients</a>
-            <a href="{{ url_for('login', user='doctor') }}">Doctors</a>
-            <a href="{{ url_for('login', user='hospital') }}">Hospitals</a>
-            <a href="{{ url_for('login', user='pharmacy') }}">Pharmacy</a>
-            <a href="{{ url_for('login', user='government') }}">Government / Research</a>
-            <a href="{{ url_for('login', user='admin') }}">Admin</a>
-        </div>
+<section class="grid two">
+  <div class="panel">
+    <h2>Login</h2>
+    <div class="button-list">
+      {% for role in ['patient','doctor','hospital','pharmacy','government','admin'] %}
+        <a href="{{ url_for('main.login', role=role) }}">{{ role.title() }} Login</a>
+      {% endfor %}
     </div>
-
-    <div class="panel">
-        <h2>Register</h2>
-        <div class="button-list">
-            <a href="{{ url_for('register', user='patient') }}">Patient Register</a>
-            <a href="{{ url_for('register', user='doctor') }}">Doctor Register</a>
-            <a href="{{ url_for('register', user='hospital') }}">Hospital Register</a>
-            <a href="{{ url_for('register', user='pharmacy') }}">Pharmacy Register</a>
-            <a href="{{ url_for('register', user='government') }}">Government Register</a>
-        </div>
+  </div>
+  <div class="panel">
+    <h2>Register</h2>
+    <div class="button-list">
+      {% for role in ['patient','doctor','hospital','pharmacy','government'] %}
+        <a href="{{ url_for('main.register', role=role) }}">{{ role.title() }} Register</a>
+      {% endfor %}
     </div>
+  </div>
 </section>
 {% endblock %}

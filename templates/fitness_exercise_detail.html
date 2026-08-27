@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}{{ exercise.name }} — ZENDOC Exercise Library{% endblock %}
+
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">{{ exercise.category.title() }} &bull; {{ exercise.difficulty.title() }}</p>
+    <h1>{{ exercise.name }}</h1>
+    <p class="section-copy">Target muscles: <strong>{{ exercise.muscle_group }}</strong> | Equipment: <strong>{{ exercise.equipment.replace('_', ' ').title() }}</strong></p>
+  </div>
+  <a href="{{ url_for('fitness.exercises_page') }}" class="secondary-action">Back to Library</a>
+</section>
+
+<div class="grid two">
+  <!-- Left column: Instructions & Details -->
+  <article class="panel">
+    <h2>Step-by-Step Technique</h2>
+    <p style="font-size:16px;line-height:1.6;white-space:pre-line;">{{ exercise.instructions }}</p>
+
+    {% if exercise.common_mistakes %}
+      <h3 style="margin-top:22px;color:var(--danger);">Common Mistakes to Avoid</h3>
+      <p style="line-height:1.5;">{{ exercise.common_mistakes }}</p>
+    {% endif %}
+
+    <div style="margin-top:22px;display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div style="background:var(--bg);padding:12px;border-radius:6px;">
+        <strong style="color:var(--success);">Easier Variation</strong>
+        <p style="margin:4px 0 0;font-size:14px;">{{ exercise.easier_variation or 'N/A' }}</p>
+      </div>
+      <div style="background:var(--bg);padding:12px;border-radius:6px;">
+        <strong style="color:var(--primary);">Harder Variation</strong>
+        <p style="margin:4px 0 0;font-size:14px;">{{ exercise.harder_variation or 'N/A' }}</p>
+      </div>
+    </div>
+
+    {% if exercise.camera_ready %}
+      <div class="privacy-banner" style="margin-top:20px;">
+        <strong>Milestone 6 Camera Coach Prepared:</strong> This exercise has calibrated pose-estimation landmarks for real-time form feedback and rep counting in the upcoming Camera Coach module.
+      </div>
+    {% endif %}
+  </article>
+
+  <!-- Right column: Video Tutorials -->
+  <article class="panel">
+    <h2>Tutorial Videos</h2>
+    {% if videos.available and videos.results %}
+      <div style="display:grid;gap:12px;">
+        {% for vid in videos.results %}
+          <div class="result" style="padding:14px;">
+            <strong>{{ vid.title }}</strong>
+            <p style="margin:4px 0;color:var(--muted);font-size:13px;">Channel: {{ vid.channel }} &bull; Source: {{ vid.provider.title() }}</p>
+            <a href="{{ vid.url }}" target="_blank" rel="noopener" class="primary-action" style="padding:6px 12px;min-height:auto;font-size:13px;margin-top:6px;">Watch Video &rarr;</a>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <p>{% if videos.reason %}{{ videos.reason }}{% else %}No video tutorials currently loaded for this exercise.{% endif %}</p>
+      </div>
+    {% endif %}
+
+    <div style="margin-top:20px;">
+      <a href="{{ url_for('fitness.videos_page', q=exercise.name) }}" class="secondary-action" style="width:100%;text-align:center;">Search All Videos for {{ exercise.name }}</a>
+    </div>
+  </article>
+</div>
+{% endblock %}

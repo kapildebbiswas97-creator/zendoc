@@ -1,41 +1,43 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}ZENDOC{% endblock %}</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}ZENDOC{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <header class="topbar">
-        <a class="brand" href="{{ url_for('home') }}"><span>Z</span>ZENDOC</a>
-        <nav>
-            {% if current_user %}
-                <a href="{{ url_for('dashboard', user=current_user.role) }}">Dashboard</a>
-                <a href="{{ url_for('appointments') }}">Appointments</a>
-                <a href="{{ url_for('records') }}">Records</a>
-                <a href="{{ url_for('health_monitoring') }}">Health</a>
-                <a href="{{ url_for('ai_center') }}">AI Care</a>
-                {% if current_user.role == 'admin' %}
-                    <a href="{{ url_for('admin') }}">Admin</a>
-                {% endif %}
-                <a href="{{ url_for('logout') }}">Logout</a>
-            {% endif %}
-        </nav>
-    </header>
-
-    <main class="page">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                <section class="alerts">
-                    {% for category, message in messages %}
-                        <div class="alert {{ category }}">{{ message }}</div>
-                    {% endfor %}
-                </section>
-            {% endif %}
-        {% endwith %}
-
-        {% block content %}{% endblock %}
-    </main>
+  <header class="topbar">
+    <a class="brand" href="{{ url_for('main.home') }}">ZENDOC</a>
+    <nav>
+      {% if current_user %}
+        <a href="{{ url_for('main.dashboard') }}">Dashboard</a>
+        <a href="{{ url_for('main.profile') }}">Profile</a>
+        <a href="{{ url_for('main.appointments') }}">Appointments</a>
+        <a href="{{ url_for('main.finder') }}">Find Care</a>
+        <a href="{{ url_for('main.records') }}">Records</a>
+        <a href="{{ url_for('main.health') }}">Health</a>
+        {% if current_user.role == 'patient' %}<a href="{{ url_for('health_memory.timeline_page') }}">Timeline</a>{% endif %}
+        {% if current_user.role == 'patient' %}<a href="{{ url_for('fitness.overview') }}">Fitness</a>{% endif %}
+        <a href="{{ url_for('main.ai_center') }}">AI</a>
+        {% if current_user.role in ['doctor','hospital','pharmacy'] %}<a href="{{ url_for('main.provider_profile') }}">Provider</a>{% endif %}
+        <a href="{{ url_for('main.notifications') }}">Notifications</a>
+        {% if current_user.role == 'admin' %}<a href="{{ url_for('main.admin') }}">Admin</a>{% endif %}
+        <a href="{{ url_for('main.logout') }}">Logout</a>
+      {% endif %}
+    </nav>
+  </header>
+  <main class="page">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <section class="alerts">
+          {% for category, message in messages %}
+            <div class="alert {{ category }}">{{ message }}</div>
+          {% endfor %}
+        </section>
+      {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
 </body>
 </html>

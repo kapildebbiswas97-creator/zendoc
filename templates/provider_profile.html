@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Provider Profile{% endblock %}
+{% block content %}
+<section class="section-head"><div><p class="eyebrow">Provider network</p><h1>Provider Profile</h1></div></section>
+<section class="grid two">
+  <form class="panel" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <h2>Public Profile</h2>
+    <label>Specialty <input name="specialty" value="{{ profile.specialty if profile else '' }}" list="specialty-options" required></label>
+    <datalist id="specialty-options">{% for specialty in specialties %}<option value="{{ specialty }}">{% endfor %}</datalist>
+    <label>Qualifications <input name="qualifications" value="{{ profile.qualifications if profile else '' }}"></label>
+    <label>License / Registration ID <input name="license_identifier" value="{{ profile.license_identifier if profile else '' }}"></label>
+    <label>Organization <input name="organization" value="{{ profile.organization if profile else '' }}"></label>
+    <label>Address <textarea name="address" rows="3">{{ profile.address if profile else '' }}</textarea></label>
+    <label>City <input name="city" value="{{ profile.city if profile else '' }}"></label>
+    <label>State <input name="state" value="{{ profile.state if profile else '' }}"></label>
+    <label>Postal Code <input name="postal_code" value="{{ profile.postal_code if profile else '' }}"></label>
+    <label>Public Phone <input name="public_phone" value="{{ profile.public_phone if profile else '' }}"></label>
+    <button type="submit">Save Provider Profile</button>
+    {% if profile %}<p class="muted">Verification status: {{ profile.verification_status }}</p>{% endif %}
+  </form>
+  <div class="panel">
+    <h2>Schedule</h2>
+    <form method="post" action="{{ url_for('main.provider_schedule') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label>Weekday <select name="weekday">{% for day in ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'] %}<option value="{{ loop.index0 }}">{{ day }}</option>{% endfor %}</select></label>
+      <label>Start <input name="start_time" type="time" required></label>
+      <label>End <input name="end_time" type="time" required></label>
+      <label>Slot Minutes <input name="slot_minutes" type="number" min="10" max="180" value="30"></label>
+      <button type="submit">Add Schedule</button>
+    </form>
+    {% if schedules %}<table><thead><tr><th>Day</th><th>Time</th><th>Slot</th></tr></thead><tbody>{% for row in schedules %}<tr><td>{{ row.weekday }}</td><td>{{ row.start_time }}-{{ row.end_time }}</td><td>{{ row.slot_minutes }} min</td></tr>{% endfor %}</tbody></table>{% else %}<p>No schedules yet.</p>{% endif %}
+  </div>
+</section>
+{% endblock %}

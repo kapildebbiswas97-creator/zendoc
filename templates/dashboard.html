@@ -1,91 +1,30 @@
 {% extends "base.html" %}
-
-{% block title %}{{ user }} Dashboard{% endblock %}
-
+{% block title %}Dashboard{% endblock %}
 {% block content %}
 <section class="section-head">
-    <div>
-        <p class="eyebrow">{{ user }} Dashboard</p>
-        <h1>Welcome, {{ name }}</h1>
-        <p class="subtitle">Your care activity, health intelligence, and AI guidance in one command center.</p>
-    </div>
-    <a class="primary-action" href="{{ url_for('ai_center') }}">Open AI Center</a>
+  <div><p class="eyebrow">{{ current_user.role.title() }} Dashboard</p><h1>Welcome, {{ current_user.name }}</h1></div>
+  <a class="primary-action" href="{{ url_for('main.ai_center') }}">Open AI Center</a>
 </section>
-
 <section class="stats">
-    {% for label, value in stats.items() %}
-        <article>
-            <span>{{ label.replace('_', ' ').title() }}</span>
-            <strong>{{ value }}</strong>
-        </article>
-    {% endfor %}
+  {% for label, value in stats.items() %}<article><span>{{ label }}</span><strong>{{ value }}</strong></article>{% endfor %}
 </section>
-
-<section class="insight-band">
-    <article>
-        <span>Health Score</span>
-        <strong>{{ intelligence.health_score }}</strong>
-        <progress value="{{ intelligence.health_score }}" max="100"></progress>
-    </article>
-    <article>
-        <span>Risk Score</span>
-        <strong>{{ intelligence.risk_score }}</strong>
-        <progress class="risk" value="{{ intelligence.risk_score }}" max="100"></progress>
-    </article>
-    <article>
-        <span>BMI</span>
-        <strong>{{ intelligence.bmi or 'Add data' }}</strong>
-        <p>{{ intelligence.summary }}</p>
-    </article>
-</section>
-
 <section class="quick-actions">
-    <a href="{{ url_for('appointments') }}">Manage Appointments</a>
-    <a href="{{ url_for('records') }}">Medical Records</a>
-    <a href="{{ url_for('health_monitoring') }}">Health Monitoring</a>
-    <a href="{{ url_for('ai_center') }}">AI Doctor And Assistant</a>
+  <a href="{{ url_for('main.profile') }}">Profile</a>
+  {% if current_user.role == 'patient' %}<a href="{{ url_for('health_memory.health_profile_page') }}">My Health</a>{% endif %}
+  <a href="{{ url_for('main.appointments') }}">Appointments</a>
+  <a href="{{ url_for('main.records') }}">Medical Records</a>
+  <a href="{{ url_for('main.finder') }}">Find Care</a>
+  <a href="{{ url_for('main.health') }}">Health Monitoring</a>
+  {% if current_user.role == 'patient' %}<a href="{{ url_for('health_memory.timeline_page') }}">Health Timeline</a>{% endif %}
+  <a href="{{ url_for('main.ai_center') }}">AI Doctor</a>
+  <a href="{{ url_for('main.notifications') }}">Notifications</a>
 </section>
-
-<section class="grid two">
-    <div class="panel">
-        <h2>Health Insights</h2>
-        <ul class="clean-list">
-            {% for insight in intelligence.insights %}
-                <li>{{ insight }}</li>
-            {% endfor %}
-        </ul>
-        <h3>Recommendations</h3>
-        <ul class="clean-list">
-            {% for recommendation in intelligence.recommendations %}
-                <li>{{ recommendation }}</li>
-            {% endfor %}
-        </ul>
-    </div>
-
-    <div class="panel">
-        <h2>Recent Appointments</h2>
-        {% if appointments %}
-            <table>
-                <thead>
-                    <tr>
-                        <th>Patient</th>
-                        <th>Provider</th>
-                        <th>Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for appointment in appointments %}
-                        <tr>
-                            <td>{{ appointment.patient_name }}</td>
-                            <td>{{ appointment.provider_display }}</td>
-                            <td><span class="status">{{ appointment.status }}</span></td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        {% else %}
-            <p>No appointments yet.</p>
-        {% endif %}
-    </div>
+<section class="panel">
+  <h2>Recent Appointments</h2>
+  {% if appointments %}
+  <table><thead><tr><th>Patient</th><th>Provider</th><th>When</th><th>Status</th></tr></thead><tbody>
+    {% for item in appointments %}<tr><td>{{ item.patient_name }}</td><td>{{ item.provider_name }}</td><td>{{ item.scheduled_for }}</td><td>{{ item.status }}</td></tr>{% endfor %}
+  </tbody></table>
+  {% else %}<p>No appointments yet.</p>{% endif %}
 </section>
 {% endblock %}

@@ -1,79 +1,9 @@
 {% extends "base.html" %}
-
-{% block title %}Admin Dashboard{% endblock %}
-
+{% block title %}Admin{% endblock %}
 {% block content %}
-<section class="section-head">
-    <div>
-        <p class="eyebrow">Operations intelligence</p>
-        <h1>Admin Dashboard</h1>
-        <p class="subtitle">Growth, engagement, usage, and patient-safety signals for investor and operator review.</p>
-    </div>
-</section>
-
-<section class="stats">
-    {% for label, value in stats.items() %}
-        <article>
-            <span>{{ label.replace('_', ' ').title() }}</span>
-            <strong>{{ value }}</strong>
-        </article>
-    {% endfor %}
-</section>
-
-<section class="grid three">
-    <div class="panel metric-panel">
-        <h2>Growth</h2>
-        <strong>{{ analytics.growth_metrics.registered_users }}</strong>
-        <span>registered users</span>
-        <p>{{ analytics.growth_metrics.record_uploads }} medical records uploaded.</p>
-    </div>
-    <div class="panel metric-panel">
-        <h2>Engagement</h2>
-        <strong>{{ analytics.engagement_metrics.ai_engagement_rate }}%</strong>
-        <span>AI engagement rate</span>
-        <p>{{ analytics.engagement_metrics.ai_active_users }} users have used AI features.</p>
-    </div>
-    <div class="panel metric-panel">
-        <h2>Care Flow</h2>
-        <strong>{{ analytics.engagement_metrics.care_completion_rate }}%</strong>
-        <span>appointment completion</span>
-        <p>{{ analytics.patient_insights.high_risk_ai_events }} high-risk AI events flagged.</p>
-    </div>
-</section>
-
-<section class="grid two">
-    <div class="panel">
-        <h2>Role Mix</h2>
-        <div class="bar-list">
-            {% for item in analytics.growth_metrics.role_mix %}
-                <div>
-                    <span>{{ item.label }}</span>
-                    <strong>{{ item.value }}</strong>
-                </div>
-            {% endfor %}
-        </div>
-    </div>
-    <div class="panel">
-        <h2>AI Feature Usage</h2>
-        <div class="bar-list">
-            {% for item in analytics.engagement_metrics.feature_usage %}
-                <div>
-                    <span>{{ item.label }}</span>
-                    <strong>{{ item.value }}</strong>
-                </div>
-            {% endfor %}
-        </div>
-    </div>
-</section>
-
-<section class="panel">
-    <h2>ZENDOC Owner</h2>
-    <p><strong>{{ owner_name }}</strong> is configured as the owner/admin for this local ZENDOC installation.</p>
-    <p>Owner email: {{ owner_email }}</p>
-</section>
-
-<section class="panel">
-    <h2>Production Readiness Notes</h2>
-    <p>Admin controls read live database statistics, AI safety events, appointment flow, role mix, and engagement. Owner credentials are now environment-driven or bootstrapped locally outside source code.</p>
-</section>
+<section class="section-head"><div><p class="eyebrow">Operations</p><h1>Admin Dashboard</h1></div></section>
+<section class="stats">{% for label, value in stats.items() %}<article><span>{{ label }}</span><strong>{{ value }}</strong></article>{% endfor %}</section>
+<section class="panel"><h2>Users</h2><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Verified</th><th>Action</th></tr></thead><tbody>{% for user in users %}<tr><td>{{ user.name }}</td><td>{{ user.email }}</td><td>{{ user.role }}</td><td>{{ 'Yes' if user.verified else 'No' }}</td><td>{% if not user.verified %}<form method="post" action="{{ url_for('main.verify_user', user_id=user.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">Verify</button></form>{% endif %}</td></tr>{% endfor %}</tbody></table></section>
+<section class="panel"><h2>Provider Profiles</h2>{% if providers %}<table><thead><tr><th>Name</th><th>Type</th><th>Specialty</th><th>City</th><th>Status</th><th>Action</th></tr></thead><tbody>{% for provider in providers %}<tr><td>{{ provider.organization or provider.name }}</td><td>{{ provider.provider_type }}</td><td>{{ provider.specialty }}</td><td>{{ provider.city }}</td><td>{{ provider.verification_status }}</td><td><form class="inline-form" method="post" action="{{ url_for('main.provider_verification_status', profile_id=provider.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><select name="verification_status">{% for status in ['pending','verified','rejected','suspended'] %}<option value="{{ status }}" {% if provider.verification_status == status %}selected{% endif %}>{{ status }}</option>{% endfor %}</select><button type="submit">Save</button></form></td></tr>{% endfor %}</tbody></table>{% else %}<p>No provider profiles yet.</p>{% endif %}</section>
+<section class="panel"><h2>Audit Log</h2>{% if audits %}<table><thead><tr><th>Action</th><th>Entity</th><th>When</th></tr></thead><tbody>{% for item in audits %}<tr><td>{{ item.action }}</td><td>{{ item.entity_type }} {{ item.entity_id or '' }}</td><td>{{ item.created_at }}</td></tr>{% endfor %}</tbody></table>{% else %}<p>No audit events yet.</p>{% endif %}</section>
 {% endblock %}

@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}Fitness Progress — ZENDOC{% endblock %}
+
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Analytics &amp; Trends</p>
+    <h1>Fitness Progress</h1>
+    <p class="section-copy">Truthful progress tracking based exclusively on your recorded workouts and weight measurements.</p>
+  </div>
+  <a href="{{ url_for('fitness.overview') }}" class="secondary-action">Overview</a>
+</section>
+
+<!-- Period Filter -->
+<div class="inline-form" style="margin-bottom:22px;justify-content:flex-end;">
+  <span style="font-weight:800;color:var(--muted);">Time Period:</span>
+  <a href="{{ url_for('fitness.progress_page', period='7d') }}" class="secondary-action" {% if selected_period == '7d' %}style="border-color:var(--primary);color:var(--primary);"{% endif %}>7 Days</a>
+  <a href="{{ url_for('fitness.progress_page', period='30d') }}" class="secondary-action" {% if selected_period == '30d' %}style="border-color:var(--primary);color:var(--primary);"{% endif %}>30 Days</a>
+  <a href="{{ url_for('fitness.progress_page', period='90d') }}" class="secondary-action" {% if selected_period == '90d' %}style="border-color:var(--primary);color:var(--primary);"{% endif %}>90 Days</a>
+</div>
+
+<!-- Stats -->
+<section class="stats">
+  <article>
+    <span>Workouts Completed</span>
+    <strong>{{ progress.workouts_completed }}</strong>
+  </article>
+  <article>
+    <span>Total Duration</span>
+    <strong>{{ progress.total_duration_minutes }} <small style="font-size:16px;font-weight:normal;">min</small></strong>
+  </article>
+  <article>
+    <span>Current Streak</span>
+    <strong>{{ progress.current_streak_days }} <small style="font-size:16px;font-weight:normal;">days</small></strong>
+  </article>
+  <article>
+    <span>Longest Streak</span>
+    <strong>{{ progress.longest_streak_days }} <small style="font-size:16px;font-weight:normal;">days</small></strong>
+  </article>
+</section>
+
+<div class="grid two">
+  <!-- Left column: Weekly Activity Heatmap/Bars -->
+  <article class="panel">
+    <h2>Weekly Workout Activity</h2>
+    {% if progress.weekly_activity %}
+      <div class="trend-bars">
+        {% for item in progress.weekly_activity %}
+          <span style="height: {{ [item.count * 25, 100]|min }}%;" title="{{ item.week }}: {{ item.count }} workouts"></span>
+        {% endfor %}
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:8px;color:var(--muted);font-size:12px;">
+        <span>{{ progress.weekly_activity[0].week if progress.weekly_activity else '' }}</span>
+        <span>{{ progress.weekly_activity[-1].week if progress.weekly_activity else '' }}</span>
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <p>No workout sessions recorded in this time period.</p>
+      </div>
+    {% endif %}
+  </article>
+
+  <!-- Right column: Weight Trend Integration -->
+  <article class="panel">
+    <div class="panel-head">
+      <h2>Weight Measurement Trend</h2>
+      <a href="{{ url_for('main.health') }}" class="secondary-action">Log Weight</a>
+    </div>
+    {% set series_list = weight_trend.series if weight_trend else [] %}
+    {% set has_points = false %}
+    {% if series_list and series_list[0].points %}
+      {% set has_points = true %}
+      <div class="trend-bars">
+        {% for pt in series_list[0].points %}
+          <span style="height: {{ [(pt.numeric_value - 40) * 2, 100]|min|max(10) }}%; background:var(--primary);" title="{{ pt.recorded_at[:10] }}: {{ pt.numeric_value }} kg"></span>
+        {% endfor %}
+      </div>
+      <p style="margin-top:10px;font-size:13px;color:var(--muted);">
+        Latest: <strong>{{ series_list[0].points[-1].numeric_value }} kg</strong> on {{ series_list[0].points[-1].recorded_at[:10] }}
+      </p>
+    {% endif %}
+    {% if not has_points %}
+      <div class="empty-state">
+        <p>No weight measurements logged in Health Monitoring for this period.</p>
+        <a href="{{ url_for('main.health') }}" class="text-link">Add a weight measurement &rarr;</a>
+      </div>
+    {% endif %}
+  </article>
+</div>
+
+<!-- Session History Table -->
+<article class="panel" style="margin-top:24px;">
+  <h2>Recorded Workout History</h2>
+  {% if sessions %}
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Workout Name</th>
+          <th>Duration</th>
+          <th>Status</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in sessions %}
+          <tr>
+            <td>{{ s.started_at[:10] }}</td>
+            <td><strong>{{ s.name }}</strong></td>
+            <td>{{ s.duration_minutes or 0 }} min</td>
+            <td><span class="status-badge active">{{ s.status.title() }}</span></td>
+            <td>{{ s.notes or '—' }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="empty-state">
+      <p>No recorded sessions found. Completed workouts will appear here automatically.</p>
+    </div>
+  {% endif %}
+</article>
+{% endblock %}
