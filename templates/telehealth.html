@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Telehealth - ZENDOC{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div><p class="eyebrow">Beta Telehealth</p><h1>Doctor Communication</h1><p class="section-copy">Request secure chat, voice, or video. Doctors must accept before any consultation room is available.</p></div>
+  {% if current_user.role in ['doctor','hospital'] %}<a href="{{ url_for('milestone7.doctor_availability_page') }}" class="secondary-action">Availability</a>{% endif %}
+</section>
+
+{% if current_user.role == 'patient' %}
+<form method="post" class="panel">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="action" value="request_consultation">
+  <div class="form-grid">
+    <label>Doctor User ID <input name="doctor_id" type="number" required></label>
+    <label>Type
+      <select name="consultation_type"><option value="chat">Chat</option><option value="voice">Voice</option><option value="video">Video</option></select>
+    </label>
+  </div>
+  <label>Reason <textarea name="reason" rows="3" required></textarea></label>
+  <button type="submit">Request Consultation</button>
+</form>
+{% endif %}
+
+<section class="panel">
+  <h2>Consultations</h2>
+  {% if consultations %}
+    <table><thead><tr><th>Patient</th><th>Doctor</th><th>Type</th><th>Status</th><th>Action</th></tr></thead><tbody>
+    {% for item in consultations %}
+      <tr>
+        <td>{{ item.patient_name }}</td><td>{{ item.doctor_name }}</td><td>{{ item.consultation_type }}</td><td>{{ item.status }}</td>
+        <td><a class="secondary-action" href="{{ url_for('milestone7.telehealth_detail_page', consultation_id=item.id) }}">Open</a></td>
+      </tr>
+    {% endfor %}
+    </tbody></table>
+  {% else %}
+    <p>No consultation requests yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Human Operations - ZENDOC{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div><p class="eyebrow">Human Operations</p><h1>Staff Task Board</h1><p class="section-copy">Coordinate real-world tasks. AI can recommend workflow steps, but humans accept and complete physical operations.</p></div>
+  {% if current_user.role == 'admin' %}<a href="{{ url_for('milestone7.admin_agent_command_center') }}" class="secondary-action">Agent Center</a>{% endif %}
+</section>
+<section class="panel">
+  <h2>Tasks</h2>
+  {% if tasks %}
+    <table><thead><tr><th>Task</th><th>Status</th><th>Staff</th><th>Requested By</th></tr></thead><tbody>
+    {% for task in tasks %}<tr><td>{{ task.title }}</td><td>{{ task.status }}</td><td>{{ task.assigned_staff_name or 'Unassigned' }}</td><td>{{ task.requester_name }}</td></tr>{% endfor %}
+    </tbody></table>
+  {% else %}
+    <p>No staff tasks yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

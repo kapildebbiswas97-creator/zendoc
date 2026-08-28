@@ -19,29 +19,40 @@ Complete in this codebase: security and authentication hardening, central AI saf
 - Saved locations, home healthcare requests, medical transport, pharmacy services, marketplace, universal search, and IoT health device hub.
 - Truthful integration boundaries for beta, verified provider, integration required, and coming soon services.
 
-## Milestone 7: Camera Pose Coach
+## Milestone 7 & 7.1: Agentic Core, Telehealth, ZENDOC Connect, Camera, Video, Operations
+
+- ZENDOC Core Agent with permissioned communication and domain tools, safety-first routing, and audit trails.
+- Admin Agent Command Center for platform health, failed operations, integrations, and agent audit trails (with strict private chat privacy boundaries).
+- Doctor availability, customizable patient message policies, consultation requests, and local-demo voice/video controls.
+- **ZENDOC Connect (Milestone 7.1)**: Unified permissioned messaging (`/messages`), contact discovery by name/role/specialty without exposing private identifiers, delivery/read receipts, unread badges, structured message cards, and consent-driven record sharing.
+- **Video Guidance & Intelligence**: Truthful video search and step-by-step guidance (`/videos`) with explicit non-fabricated fallback disclaimers.
+- Universal Search integration across providers, family, permitted contacts, conversations, and educational videos.
+- Reusable camera infrastructure and Fitness Pose Coach beta.
+- Human operations staff profiles and task lifecycle.
+
+## Milestone 8: Production Telehealth And Camera Intelligence
 
 - Permission-based pose estimation for supported exercises.
 - Rep counting, bounded form feedback, and session summaries.
 - Device performance and privacy testing.
 
-## Milestone 8: Mental Wellness
+## Milestone 9: Mental Wellness
 
 - Context-aware check-ins, journaling, breathing, sleep, and stress tracking.
 - Strong crisis escalation and age/context-appropriate support.
 
-## Milestone 9: Medicine And Pharmacy Integrations
+## Milestone 10: Medicine And Pharmacy Integrations
 
 - Real pharmacy partner integrations for inventory and delivery status.
 - Prescription-aware order validation and refill workflows.
 - No AI prescribing.
 
-## Milestone 10: Admin, Analytics, And Notifications
+## Milestone 11: Admin, Analytics, And Notifications
 
 - Unified notification delivery architecture.
 - AI safety/usage analytics, moderation, error operations, and expanded audit reporting.
 
-## Milestone 11: Mobile And Production Hardening
+## Milestone 12: Mobile And Production Hardening
 
 - PostgreSQL migrations.
 - S3-compatible file storage.

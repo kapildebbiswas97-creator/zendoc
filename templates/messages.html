@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% block title %}ZENDOC Connect Messages{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">ZENDOC Connect</p>
+    <h1>Messages</h1>
+    <p class="section-copy">Permissioned care conversations for patients, doctors, family, pharmacy, and operations teams.</p>
+  </div>
+  <span class="status-badge active">{{ unread_total }} Unread</span>
+</section>
+
+<section class="connect-shell">
+  <aside class="connect-list {% if selected %}has-selected{% endif %}">
+    <form method="get" action="{{ url_for('milestone7.messages_page') }}" class="search-form">
+      <label>Find Permitted Contacts
+        <input name="q" value="{{ q }}" placeholder="Search by name, role, or specialty">
+      </label>
+      <button type="submit">Search</button>
+    </form>
+    {% if contacts %}
+      <div class="connect-group">
+        <h2>Permitted Contacts</h2>
+        {% for contact in contacts %}
+          <form method="post" class="connect-contact">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="action" value="start">
+            <input type="hidden" name="target_user_id" value="{{ contact.id }}">
+            <input type="hidden" name="context_type" value="direct">
+            <strong>{{ contact.name }}</strong>
+            <span class="role-badge role-{{ contact.role }}">{{ contact.role.title() }}{% if contact.city %} · {{ contact.city }}{% endif %}</span>
+            <small>{{ contact.reason }}</small>
+            <button type="submit" class="secondary-action message-btn">Message</button>
+          </form>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <div class="connect-group">
+      <h2>Conversations</h2>
+      {% for conversation in conversations %}
+        <a class="conversation-link {% if selected and selected.id == conversation.id %}active{% endif %}" href="{{ url_for('milestone7.messages_page', conversation_id=conversation.id) }}">
+          <div class="conv-header">
+            <strong>{{ conversation.title or 'ZENDOC Conversation' }}</strong>
+            {% if conversation.unread_count %}<span class="unread-pill">{{ conversation.unread_count }}</span>{% endif %}
+          </div>
+          {% if conversation.last_message %}
+            <span class="conv-preview">{{ conversation.last_message.sender_name }}: {{ conversation.last_message.body[:45] }}...</span>
+          {% else %}
+            <span class="conv-preview">No messages yet</span>
+          {% endif %}
+        </a>
+      {% else %}
+        <p class="empty-state">No conversations yet. Search above to find permitted care contacts.</p>
+      {% endfor %}
+    </div>
+  </aside>
+
+  <section class="connect-thread {% if not selected %}thread-empty{% endif %}">
+    {% if selected %}
+      <div class="connect-thread-head">
+        <div class="thread-title-wrap">
+          <a class="mobile-back secondary-action" href="{{ url_for('milestone7.messages_page') }}">&larr; Back</a>
+          <div>
+            <p class="eyebrow">{{ selected.context_type.replace('_', ' ').title() if selected.context_type else 'Direct' }} Conversation</p>
+            <h2>{{ selected.title }}</h2>
+          </div>
+        </div>
+        <div class="form-actions comm-controls">
+          {% if selected.can_call %}
+            <a href="{{ url_for('milestone7.telehealth_page') }}" class="secondary-action call-btn" title="Doctor accepts voice calls">Voice Call</a>
+          {% else %}
+            <button type="button" class="secondary-action call-btn" disabled title="Doctor approval or appointment required for voice">Voice Call (Locked)</button>
+          {% endif %}
+          {% if selected.can_video %}
+            <a href="{{ url_for('milestone7.telehealth_page') }}" class="secondary-action video-btn" title="Doctor accepts video requests">Video Call</a>
+          {% else %}
+            <button type="button" class="secondary-action video-btn" disabled title="Doctor approval or appointment required for video">Video Call (Locked)</button>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="message-stack">
+        {% for message in messages %}
+          <article class="message-bubble message-type-{{ message.message_type }} {% if message.sender_id == current_user.id %}mine{% else %}theirs{% endif %}">
+            <div class="message-meta">
+              <strong>{{ message.sender_name }}</strong>
+              <span class="message-type-tag">{{ message.message_type.replace('_', ' ').title() }}</span>
+            </div>
+
+            {% if message.message_type == 'system' %}
+              <div class="system-message-content">
+                <p>{{ message.body }}</p>
+              </div>
+            {% elif message.message_type == 'video' %}
+              <div class="structured-card video-card">
+                <strong>{{ message.body }}</strong>
+                {% for att in message.attachments %}
+                  {% if att.url %}
+                    <div class="card-actions">
+                      <a href="{{ att.url }}" target="_blank" rel="noopener" class="primary-action">Watch Video</a>
+                      <a href="{{ url_for('milestone7.videos_page', q=att.title) }}" class="secondary-action">View Step Guidance</a>
+                    </div>
+                  {% endif %}
+                {% endfor %}
+              </div>
+            {% elif message.message_type == 'report' or message.message_type == 'record' %}
+              <div class="structured-card report-card">
+                <strong>{{ message.body }}</strong>
+                <p class="card-subtext">Shared with patient/family consent.</p>
+                <div class="card-actions">
+                  <a href="{{ url_for('main.records') }}" class="secondary-action">Open Medical Records</a>
+                </div>
+              </div>
+            {% elif message.message_type in ['appointment', 'consultation'] %}
+              <div class="structured-card consultation-card">
+                <strong>{{ message.body }}</strong>
+                <div class="card-actions">
+                  <a href="{{ url_for('milestone7.telehealth_page') }}" class="secondary-action">Open Telehealth</a>
+                </div>
+              </div>
+            {% else %}
+              <p class="message-text">{{ message.body }}</p>
+            {% endif %}
+
+            <div class="message-foot">
+              <small>{{ message.created_at }}</small>
+            </div>
+          </article>
+        {% endfor %}
+      </div>
+
+      <form method="post" class="message-composer">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="action" value="send">
+        <input type="hidden" name="conversation_id" value="{{ selected.id }}">
+        <div class="composer-type-row">
+          <label>Type:
+            <select name="message_type">
+              {% for type in ['text','appointment','consultation','record','report','video','service_update','task_update'] %}
+                <option value="{{ type }}">{{ type.replace('_', ' ').title() }}</option>
+              {% endfor %}
+            </select>
+          </label>
+        </div>
+        <div class="composer-input-row">
+          <textarea name="body" rows="2" placeholder="Write a care-context message..." required></textarea>
+          <button type="submit" class="send-btn">Send</button>
+        </div>
+      </form>
+    {% else %}
+      <div class="empty-state thread-empty-notice">
+        <h2>Select or start a conversation</h2>
+        <p>Search only returns contacts your account is allowed to message based on the ZENDOC centralized communication policy.</p>
+      </div>
+    {% endif %}
+  </section>
+
+  <aside class="connect-info">
+    <h2>Conversation Info</h2>
+    {% if selected %}
+      <div class="participants-list">
+        <h3>Participants</h3>
+        {% for participant in selected.participants %}
+          <div class="summary-row">
+            <strong>{{ participant.name }}</strong>
+            <span class="role-badge role-{{ participant.role }}">{{ participant.role.title() }}{% if participant.city %} · {{ participant.city }}{% endif %}</span>
+            <small>{{ participant.reason }}</small>
+          </div>
+        {% endfor %}
+      </div>
+      <div class="connect-policy-notice">
+        <p class="privacy-banner">
+          <strong>Privacy Enforced:</strong> Private emails, phone numbers, and internal IDs are never exposed. Admin metrics do not expose casual private conversation contents.
+        </p>
+      </div>
+    {% else %}
+      <p class="empty-state">Select a conversation to see care team participants and security context.</p>
+    {% endif %}
+  </aside>
+</section>
+{% endblock %}

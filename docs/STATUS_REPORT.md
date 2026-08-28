@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Milestones 1 through 6 are implemented as an advanced MVP foundation. ZENDOC is not a certified medical product, emergency dispatch system, pharmacy inventory network, or regulated medical device platform. The application now connects private health profiles, appointments, reports, structured results, measurements, AI activity, scoped provider access, fitness, family care, saved locations, home healthcare requests, medical transport requests, pharmacy workflows, and connected device provenance into a single healthcare platform architecture.
+Milestones 1 through 7 are implemented as an advanced MVP foundation. ZENDOC is not a certified medical product, emergency dispatch system, pharmacy inventory network, production telemedicine system, or regulated medical device platform. The application now connects private health profiles, appointments, reports, structured results, measurements, AI activity, scoped provider access, fitness, family care, saved locations, home healthcare requests, medical transport requests, pharmacy workflows, connected device provenance, Core Agent runs, telehealth beta requests, secure consultation messages, pose-coach sessions, video search history, and human operations tasks into a single healthcare platform architecture.
 
 ## Implemented
 
@@ -32,6 +32,18 @@ Milestones 1 through 6 are implemented as an advanced MVP foundation. ZENDOC is 
 - Home healthcare, ambulance/transport, pharmacy, marketplace, universal search, saved locations, and IoT hub API foundations.
 - IoT measurement provenance recorded as `device` only through the trusted device sync path.
 - Milestone 6 regression tests for admin, auth, family isolation, consent, remote parent care authorization, service requests, pharmacy truthfulness, IoT provenance, saved locations, AI routing, and endpoint auth.
+- Normalized email uniqueness with duplicate legacy account documentation.
+- ZENDOC Core Agent with permissioned deterministic tools, platform events, agent audit logs, and communication tools.
+- Admin Agent Command Center for operations visibility without leaking private patient-doctor clinical messages.
+- Doctor availability with customizable patient message policies, consultation request workflow, secure consultation messaging, and local demo media controls.
+- ZENDOC Connect permissioned care messaging (`/messages`) with responsive desktop 3-pane and mobile layouts.
+- Privacy-preserving contact discovery (`/api/v1/contacts`) searching by name, role, doctor specialty, and organization while redacting emails and phone numbers.
+- Message delivery receipts (`delivered`, `read`), unread counts, and notification triggers.
+- Consent-driven medical report sharing and educational video attachments in chat.
+- Universal Search extended across providers, family, permitted contacts, conversations, and educational videos.
+- Video Intelligence Agent with provider fallback, step-by-step guidance (`/videos`), and explicit non-fabricated guidance disclosures.
+- Fitness Pose Coach beta with user-initiated camera access and saved pose session summaries.
+- Human operations staff profiles and task lifecycle.
 
 ## Not Yet Production-Certified
 
@@ -44,6 +56,9 @@ Milestones 1 through 6 are implemented as an advanced MVP foundation. ZENDOC is 
 - No live ambulance dispatch, ETA, or operational home healthcare fulfillment integration.
 - No real pharmacy stock confirmation or delivery partner integration.
 - No real IoT vendor sync adapter yet; device sync is an internal architecture and provenance path.
+- No production WebRTC signaling/TURN/STUN telemedicine stack yet.
+- No MediaPipe or clinical-grade pose estimation yet.
+- No real staff dispatch/mobile workforce system yet.
 - SQLite and local file storage remain unsuitable for scaled production health data.
 - No object storage, queue worker, background extraction job, or cloud deployment automation.
 

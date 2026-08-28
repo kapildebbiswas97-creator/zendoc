@@ -1,3 +1,4 @@
+import json
 import sqlite3
 from datetime import datetime, timezone
 
@@ -34,6 +35,9 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             email TEXT NOT NULL UNIQUE,
+            email_normalized TEXT UNIQUE,
+            duplicate_of_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            duplicate_detected_at TEXT,
             password_hash TEXT NOT NULL,
             role TEXT NOT NULL CHECK(role IN ('patient','doctor','hospital','pharmacy','government','admin')),
             phone TEXT,
@@ -48,6 +52,18 @@ def init_db():
         );
         CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
         CREATE INDEX IF NOT EXISTS idx_users_active ON users(active);
+
+        CREATE TABLE IF NOT EXISTS duplicate_account_groups (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email_normalized TEXT NOT NULL,
+            primary_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            duplicate_user_ids TEXT NOT NULL DEFAULT '[]',
+            status TEXT NOT NULL DEFAULT 'needs_review',
+            notes TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_duplicate_account_groups_email ON duplicate_account_groups(email_normalized);
 
         CREATE TABLE IF NOT EXISTS appointments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -526,6 +542,284 @@ def init_db():
             created_at TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_medicine_reminders_user ON medicine_reminders(user_id, active);
+
+        -- Milestone 7: agentic core, telehealth, camera intelligence, operations
+
+        CREATE TABLE IF NOT EXISTS agent_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            agent_name TEXT NOT NULL,
+            command_text TEXT NOT NULL,
+            intent TEXT,
+            status TEXT NOT NULL DEFAULT 'completed',
+            urgency TEXT NOT NULL DEFAULT 'routine',
+            result_summary TEXT,
+            approval_state TEXT NOT NULL DEFAULT 'not_required',
+            duration_ms INTEGER,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_agent_runs_actor ON agent_runs(actor_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_agent_runs_status ON agent_runs(status, created_at);
+
+        CREATE TABLE IF NOT EXISTS agent_actions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id INTEGER REFERENCES agent_runs(id) ON DELETE CASCADE,
+            actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            agent_name TEXT NOT NULL,
+            action_type TEXT NOT NULL,
+            tool_name TEXT,
+            entity_type TEXT,
+            entity_id TEXT,
+            status TEXT NOT NULL DEFAULT 'completed',
+            approval_state TEXT NOT NULL DEFAULT 'not_required',
+            message TEXT,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_agent_actions_run ON agent_actions(run_id);
+        CREATE INDEX IF NOT EXISTS idx_agent_actions_status ON agent_actions(status, created_at);
+
+        CREATE TABLE IF NOT EXISTS agent_tool_calls (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id INTEGER REFERENCES agent_runs(id) ON DELETE CASCADE,
+            actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            tool_name TEXT NOT NULL,
+            input_summary TEXT,
+            output_summary TEXT,
+            status TEXT NOT NULL DEFAULT 'completed',
+            error TEXT,
+            duration_ms INTEGER,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_agent_tool_calls_run ON agent_tool_calls(run_id);
+
+        CREATE TABLE IF NOT EXISTS agent_approvals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id INTEGER REFERENCES agent_runs(id) ON DELETE CASCADE,
+            actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            operation_type TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            requested_at TEXT NOT NULL,
+            decided_at TEXT,
+            decision_note TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS platform_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            agent_name TEXT,
+            action TEXT NOT NULL,
+            entity_type TEXT NOT NULL,
+            entity_id TEXT,
+            status TEXT NOT NULL DEFAULT 'info',
+            error TEXT,
+            approval_state TEXT NOT NULL DEFAULT 'not_required',
+            duration_ms INTEGER,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_platform_events_status ON platform_events(status, created_at);
+
+        CREATE TABLE IF NOT EXISTS doctor_availability (
+            doctor_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+            status TEXT NOT NULL DEFAULT 'offline',
+            accepts_chat INTEGER NOT NULL DEFAULT 1,
+            accepts_voice INTEGER NOT NULL DEFAULT 0,
+            accepts_video INTEGER NOT NULL DEFAULT 0,
+            patient_message_policy TEXT NOT NULL DEFAULT 'accepted_consultation',
+            allow_voice_requests INTEGER NOT NULL DEFAULT 0,
+            allow_video_requests INTEGER NOT NULL DEFAULT 0,
+            allow_new_consultation_requests INTEGER NOT NULL DEFAULT 1,
+            note TEXT,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS consultation_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            doctor_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            appointment_id INTEGER REFERENCES appointments(id) ON DELETE SET NULL,
+            consultation_type TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'requested',
+            reason TEXT NOT NULL,
+            scheduled_for TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_consultations_patient ON consultation_requests(patient_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_consultations_doctor ON consultation_requests(doctor_id, status);
+
+        CREATE TABLE IF NOT EXISTS consultation_rooms (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            consultation_id INTEGER NOT NULL UNIQUE REFERENCES consultation_requests(id) ON DELETE CASCADE,
+            room_token_hash TEXT NOT NULL UNIQUE,
+            provider TEXT NOT NULL DEFAULT 'local_demo',
+            status TEXT NOT NULL DEFAULT 'waiting',
+            created_at TEXT NOT NULL,
+            ended_at TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS consultation_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            consultation_id INTEGER NOT NULL REFERENCES consultation_requests(id) ON DELETE CASCADE,
+            sender_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            body TEXT NOT NULL,
+            attachment_record_id INTEGER REFERENCES medical_records(id) ON DELETE SET NULL,
+            read_at TEXT,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_consultation_messages ON consultation_messages(consultation_id, created_at);
+
+        CREATE TABLE IF NOT EXISTS communication_permissions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            requester_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            target_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            context_type TEXT NOT NULL,
+            context_id TEXT,
+            allow_chat INTEGER NOT NULL DEFAULT 1,
+            allow_voice INTEGER NOT NULL DEFAULT 0,
+            allow_video INTEGER NOT NULL DEFAULT 0,
+            allow_record_sharing INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'active',
+            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            expires_at TEXT,
+            revoked_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_comm_permissions_pair ON communication_permissions(requester_id, target_user_id, status, revoked_at);
+        CREATE INDEX IF NOT EXISTS idx_comm_permissions_context ON communication_permissions(context_type, context_id);
+
+        CREATE TABLE IF NOT EXISTS conversations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            conversation_type TEXT NOT NULL DEFAULT 'direct',
+            title TEXT,
+            created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            context_type TEXT,
+            context_id TEXT,
+            status TEXT NOT NULL DEFAULT 'active',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_conversations_context ON conversations(context_type, context_id);
+        CREATE INDEX IF NOT EXISTS idx_conversations_updated ON conversations(updated_at);
+
+        CREATE TABLE IF NOT EXISTS conversation_participants (
+            conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            role TEXT NOT NULL DEFAULT 'member',
+            joined_at TEXT NOT NULL,
+            last_read_at TEXT,
+            muted INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (conversation_id, user_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_conversation_participants_user ON conversation_participants(user_id, conversation_id);
+
+        CREATE TABLE IF NOT EXISTS messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+            sender_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            message_type TEXT NOT NULL DEFAULT 'text',
+            body TEXT NOT NULL,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            edited_at TEXT,
+            deleted_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id, created_at);
+
+        CREATE TABLE IF NOT EXISTS message_receipts (
+            message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            status TEXT NOT NULL DEFAULT 'delivered',
+            delivered_at TEXT NOT NULL,
+            read_at TEXT,
+            PRIMARY KEY (message_id, user_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_message_receipts_user ON message_receipts(user_id, read_at);
+
+        CREATE TABLE IF NOT EXISTS message_attachments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+            attachment_type TEXT NOT NULL,
+            record_id INTEGER REFERENCES medical_records(id) ON DELETE SET NULL,
+            url TEXT,
+            title TEXT,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS staff_profiles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+            staff_type TEXT NOT NULL,
+            service_area TEXT,
+            status TEXT NOT NULL DEFAULT 'available',
+            verified INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_staff_profiles_type ON staff_profiles(staff_type, status);
+
+        CREATE TABLE IF NOT EXISTS staff_tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            requested_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            assigned_staff_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            patient_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            source_type TEXT,
+            source_id TEXT,
+            task_type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT,
+            status TEXT NOT NULL DEFAULT 'requested',
+            escalation_reason TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_staff_tasks_requested_by ON staff_tasks(requested_by, status);
+        CREATE INDEX IF NOT EXISTS idx_staff_tasks_assigned ON staff_tasks(assigned_staff_id, status);
+
+        CREATE TABLE IF NOT EXISTS staff_task_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id INTEGER NOT NULL REFERENCES staff_tasks(id) ON DELETE CASCADE,
+            actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            event_type TEXT NOT NULL,
+            message TEXT,
+            created_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS fitness_pose_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            exercise TEXT NOT NULL,
+            reps INTEGER NOT NULL DEFAULT 0,
+            sets INTEGER NOT NULL DEFAULT 0,
+            duration_seconds INTEGER NOT NULL DEFAULT 0,
+            confidence REAL,
+            status TEXT NOT NULL DEFAULT 'completed',
+            notes TEXT,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_pose_sessions_user ON fitness_pose_sessions(user_id, created_at);
+
+        CREATE TABLE IF NOT EXISTS fitness_pose_feedback (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pose_session_id INTEGER NOT NULL REFERENCES fitness_pose_sessions(id) ON DELETE CASCADE,
+            feedback_type TEXT NOT NULL,
+            message TEXT NOT NULL,
+            confidence REAL,
+            created_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS video_search_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            query TEXT NOT NULL,
+            category TEXT,
+            provider TEXT NOT NULL,
+            available INTEGER NOT NULL DEFAULT 0,
+            result_count INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_video_search_user ON video_search_history(user_id, created_at);
         """
     )
 
@@ -571,6 +865,9 @@ def migrate_schema(db):
 
     user_columns = table_columns(db, "users")
     for column, ddl in {
+        "email_normalized": "ALTER TABLE users ADD COLUMN email_normalized TEXT",
+        "duplicate_of_user_id": "ALTER TABLE users ADD COLUMN duplicate_of_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL",
+        "duplicate_detected_at": "ALTER TABLE users ADD COLUMN duplicate_detected_at TEXT",
         "gender": "ALTER TABLE users ADD COLUMN gender TEXT",
         "city": "ALTER TABLE users ADD COLUMN city TEXT",
         "emergency_contact": "ALTER TABLE users ADD COLUMN emergency_contact TEXT",
@@ -579,6 +876,24 @@ def migrate_schema(db):
     }.items():
         if column not in user_columns:
             db.execute(ddl)
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS duplicate_account_groups (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email_normalized TEXT NOT NULL,
+            primary_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            duplicate_user_ids TEXT NOT NULL DEFAULT '[]',
+            status TEXT NOT NULL DEFAULT 'needs_review',
+            notes TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_duplicate_account_groups_email ON duplicate_account_groups(email_normalized)")
+    repair_normalized_email_index(db)
+    db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_normalized ON users(email_normalized)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_users_duplicate_of ON users(duplicate_of_user_id)")
     db.execute("CREATE INDEX IF NOT EXISTS idx_tokens_hash ON api_tokens(token_hash)")
 
     ai_columns = table_columns(db, "ai_interactions")
@@ -625,6 +940,99 @@ def migrate_schema(db):
         if column not in appointment_columns:
             db.execute(ddl)
     db.execute("CREATE INDEX IF NOT EXISTS idx_appointments_profile ON appointments(provider_profile_id)")
+
+    doctor_availability_columns = table_columns(db, "doctor_availability")
+    for column, ddl in {
+        "patient_message_policy": "ALTER TABLE doctor_availability ADD COLUMN patient_message_policy TEXT NOT NULL DEFAULT 'accepted_consultation'",
+        "allow_voice_requests": "ALTER TABLE doctor_availability ADD COLUMN allow_voice_requests INTEGER NOT NULL DEFAULT 0",
+        "allow_video_requests": "ALTER TABLE doctor_availability ADD COLUMN allow_video_requests INTEGER NOT NULL DEFAULT 0",
+        "allow_new_consultation_requests": "ALTER TABLE doctor_availability ADD COLUMN allow_new_consultation_requests INTEGER NOT NULL DEFAULT 1",
+    }.items():
+        if column not in doctor_availability_columns:
+            db.execute(ddl)
+
+    db.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS communication_permissions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            requester_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            target_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            context_type TEXT NOT NULL,
+            context_id TEXT,
+            allow_chat INTEGER NOT NULL DEFAULT 1,
+            allow_voice INTEGER NOT NULL DEFAULT 0,
+            allow_video INTEGER NOT NULL DEFAULT 0,
+            allow_record_sharing INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'active',
+            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            expires_at TEXT,
+            revoked_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_comm_permissions_pair ON communication_permissions(requester_id, target_user_id, status, revoked_at);
+        CREATE INDEX IF NOT EXISTS idx_comm_permissions_context ON communication_permissions(context_type, context_id);
+
+        CREATE TABLE IF NOT EXISTS conversations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            conversation_type TEXT NOT NULL DEFAULT 'direct',
+            title TEXT,
+            created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            context_type TEXT,
+            context_id TEXT,
+            status TEXT NOT NULL DEFAULT 'active',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_conversations_context ON conversations(context_type, context_id);
+        CREATE INDEX IF NOT EXISTS idx_conversations_updated ON conversations(updated_at);
+
+        CREATE TABLE IF NOT EXISTS conversation_participants (
+            conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            role TEXT NOT NULL DEFAULT 'member',
+            joined_at TEXT NOT NULL,
+            last_read_at TEXT,
+            muted INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (conversation_id, user_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_conversation_participants_user ON conversation_participants(user_id, conversation_id);
+
+        CREATE TABLE IF NOT EXISTS messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+            sender_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            message_type TEXT NOT NULL DEFAULT 'text',
+            body TEXT NOT NULL,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            edited_at TEXT,
+            deleted_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id, created_at);
+
+        CREATE TABLE IF NOT EXISTS message_receipts (
+            message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            status TEXT NOT NULL DEFAULT 'delivered',
+            delivered_at TEXT NOT NULL,
+            read_at TEXT,
+            PRIMARY KEY (message_id, user_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_message_receipts_user ON message_receipts(user_id, read_at);
+
+        CREATE TABLE IF NOT EXISTS message_attachments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+            attachment_type TEXT NOT NULL,
+            record_id INTEGER REFERENCES medical_records(id) ON DELETE SET NULL,
+            url TEXT,
+            title TEXT,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL
+        );
+        """
+    )
 
     db.execute(
         """
@@ -755,31 +1163,82 @@ def migrate_schema(db):
     db.commit()
 
 
+def repair_normalized_email_index(db):
+    rows = db.execute("SELECT id, email, active, created_at FROM users ORDER BY id ASC").fetchall()
+    groups = {}
+    for row in rows:
+        normalized = (row["email"] or "").strip().lower()
+        if not normalized:
+            continue
+        groups.setdefault(normalized, []).append(row)
+    now = now_iso()
+    for normalized, items in groups.items():
+        primary = sorted(items, key=lambda row: (0 if row["active"] else 1, row["id"]))[0]
+        duplicate_ids = [row["id"] for row in items if row["id"] != primary["id"]]
+        db.execute(
+            """
+            UPDATE users
+            SET email_normalized=?, duplicate_of_user_id=NULL, duplicate_detected_at=NULL
+            WHERE id=?
+            """,
+            (normalized, primary["id"]),
+        )
+        for duplicate_id in duplicate_ids:
+            db.execute(
+                """
+                UPDATE users
+                SET email_normalized=NULL, duplicate_of_user_id=?, duplicate_detected_at=COALESCE(duplicate_detected_at, ?)
+                WHERE id=?
+                """,
+                (primary["id"], now, duplicate_id),
+            )
+        if duplicate_ids:
+            db.execute(
+                """
+                INSERT INTO duplicate_account_groups
+                (email_normalized, primary_user_id, duplicate_user_ids, status, notes, created_at, updated_at)
+                VALUES (?, ?, ?, 'needs_review', ?, ?, ?)
+                ON CONFLICT(email_normalized) DO UPDATE SET
+                    primary_user_id=excluded.primary_user_id,
+                    duplicate_user_ids=excluded.duplicate_user_ids,
+                    updated_at=excluded.updated_at
+                """,
+                (
+                    normalized,
+                    primary["id"],
+                    json.dumps(duplicate_ids),
+                    "Automatically detected during normalized-email repair; no accounts were deleted.",
+                    now,
+                    now,
+                ),
+            )
+
+
 def seed_admin():
     db = get_db()
-    admin_email = (current_app.config.get("ADMIN_EMAIL") or "bhimchandrabiswas267@gmail.com").strip().lower()
+    admin_email = (current_app.config.get("ADMIN_EMAIL") or "").strip().lower()
     admin_password = current_app.config.get("ADMIN_PASSWORD")
     if not admin_email or not admin_password:
         return
-    existing_by_email = db.execute("SELECT id, role FROM users WHERE email = ?", (admin_email,)).fetchone()
+    existing_by_email = db.execute(
+        "SELECT id, role FROM users WHERE email_normalized=? OR LOWER(TRIM(email))=? ORDER BY id ASC LIMIT 1",
+        (admin_email, admin_email),
+    ).fetchone()
     if existing_by_email:
         if existing_by_email["role"] != "admin":
-            db.execute("UPDATE users SET role='admin', verified=1 WHERE id=?", (existing_by_email["id"],))
+            db.execute("UPDATE users SET role='admin', verified=1, email_normalized=? WHERE id=?", (admin_email, existing_by_email["id"]))
             db.commit()
-        return
-
-    existing_admin = db.execute("SELECT id FROM users WHERE role = 'admin' LIMIT 1").fetchone()
-    if existing_admin:
         return
 
     now = now_iso()
     db.execute(
         """
-        INSERT INTO users (name, email, password_hash, role, verified, created_at, updated_at)
-        VALUES (?, ?, ?, 'admin', 1, ?, ?)
+        INSERT INTO users (name, email, email_normalized, password_hash, role, verified, created_at, updated_at)
+        VALUES (?, ?, ?, ?, 'admin', 1, ?, ?)
         """,
         (
             "ZENDOC Admin",
+            admin_email,
             admin_email,
             generate_password_hash(admin_password),
             now,

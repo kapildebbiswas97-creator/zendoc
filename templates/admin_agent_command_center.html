@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Agent Command Center - ZENDOC{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Admin Operations</p>
+    <h1>Agent Command Center</h1>
+    <p class="section-copy">Monitor ZENDOC Core Agent, human operations, telehealth, service queues, integrations, and audit trails.</p>
+  </div>
+  <a href="{{ url_for('main.admin') }}" class="secondary-action">Admin Dashboard</a>
+</section>
+
+<form method="post" class="panel">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <label>Ask Core Agent
+    <input name="command" placeholder="Give me today's operations summary" required>
+  </label>
+  <button type="submit">Run Command</button>
+</form>
+
+{% if agent_result %}
+<section class="result">
+  <p class="eyebrow">{{ agent_result.intent.replace('_', ' ').title() }}</p>
+  <h2>Run #{{ agent_result.run_id }}</h2>
+  <p>{{ agent_result.message }}</p>
+</section>
+{% endif %}
+
+<section class="stats">
+  {% for label, value in data.platform_health.counts.items() %}
+    <article><span>{{ label.replace('_', ' ').title() }}</span><strong>{{ value }}</strong></article>
+  {% endfor %}
+</section>
+
+<div class="grid two">
+  <article class="panel">
+    <h2>Specialized Agents</h2>
+    {% for agent in data.specialized_agents %}
+      <div class="summary-row">
+        <strong>{{ agent.name }}</strong>
+        <span class="status-badge active">{{ agent.status.replace('_', ' ') }}</span>
+        <p>{{ agent.scope }}</p>
+      </div>
+    {% endfor %}
+  </article>
+  <article class="panel">
+    <h2>Integration Status</h2>
+    {% for name, status in data.platform_health.integration_status.items() %}
+      <div class="summary-row"><strong>{{ name.replace('_', ' ').title() }}</strong><span>{{ status.replace('_', ' ') }}</span></div>
+    {% endfor %}
+  </article>
+</div>
+
+<section class="panel">
+  <h2>Active Operations</h2>
+  <div class="grid three">
+    <div><strong>Consultations</strong><p>{{ data.consultations|length }} recent</p></div>
+    <div><strong>Home Care</strong><p>{{ data.home_health_requests|length }} recent</p></div>
+    <div><strong>Transport</strong><p>{{ data.transport_requests|length }} recent</p></div>
+    <div><strong>Pharmacy</strong><p>{{ data.pharmacy_requests|length }} recent</p></div>
+    <div><strong>Staff Tasks</strong><p>{{ data.staff_tasks|length }} recent</p></div>
+    <div><strong>Failed Events</strong><p>{{ data.failed_operations|length }} requiring review</p></div>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Agent Audit Trail</h2>
+  {% if data.agent_runs %}
+    <table><thead><tr><th>Run</th><th>Actor</th><th>Intent</th><th>Status</th><th>When</th></tr></thead><tbody>
+    {% for run in data.agent_runs %}
+      <tr><td>#{{ run.id }}</td><td>{{ run.actor_name or 'System' }}</td><td>{{ run.intent }}</td><td>{{ run.status }}</td><td>{{ run.created_at }}</td></tr>
+    {% endfor %}
+    </tbody></table>
+  {% else %}
+    <p>No agent runs yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

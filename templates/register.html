@@ -7,13 +7,23 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <label>Full Name <input name="name" required></label>
     <label>Email <input name="email" type="email" required></label>
-    <label>Password <input name="password" type="password" minlength="8" required></label>
+    <label>Password <input id="password-field" name="password" type="password" minlength="8" required></label>
+    <label class="check-option"><input type="checkbox" id="show-password-toggle"> Show password</label>
     <label>Phone <input name="phone"></label>
     <label>Age <input name="age" type="number" min="0" max="130"></label>
-    <label>Gender <input name="gender"></label>
+    <label>Gender
+      <select name="gender">
+        <option value="">Prefer not to say</option>
+        <option value="male">Male</option>
+        <option value="female">Female</option>
+        <option value="other">Other</option>
+        <option value="prefer_not_to_say">Prefer not to say</option>
+      </select>
+    </label>
     <label>City <input name="city"></label>
     <label>Emergency Contact <input name="emergency_contact"></label>
     <button type="submit">Register</button>
   </form>
 </section>
+<script src="{{ url_for('static', filename='auth.js') }}"></script>
 {% endblock %}

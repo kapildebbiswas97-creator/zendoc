@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}ZENDOC Videos{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Video Guidance</p>
+    <h1>ZENDOC Videos</h1>
+    <p class="section-copy">Search real provider-backed video results when configured, with structured ZENDOC guidance shown separately.</p>
+  </div>
+  <a href="{{ url_for('milestone7.pose_coach_page') }}" class="secondary-action">Camera Coach</a>
+</section>
+
+<form method="get" action="{{ url_for('milestone7.videos_page') }}" class="filter-bar">
+  <label>Search Videos
+    <input type="text" name="q" value="{{ q }}" placeholder="e.g. squat technique, inhaler setup, knee rehab" required>
+  </label>
+  <label>Category
+    <select name="category">
+      {% for category in categories %}
+        <option value="{{ category }}" {% if selected_category == category %}selected{% endif %}>{{ category.replace('_', ' ').title() }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button type="submit">Search</button>
+</form>
+
+<div class="grid two">
+  <section class="panel">
+    <h2>Results</h2>
+    {% if video_data.available and video_data.results %}
+      {% for video in video_data.results %}
+        <article class="summary-row">
+          <strong>{{ video.title }}</strong>
+          <span>{{ video.channel }} · {{ video.provider.title() }}</span>
+          <p>{{ video.why_recommended }}</p>
+          <div class="form-actions">
+            <a href="{{ video.url }}" target="_blank" rel="noopener" class="primary-action">Watch Demo</a>
+            <a href="{{ url_for('milestone7.videos_page', q=q, category=selected_category) }}#guidance" class="secondary-action">Show Steps</a>
+          </div>
+        </article>
+      {% endfor %}
+    {% else %}
+      <div class="empty-state">
+        <h2>Video Search Status</h2>
+        <p>{{ video_data.reason or 'No live video results are currently available.' }}</p>
+        <p>ZENDOC does not invent video links. Configure the video provider to display real external results.</p>
+      </div>
+    {% endif %}
+  </section>
+
+  <section class="panel" id="guidance">
+    <p class="eyebrow">{{ guidance.label }}</p>
+    <h2>Step-by-Step Guidance</h2>
+    <h3>Before</h3>
+    <ul>{% for item in guidance.before %}<li>{{ item }}</li>{% endfor %}</ul>
+    <h3>Steps</h3>
+    <ul>{% for item in guidance.steps %}<li>{{ item }}</li>{% endfor %}</ul>
+    <h3>Common Mistakes</h3>
+    <ul>{% for item in guidance.mistakes %}<li>{{ item }}</li>{% endfor %}</ul>
+    <h3>Watch For</h3>
+    <ul>{% for item in guidance.watch_for %}<li>{{ item }}</li>{% endfor %}</ul>
+    <h3>Stop and Get Help</h3>
+    <ul>{% for item in guidance.stop_and_get_help %}<li>{{ item }}</li>{% endfor %}</ul>
+    <h3>After Completion</h3>
+    <ul>{% for item in guidance.after_completion %}<li>{{ item }}</li>{% endfor %}</ul>
+    <div class="form-actions">
+      <a href="{{ url_for('milestone7.pose_coach_page') }}" class="primary-action">Start Camera Coach</a>
+      <a href="{{ url_for('fitness.workout_page') }}" class="secondary-action">Start Exercise</a>
+    </div>
+  </section>
+</div>
+
+<section class="panel spaced-panel">
+  <h2>Recent Searches</h2>
+  {% if recent_searches %}
+    <table>
+      <thead><tr><th>Query</th><th>Category</th><th>Provider</th><th>Results</th><th>When</th></tr></thead>
+      <tbody>
+        {% for search in recent_searches %}
+          <tr><td>{{ search.query }}</td><td>{{ search.category }}</td><td>{{ search.provider }}</td><td>{{ search.result_count }}</td><td>{{ search.created_at }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="empty-state">No video searches yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

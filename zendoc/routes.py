@@ -19,6 +19,7 @@ from flask import (
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from .ai import MODEL_VERSION, assistant_answer, doctor_prediction, mental_health_support
+from .auth import ACCOUNT_EXISTS_MESSAGE, email_exists, user_by_normalized_email, validate_email
 from .db import ROLES, get_db, now_iso
 from .health_analytics import METRIC_TYPES, create_measurement, get_health_trend
 from .healthcare_finder import HealthcareFinder, normalize_query
@@ -247,10 +248,14 @@ def register(role):
         if not require_form_fields("name", "email", "password"):
             return render_template("register.html", role=role), 400
         password = request.form.get("password", "")
-        email = request.form.get("email", "").strip().lower()
-        if "@" not in email:
-            flash("Enter a valid email address.", "error")
+        try:
+            email = validate_email(request.form.get("email", ""))
+        except ValueError as error:
+            flash(str(error), "error")
             return render_template("register.html", role=role), 400
+        if email_exists(email):
+            flash(ACCOUNT_EXISTS_MESSAGE, "error")
+            return render_template("register.html", role=role), 409
         if len(password) < 8:
             flash("Password must be at least 8 characters.", "error")
             return render_template("register.html", role=role), 400
@@ -259,11 +264,12 @@ def register(role):
             get_db().execute(
                 """
                 INSERT INTO users
-                (name,email,password_hash,role,phone,age,gender,city,emergency_contact,created_at,updated_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                (name,email,email_normalized,password_hash,role,phone,age,gender,city,emergency_contact,created_at,updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
                 """,
                 (
                     request.form.get("name", "").strip(),
+                    email,
                     email,
                     generate_password_hash(password),
                     role,
@@ -280,7 +286,7 @@ def register(role):
             flash("Registration complete. Please log in.", "success")
             return redirect(url_for("main.login", role=role))
         except sqlite3.IntegrityError:
-            flash("This email is already registered or the form is invalid.", "error")
+            flash(ACCOUNT_EXISTS_MESSAGE, "error")
             return render_template("register.html", role=role), 409
     return render_template("register.html", role=role)
 
@@ -291,10 +297,11 @@ def login(role):
     if request.method == "POST":
         if not require_form_fields("email", "password"):
             return render_template("login.html", role=role), 400
-        user = get_db().execute(
-            "SELECT * FROM users WHERE email=? AND role=? AND active=1",
-            (request.form.get("email", "").strip().lower(), role),
-        ).fetchone()
+        try:
+            email = validate_email(request.form.get("email", ""))
+        except ValueError:
+            email = ""
+        user = user_by_normalized_email(email, role=role) if email else None
         if user and check_password_hash(user["password_hash"], request.form.get("password", "")):
             session.clear()
             session["user_id"] = user["id"]
@@ -311,8 +318,12 @@ def login(role):
 @bp.route("/forgot-password", methods=("GET", "POST"))
 def forgot_password():
     if request.method == "POST":
-        email = request.form.get("email", "").strip().lower()
-        user = get_db().execute("SELECT * FROM users WHERE email=? AND active=1", (email,)).fetchone()
+        email = ""
+        try:
+            email = validate_email(request.form.get("email", ""))
+        except ValueError:
+            pass
+        user = user_by_normalized_email(email) if email else None
         if user:
             token = new_token()
             get_db().execute(
@@ -784,18 +795,25 @@ def api_register():
     role = normalize_role(data.get("role", "patient"))
     if role == "admin":
         return jsonify({"error": "Admin registration is disabled"}), 403
+    try:
+        email = validate_email(data.get("email", ""))
+    except ValueError as error:
+        return jsonify({"error": {"code": 400, "message": str(error)}}), 400
+    if email_exists(email):
+        return jsonify({"error": {"code": 409, "message": ACCOUNT_EXISTS_MESSAGE}}), 409
     if len(data.get("password", "")) < 8:
         return jsonify({"error": "Password must be at least 8 characters"}), 400
     try:
         now = now_iso()
         get_db().execute(
             """
-            INSERT INTO users (name,email,password_hash,role,phone,age,city,created_at,updated_at)
-            VALUES (?,?,?,?,?,?,?,?,?)
+            INSERT INTO users (name,email,email_normalized,password_hash,role,phone,age,city,created_at,updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 data.get("name", "").strip(),
-                data.get("email", "").strip().lower(),
+                email,
+                email,
                 generate_password_hash(data.get("password")),
                 role,
                 data.get("phone"),
@@ -808,7 +826,7 @@ def api_register():
         get_db().commit()
         return jsonify({"status": "created"}), 201
     except sqlite3.IntegrityError:
-        return jsonify({"error": {"code": 409, "message": "Email already exists or payload is invalid"}}), 409
+        return jsonify({"error": {"code": 409, "message": ACCOUNT_EXISTS_MESSAGE}}), 409
 
 
 @bp.post("/api/v1/auth/login")
@@ -817,10 +835,11 @@ def api_login():
     validation_error = require_json_fields(data, "email", "password", "role")
     if validation_error:
         return validation_error
-    user = get_db().execute(
-        "SELECT * FROM users WHERE email=? AND role=? AND active=1",
-        (data.get("email", "").strip().lower(), data.get("role", "patient")),
-    ).fetchone()
+    try:
+        email = validate_email(data.get("email", ""))
+    except ValueError:
+        email = ""
+    user = user_by_normalized_email(email, role=data.get("role", "patient")) if email else None
     if not user or not check_password_hash(user["password_hash"], data.get("password", "")):
         return jsonify({"error": "Invalid credentials"}), 401
     token = new_token()
@@ -850,10 +869,11 @@ def api_logout():
 @bp.post("/api/v1/auth/forgot-password")
 def api_forgot_password():
     data = request.get_json(silent=True) or {}
-    email = data.get("email", "").strip().lower()
-    if not email:
+    try:
+        email = validate_email(data.get("email", ""))
+    except ValueError:
         return jsonify({"error": "Email is required"}), 400
-    user = get_db().execute("SELECT * FROM users WHERE email=? AND active=1", (email,)).fetchone()
+    user = user_by_normalized_email(email)
     if user:
         token = new_token()
         get_db().execute(

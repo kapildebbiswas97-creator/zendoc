@@ -64,6 +64,40 @@ Authorization: Bearer <token>
 - `GET /search?q=<query>`
 - `GET /marketplace`
 
+### ZENDOC Milestone 7 Agent, Telehealth, Camera, Video, Operations
+
+- `POST /agent/message`
+- `GET /admin/agent-command-center`
+- `PUT /doctor/availability`
+- `GET /doctor/<doctor_id>/availability`
+- `GET /consultations`
+- `POST /consultations`
+- `POST /consultations/<consultation_id>/status`
+- `GET /consultations/<consultation_id>/messages`
+- `POST /consultations/<consultation_id>/messages`
+- `POST /fitness/pose-sessions`
+- `GET /video-intelligence/search?q=<query>&category=<category>`
+- `GET /videos/guidance?q=<query>&category=<category>`
+- `POST /staff-profiles`
+- `GET /staff-tasks`
+- `POST /staff-tasks`
+- `POST /staff-tasks/<task_id>/status`
+
+### ZENDOC Connect & Permissioned Messaging (Milestone 7.1)
+
+- `GET /contacts?q=<query>`
+- `GET /conversations`
+- `POST /conversations`
+- `GET /conversations/<conversation_id>`
+- `GET /conversations/<conversation_id>/messages`
+- `POST /conversations/<conversation_id>/messages`
+- `POST /conversations/<conversation_id>/read`
+- `POST /conversations/<conversation_id>/share-video`
+- `POST /conversations/<conversation_id>/share-report`
+- `POST /communication-permissions`
+- `GET /messages/unread-count`
+
+
 ### ZENDOC Health Memory
 
 - `GET /health-profile`

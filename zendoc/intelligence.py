@@ -163,6 +163,33 @@ class ZendocIntelligence:
                 possible_actions=[{"type": "iot_hub", "label": "Open Connected Devices Hub"}],
                 provider="iot_hub",
             )
+        elif intent == "telehealth":
+            result = IntelligenceResult(
+                intent="telehealth",
+                urgency="routine",
+                message="Telehealth is available as a beta request workflow. A patient may request chat, voice, or video, and the doctor must accept before any room controls appear.",
+                follow_up_questions=["Do you want chat, voice, or video consultation?"],
+                possible_actions=[{"type": "telehealth", "label": "Open Telehealth"}],
+                provider="doctor_telehealth_agent",
+            )
+        elif intent == "video_intelligence":
+            result = IntelligenceResult(
+                intent="video_intelligence",
+                urgency="routine",
+                message="Video Intelligence can search real educational videos when a video provider is configured. Without an API key, it returns a truthful unavailable response.",
+                follow_up_questions=["What topic should I search for?"],
+                possible_actions=[{"type": "video_intelligence", "label": "Find Educational Video"}],
+                provider="video_intelligence_agent",
+            )
+        elif intent == "core_agent":
+            result = IntelligenceResult(
+                intent="core_agent",
+                urgency="routine",
+                message="ZENDOC Core Agent coordinates care, telehealth, video, IoT, family, pharmacy, transport, and operations through permissioned tools with audit logs.",
+                follow_up_questions=["Which ZENDOC workflow should I coordinate?"],
+                possible_actions=[{"type": "core_agent", "label": "Run Core Agent"}],
+                provider="core_agent",
+            )
         elif intent in FUTURE_ACTIONS:
             result = self._future_action(intent, clean_message)
         else:

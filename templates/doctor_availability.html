@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Doctor Availability - ZENDOC{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div><p class="eyebrow">Telehealth</p><h1>Doctor Availability</h1><p class="section-copy">Control when patients can request chat, voice, or video consultation. Media never starts automatically.</p></div>
+  <a href="{{ url_for('milestone7.telehealth_page') }}" class="secondary-action">Consultations</a>
+</section>
+<form method="post" class="panel">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <label>Status
+    <select name="status">
+      {% for status in ['available','busy','offline','consultation_only'] %}
+        <option value="{{ status }}" {% if availability and availability.status == status %}selected{% endif %}>{{ status.replace('_', ' ').title() }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <div class="checkbox-grid">
+    <label class="check-option"><input type="checkbox" name="accepts_chat" value="1" {% if not availability or availability.accepts_chat %}checked{% endif %}> Chat</label>
+    <label class="check-option"><input type="checkbox" name="accepts_voice" value="1" {% if availability and availability.accepts_voice %}checked{% endif %}> Voice</label>
+    <label class="check-option"><input type="checkbox" name="accepts_video" value="1" {% if availability and availability.accepts_video %}checked{% endif %}> Video</label>
+  </div>
+  <label>Patient Message Policy
+    <select name="patient_message_policy">
+      {% set selected_policy = availability.patient_message_policy if availability else 'accepted_consultation' %}
+      {% for policy in ['nobody','existing_patient','appointment','accepted_consultation','anyone'] %}
+        <option value="{{ policy }}" {% if selected_policy == policy %}selected{% endif %}>{{ policy.replace('_', ' ').title() }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <div class="checkbox-grid">
+    <label class="check-option"><input type="checkbox" name="allow_voice_requests" value="1" {% if availability and availability.allow_voice_requests %}checked{% endif %}> Allow Voice Requests</label>
+    <label class="check-option"><input type="checkbox" name="allow_video_requests" value="1" {% if availability and availability.allow_video_requests %}checked{% endif %}> Allow Video Requests</label>
+    <label class="check-option"><input type="checkbox" name="allow_new_consultation_requests" value="1" {% if not availability or availability.allow_new_consultation_requests %}checked{% endif %}> Allow New Consultation Requests</label>
+  </div>
+  <label>Note <input name="note" value="{{ availability.note if availability else '' }}" placeholder="Available after 5 PM"></label>
+  <button type="submit">Save Availability</button>
+</form>
+{% endblock %}

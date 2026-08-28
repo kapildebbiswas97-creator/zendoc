@@ -6,9 +6,13 @@
   <form method="post">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <label>Email <input name="email" type="email" required></label>
-    <label>Password <input name="password" type="password" required></label>
+    <label>Password <input id="password-field" name="password" type="password" required></label>
+    <label class="check-option"><input type="checkbox" id="show-password-toggle"> Show password</label>
+    <label class="check-option"><input type="checkbox" name="remember_me" value="1"> Remember me</label>
     <button type="submit">Login</button>
   </form>
+  <a class="text-link" href="{{ url_for('main.forgot_password') }}">Forgot password?</a>
   {% if role != 'admin' %}<a class="text-link" href="{{ url_for('main.register', role=role) }}">Create account</a>{% endif %}
 </section>
+<script src="{{ url_for('static', filename='auth.js') }}"></script>
 {% endblock %}

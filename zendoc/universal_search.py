@@ -127,7 +127,65 @@ def search_all(user, query):
             ],
         })
 
-    # 7. AI Health Assistant
+    # 7. Permitted Contacts (ZENDOC Connect)
+    if user:
+        try:
+            from .connect import discover_contacts, list_conversations
+            permitted_contacts = discover_contacts(user, query=clean_q, limit=4)
+            if permitted_contacts:
+                results.append({
+                    "category": "Care Contacts",
+                    "label": "Permitted Contacts",
+                    "items": [
+                        {
+                            "title": contact["name"],
+                            "subtitle": f"{contact['role'].title()}{' • ' + contact['city'] if contact.get('city') else ''} • {contact['reason']}",
+                            "url": f"/messages?q={clean_q}",
+                            "type": "contact",
+                        }
+                        for contact in permitted_contacts
+                    ],
+                })
+
+            user_conversations = list_conversations(user, limit=20)
+            matched_conversations = [
+                conv for conv in user_conversations
+                if lower in (conv.get("title") or "").lower()
+                or any(lower in p["name"].lower() for p in conv.get("participants", []))
+            ]
+            if matched_conversations:
+                results.append({
+                    "category": "Messages",
+                    "label": "Conversations",
+                    "items": [
+                        {
+                            "title": conv.get("title") or "Conversation",
+                            "subtitle": f"{conv.get('context_type', 'Direct').replace('_', ' ').title()} • {len(conv.get('participants', []))} participants",
+                            "url": f"/messages?conversation_id={conv['id']}",
+                            "type": "conversation",
+                        }
+                        for conv in matched_conversations[:4]
+                    ],
+                })
+        except Exception:
+            pass
+
+    # 8. Educational Videos
+    if any(k in lower for k in ("video", "exercise", "squat", "pushup", "plank", "rehab", "technique", "mobility")):
+        results.append({
+            "category": "Video Guidance",
+            "label": "Educational Videos",
+            "items": [
+                {
+                    "title": f"Watch Guidance & Videos for '{clean_q}'",
+                    "subtitle": "Truthful video finder & step-by-step exercise instructions",
+                    "url": f"/videos?q={clean_q}",
+                    "type": "video",
+                }
+            ],
+        })
+
+    # 9. AI Health Assistant
     results.append({
         "category": "ZENDOC AI",
         "label": "AI Health Consultation",
@@ -143,3 +201,4 @@ def search_all(user, query):
 
     total_matches = sum(len(c["items"]) for c in results)
     return {"query": clean_q, "categories": results, "total_matches": total_matches}
+

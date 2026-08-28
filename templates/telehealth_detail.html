@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Consultation - ZENDOC{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div><p class="eyebrow">Secure Consultation</p><h1>{{ consultation.consultation_type.title() }} Consultation</h1><p class="section-copy">{{ consultation.patient_name }} with {{ consultation.doctor_name }} - {{ consultation.status.title() }}</p></div>
+  <a href="{{ url_for('milestone7.telehealth_page') }}" class="secondary-action">Back</a>
+</section>
+
+{% if current_user.role in ['doctor','hospital','admin'] %}
+<form method="post" action="{{ url_for('milestone7.telehealth_page') }}" class="panel">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="action" value="update_status">
+  <input type="hidden" name="consultation_id" value="{{ consultation.id }}">
+  <div class="form-grid">
+    <label>Status <select name="status"><option>accepted</option><option>rejected</option><option>scheduled</option><option>ended</option></select></label>
+    <label>Scheduled For <input type="datetime-local" name="scheduled_for"></label>
+  </div>
+  <button type="submit">Update Consultation</button>
+</form>
+{% endif %}
+
+{% if consultation.status in ['accepted','scheduled'] %}
+<section class="panel">
+  <h2>Local Demo Room</h2>
+  <p class="section-copy">Camera and microphone controls are browser-local beta controls. Click Join only when you are ready to grant permission.</p>
+  <div class="form-actions">
+    <button id="telehealth-join" type="button">Join Room</button>
+    <button id="telehealth-mute" type="button" class="secondary-action">Mute</button>
+    <button id="telehealth-camera" type="button" class="secondary-action">Camera Off</button>
+    <button id="telehealth-leave" type="button" class="danger-button">Leave</button>
+  </div>
+  <video id="telehealth-preview" autoplay playsinline muted style="width:100%;max-height:360px;background:#111;border-radius:8px;margin-top:14px;"></video>
+  <p id="telehealth-status" class="section-copy">Not connected.</p>
+</section>
+<script src="{{ url_for('static', filename='camera.js') }}"></script>
+{% endif %}
+
+<section class="grid two">
+  <form method="post" action="{{ url_for('milestone7.telehealth_page') }}" class="panel">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="action" value="send_message">
+    <input type="hidden" name="consultation_id" value="{{ consultation.id }}">
+    <h2>Send Message</h2>
+    <label>Message <textarea name="body" rows="4" required></textarea></label>
+    <button type="submit">Send Secure Message</button>
+  </form>
+  <div class="panel">
+    <h2>Messages</h2>
+    {% for message in messages %}
+      <div class="notice"><strong>{{ message.sender_name }}</strong><p>{{ message.body }}</p><span>{{ message.created_at }}</span></div>
+    {% else %}
+      <p>No messages yet.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

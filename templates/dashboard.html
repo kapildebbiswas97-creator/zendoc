@@ -30,6 +30,18 @@
       <strong style="color:var(--primary);font-size:14px;">Ask AI</strong>
       <small style="color:var(--muted);font-size:11px;">Instant Advice</small>
     </a>
+    <a href="{{ url_for('milestone7.messages_page') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
+      <strong style="font-size:14px;">Messages</strong>
+      <small style="color:var(--muted);font-size:11px;">ZENDOC Connect</small>
+    </a>
+    <a href="{{ url_for('milestone7.telehealth_page') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
+      <strong style="font-size:14px;">Telehealth</strong>
+      <small style="color:var(--muted);font-size:11px;">Chat &amp; Video</small>
+    </a>
+    <a href="{{ url_for('milestone7.videos_page') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
+      <strong style="font-size:14px;">Videos</strong>
+      <small style="color:var(--muted);font-size:11px;">Video Guidance</small>
+    </a>
     <a href="{{ url_for('main.finder') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
       <strong style="font-size:14px;">Find Doctor</strong>
       <small style="color:var(--muted);font-size:11px;">Search Clinics</small>
@@ -59,6 +71,10 @@
       <strong style="font-size:14px;">Fitness Coach</strong>
       <small style="color:var(--muted);font-size:11px;">Workouts &amp; Diet</small>
     </a>
+    <a href="{{ url_for('milestone7.pose_coach_page') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
+      <strong style="font-size:14px;">Pose Coach</strong>
+      <small style="color:var(--muted);font-size:11px;">Camera Beta</small>
+    </a>
     <a href="{{ url_for('ecosystem.iot_hub_page') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
       <strong style="font-size:14px;">IoT Devices</strong>
       <small style="color:var(--muted);font-size:11px;">Smart Sync</small>
@@ -68,6 +84,12 @@
       <strong style="font-size:14px;">All Services</strong>
       <small style="color:var(--muted);font-size:11px;">Ecosystem Catalog</small>
     </a>
+    {% if current_user.role == 'admin' %}
+    <a href="{{ url_for('milestone7.admin_agent_command_center') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
+      <strong style="font-size:14px;">Agent Center</strong>
+      <small style="color:var(--muted);font-size:11px;">Ops Command</small>
+    </a>
+    {% endif %}
   </div>
 </section>
 

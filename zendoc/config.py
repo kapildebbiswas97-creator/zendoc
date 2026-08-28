@@ -28,7 +28,7 @@ def load_config(base_dir, overrides=None):
         "SESSION_COOKIE_HTTPONLY": True,
         "SESSION_COOKIE_SAMESITE": "Lax",
         "SESSION_COOKIE_SECURE": env == "production",
-        "ADMIN_EMAIL": os.environ.get("ZENDOC_ADMIN_EMAIL", "bhimchandrabiswas267@gmail.com"),
+        "ADMIN_EMAIL": os.environ.get("ZENDOC_ADMIN_EMAIL"),
         "ADMIN_PASSWORD": os.environ.get("ZENDOC_ADMIN_PASSWORD"),
         "CREATE_DEV_ADMIN": env != "production" and env_bool("ZENDOC_CREATE_DEV_ADMIN", True),
         "RATE_LIMIT_PER_MINUTE": int(os.environ.get("ZENDOC_RATE_LIMIT_PER_MINUTE", "120")),
