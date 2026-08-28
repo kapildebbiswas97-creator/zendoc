@@ -403,12 +403,135 @@ def init_db():
             created_at TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_hydration_user_date ON hydration_logs(user_id, logged_at);
+
+        -- ── Milestone 6: Family Care, Home Health, Transport, IoT & Marketplace ──
+
+        CREATE TABLE IF NOT EXISTS family_members (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            member_name TEXT NOT NULL,
+            relationship TEXT NOT NULL,
+            age INTEGER,
+            gender TEXT,
+            phone TEXT,
+            city TEXT,
+            is_remote_parent INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_family_members_user ON family_members(user_id);
+
+        CREATE TABLE IF NOT EXISTS family_access_grants (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            grantor_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            grantee_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            family_member_id INTEGER REFERENCES family_members(id) ON DELETE CASCADE,
+            scopes TEXT NOT NULL DEFAULT '["appointments","reports","metrics"]',
+            revoked_at TEXT,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_family_grants_grantee ON family_access_grants(grantee_id, revoked_at);
+
+        CREATE TABLE IF NOT EXISTS family_care_tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            family_member_id INTEGER REFERENCES family_members(id) ON DELETE CASCADE,
+            title TEXT NOT NULL,
+            task_type TEXT NOT NULL DEFAULT 'general',
+            due_date TEXT,
+            status TEXT NOT NULL DEFAULT 'pending',
+            notes TEXT,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_care_tasks_user ON family_care_tasks(user_id, status);
+
+        CREATE TABLE IF NOT EXISTS saved_locations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            label TEXT NOT NULL,
+            address TEXT NOT NULL,
+            city TEXT NOT NULL,
+            state TEXT,
+            country TEXT NOT NULL DEFAULT 'India',
+            latitude REAL,
+            longitude REAL,
+            is_default INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_saved_locations_user ON saved_locations(user_id);
+
+        CREATE TABLE IF NOT EXISTS health_devices (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            device_name TEXT NOT NULL,
+            device_type TEXT NOT NULL,
+            manufacturer TEXT,
+            model TEXT,
+            device_identifier TEXT UNIQUE,
+            status TEXT NOT NULL DEFAULT 'connected',
+            last_synced_at TEXT,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_health_devices_user ON health_devices(user_id);
+
+        CREATE TABLE IF NOT EXISTS home_health_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            requested_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            service_type TEXT NOT NULL,
+            scheduled_date TEXT NOT NULL,
+            address TEXT NOT NULL,
+            city TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'requested',
+            notes TEXT,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_home_health_patient ON home_health_requests(patient_id);
+
+        CREATE TABLE IF NOT EXISTS ambulance_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            requested_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            transport_type TEXT NOT NULL DEFAULT 'emergency_ambulance',
+            pickup_address TEXT NOT NULL,
+            destination_address TEXT,
+            urgency TEXT NOT NULL DEFAULT 'emergency',
+            status TEXT NOT NULL DEFAULT 'requested',
+            notes TEXT,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_ambulance_patient ON ambulance_requests(patient_id);
+
+        CREATE TABLE IF NOT EXISTS medicine_orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            ordered_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            pharmacy_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            items_json TEXT NOT NULL,
+            delivery_address TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            prescription_record_id INTEGER REFERENCES medical_records(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_medicine_orders_patient ON medicine_orders(patient_id);
+
+        CREATE TABLE IF NOT EXISTS medicine_reminders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            medicine_name TEXT NOT NULL,
+            dosage TEXT,
+            frequency TEXT NOT NULL DEFAULT 'daily',
+            reminder_time TEXT NOT NULL,
+            active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_medicine_reminders_user ON medicine_reminders(user_id, active);
         """
     )
+
     migrate_schema(db)
     seed_admin()
     _seed_exercises_safe()
-    current_app.teardown_appcontext(close_db)
 
 
 def table_columns(db, table):
@@ -634,13 +757,21 @@ def migrate_schema(db):
 
 def seed_admin():
     db = get_db()
-    existing = db.execute("SELECT id FROM users WHERE role = 'admin' LIMIT 1").fetchone()
-    if existing:
-        return
-    admin_email = current_app.config.get("ADMIN_EMAIL")
+    admin_email = (current_app.config.get("ADMIN_EMAIL") or "bhimchandrabiswas267@gmail.com").strip().lower()
     admin_password = current_app.config.get("ADMIN_PASSWORD")
     if not admin_email or not admin_password:
         return
+    existing_by_email = db.execute("SELECT id, role FROM users WHERE email = ?", (admin_email,)).fetchone()
+    if existing_by_email:
+        if existing_by_email["role"] != "admin":
+            db.execute("UPDATE users SET role='admin', verified=1 WHERE id=?", (existing_by_email["id"],))
+            db.commit()
+        return
+
+    existing_admin = db.execute("SELECT id FROM users WHERE role = 'admin' LIMIT 1").fetchone()
+    if existing_admin:
+        return
+
     now = now_iso()
     db.execute(
         """
@@ -649,7 +780,7 @@ def seed_admin():
         """,
         (
             "ZENDOC Admin",
-            admin_email.strip().lower(),
+            admin_email,
             generate_password_hash(admin_password),
             now,
             now,

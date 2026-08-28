@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Search Results for "{{ q }}" — ZENDOC{% endblock %}
+
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Universal Search Engine</p>
+    <h1>Search Results</h1>
+    <p class="section-copy">Showing results for <strong>"{{ q }}"</strong> across doctors, family records, medicines, fitness, and platform services.</p>
+  </div>
+  <a href="{{ url_for('main.dashboard') }}" class="secondary-action">Dashboard</a>
+</section>
+
+<!-- Search Input -->
+<form method="get" action="{{ url_for('ecosystem.search_page') }}" class="filter-bar">
+  <label style="grid-column: 1 / -2;">Universal Search
+    <input type="text" name="q" value="{{ q }}" placeholder="Search doctors, symptoms, medicines, fitness, or family members..." required>
+  </label>
+  <button type="submit" class="primary-action">Search</button>
+</form>
+
+{% if search_data.categories %}
+  <p style="color:var(--muted);margin-bottom:20px;">Found <strong>{{ search_data.total_matches }}</strong> matching results</p>
+
+  <div class="grid two">
+    {% for cat in search_data.categories %}
+      <article class="panel">
+        <h2 style="color:var(--primary);margin-top:0;">{{ cat.category }}</h2>
+        <div class="summary-block">
+          {% for item in cat["items"] %}
+            <div class="summary-row" style="display:flex;justify-content:space-between;align-items:center;">
+              <div>
+                <strong>{{ item.title }}</strong>
+                <p style="margin:2px 0 0;color:var(--muted);font-size:13px;">{{ item.subtitle }}</p>
+              </div>
+              <a href="{{ item.url }}" class="primary-action" style="padding:6px 12px;min-height:auto;font-size:12px;">Open &rarr;</a>
+            </div>
+          {% endfor %}
+        </div>
+      </article>
+    {% endfor %}
+  </div>
+{% else %}
+  <article class="panel">
+    <div class="empty-state">
+      <h2>No Direct Matches Found for "{{ q }}"</h2>
+      <p>Try searching for specific terms like <em>cardiologist, fever, paracetamol, ambulance, squat, or blood test</em>.</p>
+      
+      <div style="margin-top:16px;">
+        <a href="{{ url_for('main.ai_center') }}" class="primary-action">Ask ZENDOC AI Assistant &rarr;</a>
+      </div>
+    </div>
+  </article>
+{% endif %}
+{% endblock %}

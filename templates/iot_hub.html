@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}IoT Health Device Hub — ZENDOC{% endblock %}
+
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Connected Healthcare Infrastructure</p>
+    <h1>IoT Health Device Hub</h1>
+    <p class="section-copy">Connect smartwatches, BP monitors, glucometers, smart scales, and pulse oximeters directly to your ZENDOC Health Memory with full measurement provenance tracking.</p>
+  </div>
+  <a href="{{ url_for('main.dashboard') }}" class="secondary-action">Dashboard</a>
+</section>
+
+<!-- Supported Device Types Grid -->
+<h2 style="margin-bottom:14px;">Supported Device Ecosystem</h2>
+<div class="grid three" style="margin-bottom:28px;">
+  {% for d in device_types %}
+    <article class="panel">
+      <span class="status-badge active" style="font-size:11px;">Supported</span>
+      <h3 style="margin:10px 0 6px;">{{ d.name }}</h3>
+      <p style="color:var(--muted);font-size:13px;margin:0 0 8px;">Synced Metrics: <strong>{{ d.metrics|join(', ') }}</strong></p>
+    </article>
+  {% endfor %}
+</div>
+
+<div class="grid two">
+  <!-- Connect Device Form -->
+  <article class="panel">
+    <h2>Connect a New Device</h2>
+    <form method="post" action="{{ url_for('ecosystem.iot_hub_page') }}">
+      <input type="hidden" name="action" value="connect">
+      
+      <label>Device Type
+        <select name="device_type" required>
+          {% for d in device_types %}
+            <option value="{{ d.type }}">{{ d.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <label style="margin-top:12px;">Device Display Name
+        <input type="text" name="device_name" placeholder="e.g. Dad's Omron BP Monitor or Apple Watch Series 8" required>
+      </label>
+
+      <div class="form-grid" style="margin-top:12px;">
+        <label>Manufacturer (optional)
+          <input type="text" name="manufacturer" placeholder="e.g. Omron, Apple, Fitbit">
+        </label>
+        <label>Model / Identifier
+          <input type="text" name="model" placeholder="e.g. HEM-7120">
+        </label>
+      </div>
+
+      <button type="submit" class="primary-action" style="margin-top:16px;">Connect Health Device</button>
+    </form>
+  </article>
+
+  <!-- Connected Devices & Sync Panel -->
+  <article class="panel">
+    <h2>Your Connected Devices</h2>
+    {% if devices %}
+      <div class="summary-block">
+        {% for dev in devices %}
+          <div class="summary-row">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <strong>{{ dev.device_name }}</strong>
+              <span class="status-badge active">{{ dev.status.title() }}</span>
+            </div>
+            <span>Type: {{ dev.device_type.replace('_', ' ').title() }} &bull; ID: <code>{{ dev.device_identifier }}</code></span>
+            <small style="color:var(--muted);">Last synced: {{ dev.last_synced_at[:16] if dev.last_synced_at else 'Never' }}</small>
+            
+            <!-- Quick Manual Sync Form for Testing -->
+            <form method="post" action="{{ url_for('ecosystem.iot_hub_page') }}" class="inline-form" style="margin-top:8px;">
+              <input type="hidden" name="action" value="sync">
+              <input type="hidden" name="device_id" value="{{ dev.id }}">
+              <select name="metric_type" style="min-width:130px;font-size:12px;min-height:34px;">
+                <option value="heart_rate">Heart Rate</option>
+                <option value="blood_pressure">Blood Pressure</option>
+                <option value="blood_glucose">Blood Glucose</option>
+                <option value="oxygen_saturation">SpO2</option>
+                <option value="weight">Weight</option>
+                <option value="temperature">Temperature</option>
+              </select>
+              <input type="number" step="0.1" name="metric_value" placeholder="Value" style="width:90px;font-size:12px;min-height:34px;" required>
+              <button type="submit" class="primary-action" style="min-height:34px;padding:4px 10px;font-size:12px;">Sync Data</button>
+            </form>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <p>No health devices connected yet. Connect a smartwatch or monitor to automatically sync vitals with full provenance tracking.</p>
+      </div>
+    {% endif %}
+  </article>
+</div>
+{% endblock %}

@@ -1,0 +1,41 @@
+{# Reusable accessible form selector macros #}
+
+{% macro gender_select(name="gender", selected="", required=false) %}
+<select name="{{ name }}" {% if required %}required{% endif %}>
+  <option value="" disabled {% if not selected %}selected{% endif %}>Select Gender...</option>
+  <option value="male" {% if selected == 'male' %}selected{% endif %}>Male</option>
+  <option value="female" {% if selected == 'female' %}selected{% endif %}>Female</option>
+  <option value="other" {% if selected == 'other' %}selected{% endif %}>Other</option>
+  <option value="prefer_not_to_say" {% if selected == 'prefer_not_to_say' %}selected{% endif %}>Prefer not to say</option>
+</select>
+{% endmacro %}
+
+{% macro blood_group_select(name="blood_group", selected="", required=false) %}
+<select name="{{ name }}" {% if required %}required{% endif %}>
+  <option value="" disabled {% if not selected %}selected{% endif %}>Select Blood Group...</option>
+  <option value="A+" {% if selected == 'A+' %}selected{% endif %}>A+</option>
+  <option value="A-" {% if selected == 'A-' %}selected{% endif %}>A-</option>
+  <option value="B+" {% if selected == 'B+' %}selected{% endif %}>B+</option>
+  <option value="B-" {% if selected == 'B-' %}selected{% endif %}>B-</option>
+  <option value="AB+" {% if selected == 'AB+' %}selected{% endif %}>AB+</option>
+  <option value="AB-" {% if selected == 'AB-' %}selected{% endif %}>AB-</option>
+  <option value="O+" {% if selected == 'O+' %}selected{% endif %}>O+</option>
+  <option value="O-" {% if selected == 'O-' %}selected{% endif %}>O-</option>
+  <option value="Unknown" {% if selected == 'Unknown' %}selected{% endif %}>Unknown</option>
+</select>
+{% endmacro %}
+
+{% macro relationship_select(name="relationship", selected="", required=false) %}
+<select name="{{ name }}" {% if required %}required{% endif %}>
+  <option value="" disabled {% if not selected %}selected{% endif %}>Select Relationship...</option>
+  <option value="father" {% if selected == 'father' %}selected{% endif %}>Father</option>
+  <option value="mother" {% if selected == 'mother' %}selected{% endif %}>Mother</option>
+  <option value="spouse" {% if selected == 'spouse' %}selected{% endif %}>Spouse</option>
+  <option value="son" {% if selected == 'son' %}selected{% endif %}>Son</option>
+  <option value="daughter" {% if selected == 'daughter' %}selected{% endif %}>Daughter</option>
+  <option value="grandfather" {% if selected == 'grandfather' %}selected{% endif %}>Grandfather</option>
+  <option value="grandmother" {% if selected == 'grandmother' %}selected{% endif %}>Grandmother</option>
+  <option value="guardian" {% if selected == 'guardian' %}selected{% endif %}>Guardian</option>
+  <option value="other" {% if selected == 'other' %}selected{% endif %}>Other</option>
+</select>
+{% endmacro %}

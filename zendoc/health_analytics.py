@@ -53,7 +53,7 @@ def _recorded_at(value):
     return parsed.astimezone(timezone.utc).isoformat(timespec="seconds")
 
 
-def create_measurement(actor, data, patient_id=None):
+def create_measurement(actor, data, patient_id=None, trusted_source=False):
     target_id = authorize_patient(actor, patient_id, "measurements")
     metric_type = normalize_metric_type(data.get("metric_type"))
     primary = data.get("value", data.get("metric_value"))
@@ -72,11 +72,13 @@ def create_measurement(actor, data, patient_id=None):
             raise ValueError("Blood pressure requires systolic and diastolic values.")
     source = str(data.get("source") or "manual").strip().lower()
     actor_role = _value(actor, "role")
-    if actor_role == "patient" and source != "manual":
+    if actor_role == "patient" and source != "manual" and not trusted_source:
         raise ValueError("Patient-entered measurements must use the manual source.")
-    if actor_role in {"doctor", "hospital"} and source not in {"manual", "clinical"}:
-        raise ValueError("Provider-entered measurements must use manual or clinical source.")
-    if actor_role == "admin" and source not in {"manual", "clinical", "imported", "calculated"}:
+    if actor_role == "patient" and source not in {"manual", "device", "report", "import"}:
+        raise ValueError("Measurement source is not supported.")
+    if actor_role in {"doctor", "hospital"} and source not in {"manual", "clinical", "provider"}:
+        raise ValueError("Provider-entered measurements must use manual, clinical, or provider source.")
+    if actor_role == "admin" and source not in {"manual", "clinical", "provider", "device", "report", "import", "imported", "calculated"}:
         raise ValueError("Measurement source is not supported.")
     unit = str(data.get("unit") or DEFAULT_UNITS.get(metric_type, "")).strip()[:40]
     display_value = f"{numeric_value:g}/{secondary_value:g}" if secondary_value is not None else f"{numeric_value:g}"

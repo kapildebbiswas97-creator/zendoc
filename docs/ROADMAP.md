@@ -11,28 +11,37 @@ Complete in this codebase: security and authentication hardening, central AI saf
 - General wellness nutrition logging and goals.
 - Progress tracking connected to Health Memory with explicit consent.
 
-## Milestone 6: Camera Pose Coach
+## Milestone 6: Production UX And Connected Care
+
+- Premium Health Command Center dashboard and consistent healthcare SaaS UI.
+- One-time account registration, persistent session controls, password reset architecture, and environment-driven admin bootstrap.
+- Family Care and Remote Parent Care with scoped consent grants and audit trails.
+- Saved locations, home healthcare requests, medical transport, pharmacy services, marketplace, universal search, and IoT health device hub.
+- Truthful integration boundaries for beta, verified provider, integration required, and coming soon services.
+
+## Milestone 7: Camera Pose Coach
 
 - Permission-based pose estimation for supported exercises.
 - Rep counting, bounded form feedback, and session summaries.
 - Device performance and privacy testing.
 
-## Milestone 7: Mental Wellness
+## Milestone 8: Mental Wellness
 
 - Context-aware check-ins, journaling, breathing, sleep, and stress tracking.
 - Strong crisis escalation and age/context-appropriate support.
 
-## Milestone 8: Medicine And Pharmacy
+## Milestone 9: Medicine And Pharmacy Integrations
 
-- Medicine information, medication list, reminders, and prescription storage.
-- Pharmacy discovery and future inventory/order boundaries without AI prescribing.
+- Real pharmacy partner integrations for inventory and delivery status.
+- Prescription-aware order validation and refill workflows.
+- No AI prescribing.
 
-## Milestone 9: Admin, Analytics, And Notifications
+## Milestone 10: Admin, Analytics, And Notifications
 
 - Unified notification delivery architecture.
 - AI safety/usage analytics, moderation, error operations, and expanded audit reporting.
 
-## Milestone 10: Mobile And Production Hardening
+## Milestone 11: Mobile And Production Hardening
 
 - PostgreSQL migrations.
 - S3-compatible file storage.

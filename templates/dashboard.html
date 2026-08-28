@@ -1,30 +1,146 @@
 {% extends "base.html" %}
-{% block title %}Dashboard{% endblock %}
+{% block title %}Health Command Center — ZENDOC{% endblock %}
+
 {% block content %}
 <section class="section-head">
-  <div><p class="eyebrow">{{ current_user.role.title() }} Dashboard</p><h1>Welcome, {{ current_user.name }}</h1></div>
-  <a class="primary-action" href="{{ url_for('main.ai_center') }}">Open AI Center</a>
+  <div>
+    <p class="eyebrow">Health Command Center &bull; {{ current_user.role.title() }}</p>
+    <h1>{% if current_user.role == 'admin' %}Admin Dashboard{% else %}Welcome, {{ current_user.name }}{% endif %}</h1>
+    <p class="section-copy">Your central hub for personal healthcare, family wellness, medical records, and AI assistance.</p>
+  </div>
+  <div class="form-actions">
+    <a href="{{ url_for('ecosystem.search_page') }}" class="secondary-action">Universal Search</a>
+    <a href="{{ url_for('main.ai_center') }}" class="primary-action">Ask ZENDOC AI</a>
+  </div>
 </section>
+
+<!-- Emergency Shortcut Banner -->
+<div class="privacy-banner" style="background:#fff5f5;border-color:var(--danger);color:#b42318;margin-bottom:24px;display:flex;justify-content:space-between;align-items:center;">
+  <div>
+    <strong>Emergency Care Required?</strong> Call 108 immediately for acute chest pain, severe shortness of breath, stroke symptoms, or severe injury.
+  </div>
+  <a href="{{ url_for('ecosystem.ambulance_page') }}" class="primary-action danger-button" style="min-height:36px;padding:4px 12px;font-size:13px;">Request Ambulance</a>
+</div>
+
+<!-- Quick Action Grid (One-Tap Access) -->
+<section style="margin-bottom:24px;">
+  <h3 style="margin:0 0 12px;">Quick Action Shortcuts</h3>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(130px, 1fr));gap:12px;">
+    <a href="{{ url_for('main.ai_center') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;background:#eef4ff;border-color:#b2ddff;">
+      <strong style="color:var(--primary);font-size:14px;">Ask AI</strong>
+      <small style="color:var(--muted);font-size:11px;">Instant Advice</small>
+    </a>
+    <a href="{{ url_for('main.finder') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
+      <strong style="font-size:14px;">Find Doctor</strong>
+      <small style="color:var(--muted);font-size:11px;">Search Clinics</small>
+    </a>
+    <a href="{{ url_for('main.appointments') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
+      <strong style="font-size:14px;">Appointments</strong>
+      <small style="color:var(--muted);font-size:11px;">Book &amp; View</small>
+    </a>
+    <a href="{{ url_for('main.records') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
+      <strong style="font-size:14px;">Upload Report</strong>
+      <small style="color:var(--muted);font-size:11px;">Smart Extract</small>
+    </a>
+    <a href="{{ url_for('ecosystem.pharmacy_page') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
+      <strong style="font-size:14px;">Medicines</strong>
+      <small style="color:var(--muted);font-size:11px;">Order &amp; Reminders</small>
+    </a>
+    <a href="{{ url_for('ecosystem.home_health_page') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
+      <strong style="font-size:14px;">Home Health</strong>
+      <small style="color:var(--muted);font-size:11px;">Nurse &amp; Physio</small>
+    </a>
+    {% if current_user.role == 'patient' %}
+    <a href="{{ url_for('family.family_page') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
+      <strong style="font-size:14px;">Family Care</strong>
+      <small style="color:var(--muted);font-size:11px;">Remote Parents</small>
+    </a>
+    <a href="{{ url_for('fitness.overview') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
+      <strong style="font-size:14px;">Fitness Coach</strong>
+      <small style="color:var(--muted);font-size:11px;">Workouts &amp; Diet</small>
+    </a>
+    <a href="{{ url_for('ecosystem.iot_hub_page') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
+      <strong style="font-size:14px;">IoT Devices</strong>
+      <small style="color:var(--muted);font-size:11px;">Smart Sync</small>
+    </a>
+    {% endif %}
+    <a href="{{ url_for('ecosystem.marketplace_page') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
+      <strong style="font-size:14px;">All Services</strong>
+      <small style="color:var(--muted);font-size:11px;">Ecosystem Catalog</small>
+    </a>
+  </div>
+</section>
+
+<!-- Health Snapshot Stats -->
 <section class="stats">
-  {% for label, value in stats.items() %}<article><span>{{ label }}</span><strong>{{ value }}</strong></article>{% endfor %}
+  {% for label, value in stats.items() %}
+    <article>
+      <span>{{ label }}</span>
+      <strong>{{ value }}</strong>
+    </article>
+  {% endfor %}
 </section>
-<section class="quick-actions">
-  <a href="{{ url_for('main.profile') }}">Profile</a>
-  {% if current_user.role == 'patient' %}<a href="{{ url_for('health_memory.health_profile_page') }}">My Health</a>{% endif %}
-  <a href="{{ url_for('main.appointments') }}">Appointments</a>
-  <a href="{{ url_for('main.records') }}">Medical Records</a>
-  <a href="{{ url_for('main.finder') }}">Find Care</a>
-  <a href="{{ url_for('main.health') }}">Health Monitoring</a>
-  {% if current_user.role == 'patient' %}<a href="{{ url_for('health_memory.timeline_page') }}">Health Timeline</a>{% endif %}
-  <a href="{{ url_for('main.ai_center') }}">AI Doctor</a>
-  <a href="{{ url_for('main.notifications') }}">Notifications</a>
-</section>
-<section class="panel">
-  <h2>Recent Appointments</h2>
-  {% if appointments %}
-  <table><thead><tr><th>Patient</th><th>Provider</th><th>When</th><th>Status</th></tr></thead><tbody>
-    {% for item in appointments %}<tr><td>{{ item.patient_name }}</td><td>{{ item.provider_name }}</td><td>{{ item.scheduled_for }}</td><td>{{ item.status }}</td></tr>{% endfor %}
-  </tbody></table>
-  {% else %}<p>No appointments yet.</p>{% endif %}
-</section>
+
+<div class="grid two">
+  <!-- Left column: Recent Appointments & Reminders -->
+  <article class="panel">
+    <div class="panel-head">
+      <h2>Upcoming Appointments</h2>
+      <a href="{{ url_for('main.appointments') }}" class="secondary-action">Manage</a>
+    </div>
+    {% if appointments %}
+      <table>
+        <thead>
+          <tr>
+            <th>Patient</th>
+            <th>Provider</th>
+            <th>Scheduled</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in appointments %}
+            <tr>
+              <td><strong>{{ item.patient_name }}</strong></td>
+              <td>{{ item.provider_name }}</td>
+              <td>{{ item.scheduled_for }}</td>
+              <td><span class="status-badge active">{{ item.status }}</span></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <div class="empty-state">
+        <p>No upcoming appointments booked.</p>
+        <a href="{{ url_for('main.finder') }}" class="primary-action" style="margin-top:8px;">Find Doctor &amp; Book</a>
+      </div>
+    {% endif %}
+  </article>
+
+  <!-- Right column: Family & Ecosystem Highlights -->
+  <article class="panel">
+    <div class="panel-head">
+      <h2>Ecosystem Connected Care</h2>
+      <a href="{{ url_for('ecosystem.marketplace_page') }}" class="secondary-action">Explore All Services</a>
+    </div>
+    
+    <div class="summary-block" style="margin-top:12px;">
+      <div class="summary-row">
+        <strong>Family &amp; Parent Care</strong>
+        <span>Manage elder care, appointment booking for dependents, and remote caregiver tasks.</span>
+        <a href="{{ url_for('family.family_page') }}" class="text-link" style="margin-top:4px;">Open Family Care &rarr;</a>
+      </div>
+      <div class="summary-row">
+        <strong>Home Healthcare</strong>
+        <span>Book doctor home visits, trained nursing care, physiotherapy, or sample collection.</span>
+        <a href="{{ url_for('ecosystem.home_health_page') }}" class="text-link" style="margin-top:4px;">Book Home Care &rarr;</a>
+      </div>
+      <div class="summary-row">
+        <strong>IoT Connected Devices</strong>
+        <span>Sync smartwatches, BP monitors, glucometers, and scales into your Health Memory.</span>
+        <a href="{{ url_for('ecosystem.iot_hub_page') }}" class="text-link" style="margin-top:4px;">Connect Devices &rarr;</a>
+      </div>
+    </div>
+  </article>
+</div>
 {% endblock %}

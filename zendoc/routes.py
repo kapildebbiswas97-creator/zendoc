@@ -299,11 +299,53 @@ def login(role):
             session.clear()
             session["user_id"] = user["id"]
             session["csrf_token"] = secrets.token_urlsafe(32)
+            if request.form.get("remember_me"):
+                session.permanent = True
             audit("login", "user", str(user["id"]))
             get_db().commit()
             return redirect(url_for("main.dashboard"))
         flash("Invalid login details.", "error")
     return render_template("login.html", role=role)
+
+
+@bp.route("/forgot-password", methods=("GET", "POST"))
+def forgot_password():
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        user = get_db().execute("SELECT * FROM users WHERE email=? AND active=1", (email,)).fetchone()
+        if user:
+            token = new_token()
+            get_db().execute(
+                "INSERT INTO api_tokens (user_id, token_hash, created_at) VALUES (?, ?, ?)",
+                (user["id"], hash_token(token), now_iso()),
+            )
+            get_db().commit()
+            flash("Password reset token generated. Reset your password below.", "success")
+            return redirect(url_for("main.reset_password", token=token))
+        flash("If the account exists, instructions have been generated.", "success")
+    return render_template("forgot_password.html")
+
+
+@bp.route("/reset-password", methods=("GET", "POST"))
+def reset_password():
+    token = request.args.get("token") or request.form.get("token", "")
+    if request.method == "POST":
+        password = request.form.get("password", "")
+        if len(password) < 8:
+            flash("Password must be at least 8 characters.", "error")
+            return render_template("reset_password.html", token=token), 400
+        token_digest = hash_token(token)
+        tok_row = get_db().execute("SELECT * FROM api_tokens WHERE token_hash=? AND revoked_at IS NULL", (token_digest,)).fetchone()
+        if not tok_row:
+            flash("Invalid or expired password reset token.", "error")
+            return render_template("reset_password.html", token=token), 400
+        user_id = tok_row["user_id"]
+        get_db().execute("UPDATE users SET password_hash=?, updated_at=? WHERE id=?", (generate_password_hash(password), now_iso(), user_id))
+        get_db().execute("UPDATE api_tokens SET revoked_at=? WHERE id=?", (now_iso(), tok_row["id"]))
+        get_db().commit()
+        flash("Password reset successful. Please log in with your new password.", "success")
+        return redirect(url_for("main.login", role="patient"))
+    return render_template("reset_password.html", token=token)
 
 
 @bp.get("/logout")
@@ -803,6 +845,44 @@ def api_logout():
     )
     get_db().commit()
     return jsonify({"status": "revoked"})
+
+
+@bp.post("/api/v1/auth/forgot-password")
+def api_forgot_password():
+    data = request.get_json(silent=True) or {}
+    email = data.get("email", "").strip().lower()
+    if not email:
+        return jsonify({"error": "Email is required"}), 400
+    user = get_db().execute("SELECT * FROM users WHERE email=? AND active=1", (email,)).fetchone()
+    if user:
+        token = new_token()
+        get_db().execute(
+            "INSERT INTO api_tokens (user_id, token_hash, created_at) VALUES (?, ?, ?)",
+            (user["id"], hash_token(token), now_iso()),
+        )
+        get_db().commit()
+        return jsonify({"status": "reset_token_generated", "reset_token": token, "message": "Password reset token generated."})
+    return jsonify({"status": "reset_token_generated", "message": "If account exists, instructions were processed."})
+
+
+@bp.post("/api/v1/auth/reset-password")
+def api_reset_password():
+    data = request.get_json(silent=True) or {}
+    token = data.get("reset_token", "").strip()
+    password = data.get("password", "").strip()
+    if not token or not password:
+        return jsonify({"error": "reset_token and password are required"}), 400
+    if len(password) < 8:
+        return jsonify({"error": "Password must be at least 8 characters"}), 400
+    token_digest = hash_token(token)
+    tok_row = get_db().execute("SELECT * FROM api_tokens WHERE token_hash=? AND revoked_at IS NULL", (token_digest,)).fetchone()
+    if not tok_row:
+        return jsonify({"error": "Invalid or expired reset token"}), 400
+    user_id = tok_row["user_id"]
+    get_db().execute("UPDATE users SET password_hash=?, updated_at=? WHERE id=?", (generate_password_hash(password), now_iso(), user_id))
+    get_db().execute("UPDATE api_tokens SET revoked_at=? WHERE id=?", (now_iso(), tok_row["id"]))
+    get_db().commit()
+    return jsonify({"status": "password_reset_success"})
 
 
 @bp.get("/api/v1/dashboard")

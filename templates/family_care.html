@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}Family Care — ZENDOC{% endblock %}
+
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Caregiving &amp; Dependents</p>
+    <h1>Family Care</h1>
+    <p class="section-copy">Manage healthcare for parents, children, spouse, and dependents with explicit consent and proxy permissions.</p>
+  </div>
+  <div class="form-actions">
+    <a href="{{ url_for('family.parent_care_page') }}" class="primary-action">Remote Parent Care Dashboard</a>
+    <a href="{{ url_for('main.dashboard') }}" class="secondary-action">Dashboard</a>
+  </div>
+</section>
+
+<div class="grid two">
+  <!-- Left column: Add Family Member & List -->
+  <article class="panel">
+    <h2>Family Members</h2>
+    {% if members %}
+      <div class="summary-block">
+        {% for m in members %}
+          <div class="summary-row" style="display:flex;justify-content:space-between;align-items:center;">
+            <div>
+              <strong>{{ m.member_name }}</strong>
+              <p style="margin:2px 0 0;color:var(--muted);font-size:13px;">
+                {{ m.relationship.title() }} &bull; Age: {{ m.age or 'N/A' }} &bull; {{ m.city or 'Local' }}
+                {% if m.is_remote_parent %}&bull; <span class="status-badge active">Remote Parent</span>{% endif %}
+              </p>
+            </div>
+            <a href="{{ url_for('family.family_page', member_id=m.id) }}" class="secondary-action" style="padding:4px 10px;min-height:auto;font-size:12px;">Tasks &amp; Care</a>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <p>No family members added yet.</p>
+      </div>
+    {% endif %}
+
+    <h3 style="margin-top:22px;">Add Family Member</h3>
+    <form method="post" action="{{ url_for('family.family_page') }}">
+      <input type="hidden" name="action" value="add_member">
+      <label>Member Full Name
+        <input type="text" name="member_name" placeholder="e.g. Ramesh Chandra Biswas" required>
+      </label>
+
+      <div class="form-grid">
+        <label>Relationship
+          <select name="relationship" required>
+            <option value="father">Father</option>
+            <option value="mother">Mother</option>
+            <option value="spouse">Spouse</option>
+            <option value="son">Son</option>
+            <option value="daughter">Daughter</option>
+            <option value="grandfather">Grandfather</option>
+            <option value="grandmother">Grandmother</option>
+            <option value="guardian">Guardian</option>
+            <option value="other">Other</option>
+          </select>
+        </label>
+        <label>Age
+          <input type="number" name="age" min="0" max="150" placeholder="e.g. 68">
+        </label>
+      </div>
+
+      <div class="form-grid" style="margin-top:12px;">
+        <label>Gender
+          <select name="gender">
+            <option value="male">Male</option>
+            <option value="female">Female</option>
+            <option value="other">Other</option>
+            <option value="prefer_not_to_say">Prefer not to say</option>
+          </select>
+        </label>
+        <label>City
+          <input type="text" name="city" placeholder="e.g. Kolkata, India">
+        </label>
+      </div>
+
+      <label class="check-option" style="margin-top:12px;">
+        <input type="checkbox" name="is_remote_parent" value="1" checked> Flag as Remote Parent / Senior Dependent
+      </label>
+
+      <button type="submit" class="primary-action" style="margin-top:14px;">Add Family Member</button>
+    </form>
+  </article>
+
+  <!-- Right column: Family Care Tasks -->
+  <article class="panel">
+    <h2>Care Tasks &amp; Reminders</h2>
+    {% if tasks %}
+      <div class="summary-block">
+        {% for t in tasks %}
+          <div class="summary-row" style="display:flex;justify-content:space-between;align-items:center;">
+            <div>
+              <strong>{{ t.title }}</strong>
+              <p style="margin:2px 0 0;color:var(--muted);font-size:13px;">
+                For: {{ t.member_name or 'General' }} &bull; Due: {{ t.due_date or 'Anytime' }} &bull; Status: {{ t.status.title() }}
+              </p>
+            </div>
+            {% if t.status == 'pending' %}
+              <form method="post" action="{{ url_for('family.family_page') }}" style="margin:0;">
+                <input type="hidden" name="action" value="complete_task">
+                <input type="hidden" name="task_id" value="{{ t.id }}">
+                <button type="submit" class="secondary-action" style="padding:4px 8px;min-height:auto;font-size:12px;">Mark Done ✓</button>
+              </form>
+            {% else %}
+              <span class="status-badge active">Completed</span>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <p>No care tasks set yet.</p>
+      </div>
+    {% endif %}
+
+    <h3 style="margin-top:22px;">Create Care Task</h3>
+    <form method="post" action="{{ url_for('family.family_page') }}">
+      <input type="hidden" name="action" value="add_task">
+      <label>Family Member
+        <select name="family_member_id">
+          <option value="">Select Family Member...</option>
+          {% for m in members %}
+            <option value="{{ m.id }}">{{ m.member_name }} ({{ m.relationship.title() }})</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <label style="margin-top:12px;">Task Title
+        <input type="text" name="title" placeholder="e.g. Schedule monthly BP checkup" required>
+      </label>
+
+      <div class="form-grid" style="margin-top:12px;">
+        <label>Task Type
+          <select name="task_type">
+            <option value="checkup">Doctor Checkup</option>
+            <option value="medicine">Medicine Refill</option>
+            <option value="home_care">Home Care Visit</option>
+            <option value="general" selected>General Task</option>
+          </select>
+        </label>
+        <label>Due Date
+          <input type="date" name="due_date">
+        </label>
+      </div>
+
+      <button type="submit" class="primary-action" style="margin-top:14px;">Add Care Task</button>
+    </form>
+  </article>
+</div>
+{% endblock %}

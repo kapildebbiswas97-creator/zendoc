@@ -118,6 +118,51 @@ class ZendocIntelligence:
             result = self._health_memory_action(intent, clean_message, user)
         elif intent in FITNESS_INTENTS:
             result = self._fitness_action(intent, clean_message, user)
+        elif intent == "family_care":
+            result = IntelligenceResult(
+                intent="family_care",
+                urgency="routine",
+                message="ZENDOC Family Care helps you manage appointments, reports, home care, and emergency alerts for your parents and family members.",
+                follow_up_questions=["Would you like to open Family Care or Remote Parent Care?"],
+                possible_actions=[{"type": "family_care", "label": "Open Family Care"}, {"type": "parent_care", "label": "Open Remote Parent Care"}],
+                provider="family_service",
+            )
+        elif intent == "home_health":
+            result = IntelligenceResult(
+                intent="home_health",
+                urgency="routine",
+                message="ZENDOC Home Healthcare offers home doctor visits, nursing care, physiotherapy, elder attendants, sample collection, and equipment rental.",
+                follow_up_questions=["Which home healthcare service do you need today?"],
+                possible_actions=[{"type": "home_health", "label": "Book Home Healthcare"}],
+                provider="home_health_service",
+            )
+        elif intent == "ambulance":
+            result = IntelligenceResult(
+                intent="ambulance",
+                urgency="routine",
+                message="For urgent life-threatening emergencies, call 108 immediately. You can also request basic, advanced, or wheelchair patient transport.",
+                follow_up_questions=["Is this an emergency or a scheduled patient transport?"],
+                possible_actions=[{"type": "ambulance", "label": "Request Medical Transport"}],
+                provider="medical_transport",
+            )
+        elif intent == "pharmacy":
+            result = IntelligenceResult(
+                intent="pharmacy",
+                urgency="routine",
+                message="ZENDOC Pharmacy lets you search essential medicines, locate nearby pharmacies, request delivery, and set refill reminders.",
+                follow_up_questions=["Would you like to search medicines or find a nearby pharmacy?"],
+                possible_actions=[{"type": "pharmacy", "label": "Open Pharmacy Services"}],
+                provider="pharmacy_service",
+            )
+        elif intent == "iot_hub":
+            result = IntelligenceResult(
+                intent="iot_hub",
+                urgency="routine",
+                message="ZENDOC IoT Hub connects your smartwatch, BP monitor, glucometer, smart scale, and pulse oximeter directly to your Health Memory.",
+                follow_up_questions=["Would you like to connect a new health device or view synced measurements?"],
+                possible_actions=[{"type": "iot_hub", "label": "Open Connected Devices Hub"}],
+                provider="iot_hub",
+            )
         elif intent in FUTURE_ACTIONS:
             result = self._future_action(intent, clean_message)
         else:

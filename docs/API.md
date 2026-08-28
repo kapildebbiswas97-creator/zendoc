@@ -7,6 +7,8 @@ Base URL: `/api/v1`
 - `POST /auth/register`
 - `POST /auth/login`
 - `POST /auth/logout`
+- `POST /auth/forgot-password`
+- `POST /auth/reset-password`
 
 Use the returned token as:
 
@@ -29,6 +31,38 @@ Authorization: Bearer <token>
 - `POST /ai/assistant`
 - `POST /ai/mental-health`
 - `POST /ai/message`
+
+### ZENDOC Milestone 6 Ecosystem
+
+- `GET /family`
+- `POST /family`
+- `GET /family/<member_id>`
+- `PUT /family/<member_id>`
+- `DELETE /family/<member_id>`
+- `GET /family/care-tasks`
+- `POST /family/care-tasks`
+- `PUT /family/care-tasks/<task_id>`
+- `GET /family/access-grants`
+- `POST /family/access-grants`
+- `DELETE /family/access-grants/<grant_id>`
+- `GET /home-health/requests`
+- `POST /home-health/requests`
+- `GET /ambulance/requests`
+- `POST /ambulance/requests`
+- `GET /pharmacy/medicines?q=<query>`
+- `GET /pharmacy/stores?city=<city>`
+- `POST /pharmacy/orders`
+- `GET /pharmacy/reminders`
+- `POST /pharmacy/reminders`
+- `DELETE /pharmacy/reminders/<reminder_id>`
+- `GET /iot/devices`
+- `POST /iot/devices`
+- `POST /iot/devices/<device_id>/sync`
+- `GET /locations`
+- `POST /locations`
+- `DELETE /locations/<location_id>`
+- `GET /search?q=<query>`
+- `GET /marketplace`
 
 ### ZENDOC Health Memory
 
@@ -97,6 +131,18 @@ Patients create a grant with a verified provider profile, one or more scopes, an
 ```
 
 Supported scopes are `profile`, `reports`, `appointments`, `measurements`, and `timeline`. Revoked and expired grants are denied.
+
+Family care uses a separate user-to-user grant for caregiver actions:
+
+```json
+{
+  "grantee_email": "child@example.com",
+  "family_member_id": 3,
+  "scopes": ["home_health", "pharmacy", "transport"]
+}
+```
+
+Supported family scopes are `appointments`, `reports`, `metrics`, `timeline`, `emergency`, `home_health`, `pharmacy`, `transport`, and `care_tasks`. Home healthcare, pharmacy, and transport requests for another patient account are denied unless the requester owns that account, is an admin, or has the matching active family grant.
 
 ## Healthcare Search
 

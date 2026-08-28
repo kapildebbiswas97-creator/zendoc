@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Remote Parent Care — ZENDOC{% endblock %}
+
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Startup Innovation &bull; Remote Caregiving</p>
+    <h1>Remote Parent Care Dashboard</h1>
+    <p class="section-copy">Care for your elderly parents living in another city or country. Schedule doctor visits, order home healthcare, request medicine delivery, and monitor health from anywhere.</p>
+  </div>
+  <a href="{{ url_for('family.family_page') }}" class="secondary-action">Back to Family Care</a>
+</section>
+
+{% if parents %}
+  <div class="grid two">
+    {% for parent in parents %}
+      <article class="panel">
+        <div class="panel-head">
+          <div>
+            <span class="status-badge active">{{ parent.relationship.title() }}</span>
+            <h2 style="margin-top:4px;">{{ parent.member_name }}</h2>
+            <p style="margin:2px 0 0;color:var(--muted);font-size:13px;">Age: {{ parent.age or 'N/A' }} &bull; Location: <strong>{{ parent.city or 'India' }}</strong></p>
+          </div>
+        </div>
+
+        <h4 style="margin-top:18px;">Quick Proxy Actions for {{ parent.member_name }}</h4>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;">
+          <a href="{{ url_for('main.finder') }}" class="secondary-action" style="font-size:13px;">Book Doctor Consultation</a>
+          <a href="{{ url_for('ecosystem.home_health_page') }}" class="secondary-action" style="font-size:13px;">Request Nurse / Home Visit</a>
+          <a href="{{ url_for('ecosystem.pharmacy_page') }}" class="secondary-action" style="font-size:13px;">Order Medicine Delivery</a>
+          <a href="{{ url_for('ecosystem.ambulance_page') }}" class="secondary-action" style="font-size:13px;border-color:var(--danger);color:var(--danger);">Request Emergency Ambulance</a>
+        </div>
+      </article>
+    {% endfor %}
+  </div>
+{% else %}
+  <article class="panel">
+    <div class="empty-state">
+      <h2>No Remote Parents Added Yet</h2>
+      <p>Add your mother, father, or grandparents in Family Care to enable the Remote Parent Care dashboard.</p>
+      <a href="{{ url_for('family.family_page') }}" class="primary-action" style="margin-top:12px;">Add Parent / Dependent Now</a>
+    </div>
+  </article>
+{% endif %}
+
+<article class="panel" style="margin-top:24px;">
+  <h2>Parent Care Tasks</h2>
+  {% if tasks %}
+    <table>
+      <thead>
+        <tr>
+          <th>Task Title</th>
+          <th>Parent / Member</th>
+          <th>Due Date</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in tasks %}
+          <tr>
+            <td><strong>{{ t.title }}</strong></td>
+            <td>{{ t.member_name or 'Parent' }}</td>
+            <td>{{ t.due_date or 'Flexible' }}</td>
+            <td><span class="status-badge active">{{ t.status.title() }}</span></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="empty-state">No parent care tasks currently active.</p>
+  {% endif %}
+</article>
+{% endblock %}

@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Home Healthcare — ZENDOC{% endblock %}
+
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Doorstep Medical Services</p>
+    <h1>Home Healthcare</h1>
+    <p class="section-copy">Book home doctor visits, nursing care, physiotherapy, elder attendants, sample collection, and equipment rental at your home.</p>
+  </div>
+  <a href="{{ url_for('main.dashboard') }}" class="secondary-action">Dashboard</a>
+</section>
+
+<!-- Available Services Catalog -->
+<h2 style="margin-bottom:14px;">Available Home Health Services</h2>
+<div class="grid three" style="margin-bottom:28px;">
+  {% for s in services %}
+    <article class="panel">
+      <span class="status-badge active" style="font-size:11px;">{{ s.status_badge }}</span>
+      <h3 style="margin:10px 0 6px;">{{ s.title }}</h3>
+      <p style="color:var(--muted);font-size:13px;margin:0 0 12px;">Category: <strong>{{ s.category }}</strong></p>
+      <p style="font-size:13px;line-height:1.4;">{{ s.description }}</p>
+    </article>
+  {% endfor %}
+</div>
+
+<div class="grid two">
+  <!-- Request Booking Form -->
+  <article class="panel">
+    <h2>Book Home Healthcare Service</h2>
+    <form method="post" action="{{ url_for('ecosystem.home_health_page') }}">
+      <label>Service Type
+        <select name="service_type" required>
+          {% for s in services %}
+            <option value="{{ s.id }}">{{ s.title }} ({{ s.status_badge }})</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <div class="form-grid" style="margin-top:12px;">
+        <label>Scheduled Date
+          <input type="date" name="scheduled_date" required>
+        </label>
+        <label>City
+          <input type="text" name="city" placeholder="e.g. Kolkata" required>
+        </label>
+      </div>
+
+      <label style="margin-top:12px;">Doorstep Address
+        <textarea name="address" rows="2" placeholder="Full house address with landmark" required></textarea>
+      </label>
+
+      <label style="margin-top:12px;">Special Instructions / Clinical Notes (optional)
+        <input type="text" name="notes" placeholder="e.g. Patient is recovering from knee surgery">
+      </label>
+
+      <button type="submit" class="primary-action" style="margin-top:16px;">Submit Home Care Request</button>
+    </form>
+  </article>
+
+  <!-- Request History -->
+  <article class="panel">
+    <h2>Your Home Care Requests</h2>
+    {% if requests %}
+      <div class="summary-block">
+        {% for r in requests %}
+          <div class="summary-row">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <strong>{{ r.service_type.replace('_', ' ').title() }}</strong>
+              <span class="status-badge active">{{ r.status.title() }}</span>
+            </div>
+            <span>Date: {{ r.scheduled_date }} &bull; Patient: {{ r.patient_name }} &bull; City: {{ r.city }}</span>
+            {% if r.notes %}<p style="margin:2px 0 0;font-size:12px;color:var(--muted);">{{ r.notes }}</p>{% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <p>No home healthcare requests submitted yet.</p>
+      </div>
+    {% endif %}
+  </article>
+</div>
+{% endblock %}

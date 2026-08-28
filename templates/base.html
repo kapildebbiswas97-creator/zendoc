@@ -9,21 +9,31 @@
 <body>
   <header class="topbar">
     <a class="brand" href="{{ url_for('main.home') }}">ZENDOC</a>
+    <div style="display:flex;align-items:center;gap:12px;flex:1;max-width:320px;">
+      <form action="{{ url_for('ecosystem.search_page') }}" method="get" style="width:100%;margin:0;">
+        <input type="text" name="q" placeholder="Search ZENDOC..." style="min-height:36px;padding:6px 12px;font-size:13px;border-radius:20px;background:#f0f4f9;">
+      </form>
+    </div>
     <nav>
       {% if current_user %}
         <a href="{{ url_for('main.dashboard') }}">Dashboard</a>
-        <a href="{{ url_for('main.profile') }}">Profile</a>
+        {% if current_user.role == 'patient' %}<a href="{{ url_for('family.family_page') }}">Family</a>{% endif %}
+        <a href="{{ url_for('ecosystem.marketplace_page') }}">Services</a>
         <a href="{{ url_for('main.appointments') }}">Appointments</a>
         <a href="{{ url_for('main.finder') }}">Find Care</a>
         <a href="{{ url_for('main.records') }}">Records</a>
         <a href="{{ url_for('main.health') }}">Health</a>
         {% if current_user.role == 'patient' %}<a href="{{ url_for('health_memory.timeline_page') }}">Timeline</a>{% endif %}
         {% if current_user.role == 'patient' %}<a href="{{ url_for('fitness.overview') }}">Fitness</a>{% endif %}
-        <a href="{{ url_for('main.ai_center') }}">AI</a>
+        <a href="{{ url_for('main.ai_center') }}">AI Assistant</a>
         {% if current_user.role in ['doctor','hospital','pharmacy'] %}<a href="{{ url_for('main.provider_profile') }}">Provider</a>{% endif %}
         <a href="{{ url_for('main.notifications') }}">Notifications</a>
         {% if current_user.role == 'admin' %}<a href="{{ url_for('main.admin') }}">Admin</a>{% endif %}
         <a href="{{ url_for('main.logout') }}">Logout</a>
+      {% else %}
+        <a href="{{ url_for('ecosystem.marketplace_page') }}">Services</a>
+        <a href="{{ url_for('main.login', role='patient') }}">Login</a>
+        <a href="{{ url_for('main.register', role='patient') }}" class="primary-action" style="min-height:36px;padding:6px 14px;">Get Started</a>
       {% endif %}
     </nav>
   </header>
