@@ -18,7 +18,7 @@ from .db import get_db
 from .human_operations import create_staff_task, list_staff_tasks, update_staff_task, upsert_staff_profile
 from .pose_coach import POSE_EXERCISES, list_pose_sessions, save_pose_session
 from .routes import audit, require_api_user
-from .security import login_required, role_required
+from .security import assert_owner, login_required, owner_required, role_required
 from .telehealth import (
     get_consultation,
     get_doctor_availability,
@@ -48,7 +48,7 @@ def _api_error(error):
 
 @bp.route("/admin/agent-command-center", methods=("GET", "POST"))
 @login_required
-@role_required("admin")
+@owner_required
 def admin_agent_command_center():
     agent_result = None
     if request.method == "POST":
@@ -241,7 +241,9 @@ def api_admin_agent_command_center():
     user, error = require_api_user()
     if error:
         return error
-    if user["role"] != "admin":
+    try:
+        assert_owner(user)
+    except PermissionError:
         abort(403)
     return jsonify(admin_command_center_data())
 

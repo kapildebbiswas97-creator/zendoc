@@ -183,3 +183,28 @@ Supported family scopes are `appointments`, `reports`, `metrics`, `timeline`, `e
 `GET /healthcare/search?category=doctor&specialty=Cardiology&location=Kolkata`
 
 Returns registered verified ZENDOC providers and external places results when a provider is configured. Missing external credentials return a graceful unavailable message with no fabricated results.
+# Milestone 8 APIs
+
+All M8 endpoints require a bearer token. `/api/v1/admin/*` endpoints additionally require the environment-configured ZENDOC owner identity.
+
+- `GET /api/v1/capabilities`
+- `GET /api/v1/agent/registry`
+- `GET /api/v1/agent/tools`
+- `GET /api/v1/agent/tasks`
+- `GET /api/v1/agent/tasks/{id}`
+- `POST /api/v1/agent/tasks/{id}/execute`
+- `POST /api/v1/agent/tasks/{id}/retry`
+- `GET /api/v1/agent/approvals`
+- `POST /api/v1/agent/approvals/{id}/decision`
+- `GET /api/v1/events?after_id={id}&limit={n}`
+- `POST /api/v1/admin/agent/tasks`
+- `GET /api/v1/admin/model-router`
+- `GET /api/v1/admin/infrastructure`
+- `GET /api/v1/admin/approvals`
+- `POST /api/v1/admin/approvals/{id}/decision`
+- `GET /api/v1/admin/alerts`
+- `POST /api/v1/admin/alerts/check`
+- `POST /api/v1/admin/alerts/{id}/acknowledge`
+- `POST /api/v1/admin/alerts/{id}/resolve`
+
+See [Milestone 8](MILESTONE8.md) for schemas, status, and safety boundaries.

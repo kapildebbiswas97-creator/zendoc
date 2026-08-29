@@ -7,6 +7,8 @@ from werkzeug.security import generate_password_hash
 
 
 ROLES = ("patient", "doctor", "hospital", "pharmacy", "government", "admin")
+LEGACY_ADMIN_FALLBACK_ROLE = "patient"
+LEGACY_ADMIN_RECONCILIATION_VERSION = "m8_legacy_admin_reconciliation_v1"
 
 
 def now_iso():
@@ -596,12 +598,25 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             run_id INTEGER REFERENCES agent_runs(id) ON DELETE CASCADE,
             actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-            operation_type TEXT NOT NULL,
+            operation_type TEXT NOT NULL DEFAULT 'agent_action',
             status TEXT NOT NULL DEFAULT 'pending',
-            requested_at TEXT NOT NULL,
+            requested_at TEXT NOT NULL DEFAULT '',
             decided_at TEXT,
-            decision_note TEXT
+            decision_note TEXT,
+            requested_by_agent TEXT NOT NULL DEFAULT 'ZENDOC Core Agent',
+            requested_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            action_type TEXT,
+            task_id INTEGER REFERENCES agent_tasks(id) ON DELETE SET NULL,
+            payload_summary TEXT,
+            risk_level TEXT NOT NULL DEFAULT 'owner_approval',
+            approver_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            resolved_at TEXT,
+            resolved_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            resolution_note TEXT,
+            expires_at TEXT,
+            created_at TEXT NOT NULL DEFAULT ''
         );
+        CREATE INDEX IF NOT EXISTS idx_agent_approvals_status ON agent_approvals(status, requested_at);
 
         CREATE TABLE IF NOT EXISTS platform_events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -614,6 +629,10 @@ def init_db():
             error TEXT,
             approval_state TEXT NOT NULL DEFAULT 'not_required',
             duration_ms INTEGER,
+            event_type TEXT,
+            payload_json TEXT NOT NULL DEFAULT '{}',
+            correlation_id TEXT,
+            idempotency_key TEXT,
             created_at TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_platform_events_status ON platform_events(status, created_at);
@@ -820,6 +839,97 @@ def init_db():
             created_at TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_video_search_user ON video_search_history(user_id, created_at);
+
+        -- Milestone 8: Intelligence, Task Engine, Approvals, Alerts, Events
+
+        CREATE TABLE IF NOT EXISTS agent_tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_type TEXT NOT NULL,
+            requested_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            assigned_agent TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'queued',
+            priority TEXT NOT NULL DEFAULT 'normal',
+            risk_level TEXT NOT NULL DEFAULT 'low_risk',
+            attempt_count INTEGER NOT NULL DEFAULT 0,
+            max_attempts INTEGER NOT NULL DEFAULT 3,
+            idempotency_key TEXT UNIQUE,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            result_summary TEXT,
+            last_error_category TEXT,
+            duration_ms INTEGER,
+            started_at TEXT,
+            completed_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_agent_tasks_status ON agent_tasks(status, created_at);
+        CREATE INDEX IF NOT EXISTS idx_agent_tasks_requested_by ON agent_tasks(requested_by);
+
+        CREATE TABLE IF NOT EXISTS agent_task_attempts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id INTEGER NOT NULL REFERENCES agent_tasks(id) ON DELETE CASCADE,
+            status TEXT NOT NULL,
+            message TEXT,
+            error_category TEXT,
+            duration_ms INTEGER,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_agent_task_attempts_task ON agent_task_attempts(task_id);
+
+        CREATE TABLE IF NOT EXISTS agent_alerts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            severity TEXT NOT NULL DEFAULT 'info',
+            category TEXT NOT NULL DEFAULT 'operational',
+            title TEXT NOT NULL,
+            summary TEXT,
+            source_type TEXT,
+            source_id TEXT,
+            status TEXT NOT NULL DEFAULT 'active',
+            created_at TEXT NOT NULL,
+            acknowledged_at TEXT,
+            acknowledged_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            resolved_at TEXT,
+            resolved_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            dedupe_key TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_agent_alerts_status ON agent_alerts(status, created_at);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_alerts_dedupe ON agent_alerts(dedupe_key) WHERE dedupe_key IS NOT NULL AND status='active';
+
+        CREATE TABLE IF NOT EXISTS model_execution_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            task_type TEXT,
+            intent TEXT,
+            provider TEXT NOT NULL,
+            model TEXT,
+            routing_reason TEXT,
+            latency_ms INTEGER,
+            success INTEGER NOT NULL DEFAULT 1,
+            fallback_used INTEGER NOT NULL DEFAULT 0,
+            error_category TEXT,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_model_exec_logs_actor ON model_execution_logs(actor_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_model_exec_logs_provider ON model_execution_logs(provider, created_at);
+
+        CREATE TABLE IF NOT EXISTS notification_deliveries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            channel TEXT NOT NULL DEFAULT 'in_app',
+            template_type TEXT,
+            status TEXT NOT NULL DEFAULT 'queued',
+            title TEXT NOT NULL,
+            message TEXT NOT NULL,
+            provider_response TEXT,
+            created_at TEXT NOT NULL,
+            sent_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_notif_deliveries_user ON notification_deliveries(user_id, status);
+
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            version TEXT PRIMARY KEY,
+            applied_at TEXT NOT NULL
+        );
         """
     )
 
@@ -1160,6 +1270,65 @@ def migrate_schema(db):
         CREATE INDEX IF NOT EXISTS idx_health_grants_provider ON health_access_grants(provider_id, patient_id, revoked_at);
         """
     )
+
+    # Milestone 8 is additive so existing M1-M7 databases remain valid.
+    for table, additions in {
+        "agent_approvals": {
+            "requested_by_agent": "TEXT NOT NULL DEFAULT 'ZENDOC Core Agent'",
+            "requested_by_user_id": "INTEGER REFERENCES users(id) ON DELETE SET NULL",
+            "action_type": "TEXT",
+            "task_id": "INTEGER REFERENCES agent_tasks(id) ON DELETE SET NULL",
+            "payload_summary": "TEXT",
+            "risk_level": "TEXT NOT NULL DEFAULT 'owner_approval'",
+            "approver_user_id": "INTEGER REFERENCES users(id) ON DELETE SET NULL",
+            "resolved_at": "TEXT",
+            "resolved_by": "INTEGER REFERENCES users(id) ON DELETE SET NULL",
+            "resolution_note": "TEXT",
+            "expires_at": "TEXT",
+            "created_at": "TEXT",
+        },
+        "platform_events": {
+            "event_type": "TEXT",
+            "payload_json": "TEXT NOT NULL DEFAULT '{}'",
+            "correlation_id": "TEXT",
+            "idempotency_key": "TEXT",
+        },
+        "agent_tasks": {
+            "duration_ms": "INTEGER",
+        },
+        "agent_task_attempts": {
+            "duration_ms": "INTEGER",
+        },
+        "agent_alerts": {
+            "acknowledged_by": "INTEGER REFERENCES users(id) ON DELETE SET NULL",
+            "resolved_at": "TEXT",
+            "resolved_by": "INTEGER REFERENCES users(id) ON DELETE SET NULL",
+            "dedupe_key": "TEXT",
+        },
+    }.items():
+        existing_columns = table_columns(db, table)
+        for column, ddl in additions.items():
+            if column not in existing_columns:
+                db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+
+    db.execute(
+        """
+        UPDATE agent_approvals
+        SET created_at=COALESCE(NULLIF(created_at, ''), requested_at),
+            action_type=COALESCE(action_type, operation_type),
+            requested_by_user_id=COALESCE(requested_by_user_id, actor_id),
+            resolved_at=COALESCE(resolved_at, decided_at),
+            resolution_note=COALESCE(resolution_note, decision_note)
+        """
+    )
+    db.execute("UPDATE platform_events SET event_type=action WHERE event_type IS NULL OR event_type=''")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_agent_approvals_status ON agent_approvals(status, requested_at)")
+    db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_platform_events_idempotency ON platform_events(idempotency_key) WHERE idempotency_key IS NOT NULL")
+    db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_alerts_dedupe ON agent_alerts(dedupe_key) WHERE dedupe_key IS NOT NULL AND status='active'")
+    db.execute(
+        "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES ('m8_agent_platform_v1', ?)",
+        (now_iso(),),
+    )
     db.commit()
 
 
@@ -1214,38 +1383,167 @@ def repair_normalized_email_index(db):
             )
 
 
-def seed_admin():
-    db = get_db()
-    admin_email = (current_app.config.get("ADMIN_EMAIL") or "").strip().lower()
-    admin_password = current_app.config.get("ADMIN_PASSWORD")
-    if not admin_email or not admin_password:
-        return
-    existing_by_email = db.execute(
-        "SELECT id, role FROM users WHERE email_normalized=? OR LOWER(TRIM(email))=? ORDER BY id ASC LIMIT 1",
-        (admin_email, admin_email),
+def _legacy_admin_non_privileged_role(db, user_id):
+    """Return a deterministic pre-Admin role only when account metadata proves it."""
+    provider = db.execute(
+        "SELECT provider_type FROM provider_profiles WHERE user_id=?",
+        (user_id,),
     ).fetchone()
-    if existing_by_email:
-        if existing_by_email["role"] != "admin":
-            db.execute("UPDATE users SET role='admin', verified=1, email_normalized=? WHERE id=?", (admin_email, existing_by_email["id"]))
-            db.commit()
-        return
+    if provider and provider["provider_type"] in {"doctor", "hospital", "pharmacy"}:
+        return provider["provider_type"], "restored_provider_profile_role"
+    return LEGACY_ADMIN_FALLBACK_ROLE, "fallback_no_reliable_role_metadata"
 
-    now = now_iso()
+
+def _owner_identity_matches(row, owner_email, normalize_email):
+    return owner_email in {
+        normalize_email(row["email"]),
+        normalize_email(row["email_normalized"]),
+    }
+
+
+def _create_single_admin_index(db):
+    # This is deliberately called only after legacy rows have been reconciled.
     db.execute(
         """
-        INSERT INTO users (name, email, email_normalized, password_hash, role, verified, created_at, updated_at)
-        VALUES (?, ?, ?, ?, 'admin', 1, ?, ?)
-        """,
-        (
-            "ZENDOC Admin",
-            admin_email,
-            admin_email,
-            generate_password_hash(admin_password),
-            now,
-            now,
-        ),
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_users_single_admin
+        ON users((CASE WHEN role='admin' THEN 1 END))
+        WHERE role='admin'
+        """
     )
-    db.commit()
+
+
+def seed_admin():
+    """Bootstrap the owner and reconcile only legacy multi-Admin databases."""
+    from .auth import normalize_email
+    from .config import ConfigError
+
+    db = get_db()
+    owner_email = normalize_email(current_app.config.get("ADMIN_EMAIL"))
+    owner_password = current_app.config.get("ADMIN_PASSWORD")
+    users = db.execute(
+        "SELECT id, email, email_normalized, role FROM users ORDER BY id"
+    ).fetchall()
+    admin_rows = [row for row in users if row["role"] == "admin"]
+
+    if not owner_email:
+        if admin_rows:
+            raise ConfigError(
+                "Owner integrity violation: ZENDOC_ADMIN_EMAIL is required because Admin account data exists; "
+                "no owner was selected automatically."
+            )
+        return
+
+    owner_matches = [
+        row for row in users if _owner_identity_matches(row, owner_email, normalize_email)
+    ]
+    if len(owner_matches) > 1:
+        raise ConfigError(
+            "Owner integrity violation: ZENDOC_ADMIN_EMAIL matches more than one normalized account; "
+            "owner identity is ambiguous and no account was selected or merged."
+        )
+
+    if len(admin_rows) > 1:
+        if not owner_matches or owner_matches[0]["role"] != "admin":
+            raise ConfigError(
+                "Owner integrity violation: ZENDOC_ADMIN_EMAIL does not match any legacy Admin account; "
+                "configure the legitimate owner explicitly before retrying."
+            )
+
+        owner = owner_matches[0]
+        now = now_iso()
+        try:
+            db.execute("BEGIN IMMEDIATE")
+            for legacy_admin in admin_rows:
+                if legacy_admin["id"] == owner["id"]:
+                    continue
+                new_role, role_source = _legacy_admin_non_privileged_role(db, legacy_admin["id"])
+                db.execute(
+                    "UPDATE users SET role=?, updated_at=? WHERE id=? AND role='admin'",
+                    (new_role, now, legacy_admin["id"]),
+                )
+                db.execute(
+                    """
+                    INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, created_at)
+                    VALUES (?, ?, 'user', ?, ?)
+                    """,
+                    (
+                        owner["id"],
+                        f"security.legacy_admin_demoted.admin_to_{new_role}.{role_source}",
+                        str(legacy_admin["id"]),
+                        now,
+                    ),
+                )
+
+            db.execute(
+                "UPDATE users SET verified=1, active=1, email_normalized=?, updated_at=? WHERE id=?",
+                (owner_email, now, owner["id"]),
+            )
+            remaining_admins = db.execute(
+                "SELECT id FROM users WHERE role='admin' ORDER BY id"
+            ).fetchall()
+            if [row["id"] for row in remaining_admins] != [owner["id"]]:
+                raise ConfigError(
+                    "Owner integrity violation: legacy Admin reconciliation did not produce exactly the configured owner."
+                )
+            _create_single_admin_index(db)
+            db.execute(
+                "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+                (LEGACY_ADMIN_RECONCILIATION_VERSION, now),
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        return
+
+    if admin_rows:
+        if not owner_matches or owner_matches[0]["id"] != admin_rows[0]["id"]:
+            raise ConfigError(
+                "Owner integrity violation: configured owner does not match the existing Admin account."
+            )
+        try:
+            db.execute("BEGIN IMMEDIATE")
+            db.execute(
+                "UPDATE users SET verified=1, active=1, email_normalized=? WHERE id=?",
+                (owner_email, admin_rows[0]["id"]),
+            )
+            _create_single_admin_index(db)
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        return
+
+    if owner_matches:
+        raise ConfigError(
+            "Owner bootstrap refused: the configured Admin email belongs to a non-Admin account. "
+            "Choose a new owner email or resolve the account collision server-side."
+        )
+    if not owner_password:
+        raise ConfigError("ZENDOC_ADMIN_PASSWORD is required to create the configured owner account.")
+
+    now = now_iso()
+    try:
+        db.execute("BEGIN IMMEDIATE")
+        db.execute(
+            """
+            INSERT INTO users (name, email, email_normalized, password_hash, role, verified, created_at, updated_at)
+            VALUES (?, ?, ?, ?, 'admin', 1, ?, ?)
+            """,
+            (
+                "ZENDOC Admin",
+                owner_email,
+                owner_email,
+                generate_password_hash(owner_password),
+                now,
+                now,
+            ),
+        )
+        _create_single_admin_index(db)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
 
 
 def _seed_exercises_safe():

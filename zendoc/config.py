@@ -35,6 +35,19 @@ def load_config(base_dir, overrides=None):
         "PLACES_PROVIDER": os.environ.get("ZENDOC_PLACES_PROVIDER", "none"),
         "VIDEO_PROVIDER": os.environ.get("ZENDOC_VIDEO_PROVIDER", "none"),
         "YOUTUBE_API_KEY": os.environ.get("ZENDOC_YOUTUBE_API_KEY", ""),
+        "DATABASE_URL": os.environ.get("DATABASE_URL", ""),
+        "STORAGE_PROVIDER": os.environ.get("ZENDOC_STORAGE_PROVIDER", "local").strip().lower(),
+        "TELEHEALTH_PROVIDER": os.environ.get("ZENDOC_TELEHEALTH_PROVIDER", "local_demo").strip().lower(),
+        "REALTIME_PROVIDER": os.environ.get("ZENDOC_REALTIME_PROVIDER", "polling").strip().lower(),
+        "NOTIFICATION_PROVIDER": os.environ.get("ZENDOC_NOTIFICATION_PROVIDER", "in_app").strip().lower(),
+        "SLM_ENABLED": env_bool("ZENDOC_SLM_ENABLED", False),
+        "SLM_PROVIDER": os.environ.get("ZENDOC_SLM_PROVIDER", "ollama").strip().lower(),
+        "SLM_BASE_URL": os.environ.get("ZENDOC_SLM_BASE_URL", "http://127.0.0.1:11434").strip(),
+        "SLM_MODEL": os.environ.get("ZENDOC_SLM_MODEL", "").strip(),
+        "SLM_TIMEOUT": int(os.environ.get("ZENDOC_SLM_TIMEOUT", "10")),
+        "AI_PROVIDER": os.environ.get("ZENDOC_AI_PROVIDER", "").strip().lower(),
+        "AI_BASE_URL": os.environ.get("ZENDOC_AI_BASE_URL", "").strip(),
+        "AI_MODEL": os.environ.get("ZENDOC_AI_MODEL", "").strip(),
     }
     if overrides:
         config.update(overrides)

@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Milestones 1 through 7 are implemented as an advanced MVP foundation. ZENDOC is not a certified medical product, emergency dispatch system, pharmacy inventory network, production telemedicine system, or regulated medical device platform. The application now connects private health profiles, appointments, reports, structured results, measurements, AI activity, scoped provider access, fitness, family care, saved locations, home healthcare requests, medical transport requests, pharmacy workflows, connected device provenance, Core Agent runs, telehealth beta requests, secure consultation messages, pose-coach sessions, video search history, and human operations tasks into a single healthcare platform architecture.
+Milestones 1 through 8 are implemented as an advanced MVP foundation. ZENDOC is not a certified medical product, emergency dispatch system, pharmacy inventory network, production telemedicine system, or regulated medical device platform. M8 adds an owner-bound Admin invariant, bounded planner/executor, model router and real local-provider adapter foundation, specialized agent/tool registries, persistent tasks/events/approvals/alerts, authenticated polling, provider abstractions, and Owner Command Center 2.0 while preserving M1-M7.1 subsystems.
 
 ## Implemented
 
@@ -44,12 +44,20 @@ Milestones 1 through 7 are implemented as an advanced MVP foundation. ZENDOC is 
 - Video Intelligence Agent with provider fallback, step-by-step guidance (`/videos`), and explicit non-fabricated guidance disclosures.
 - Fitness Pose Coach beta with user-initiated camera access and saved pose session summaries.
 - Human operations staff profiles and task lifecycle.
+- Single environment-configured owner enforcement across Admin web/API/tool workflows; Admin registration and self-promotion remain blocked.
+- Bounded deterministic Core Agent plans executed only through registered server handlers.
+- Local SLM and OpenAI-compatible cloud adapters with deterministic fallback and metadata-only routing logs.
+- Persistent agent tasks, attempts, idempotency, categorized retries, events, approvals, and proactive alerts.
+- Authenticated actor-scoped event polling as the real-time messaging foundation.
+- Medical-record storage, notifications, telehealth, database-readiness, and infrastructure status provider boundaries.
+- Owner Command Center 2.0 with working commands, retries, approvals, and alert controls.
+- Truthful M8 capability registry and report in `docs/MILESTONE8.md`.
 
 ## Not Yet Production-Certified
 
 - No HIPAA/GDPR/DPDP legal review.
 - No clinical validation or medical-device certification.
-- No external ML model training pipeline yet.
+- No configured/tested local SLM or proprietary ZENDOC-trained model. Local SLM integration is ready, but a model is not configured.
 - No OCR/document extraction provider or clinically validated report interpretation.
 - Consent controls are a technical foundation, not a legal compliance certification.
 - No payment, insurance, medicine delivery, or telemedicine video module.
@@ -59,7 +67,7 @@ Milestones 1 through 7 are implemented as an advanced MVP foundation. ZENDOC is 
 - No production WebRTC signaling/TURN/STUN telemedicine stack yet.
 - No MediaPipe or clinical-grade pose estimation yet.
 - No real staff dispatch/mobile workforce system yet.
-- SQLite and local file storage remain unsuitable for scaled production health data.
+- SQLite and local file storage remain unsuitable for scaled production health data; PostgreSQL and external object storage are Integration Required.
 - No object storage, queue worker, background extraction job, or cloud deployment automation.
 
 ## Launch Recommendation

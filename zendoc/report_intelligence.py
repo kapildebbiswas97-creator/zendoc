@@ -1,14 +1,12 @@
 import re
-import secrets
 import uuid
 from datetime import date
-from pathlib import Path
 
-from flask import current_app
 from werkzeug.utils import secure_filename
 
 from .db import get_db, now_iso
 from .health_access import authorize_patient
+from .record_storage import get_record_storage
 
 
 REPORT_TYPES = (
@@ -81,12 +79,8 @@ def validate_report_upload(upload):
 
 def store_report_upload(upload, owner_id, uploaded_by, data):
     original = validate_report_upload(upload)
-    stored = f"{secrets.token_hex(16)}-{original}"
-    upload_root = Path(current_app.config["UPLOAD_FOLDER"]).resolve()
-    destination = (upload_root / stored).resolve()
-    if destination.parent != upload_root:
-        raise ValueError("Upload destination is invalid.")
-    upload.save(destination)
+    storage = get_record_storage()
+    stored_record = storage.save(upload, original)
     try:
         cursor = get_db().execute(
             """
@@ -100,9 +94,9 @@ def store_report_upload(upload, owner_id, uploaded_by, data):
                 str(data.get("title") or original).strip()[:180],
                 str(data.get("category") or data.get("report_type") or "Report").strip()[:80],
                 original,
-                stored,
+                stored_record.storage_key,
                 upload.mimetype,
-                destination.stat().st_size,
+                stored_record.size_bytes,
                 now_iso(),
             ),
         )
@@ -110,7 +104,7 @@ def store_report_upload(upload, owner_id, uploaded_by, data):
         create_report_metadata(record_id, data)
         return record_id
     except Exception:
-        destination.unlink(missing_ok=True)
+        storage.delete(stored_record.storage_key)
         raise
 
 

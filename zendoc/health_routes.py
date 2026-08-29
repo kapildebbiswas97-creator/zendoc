@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from flask import Blueprint, abort, current_app, flash, g, jsonify, redirect, render_template, request, send_from_directory, url_for
+from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, url_for
 
 from .db import get_db
 from .health_access import HEALTH_SCOPES, authorize_patient, create_access_grant, list_access_grants, revoke_access_grant
@@ -20,6 +20,7 @@ from .report_intelligence import (
     list_reports,
     store_report_upload,
 )
+from .record_storage import get_record_storage
 from .routes import audit, create_notification, require_api_user
 from .security import login_required, role_required
 
@@ -135,12 +136,7 @@ def report_download(record_id):
         abort(403)
     audit("download", "medical_report", str(record_id))
     get_db().commit()
-    return send_from_directory(
-        current_app.config["UPLOAD_FOLDER"],
-        report["stored_filename"],
-        as_attachment=True,
-        download_name=report["original_filename"],
-    )
+    return get_record_storage().response(report["stored_filename"], report["original_filename"])
 
 
 @bp.get("/health-summary")
@@ -313,10 +309,7 @@ def api_report_download(record_id):
         report = get_report_file(user, record_id)
         audit("download", "medical_report", str(record_id), actor=user)
         get_db().commit()
-        return send_from_directory(
-            current_app.config["UPLOAD_FOLDER"], report["stored_filename"], as_attachment=True,
-            download_name=report["original_filename"],
-        )
+        return get_record_storage().response(report["stored_filename"], report["original_filename"])
     except (PermissionError, LookupError) as service_error:
         return _api_error(service_error)
 

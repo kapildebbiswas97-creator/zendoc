@@ -26,7 +26,7 @@ $env:ZENDOC_ADMIN_PASSWORD="replace-with-a-strong-password"
 python -m pytest tests
 ```
 
-## Milestones 6-7
+## Milestones 6-8
 
 Milestone 6 adds the consumer-grade healthcare ecosystem layer:
 
@@ -39,13 +39,14 @@ Milestone 6 adds the consumer-grade healthcare ecosystem layer:
 
 Milestone 7 & 7.1 adds the agentic core, telehealth beta workflows, ZENDOC Connect permissioned messaging, camera intelligence foundations, video intelligence, and human operations. Details, limitations, files changed, and validation notes are in `docs/MILESTONE6.md`, `docs/MILESTONE7.md`, and `docs/ZENDOC_CONNECT.md`.
 
+Milestone 8 adds the environment-bound single owner invariant, bounded Core Agent planner/executor, truthful local/cloud model-router adapters, specialized agent and permissioned tool registries, persistent tasks/events/approvals/alerts, provider boundaries, and Owner Command Center 2.0. Current local SLM status is: **Local SLM integration ready — model not configured.** See `docs/MILESTONE8.md`.
+
 ## Production Notes
 
 Set `ZENDOC_ENV=production`, `ZENDOC_SECRET_KEY`, `ZENDOC_ADMIN_EMAIL`, and `ZENDOC_ADMIN_PASSWORD` in the environment. Use PostgreSQL and external object storage before production healthcare data.
 
-Optional AI provider selection is controlled with `ZENDOC_AI_PROVIDER`. If no external provider is configured, ZENDOC uses the deterministic local fallback.
+Optional model providers are controlled with the `ZENDOC_SLM_*` and `ZENDOC_AI_*` environment variables. If no tested provider is configured, ZENDOC uses the deterministic local fallback and never claims model inference occurred.
 
 Healthcare finder external integrations are controlled by `ZENDOC_PLACES_PROVIDER` and provider-specific keys such as `ZENDOC_GOOGLE_PLACES_API_KEY`. With no key, the app still runs and returns a truthful unavailable message.
 
-Health Memory architecture is documented in `docs/HEALTH_MEMORY.md`. Milestone 6 ecosystem architecture is documented in `docs/MILESTONE6.md`; Milestone 7/7.1 agent, telehealth, Connect, and operations architecture is documented in `docs/MILESTONE7.md` and `docs/ZENDOC_CONNECT.md`. ZENDOC does not claim clinical validation, emergency dispatch capability, production telemedicine capability, real provider inventory, or regulatory compliance.
-
+Health Memory architecture is documented in `docs/HEALTH_MEMORY.md`. Milestone 6 ecosystem architecture is documented in `docs/MILESTONE6.md`; Milestone 7/7.1 agent, telehealth, Connect, and operations architecture is documented in `docs/MILESTONE7.md` and `docs/ZENDOC_CONNECT.md`; M8 is documented in `docs/MILESTONE8.md`. ZENDOC does not claim clinical validation, emergency dispatch capability, production telemedicine capability, a proprietary trained SLM, real provider inventory, or regulatory compliance.

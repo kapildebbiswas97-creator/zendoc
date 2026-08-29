@@ -1,78 +1,88 @@
 {% extends "base.html" %}
-{% block title %}Agent Command Center - ZENDOC{% endblock %}
+{% block title %}Owner Command Center - ZENDOC{% endblock %}
 {% block content %}
-<section class="section-head">
+<section class="section-head command-hero">
   <div>
-    <p class="eyebrow">Admin Operations</p>
-    <h1>Agent Command Center</h1>
-    <p class="section-copy">Monitor ZENDOC Core Agent, human operations, telehealth, service queues, integrations, and audit trails.</p>
+    <p class="eyebrow">Owner Operations · Milestone 8</p>
+    <h1>Owner Command Center 2.0</h1>
+    <p class="section-copy">A live, owner-only view of permissioned agents, bounded tasks, approvals, alerts, model routing, infrastructure, and audit events.</p>
   </div>
-  <a href="{{ url_for('main.admin') }}" class="secondary-action">Admin Dashboard</a>
+  <div class="form-actions">
+    <form method="post" action="{{ url_for('milestone8.owner_alert_check') }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">Run alert scan</button></form>
+    <a href="{{ url_for('main.admin') }}" class="secondary-action">Admin Dashboard</a>
+  </div>
 </section>
 
-<form method="post" class="panel">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-  <label>Ask Core Agent
-    <input name="command" placeholder="Give me today's operations summary" required>
-  </label>
-  <button type="submit">Run Command</button>
-</form>
-
-{% if agent_result %}
-<section class="result">
-  <p class="eyebrow">{{ agent_result.intent.replace('_', ' ').title() }}</p>
-  <h2>Run #{{ agent_result.run_id }}</h2>
-  <p>{{ agent_result.message }}</p>
-</section>
-{% endif %}
-
-<section class="stats">
-  {% for label, value in data.platform_health.counts.items() %}
-    <article><span>{{ label.replace('_', ' ').title() }}</span><strong>{{ value }}</strong></article>
-  {% endfor %}
+<section class="command-strip" aria-label="Agent architecture status">
+  <span>Owner</span><b>→</b><span>Core Agent</span><b>→</b><span>Safety Gate</span><b>→</b><span>Model Router</span><b>→</b><span>Specialized Agents</span><b>→</b><span>Permissioned Tools</span><b>→</b><span>Human Approval</span>
 </section>
 
-<div class="grid two">
-  <article class="panel">
-    <h2>Specialized Agents</h2>
-    {% for agent in data.specialized_agents %}
-      <div class="summary-row">
-        <strong>{{ agent.name }}</strong>
-        <span class="status-badge active">{{ agent.status.replace('_', ' ') }}</span>
-        <p>{{ agent.scope }}</p>
-      </div>
-    {% endfor %}
-  </article>
-  <article class="panel">
-    <h2>Integration Status</h2>
-    {% for name, status in data.platform_health.integration_status.items() %}
-      <div class="summary-row"><strong>{{ name.replace('_', ' ').title() }}</strong><span>{{ status.replace('_', ' ') }}</span></div>
-    {% endfor %}
+<div class="command-layout">
+  <form method="post" class="panel command-console">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div><p class="eyebrow">Bounded planner / executor</p><h2>Ask ZENDOC Core Agent</h2><p class="section-copy">Commands are safety-checked, planned, permission-checked, executed through registered tools, and audited.</p></div>
+    <label>Owner command<textarea name="command" placeholder="Give me today's operations summary" required></textarea></label>
+    <button type="submit">Plan and execute</button>
+  </form>
+
+  <article class="panel model-card">
+    <p class="eyebrow">Intelligence routing</p>
+    <h2>{{ data.model_router.routing_mode.replace('_', ' ').title() }}</h2>
+    <div class="summary-row"><strong>Deterministic safety</strong><span class="status-badge active">Working</span></div>
+    <div class="summary-row"><strong>Local SLM</strong><span class="status-badge {{ 'active' if data.model_router.local_slm.status == 'configured' else 'integration' }}">{{ data.model_router.local_slm.status.replace('_', ' ') }}</span><p>{{ data.model_router.local_slm.message }}</p></div>
+    <div class="summary-row"><strong>Cloud LLM</strong><span class="status-badge {{ 'active' if data.model_router.cloud_llm.status == 'configured' else 'integration' }}">{{ data.model_router.cloud_llm.status.replace('_', ' ') }}</span><p>{{ data.model_router.cloud_llm.message }}</p></div>
+    <div class="model-metrics"><span>{{ data.model_router.stats.requests }} routed</span><span>{{ data.model_router.stats.fallback_count }} fallbacks</span><span>{{ data.model_router.stats.avg_latency_ms }} ms avg</span></div>
   </article>
 </div>
 
-<section class="panel">
-  <h2>Active Operations</h2>
-  <div class="grid three">
-    <div><strong>Consultations</strong><p>{{ data.consultations|length }} recent</p></div>
-    <div><strong>Home Care</strong><p>{{ data.home_health_requests|length }} recent</p></div>
-    <div><strong>Transport</strong><p>{{ data.transport_requests|length }} recent</p></div>
-    <div><strong>Pharmacy</strong><p>{{ data.pharmacy_requests|length }} recent</p></div>
-    <div><strong>Staff Tasks</strong><p>{{ data.staff_tasks|length }} recent</p></div>
-    <div><strong>Failed Events</strong><p>{{ data.failed_operations|length }} requiring review</p></div>
-  </div>
+{% if agent_result %}
+<section class="result command-result"><div><p class="eyebrow">{{ agent_result.plan.assigned_agent }} · {{ agent_result.intent.replace('_', ' ').title() }}</p><h2>Run #{{ agent_result.run_id }} · Task #{{ agent_result.task_id }}</h2><p>{{ agent_result.message }}</p></div><span class="status-badge active">{{ 'Waiting for confirmation' if agent_result.requires_confirmation else 'Completed' }}</span></section>
+{% endif %}
+
+<section class="stats command-stats">
+  {% for label, value in data.platform_health.counts.items() %}<article><span>{{ label.replace('_', ' ').title() }}</span><strong>{{ value }}</strong></article>{% endfor %}
 </section>
 
-<section class="panel">
-  <h2>Agent Audit Trail</h2>
-  {% if data.agent_runs %}
-    <table><thead><tr><th>Run</th><th>Actor</th><th>Intent</th><th>Status</th><th>When</th></tr></thead><tbody>
-    {% for run in data.agent_runs %}
-      <tr><td>#{{ run.id }}</td><td>{{ run.actor_name or 'System' }}</td><td>{{ run.intent }}</td><td>{{ run.status }}</td><td>{{ run.created_at }}</td></tr>
-    {% endfor %}
-    </tbody></table>
-  {% else %}
-    <p>No agent runs yet.</p>
-  {% endif %}
+<div class="grid two command-columns">
+  <section class="panel">
+    <div class="panel-head"><div><p class="eyebrow">Human in the loop</p><h2>Pending approvals</h2></div><span class="count-pill">{{ data.pending_approvals|length }}</span></div>
+    {% for approval in data.pending_approvals %}
+      <article class="operation-card"><div><strong>{{ approval.action_type or approval.operation_type }}</strong><p>{{ approval.payload_summary or 'No sensitive payload stored.' }}</p><small>{{ approval.risk_level.replace('_', ' ') }} · expires {{ approval.expires_at }}</small></div><div class="operation-actions"><form method="post" action="{{ url_for('milestone8.owner_approval_action', approval_id=approval.id, decision='approved') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">Approve</button></form><form method="post" action="{{ url_for('milestone8.owner_approval_action', approval_id=approval.id, decision='rejected') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit" class="danger-button">Reject</button></form></div></article>
+    {% else %}<p class="empty-state">No approvals are waiting.</p>{% endfor %}
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><div><p class="eyebrow">Proactive operations</p><h2>Active alerts</h2></div><span class="count-pill alert-count">{{ data.active_alerts|length }}</span></div>
+    {% for alert in data.active_alerts %}
+      <article class="operation-card alert-severity-{{ alert.severity }}"><div><strong>{{ alert.title }}</strong><p>{{ alert.summary }}</p><small>{{ alert.severity }} · {{ alert.category.replace('_', ' ') }}</small></div><div class="operation-actions"><form method="post" action="{{ url_for('milestone8.owner_alert_action', alert_id=alert.id, action='acknowledge') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit" class="secondary-action">Acknowledge</button></form><form method="post" action="{{ url_for('milestone8.owner_alert_action', alert_id=alert.id, action='resolve') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">Resolve</button></form></div></article>
+    {% else %}<p class="empty-state">No active operational alerts.</p>{% endfor %}
+  </section>
+</div>
+
+<section class="panel spaced-panel">
+  <div class="panel-head"><div><p class="eyebrow">Persistent execution</p><h2>Agent tasks</h2></div><span class="count-pill">{{ data.agent_tasks|length }} recent</span></div>
+  {% if data.agent_tasks %}<div class="table-shell"><table><thead><tr><th>Task</th><th>Agent</th><th>Status</th><th>Risk</th><th>Attempts</th><th>Updated</th><th>Action</th></tr></thead><tbody>
+    {% for task in data.agent_tasks %}<tr><td><strong>#{{ task.id }}</strong><br><small>{{ task.task_type.replace('_', ' ') }}</small></td><td>{{ task.assigned_agent }}</td><td><span class="status-badge {{ 'active' if task.status == 'completed' else 'integration' if task.status in ['waiting_approval','waiting_human'] else '' }}">{{ task.status.replace('_', ' ') }}</span></td><td>{{ task.risk_level.replace('_', ' ') }}</td><td>{{ task.attempt_count }}/{{ task.max_attempts }}</td><td>{{ task.updated_at }}</td><td>{% if task.status == 'failed' %}<form method="post" action="{{ url_for('milestone8.owner_task_retry', task_id=task.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit" class="secondary-action">Queue retry</button></form>{% else %}—{% endif %}</td></tr>{% endfor %}
+  </tbody></table></div>{% else %}<p class="empty-state">No agent tasks yet.</p>{% endif %}
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head"><div><p class="eyebrow">Registered and bounded</p><h2>Specialized agents</h2></div><span class="count-pill">{{ data.specialized_agents|length }} agents · {{ data.tool_registry|length }} tools</span></div>
+  <div class="agent-grid">{% for agent in data.specialized_agents %}<article class="agent-card"><div class="agent-card-head"><strong>{{ agent.name }}</strong><span class="status-badge {{ 'active' if agent.status == 'connected' else 'integration' }}">{{ agent.status.replace('_', ' ') }}</span></div><p>{{ agent.scope }}</p><small>{{ agent.allowed_tools|length }} permitted tool(s) · {{ agent.risk_level.replace('_', ' ') }}</small></article>{% endfor %}</div>
+</section>
+
+<div class="grid two command-columns spaced-panel">
+  <section class="panel"><p class="eyebrow">Provider boundaries</p><h2>Infrastructure</h2>{% for name, details in data.infrastructure.items() %}<div class="summary-row"><strong>{{ name.replace('_', ' ').title() }}</strong><pre class="status-json">{{ details|tojson(indent=2) }}</pre></div>{% endfor %}</section>
+  <section class="panel"><p class="eyebrow">Truthful product status</p><h2>Capability matrix</h2><div class="capability-list">{% for key, capability in data.capabilities.items() %}<div class="capability-row"><div><strong>{{ capability.label }}</strong><p>{{ capability.description }}</p></div><span class="status-badge {{ 'active' if capability.status == 'WORKING' else 'integration' }}">{{ capability.status.replace('_', ' ') }}</span></div>{% endfor %}</div></section>
+</div>
+
+<section class="panel spaced-panel">
+  <div class="panel-head"><div><p class="eyebrow">Persistent event bus</p><h2>Recent platform events</h2></div><span class="count-pill">{{ data.platform_events|length }} recent</span></div>
+  {% if data.platform_events %}<div class="table-shell"><table><thead><tr><th>Event</th><th>Agent</th><th>Entity</th><th>Status</th><th>When</th></tr></thead><tbody>{% for event in data.platform_events[:20] %}<tr><td>{{ event.event_type or event.action }}</td><td>{{ event.agent_name or 'Platform' }}</td><td>{{ event.entity_type }} {{ event.entity_id or '' }}</td><td>{{ event.status }}</td><td>{{ event.created_at }}</td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="empty-state">No platform events yet.</p>{% endif %}
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head"><div><p class="eyebrow">Audit and observability</p><h2>Agent run history</h2></div><span class="count-pill">{{ data.agent_runs|length }} recent</span></div>
+  {% if data.agent_runs %}<div class="table-shell"><table><thead><tr><th>Run</th><th>Actor</th><th>Intent</th><th>Status</th><th>Duration</th><th>When</th></tr></thead><tbody>{% for run in data.agent_runs %}<tr><td>#{{ run.id }}</td><td>{{ run.actor_name or 'System' }}</td><td>{{ run.intent }}</td><td>{{ run.status }}</td><td>{{ run.duration_ms or 0 }} ms</td><td>{{ run.created_at }}</td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="empty-state">No agent runs yet.</p>{% endif %}
 </section>
 {% endblock %}

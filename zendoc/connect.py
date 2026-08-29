@@ -284,6 +284,8 @@ def list_messages(actor, conversation_id, limit=100):
 
 
 def _notify_recipients(message_id, conversation_id, sender_id, message_type):
+    from .notification_providers import deliver_notification
+
     recipients = [uid for uid in _participant_ids(conversation_id) if uid != int(sender_id)]
     now = now_iso()
     for uid in recipients:
@@ -294,9 +296,12 @@ def _notify_recipients(message_id, conversation_id, sender_id, message_type):
             """,
             (int(message_id), uid, now),
         )
-        get_db().execute(
-            "INSERT INTO notifications (user_id, title, message, channel, created_at) VALUES (?, ?, ?, 'in_app', ?)",
-            (uid, "New ZENDOC message", f"A {message_type.replace('_', ' ')} message is waiting in ZENDOC Connect.", now),
+        deliver_notification(
+            uid,
+            "New ZENDOC message",
+            f"A {message_type.replace('_', ' ')} message is waiting in ZENDOC Connect.",
+            channel="in_app",
+            template_type="connect_message",
         )
 
 
@@ -326,6 +331,18 @@ def send_message(actor, conversation_id, data):
     get_db().execute("UPDATE conversations SET updated_at=? WHERE id=?", (now, int(conversation_id)))
     _notify_recipients(message_id, conversation_id, sender_id, message_type)
     get_db().commit()
+    try:
+        from .event_bus import publish_event
+        publish_event(
+            "connect.message.created",
+            actor=actor,
+            entity_type="conversation",
+            entity_id=str(conversation_id),
+            status="created",
+            payload={"message_id": message_id, "message_type": message_type},
+        )
+    except Exception:
+        pass
     return _message_to_dict(get_db().execute("SELECT * FROM messages WHERE id=?", (message_id,)).fetchone())
 
 

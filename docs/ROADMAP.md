@@ -30,11 +30,16 @@ Complete in this codebase: security and authentication hardening, central AI saf
 - Reusable camera infrastructure and Fitness Pose Coach beta.
 - Human operations staff profiles and task lifecycle.
 
-## Milestone 8: Production Telehealth And Camera Intelligence
+## Milestone 8: Agentic Intelligence And Owner Operations
 
-- Permission-based pose estimation for supported exercises.
-- Rep counting, bounded form feedback, and session summaries.
-- Device performance and privacy testing.
+- Single environment-configured ZENDOC owner and server-side Admin enforcement.
+- Bounded Core Agent planner/executor with deterministic safety first.
+- Local SLM and cloud model-provider adapters with truthful fallback status.
+- Specialized Agent Registry and Permissioned Tool Registry.
+- Persistent tasks, attempts, events, approvals, alerts, retries, and idempotency.
+- Authenticated incremental event polling and provider abstractions.
+- Owner Command Center 2.0 with real workflow controls and capability matrix.
+- PostgreSQL/external storage/notification/WebRTC readiness boundaries without fabricated integration.
 
 ## Milestone 9: Mental Wellness
 

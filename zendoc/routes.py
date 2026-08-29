@@ -12,7 +12,6 @@ from flask import (
     redirect,
     render_template,
     request,
-    send_from_directory,
     session,
     url_for,
 )
@@ -35,7 +34,8 @@ from .provider_service import (
     upsert_provider_profile,
 )
 from .report_intelligence import REPORT_TYPES, store_report_upload
-from .security import csrf_token, hash_token, load_user_and_check_csrf, login_required, new_token, role_required
+from .record_storage import get_record_storage
+from .security import csrf_token, hash_token, is_owner, load_user_and_check_csrf, login_required, new_token, owner_required, role_required
 
 
 bp = Blueprint("main", __name__)
@@ -139,10 +139,8 @@ def require_json_fields(data, *fields):
 
 
 def create_notification(user_id, title, message):
-    get_db().execute(
-        "INSERT INTO notifications (user_id, title, message, created_at) VALUES (?, ?, ?, ?)",
-        (user_id, title, message, now_iso()),
-    )
+    from .notification_providers import deliver_notification
+    return deliver_notification(user_id, title, message, channel="in_app")
 
 
 def get_or_create_conversation(user_id, conversation_id=None, title=None):
@@ -302,6 +300,8 @@ def login(role):
         except ValueError:
             email = ""
         user = user_by_normalized_email(email, role=role) if email else None
+        if user and user["role"] == "admin" and not is_owner(user):
+            user = None
         if user and check_password_hash(user["password_hash"], request.form.get("password", "")):
             session.clear()
             session["user_id"] = user["id"]
@@ -528,12 +528,7 @@ def download_record(record_id):
         abort(403)
     audit("download", "medical_record", str(record_id))
     get_db().commit()
-    return send_from_directory(
-        current_app.config["UPLOAD_FOLDER"],
-        record["stored_filename"],
-        as_attachment=True,
-        download_name=record["original_filename"],
-    )
+    return get_record_storage().response(record["stored_filename"], record["original_filename"])
 
 
 @bp.route("/health", methods=("GET", "POST"))
@@ -703,7 +698,7 @@ def provider_schedule():
 
 
 @bp.get("/admin")
-@role_required("admin")
+@owner_required
 def admin():
     db = get_db()
     users = db.execute("SELECT id,name,email,role,verified,active,created_at FROM users ORDER BY created_at DESC").fetchall()
@@ -719,7 +714,7 @@ def admin():
 
 
 @bp.post("/admin/users/<int:user_id>/verify")
-@role_required("admin")
+@owner_required
 def verify_user(user_id):
     get_db().execute("UPDATE users SET verified=1, updated_at=? WHERE id=?", (now_iso(), user_id))
     audit("verify", "user", str(user_id))
@@ -729,7 +724,7 @@ def verify_user(user_id):
 
 
 @bp.post("/admin/providers/<int:profile_id>/status")
-@role_required("admin")
+@owner_required
 def provider_verification_status(profile_id):
     status = request.form.get("verification_status", "pending")
     if status not in VERIFICATION_STATES:
@@ -778,6 +773,8 @@ def require_api_user():
     user = api_user()
     if not user:
         return None, (jsonify({"error": "Unauthorized"}), 401)
+    if user["role"] == "admin" and not is_owner(user):
+        return None, (jsonify({"error": {"code": 403, "message": "Only the ZENDOC owner may access Admin operations."}}), 403)
     return user, None
 
 
@@ -839,7 +836,10 @@ def api_login():
         email = validate_email(data.get("email", ""))
     except ValueError:
         email = ""
-    user = user_by_normalized_email(email, role=data.get("role", "patient")) if email else None
+    requested_role = str(data.get("role", "patient") or "patient").strip().lower()
+    user = user_by_normalized_email(email, role=requested_role) if email else None
+    if user and user["role"] == "admin" and not is_owner(user):
+        user = None
     if not user or not check_password_hash(user["password_hash"], data.get("password", "")):
         return jsonify({"error": "Invalid credentials"}), 401
     token = new_token()

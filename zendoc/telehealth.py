@@ -1,7 +1,5 @@
-import secrets
-
 from .db import get_db, now_iso
-from .security import hash_token
+from .telehealth_provider import get_telehealth_provider
 
 
 DOCTOR_STATUSES = ("available", "busy", "offline", "consultation_only")
@@ -200,19 +198,24 @@ def update_consultation_status(actor, consultation_id, status, scheduled_for=Non
         raise ValueError("Invalid consultation status.")
     if role not in {"admin", "doctor", "hospital"} or (role != "admin" and uid != consultation["doctor_id"]):
         raise PermissionError("Only the assigned doctor can accept, reject, schedule, or end this consultation.")
+    if role == "admin":
+        from .security import assert_owner
+        assert_owner(actor)
     now = now_iso()
+    room = None
+    if status in {"accepted", "scheduled"} and not consultation.get("room_id"):
+        room = get_telehealth_provider().create_room(consultation_id)
     get_db().execute(
         "UPDATE consultation_requests SET status=?, scheduled_for=COALESCE(?, scheduled_for), updated_at=? WHERE id=?",
         (status, scheduled_for, now, consultation_id),
     )
-    if status in {"accepted", "scheduled"} and not consultation.get("room_id"):
-        room_token = secrets.token_urlsafe(32)
+    if room:
         get_db().execute(
             """
             INSERT INTO consultation_rooms (consultation_id, room_token_hash, provider, status, created_at)
-            VALUES (?, ?, 'local_demo', 'waiting', ?)
+            VALUES (?, ?, ?, ?, ?)
             """,
-            (consultation_id, hash_token(room_token), now),
+            (consultation_id, room["room_token_hash"], room["provider"], room["status"], now),
         )
     if status == "ended":
         get_db().execute("UPDATE consultation_rooms SET status='ended', ended_at=? WHERE consultation_id=?", (now, consultation_id))

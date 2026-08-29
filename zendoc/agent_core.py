@@ -23,27 +23,11 @@ from .connect import (
     unread_count,
 )
 from .db import get_db, now_iso
-from .iot_hub import list_devices
-from .safety import SafetyEngine
 from .telehealth import get_doctor_availability, request_consultation
-from .video_intelligence import find_educational_video
-
-
-SPECIALIZED_AGENTS = (
-    {"name": "Care Agent", "status": "connected", "scope": "appointments, reports, family care"},
-    {"name": "Doctor/Telehealth Agent", "status": "beta", "scope": "doctor availability and consultation requests"},
-    {"name": "Communication Agent", "status": "connected", "scope": "permissioned messaging, contacts, video/report sharing"},
-    {"name": "Fitness Agent", "status": "connected", "scope": "plans, sessions, pose coach"},
-    {"name": "Operations Agent", "status": "beta", "scope": "staff tasks and operational queues"},
-    {"name": "Family Care Agent", "status": "connected", "scope": "remote parent care with consent"},
-    {"name": "Pharmacy Agent", "status": "beta", "scope": "medicine search and requests"},
-    {"name": "Transport Agent", "status": "integration_required", "scope": "transport requests without live dispatch"},
-    {"name": "Home Health Agent", "status": "integration_required", "scope": "home-care request intake"},
-    {"name": "IoT Agent", "status": "beta", "scope": "authorized device measurements"},
-    {"name": "Video Intelligence Agent", "status": "beta", "scope": "educational video search"},
-    {"name": "Safety Agent", "status": "connected", "scope": "emergency-first routing"},
-)
-
+from .agent_executor import execute_plan
+from .agent_planner import build_plan
+from .agent_registry import list_agents
+from .agent_task_engine import create_agent_task, execute_safe_task, set_task_waiting
 
 def _value(user, key, default=None):
     if user is None:
@@ -151,6 +135,9 @@ def get_platform_health():
         "staff_tasks": "staff_tasks",
         "agent_runs": "agent_runs",
         "devices": "health_devices",
+        "agent_tasks": "agent_tasks",
+        "agent_alerts": "agent_alerts",
+        "model_executions": "model_execution_logs",
     }.items():
         counts[label] = db.execute(f"SELECT COUNT(*) c FROM {table}").fetchone()["c"]
     failed_operations = db.execute("SELECT COUNT(*) c FROM platform_events WHERE status IN ('failed','error')").fetchone()["c"]
@@ -195,9 +182,23 @@ def respond_with_core_agent(actor, command_text):
     command = str(command_text or "").strip()
     if not command:
         raise ValueError("Agent command is required.")
+    plan = build_plan(actor, command)
+    if plan.authorization_error:
+        raise PermissionError(plan.authorization_error)
 
-    safety = SafetyEngine().assess(command)
-    if safety["emergency"]:
+    task = create_agent_task(
+        task_type="core_agent_command",
+        requested_by=_user_id(actor),
+        assigned_agent=plan.assigned_agent,
+        priority="critical" if plan.urgency == "emergency" else "normal",
+        risk_level=plan.risk_level,
+        metadata={"intent": plan.intent, "plan_id": plan.plan_id},
+        actor=actor,
+    )
+
+    if plan.intent == "emergency":
+        safety = plan.safety
+        task = execute_safe_task(task["id"], actor, handler_fn=lambda _task: safety["guidance"])
         duration = int((time.perf_counter() - started) * 1000)
         run_id = create_agent_run(actor, command, "emergency", "completed", "emergency", safety["guidance"], duration_ms=duration)
         log_agent_action(run_id, actor, "emergency_escalation", "SafetyAgent.assess", "safety_alert", str(run_id), message=safety["guidance"])
@@ -205,6 +206,8 @@ def respond_with_core_agent(actor, command_text):
         get_db().commit()
         return {
             "run_id": run_id,
+            "task_id": task["id"],
+            "plan": plan.to_dict(),
             "intent": "emergency",
             "urgency": "emergency",
             "message": f"{safety['reason']} {safety['guidance']}",
@@ -212,72 +215,133 @@ def respond_with_core_agent(actor, command_text):
             "requires_confirmation": False,
         }
 
-    lower = command.lower()
-    role = _value(actor, "role")
-    actions = []
-    requires_confirmation = False
+    execution = {"status": "waiting_human", "tool_results": []}
+    if plan.requires_confirmation:
+        task = set_task_waiting(task["id"], "waiting_human", "Explicit user confirmation is required before execution.")
+    else:
+        execution_holder = {}
 
-    if role == "admin" and any(text in lower for text in ("summary", "platform health", "operations summary", "today")):
-        payload = get_platform_health()
-        message = f"Platform health is {payload['status']}. Active counts: {payload['counts']}."
+        def _run_plan(_task):
+            execution_holder["result"] = execute_plan(plan, actor)
+            return f"{plan.assigned_agent} completed {len(plan.steps)} bounded tool step(s)."
+
+        task = execute_safe_task(task["id"], actor, handler_fn=_run_plan)
+        if task["status"] == "failed":
+            raise ValueError(task.get("result_summary") or "Core Agent plan failed.")
+        execution = execution_holder.get("result") or execution
+
+    tool_results = execution.get("tool_results", [])
+    tool_output = tool_results[0]["output"] if tool_results else None
+    actions = []
+    requires_confirmation = plan.requires_confirmation
+
+    if plan.intent == "platform_health":
+        payload = tool_output or get_platform_health()
+        if isinstance(payload, dict) and "created_alerts" in payload:
+            message = f"Operational alert scan completed and created {len(payload['created_alerts'])} new alert(s)."
+            actions = [{"type": "alert_check", "label": "Reviewed operational alerts", "data": payload}]
+        else:
+            message = f"Platform health is {payload['status']}. Active counts: {payload['counts']}."
+            actions = [{"type": "platform_health", "label": "Reviewed platform health", "data": payload}]
         intent = "platform_health"
-        actions = [{"type": "platform_health", "label": "Reviewed platform health", "data": payload}]
-    elif role == "admin" and "failed" in lower:
-        payload = get_failed_operations()
+    elif plan.intent == "failed_operations":
+        payload = tool_output or []
         message = f"Found {len(payload)} failed or errored platform events."
         intent = "failed_operations"
         actions = [{"type": "failed_operations", "label": "Show failed operations", "data": payload}]
-    elif any(text in lower for text in ("find contact", "search contact", "discover contact", "who can i message", "search doctor")):
-        query = command.replace("find contact", "").replace("search contact", "").replace("who can i message", "").strip()
-        contacts = tool_find_contact(actor, query=query or "doctor")
+    elif plan.intent == "contact_discovery":
+        contacts = tool_output or []
         message = f"Found {len(contacts)} permitted contact(s) for your account."
         intent = "contact_discovery"
         actions = [{"type": "contact_list", "label": "View permitted contacts", "data": contacts, "url": "/messages"}]
-    elif any(text in lower for text in ("share report", "send report", "share medical record")):
+    elif plan.intent == "record_share_request":
         message = "Sharing medical records requires patient owner consent or explicit communication grant. Please confirm the recipient and report."
         intent = "record_share_request"
-        requires_confirmation = True
         actions = [{"type": "confirm_record_share", "label": "Select conversation and verify consent", "url": "/messages"}]
-    elif "share video" in lower:
-        message = "You can share educational videos into active conversations through ZENDOC Connect."
+    elif plan.intent == "video_share":
+        message = "You can share educational videos into active conversations through ZENDOC Connect after confirming the destination."
         intent = "video_share"
         actions = [{"type": "video_share", "label": "Open Videos or Messages", "url": "/videos"}]
-    elif any(text in lower for text in ("unread message", "check message", "my message", "inbox")):
-        count = unread_count(actor)
+    elif plan.intent == "messages_inbox":
+        count = int((tool_output or {}).get("unread_count", 0))
         message = f"You have {count} unread message(s) in ZENDOC Connect."
         intent = "messages_inbox"
         actions = [{"type": "messages_inbox", "label": "Open Messages", "url": "/messages"}]
-    elif "video" in lower:
-        payload = find_educational_video(actor, command, category=_video_category(lower))
+    elif plan.intent == "video_intelligence":
+        payload = tool_output or {}
         message = payload.get("reason") or f"Found {len(payload.get('results', []))} educational video results."
         intent = "video_intelligence"
         actions = [{"type": "video_results", "label": "Review educational videos", "data": payload}]
-    elif "device" in lower or "iot" in lower or "blood pressure" in lower or "heart rate" in lower:
-        payload = list_devices(actor) if role in {"patient", "admin"} else []
+    elif plan.intent == "iot_status":
+        payload = tool_output or []
         message = f"I found {len(payload)} connected device records available to this account."
         intent = "iot_status"
         actions = [{"type": "iot_devices", "label": "Open Connected Devices", "url": "/iot-hub"}]
-    elif "video consultation" in lower or "doctor video" in lower or "consultation" in lower:
+    elif plan.intent == "telehealth_request":
         message = "Telehealth requests are available as a beta workflow. A doctor must accept before chat, voice, or video room controls are shown."
         intent = "telehealth_request"
         actions = [{"type": "telehealth", "label": "Open Telehealth", "url": "/telehealth"}]
-    elif "home care" in lower or "nurse" in lower or "parent" in lower:
+    elif plan.intent == "care_coordination":
         message = "I can route this to Family Care or Home Healthcare, but another adult patient's care requires an active family access grant."
         intent = "care_coordination"
         actions = [{"type": "home_health", "label": "Open Home Healthcare", "url": "/home-health"}]
     else:
-        message = "ZENDOC Core Agent can route care, telehealth, messaging, pharmacy, transport, fitness, IoT, video, and operations requests through permissioned tools."
+        from .model_router import get_model_router
+        model_response = get_model_router().route(
+            command,
+            intent="general",
+            task_type="core_agent_guidance",
+            privacy_sensitive=True,
+            allow_cloud=False,
+            actor_id=_user_id(actor),
+        )
+        message = model_response.text
         intent = "general_agent"
         actions = [{"type": "agent_help", "label": "Show available agent tools"}]
 
+    # Compatibility: the M7 response shape is preserved and M8 metadata is additive.
     duration = int((time.perf_counter() - started) * 1000)
     run_id = create_agent_run(actor, command, intent, "completed", "routine", message, duration_ms=duration)
+    for result in tool_results:
+        get_db().execute(
+            """
+            INSERT INTO agent_tool_calls
+            (run_id, actor_id, tool_name, input_summary, output_summary, status, duration_ms, created_at)
+            VALUES (?, ?, ?, ?, ?, 'completed', ?, ?)
+            """,
+            (
+                run_id,
+                _user_id(actor),
+                result["tool_name"],
+                "Validated planner arguments",
+                f"Bounded {result['tool_name']} result",
+                result.get("duration_ms"),
+                now_iso(),
+            ),
+        )
     for action in actions:
         log_agent_action(run_id, actor, action["type"], entity_type=intent, message=action.get("label"))
-    log_platform_event(actor, intent, "agent_run", str(run_id), "info", "ZENDOC Core Agent", duration_ms=duration)
+    log_platform_event(actor, intent, "agent_run", str(run_id), "info", plan.assigned_agent, duration_ms=duration)
     get_db().commit()
+    try:
+        from .event_bus import publish_event
+        publish_event(
+            "agent.run.completed",
+            actor=actor,
+            entity_type="agent_run",
+            entity_id=str(run_id),
+            status="completed",
+            agent_name=plan.assigned_agent,
+            duration_ms=duration,
+            correlation_id=plan.plan_id,
+            payload={"intent": intent, "task_id": task["id"], "tool_count": len(tool_results)},
+        )
+    except Exception:
+        pass
     return {
         "run_id": run_id,
+        "task_id": task["id"],
+        "plan": plan.to_dict(),
         "intent": intent,
         "urgency": "routine",
         "message": message,
@@ -287,10 +351,19 @@ def respond_with_core_agent(actor, command_text):
 
 
 def admin_command_center_data():
+    from .agent_alerts import list_alerts
+    from .agent_approvals import list_pending_approvals
+    from .agent_task_engine import list_agent_tasks
+    from .capability_registry import get_capability_registry
+    from .infrastructure import infrastructure_status
+    from .model_router import get_model_router
+    from .tool_registry import TOOL_REGISTRY
+
     db = get_db()
+    agents = list_agents()
     return {
         "platform_health": get_platform_health(),
-        "specialized_agents": SPECIALIZED_AGENTS,
+        "specialized_agents": [{**agent, "scope": agent["purpose"]} for agent in agents],
         "failed_operations": get_failed_operations(),
         "agent_runs": get_agent_audit_log(),
         "consultations": [dict(row) for row in db.execute("SELECT * FROM consultation_requests ORDER BY created_at DESC LIMIT 25").fetchall()],
@@ -299,19 +372,12 @@ def admin_command_center_data():
         "pharmacy_requests": [dict(row) for row in db.execute("SELECT * FROM medicine_orders ORDER BY created_at DESC LIMIT 25").fetchall()],
         "staff_tasks": [dict(row) for row in db.execute("SELECT * FROM staff_tasks ORDER BY created_at DESC LIMIT 25").fetchall()],
         "platform_events": [dict(row) for row in db.execute("SELECT * FROM platform_events ORDER BY created_at DESC LIMIT 50").fetchall()],
+        "agent_tasks": list_agent_tasks(limit=25),
+        "pending_approvals": list_pending_approvals(),
+        "active_alerts": list_alerts("active", limit=25),
+        "model_router": get_model_router().status(),
+        "capabilities": get_capability_registry(),
+        "infrastructure": infrastructure_status(),
+        "tool_registry": [tool.to_dict() for tool in TOOL_REGISTRY.values()],
+        "schema_migrations": [dict(row) for row in db.execute("SELECT * FROM schema_migrations ORDER BY applied_at DESC").fetchall()],
     }
-
-
-def _video_category(text):
-    if "device" in text or "iot" in text:
-        return "device_setup"
-    if "nutrition" in text or "diet" in text:
-        return "nutrition"
-    if "rehab" in text or "mobility" in text:
-        return "rehabilitation"
-    if "staff" in text or "training" in text:
-        return "staff_training"
-    if "doctor" in text or "patient education" in text:
-        return "patient_education"
-    return "fitness"
-
