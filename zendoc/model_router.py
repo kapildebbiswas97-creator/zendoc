@@ -1,42 +1,83 @@
-"""
-ZENDOC Model Router — Milestone 8
-Decides which intelligence backend should handle a task.
-
-Architecture:
-  1. deterministic_safety  – always first for emergency detection
-  2. local_slm             – Ollama / llama.cpp / OpenAI-compatible local endpoint
-  3. cloud_llm             – external provider (OpenAI, Gemini, Claude, etc.)
-  4. local_fallback        – built-in rule-based answers
-
-Never fabricates confidence. Never pretends local SLM ran if not configured.
-"""
+"""Privacy-aware deterministic/local/cloud model routing for ZENDOC Milestone 8.1."""
 from __future__ import annotations
 
+import json
 import os
 import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass, field
+from urllib.parse import urlsplit
+
+from .local_ai_provider import (
+    LocalAISettings,
+    LocalInferenceRequest,
+    LocalInferenceResult,
+    STRUCTURED_OUTPUT_SCHEMA,
+    create_local_ai_provider,
+    validate_structured_model_content,
+)
 
 
-# ── Risk classes ───────────────────────────────────────────────────────────────
 class RiskClass:
-    READ_ONLY         = "read_only"
-    LOW_RISK          = "low_risk"
-    CONSENT_REQUIRED  = "consent_required"
-    DOCTOR_APPROVAL   = "doctor_approval"
-    OWNER_APPROVAL    = "owner_approval"
-    CRITICAL_BLOCKED  = "critical_blocked"
+    READ_ONLY = "read_only"
+    LOW_RISK = "low_risk"
+    CONSENT_REQUIRED = "consent_required"
+    DOCTOR_APPROVAL = "doctor_approval"
+    OWNER_APPROVAL = "owner_approval"
+    CRITICAL_BLOCKED = "critical_blocked"
 
 
-# ── Routing categories ─────────────────────────────────────────────────────────
+class PrivacyClass:
+    PUBLIC = "PUBLIC"
+    INTERNAL = "INTERNAL"
+    PERSONAL = "PERSONAL"
+    HEALTH_SENSITIVE = "HEALTH_SENSITIVE"
+    HIGH_RISK = "HIGH_RISK"
+
+    ALL = {PUBLIC, INTERNAL, PERSONAL, HEALTH_SENSITIVE, HIGH_RISK}
+
+
 class RoutingReason:
-    DETERMINISTIC_SAFETY   = "deterministic_safety"
-    LOCAL_SLM              = "local_slm"
-    CLOUD_LLM              = "cloud_llm"
-    LOCAL_FALLBACK         = "local_fallback"
-    PROVIDER_UNAVAILABLE   = "provider_unavailable"
+    DETERMINISTIC_SAFETY = "deterministic_safety"
+    DETERMINISTIC_POLICY = "deterministic_policy"
+    LOCAL_SLM = "local_slm"
+    CLOUD_LLM = "cloud_llm"
+    LOCAL_FALLBACK = "local_fallback"
+    PROVIDER_UNAVAILABLE = "provider_unavailable"
+    CLOUD_POLICY_BLOCKED = "cloud_policy_blocked"
 
 
-# ── Common response type ───────────────────────────────────────────────────────
+SAFE_LOCAL_TASKS = {
+    "core_agent_guidance",
+    "general",
+    "general_platform_question",
+    "intent_classification",
+    "navigation_help",
+    "non_critical_extraction",
+    "owner_operational_summary",
+    "planning_assistance",
+    "provider_discovery_query",
+    "rewriting",
+    "summarization",
+}
+DETERMINISTIC_ONLY_TASKS = {
+    "admin_promotion",
+    "ambulance_dispatch",
+    "arbitrary_code",
+    "arbitrary_filesystem",
+    "arbitrary_sql",
+    "diagnosis",
+    "emergency",
+    "medication_change",
+    "payment_approval",
+    "permission_change",
+    "prescribing",
+}
+CLOUD_ALWAYS_BLOCKED = {PrivacyClass.HEALTH_SENSITIVE, PrivacyClass.HIGH_RISK}
+HARMLESS_LOCAL_TEST_PROMPT = "In one sentence, explain what the ZENDOC dashboard helps a user navigate."
+
+
 @dataclass
 class ModelResponse:
     text: str
@@ -45,208 +86,111 @@ class ModelResponse:
     latency_ms: int
     success: bool
     fallback_used: bool = False
-    # confidence is deliberately absent — we do NOT fabricate it
     routing_reason: str = RoutingReason.LOCAL_FALLBACK
     error_category: str | None = None
     metadata: dict = field(default_factory=dict)
+    task_type: str = "general"
+    output: dict = field(default_factory=dict)
+    privacy_class: str = PrivacyClass.INTERNAL
+    fallback_reason: str | None = None
+    structured_output: bool = True
+
+    def __post_init__(self):
+        if not self.output and self.text:
+            self.output = {"text": self.text, "data": {}}
 
     def to_dict(self) -> dict:
         return {
-            "text": self.text,
+            "success": self.success,
             "provider": self.provider,
             "model": self.model,
-            "latency_ms": self.latency_ms,
-            "success": self.success,
-            "fallback_used": self.fallback_used,
+            "task_type": self.task_type,
+            "output": dict(self.output),
+            "text": self.text,
+            "latency_ms": max(0, int(self.latency_ms or 0)),
+            "fallback_used": bool(self.fallback_used),
             "routing_reason": self.routing_reason,
             "error_category": self.error_category,
-            "metadata": self.metadata,
+            "privacy_class": self.privacy_class,
+            "fallback_reason": self.fallback_reason,
+            "structured_output": bool(self.structured_output),
+            "metadata": dict(self.metadata),
         }
 
 
-# ── SLM Provider (Ollama / llama.cpp / OpenAI-compatible local endpoint) ──────
 class SLMProvider:
-    """
-    Adapter for a local/open small language model.
-
-    Supported endpoints:
-      - Ollama  (http://localhost:11434)
-      - llama.cpp server (OpenAI-compatible)
-      - Any OpenAI-compatible local inference server
-      - Future ZENDOC fine-tuned SLM
-
-    Environment config:
-      ZENDOC_SLM_ENABLED   1/true/yes
-      ZENDOC_SLM_PROVIDER  ollama | openai_compatible
-      ZENDOC_SLM_BASE_URL  http://localhost:11434
-      ZENDOC_SLM_MODEL     llama3.2:3b
-      ZENDOC_SLM_TIMEOUT   10
-    """
+    """Compatibility facade around provider-neutral local AI adapters."""
 
     name = "local_slm"
 
-    def __init__(self):
-        self.enabled = _env_bool("ZENDOC_SLM_ENABLED", False)
-        self.provider = os.environ.get("ZENDOC_SLM_PROVIDER", "ollama").strip().lower()
-        self.base_url = os.environ.get("ZENDOC_SLM_BASE_URL", "http://localhost:11434").rstrip("/")
-        self.model = os.environ.get("ZENDOC_SLM_MODEL", "").strip()
-        self.timeout = int(os.environ.get("ZENDOC_SLM_TIMEOUT", "10") or "10")
+    def __init__(self, settings: LocalAISettings | None = None):
+        self.settings = settings or LocalAISettings.from_runtime()
+        self.adapter = create_local_ai_provider(self.settings)
+        self.enabled = self.settings.enabled
+        self.provider = self.settings.provider
+        self.base_url = self.settings.base_url
+        self.model = self.settings.model
+        self.timeout = self.settings.timeout
 
     def is_configured(self) -> bool:
-        return bool(self.enabled and self.model and self.provider in {"ollama", "openai_compatible"})
+        return self.adapter.is_configured()
 
-    def status(self) -> dict:
-        if not self.enabled or not self.model:
-            return {
-                "status": "integration_required",
-                "provider": self.provider,
-                "message": "Local SLM integration ready — model not configured.",
-            }
-        if self.provider not in {"ollama", "openai_compatible"}:
-            return {"status": "integration_required", "provider": self.provider, "message": "Unsupported local SLM provider adapter."}
+    def health(self) -> dict:
+        return self.adapter.health_check().to_dict()
+
+    def status(self, check_health: bool = False) -> dict:
+        canonical = self.health() if check_health else self._configuration_status()
+        return _legacy_slm_status(canonical)
+
+    def _configuration_status(self) -> dict:
+        configured = self.adapter.configuration_health()
+        if configured:
+            return configured.to_dict()
         return {
             "status": "configured",
-            "provider": self.provider,
-            "base_url": self.base_url,
+            "provider": self.adapter.provider_name,
+            "server_status": "not_checked",
+            "model_status": "configured_not_checked",
             "model": self.model,
-            "timeout": self.timeout,
-            "message": "Local SLM configured — connectivity not tested at startup.",
+            "latency_ms": None,
+            "message": "Local AI configured — use the owner runtime health check to verify readiness.",
+            "error_category": None,
+            "last_successful_inference": self.adapter.last_successful_inference,
+            "capabilities": [],
         }
 
-    def complete(self, prompt: str, system_prompt: str = "") -> ModelResponse:
-        """
-        Call the local SLM endpoint. Returns truthful error if not configured
-        or unreachable. NEVER pretends inference occurred.
-        """
-        if not self.is_configured():
-            return ModelResponse(
-                text="Local ZENDOC SLM is not configured. A fallback provider was used.",
-                provider="local_slm",
-                model=self.model or "not_configured",
-                latency_ms=0,
-                success=False,
-                fallback_used=True,
-                routing_reason=RoutingReason.PROVIDER_UNAVAILABLE,
-                error_category="not_configured",
-            )
-
-        started = time.perf_counter()
-        try:
-            if self.provider == "ollama":
-                return self._call_ollama(prompt, system_prompt, started)
-            elif self.provider == "openai_compatible":
-                return self._call_openai_compatible(prompt, system_prompt, started)
-            else:
-                return ModelResponse(
-                    text=f"Unknown SLM provider '{self.provider}'. Configure ZENDOC_SLM_PROVIDER.",
-                    provider="local_slm",
-                    model=self.model,
-                    latency_ms=_elapsed(started),
-                    success=False,
-                    fallback_used=True,
-                    routing_reason=RoutingReason.PROVIDER_UNAVAILABLE,
-                    error_category="invalid_provider",
-                )
-        except Exception as exc:
-            return ModelResponse(
-                text="Local SLM is not reachable. A fallback provider was used.",
-                provider="local_slm",
-                model=self.model,
-                latency_ms=_elapsed(started),
-                success=False,
-                fallback_used=True,
-                routing_reason=RoutingReason.PROVIDER_UNAVAILABLE,
-                error_category=_classify_connection_error(exc),
-                metadata={"error": str(exc)[:200]},
-            )
-
-    def _call_ollama(self, prompt: str, system_prompt: str, started: float) -> ModelResponse:
-        import urllib.request, json as _json
-
-        messages = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
-
-        payload = _json.dumps({
-            "model": self.model,
-            "messages": messages,
-            "stream": False,
-        }).encode()
-
-        req = urllib.request.Request(
-            f"{self.base_url}/api/chat",
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-            data = _json.loads(resp.read().decode())
-
-        text = (data.get("message") or {}).get("content") or data.get("response") or ""
-        return ModelResponse(
-            text=text.strip(),
-            provider="local_slm_ollama",
-            model=self.model,
-            latency_ms=_elapsed(started),
-            success=True,
-            routing_reason=RoutingReason.LOCAL_SLM,
-            metadata={"done": data.get("done"), "eval_count": data.get("eval_count")},
-        )
-
-    def _call_openai_compatible(self, prompt: str, system_prompt: str, started: float) -> ModelResponse:
-        import urllib.request, json as _json
-
-        messages = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
-
-        payload = _json.dumps({
-            "model": self.model,
-            "messages": messages,
-        }).encode()
-
-        req = urllib.request.Request(
-            f"{self.base_url}/v1/chat/completions",
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-            data = _json.loads(resp.read().decode())
-
-        text = (data.get("choices") or [{}])[0].get("message", {}).get("content") or ""
-        return ModelResponse(
-            text=text.strip(),
-            provider="local_slm_openai_compatible",
-            model=self.model,
-            latency_ms=_elapsed(started),
-            success=True,
-            routing_reason=RoutingReason.LOCAL_SLM,
-        )
+    def complete(
+        self,
+        prompt: str,
+        system_prompt: str = "",
+        *,
+        task_type: str = "general",
+        privacy_class: str = PrivacyClass.INTERNAL,
+    ) -> ModelResponse:
+        result = self.adapter.infer(LocalInferenceRequest(prompt, task_type, privacy_class, system_prompt))
+        return _model_response_from_local(result)
 
 
-# ── Cloud LLM Provider (OpenAI-compatible adapter) ────────────────────────────
 class CloudLLMProvider:
-    """
-    Adapter for external cloud LLM (OpenAI, Gemini, Claude, etc.).
-    Actual API keys come from environment variables only.
-    """
+    """OpenAI-compatible cloud adapter. Environment configuration is never user-controlled."""
+
     name = "cloud_llm"
 
     def __init__(self):
-        self.provider = os.environ.get("ZENDOC_AI_PROVIDER", "").strip().lower()
-        self.api_key = os.environ.get("ZENDOC_AI_API_KEY", "").strip()
+        self.provider = _runtime_value("AI_PROVIDER", "ZENDOC_AI_PROVIDER", "").lower()
+        self.api_key = _runtime_value("AI_API_KEY", "ZENDOC_AI_API_KEY", "")
         default_url = "https://api.openai.com" if self.provider == "openai" else ""
-        self.base_url = os.environ.get("ZENDOC_AI_BASE_URL", default_url).strip().rstrip("/")
-        self.model = os.environ.get("ZENDOC_AI_MODEL", "").strip()
-        self.timeout = max(1, min(int(os.environ.get("ZENDOC_AI_TIMEOUT", "20") or "20"), 120))
+        self.base_url = _runtime_value("AI_BASE_URL", "ZENDOC_AI_BASE_URL", default_url).rstrip("/")
+        self.model = _runtime_value("AI_MODEL", "ZENDOC_AI_MODEL", "")
+        self.timeout = _bounded_int(_runtime_value("AI_TIMEOUT", "ZENDOC_AI_TIMEOUT", "20"), 1, 120, 20)
+
+    def fingerprint(self) -> tuple:
+        return (self.provider, bool(self.api_key), self.base_url, self.model, self.timeout)
 
     def is_configured(self) -> bool:
         return bool(
             self.provider in {"openai", "openai_compatible"}
-            and self.api_key and self.base_url and self.model
+            and self.api_key and self.model and _safe_cloud_base_url(self.base_url)
         )
 
     def status(self) -> dict:
@@ -260,112 +204,98 @@ class CloudLLMProvider:
         if not self.model:
             missing.append("ZENDOC_AI_MODEL")
         if missing:
-            return {"status": "integration_required", "provider": self.provider or None, "message": f"Cloud LLM integration requires: {', '.join(missing)}."}
+            return {
+                "status": "integration_required",
+                "provider": self.provider or None,
+                "message": f"Cloud LLM integration requires: {', '.join(missing)}.",
+            }
         if self.provider not in {"openai", "openai_compatible"}:
             return {"status": "integration_required", "provider": self.provider, "message": "Cloud provider adapter is not implemented."}
+        if not _safe_cloud_base_url(self.base_url):
+            return {"status": "configuration_error", "provider": self.provider, "message": "Cloud provider URL is invalid."}
         return {
             "status": "configured",
             "provider": self.provider,
             "model": self.model,
-            "message": f"Cloud LLM provider '{self.provider}' configured — connectivity not verified.",
+            "message": "Cloud LLM is configured; use remains subject to per-request privacy policy.",
         }
 
-    def complete(self, prompt: str, system_prompt: str = "") -> ModelResponse:
+    def complete(
+        self,
+        prompt: str,
+        system_prompt: str = "",
+        *,
+        task_type: str = "general",
+        privacy_class: str = PrivacyClass.PUBLIC,
+    ) -> ModelResponse:
         if not self.is_configured():
             return ModelResponse(
-                text="External AI provider is not configured. Local fallback was used.",
-                provider="cloud_llm",
-                model="not_configured",
-                latency_ms=0,
-                success=False,
-                fallback_used=True,
-                routing_reason=RoutingReason.PROVIDER_UNAVAILABLE,
-                error_category="not_configured",
+                "External AI provider is not configured.", "cloud_llm", "not_configured", 0, False, True,
+                RoutingReason.PROVIDER_UNAVAILABLE, "not_configured", task_type=task_type,
+                privacy_class=privacy_class, fallback_reason="cloud_not_configured",
             )
-        if self.provider not in {"openai", "openai_compatible"}:
-            return ModelResponse(
-                text=f"Cloud provider adapter '{self.provider}' is not implemented. Local fallback was used.",
-                provider=f"cloud_llm_{self.provider}",
-                model=self.model,
-                latency_ms=0,
-                success=False,
-                fallback_used=True,
-                routing_reason=RoutingReason.PROVIDER_UNAVAILABLE,
-                error_category="adapter_not_implemented",
-            )
-        import json as _json
-        import urllib.request
-
         started = time.perf_counter()
-        messages = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
         request = urllib.request.Request(
             f"{self.base_url}/v1/chat/completions",
-            data=_json.dumps({"model": self.model, "messages": messages}).encode(),
-            headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
+            data=json.dumps({
+                "model": self.model,
+                "messages": [
+                    {"role": "system", "content": _cloud_system_prompt(system_prompt)},
+                    {"role": "user", "content": str(prompt or "").strip()[:4_000]},
+                ],
+                "temperature": 0,
+                "response_format": {"type": "json_schema", "json_schema": {"name": "zendoc_output", "schema": STRUCTURED_OUTPUT_SCHEMA}},
+            }, separators=(",", ":")).encode(),
+            headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json", "Accept": "application/json"},
             method="POST",
         )
         try:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
-                data = _json.loads(response.read().decode())
-            text = (data.get("choices") or [{}])[0].get("message", {}).get("content") or ""
-            if not str(text).strip():
-                raise ValueError("Provider returned an empty response.")
+                raw = response.read(1_048_577)
+            if len(raw) > 1_048_576:
+                raise ValueError("Provider response is too large.")
+            data = json.loads(raw.decode("utf-8"))
+            choices = data.get("choices") if isinstance(data, dict) else None
+            message = choices[0].get("message") if isinstance(choices, list) and choices and isinstance(choices[0], dict) else None
+            if not isinstance(message, dict) or message.get("tool_calls"):
+                raise ValueError("Provider returned an unsafe response envelope.")
+            output = validate_structured_model_content(message.get("content"))
             return ModelResponse(
-                text=str(text).strip(),
-                provider=f"cloud_llm_{self.provider}",
-                model=self.model,
-                latency_ms=_elapsed(started),
-                success=True,
-                routing_reason=RoutingReason.CLOUD_LLM,
+                output["text"], f"cloud_llm_{self.provider}", self.model, _elapsed(started), True,
+                routing_reason=RoutingReason.CLOUD_LLM, task_type=task_type, output=output,
+                privacy_class=privacy_class, metadata={"structured_output": True},
             )
         except Exception as exc:
+            category = _classify_cloud_error(exc)
             return ModelResponse(
-                text="Cloud LLM is unavailable. Local fallback was used.",
-                provider=f"cloud_llm_{self.provider}",
-                model=self.model,
-                latency_ms=_elapsed(started),
-                success=False,
-                fallback_used=True,
-                routing_reason=RoutingReason.PROVIDER_UNAVAILABLE,
-                error_category=_classify_connection_error(exc),
-                metadata={"error": str(exc)[:200]},
+                "Cloud LLM is unavailable.", f"cloud_llm_{self.provider}", self.model, _elapsed(started), False, True,
+                RoutingReason.PROVIDER_UNAVAILABLE, category, task_type=task_type,
+                privacy_class=privacy_class, fallback_reason=category,
             )
 
 
-# ── Local Fallback (deterministic, always available) ──────────────────────────
 class LocalFallbackProvider:
     name = "local_fallback"
 
-    def complete(self, prompt: str, intent: str = "general") -> ModelResponse:
+    def complete(
+        self,
+        prompt: str,
+        intent: str = "general",
+        *,
+        task_type: str = "general",
+        privacy_class: str = PrivacyClass.INTERNAL,
+    ) -> ModelResponse:
         started = time.perf_counter()
-        text = _deterministic_response(intent, prompt)
+        text = _deterministic_response(intent, prompt, task_type)
         return ModelResponse(
-            text=text,
-            provider="local_fallback",
-            model="zendoc_deterministic_v1",
-            latency_ms=_elapsed(started),
-            success=True,
-            routing_reason=RoutingReason.LOCAL_FALLBACK,
+            text, "local_fallback", "zendoc_deterministic_v2", _elapsed(started), True,
+            routing_reason=RoutingReason.LOCAL_FALLBACK, task_type=task_type,
+            privacy_class=privacy_class,
         )
 
 
-# ── Model Router ───────────────────────────────────────────────────────────────
 class ModelRouter:
-    """
-    Routes tasks to the appropriate intelligence backend.
-
-    Routing policy:
-      1. Emergency detection → ALWAYS deterministic safety first
-      2. Simple classification / routing → prefer local SLM when configured
-      3. Privacy-sensitive health info → explicit policy gate before cloud
-      4. Complex planning / reasoning → cloud LLM if configured
-      5. Always falls back to local_fallback
-
-    Records routing decision metadata. Never stores hidden chain-of-thought.
-    """
+    """Deterministic-first router; model output is advisory and never executable."""
 
     def __init__(self):
         self.slm = SLMProvider()
@@ -381,65 +311,139 @@ class ModelRouter:
             "requests": 0,
         }
 
+    def configuration_fingerprint(self) -> tuple:
+        return (self.slm.settings.fingerprint(), self.cloud.fingerprint())
+
     def route(
         self,
         prompt: str,
         intent: str = "general",
         task_type: str = "general",
         privacy_sensitive: bool = False,
-        allow_cloud: bool = True,
+        allow_cloud: bool = False,
         system_prompt: str = "",
         actor_id: int | None = None,
+        *,
+        privacy_class: str | None = None,
+        cloud_consent: bool = False,
+        complexity: str = "low",
+        latency_preference: str = "normal",
+        risk_class: str = RiskClass.READ_ONLY,
+        structured_output_required: bool = True,
     ) -> ModelResponse:
-        """
-        Select backend and execute. Returns a ModelResponse.
-        Records routing metadata (not content).
-        """
         self._routing_stats["requests"] += 1
+        task_type = str(task_type or "general").strip().lower()[:100]
+        intent = str(intent or "general").strip().lower()[:100]
+        privacy = normalize_privacy_class(privacy_class)
+        if privacy_sensitive and privacy != PrivacyClass.HIGH_RISK:
+            privacy = PrivacyClass.HEALTH_SENSITIVE
 
-        # 1. Emergency check is ALWAYS deterministic — never routed to LLM
-        if task_type == "emergency" or intent == "emergency":
+        if _requires_deterministic(task_type, intent, privacy, risk_class, latency_preference):
             self._routing_stats["deterministic"] += 1
-            response = self.fallback.complete(prompt, "emergency")
-            response.routing_reason = RoutingReason.DETERMINISTIC_SAFETY
-            self._routing_stats["total_latency_ms"] += response.latency_ms
-            self._log_execution(response, actor_id, task_type, intent)
+            response = self.fallback.complete(prompt, intent, task_type=task_type, privacy_class=privacy)
+            response.routing_reason = (
+                RoutingReason.DETERMINISTIC_SAFETY
+                if task_type == "emergency" or intent == "emergency"
+                else RoutingReason.DETERMINISTIC_POLICY
+            )
+            response.fallback_reason = "deterministic_safety_or_policy"
+            self._finish(response, actor_id, task_type, intent, privacy, structured_output_required)
             return response
 
-        # 2. Local SLM — preferred for classification / simple tasks
-        attempted_provider = False
-        if self.slm.is_configured():
-            attempted_provider = True
-            response = self.slm.complete(prompt, system_prompt)
+        attempted = []
+        reasons = []
+        local_allowed = _local_task_allowed(task_type, complexity, risk_class, latency_preference)
+        if local_allowed and self.slm.is_configured():
+            attempted.append("local_ai")
+            response = self.slm.complete(
+                prompt, system_prompt, task_type=task_type, privacy_class=privacy
+            )
             if response.success:
                 self._routing_stats["local_slm"] += 1
-                self._routing_stats["total_latency_ms"] += response.latency_ms
-                self._log_execution(response, actor_id, task_type, intent)
+                self._finish(response, actor_id, task_type, intent, privacy, structured_output_required)
                 return response
-            # SLM failed → try next
+            reasons.append(response.error_category or "local_provider_error")
+            response.fallback_reason = reasons[-1]
             self._routing_stats["fallback_count"] += 1
+            self._log_execution(response, actor_id, task_type, intent, privacy, structured_output_required)
+        elif not local_allowed:
+            reasons.append("local_policy_not_applicable")
+        else:
+            reasons.append("local_not_configured")
 
-        # 3. Cloud LLM — only when allowed and not privacy-sensitive
-        if self.cloud.is_configured() and allow_cloud and not privacy_sensitive:
-            attempted_provider = True
-            response = self.cloud.complete(prompt, system_prompt)
+        cloud_privacy_allowed = cloud_policy_allows(privacy, allow_cloud, cloud_consent)
+        cloud_risk_allowed = risk_class in {RiskClass.READ_ONLY, RiskClass.LOW_RISK}
+        cloud_allowed = cloud_privacy_allowed and cloud_risk_allowed
+        if cloud_allowed and self.cloud.is_configured():
+            attempted.append("cloud_ai")
+            response = self.cloud.complete(
+                prompt, system_prompt, task_type=task_type, privacy_class=privacy
+            )
             if response.success:
                 self._routing_stats["cloud_llm"] += 1
-                self._routing_stats["total_latency_ms"] += response.latency_ms
-                self._log_execution(response, actor_id, task_type, intent)
+                response.fallback_used = bool(attempted[:-1])
+                response.fallback_reason = ",".join(reasons) or None
+                self._finish(response, actor_id, task_type, intent, privacy, structured_output_required)
                 return response
+            reasons.append(response.error_category or "cloud_provider_error")
+            response.fallback_reason = reasons[-1]
             self._routing_stats["fallback_count"] += 1
+            self._log_execution(response, actor_id, task_type, intent, privacy, structured_output_required)
+        elif allow_cloud and not cloud_allowed:
+            reasons.append(
+                "cloud_policy_blocked" if not cloud_privacy_allowed else "cloud_approval_risk_blocked"
+            )
+        elif not allow_cloud:
+            reasons.append("cloud_not_approved")
+        else:
+            reasons.append("cloud_not_configured")
 
-        # 4. Always-available local fallback
         self._routing_stats["local_fallback"] += 1
-        response = self.fallback.complete(prompt, intent)
-        response.fallback_used = attempted_provider
-        self._routing_stats["total_latency_ms"] += response.latency_ms
-        self._log_execution(response, actor_id, task_type, intent)
+        response = self.fallback.complete(prompt, intent, task_type=task_type, privacy_class=privacy)
+        response.fallback_used = bool(attempted)
+        response.fallback_reason = ",".join(dict.fromkeys(reasons)) or None
+        self._finish(response, actor_id, task_type, intent, privacy, structured_output_required)
         return response
 
-    def _log_execution(self, response: ModelResponse, actor_id: int | None, task_type: str, intent: str):
-        """Persist routing metadata only; prompts and hidden reasoning are never stored."""
+    def test_local_ai(self, actor_id: int | None = None) -> ModelResponse:
+        response = self.slm.complete(
+            HARMLESS_LOCAL_TEST_PROMPT,
+            "Answer only the harmless platform-navigation question.",
+            task_type="general_platform_question",
+            privacy_class=PrivacyClass.PUBLIC,
+        )
+        self._log_execution(
+            response,
+            actor_id,
+            "local_ai_health_test",
+            "platform_help",
+            PrivacyClass.PUBLIC,
+            True,
+        )
+        return response
+
+    def _finish(
+        self,
+        response: ModelResponse,
+        actor_id: int | None,
+        task_type: str,
+        intent: str,
+        privacy_class: str,
+        structured_output: bool,
+    ):
+        self._routing_stats["total_latency_ms"] += max(0, int(response.latency_ms or 0))
+        self._log_execution(response, actor_id, task_type, intent, privacy_class, structured_output)
+
+    def _log_execution(
+        self,
+        response: ModelResponse,
+        actor_id: int | None,
+        task_type: str,
+        intent: str,
+        privacy_class: str,
+        structured_output: bool,
+    ):
+        """Persist metadata only. Prompts, responses, keys, and hidden reasoning are excluded."""
         try:
             from flask import has_app_context
             if not has_app_context():
@@ -448,94 +452,243 @@ class ModelRouter:
             get_db().execute(
                 """
                 INSERT INTO model_execution_logs
-                (actor_id, task_type, intent, provider, model, routing_reason, latency_ms,
-                 success, fallback_used, error_category, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (actor_id,task_type,intent,provider,model,routing_reason,latency_ms,success,
+                 fallback_used,error_category,privacy_class,fallback_reason,structured_output,created_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """,
                 (
                     int(actor_id) if actor_id else None,
                     str(task_type or "general")[:100],
                     str(intent or "general")[:100],
-                    response.provider[:100],
-                    response.model[:120],
-                    response.routing_reason[:100],
+                    str(response.provider or "unknown")[:100],
+                    str(response.model or "unknown")[:120],
+                    str(response.routing_reason or "unknown")[:100],
                     max(0, int(response.latency_ms or 0)),
                     1 if response.success else 0,
                     1 if response.fallback_used else 0,
-                    response.error_category,
+                    str(response.error_category)[:100] if response.error_category else None,
+                    normalize_privacy_class(privacy_class),
+                    str(response.fallback_reason)[:200] if response.fallback_reason else None,
+                    1 if structured_output else 0,
                     now_iso(),
                 ),
             )
             get_db().commit()
         except Exception:
+            # Observability failure must never crash inference or the application.
             pass
 
-    def status(self) -> dict:
-        slm_status = self.slm.status()
+    def status(self, check_health: bool = False) -> dict:
+        local_canonical = self.slm.health() if check_health else self.slm._configuration_status()
+        local_compat = _legacy_slm_status(local_canonical)
         cloud_status = self.cloud.status()
         stats = dict(self._routing_stats)
-        avg_latency = round(stats["total_latency_ms"] / max(stats["requests"], 1), 1)
+        persistent = _persistent_runtime_metadata()
+        requests = max(stats["requests"], persistent["requests"])
+        total_latency = (
+            persistent["total_latency_ms"]
+            if persistent["requests"]
+            else stats["total_latency_ms"]
+        )
+        average = round(total_latency / max(requests, 1), 1)
+        if persistent["last_local_success"]:
+            local_canonical["last_successful_inference"] = persistent["last_local_success"]
+            local_compat["last_successful_inference"] = persistent["last_local_success"]
         return {
-            "local_slm": slm_status,
+            "local_ai": local_canonical,
+            "local_slm": local_compat,
             "cloud_llm": cloud_status,
             "deterministic_safety": {"status": "working", "message": "Always available — rule-based, no LLM."},
             "local_fallback": {"status": "working", "message": "Always available."},
-            "routing_mode": _routing_mode(slm_status, cloud_status),
-            "stats": {
-                "requests": stats["requests"],
-                "deterministic": stats["deterministic"],
-                "local_slm": stats["local_slm"],
-                "cloud_llm": stats["cloud_llm"],
-                "local_fallback": stats["local_fallback"],
-                "fallback_count": stats["fallback_count"],
-                "avg_latency_ms": avg_latency,
+            "routing_mode": _routing_mode(local_canonical, cloud_status),
+            "routing_policy": {
+                "priority": ["deterministic_safety", "deterministic_tasks", "local_ai", "approved_cloud", "local_fallback"],
+                "cloud_blocked_privacy_classes": sorted(CLOUD_ALWAYS_BLOCKED),
+                "personal_cloud_requires_consent": True,
+                "model_output_can_execute_tools": False,
             },
+            "stats": {
+                "requests": requests,
+                "deterministic": max(stats["deterministic"], persistent["deterministic"]),
+                "local_slm": max(stats["local_slm"], persistent["local_slm"]),
+                "cloud_llm": max(stats["cloud_llm"], persistent["cloud_llm"]),
+                "local_fallback": max(stats["local_fallback"], persistent["local_fallback"]),
+                "fallback_count": max(stats["fallback_count"], persistent["fallback_count"]),
+                "avg_latency_ms": average,
+            },
+            "recent_inferences": persistent["recent_inferences"],
+            "provider_errors": persistent["provider_errors"],
+            "fallback_reasons": persistent["fallback_reasons"],
         }
 
 
-# ── Singleton ─────────────────────────────────────────────────────────────────
 _router_instance: ModelRouter | None = None
 
 
 def get_model_router() -> ModelRouter:
     global _router_instance
-    if _router_instance is None:
+    fingerprint = _current_configuration_fingerprint()
+    if _router_instance is None or _router_instance.configuration_fingerprint() != fingerprint:
         _router_instance = ModelRouter()
     return _router_instance
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
-def _env_bool(name: str, default: bool = False) -> bool:
-    val = os.environ.get(name)
-    if val is None:
-        return default
-    return val.strip().lower() in {"1", "true", "yes", "on"}
+def reset_model_router():
+    global _router_instance
+    _router_instance = None
 
 
-def _elapsed(started: float) -> int:
-    return int((time.perf_counter() - started) * 1000)
+def normalize_privacy_class(value: str | None) -> str:
+    normalized = str(value or PrivacyClass.INTERNAL).strip().upper()
+    return normalized if normalized in PrivacyClass.ALL else PrivacyClass.INTERNAL
 
 
-def _classify_connection_error(exc: Exception) -> str:
-    msg = str(exc).lower()
-    if "timeout" in msg or "timed out" in msg:
-        return "timeout"
-    if "refused" in msg or "connection" in msg:
-        return "provider_unavailable"
-    return "unknown"
+def cloud_policy_allows(privacy_class: str, allow_cloud: bool, cloud_consent: bool = False) -> bool:
+    privacy = normalize_privacy_class(privacy_class)
+    if not allow_cloud or privacy in CLOUD_ALWAYS_BLOCKED:
+        return False
+    if privacy == PrivacyClass.PERSONAL:
+        return bool(cloud_consent)
+    return privacy in {PrivacyClass.PUBLIC, PrivacyClass.INTERNAL}
 
 
-def _routing_mode(slm_status: dict, cloud_status: dict) -> str:
-    if slm_status.get("status") == "configured" and cloud_status.get("status") == "configured":
-        return "slm_primary_cloud_fallback"
-    if slm_status.get("status") == "configured":
-        return "slm_primary_local_fallback"
-    if cloud_status.get("status") == "configured":
-        return "cloud_primary_local_fallback"
+def _requires_deterministic(task_type, intent, privacy, risk_class, latency_preference) -> bool:
+    return bool(
+        task_type in DETERMINISTIC_ONLY_TASKS
+        or intent == "emergency"
+        or privacy == PrivacyClass.HIGH_RISK
+        or risk_class == RiskClass.CRITICAL_BLOCKED
+        or latency_preference == "deterministic"
+    )
+
+
+def _local_task_allowed(task_type, complexity, risk_class, latency_preference) -> bool:
+    return bool(
+        task_type in SAFE_LOCAL_TASKS
+        and str(complexity or "low").lower() in {"low", "medium"}
+        and risk_class in {RiskClass.READ_ONLY, RiskClass.LOW_RISK, RiskClass.OWNER_APPROVAL}
+        and latency_preference != "deterministic"
+    )
+
+
+def _model_response_from_local(result: LocalInferenceResult) -> ModelResponse:
+    text = str(result.output.get("text") or "") if result.output else ""
+    if not result.success:
+        text = "Local AI inference was unavailable or rejected."
+    return ModelResponse(
+        text=text,
+        provider=result.provider,
+        model=result.model,
+        latency_ms=result.latency_ms,
+        success=result.success,
+        fallback_used=result.fallback_used,
+        routing_reason=RoutingReason.LOCAL_SLM if result.success else RoutingReason.PROVIDER_UNAVAILABLE,
+        error_category=result.error_category,
+        metadata=result.metadata,
+        task_type=result.task_type,
+        output=result.output,
+        privacy_class=result.privacy_class,
+        fallback_reason=result.error_category if not result.success else None,
+        structured_output=True,
+    )
+
+
+def _legacy_slm_status(canonical: dict) -> dict:
+    result = dict(canonical)
+    state = canonical.get("status")
+    result["runtime_state"] = state
+    if state == "disabled":
+        result["status"] = "integration_required"
+        result["message"] = "Local SLM integration ready — model not configured."
+    elif state == "ready":
+        result["status"] = "configured"
+    return result
+
+
+def _persistent_runtime_metadata() -> dict:
+    empty = {
+        "requests": 0,
+        "deterministic": 0,
+        "local_slm": 0,
+        "cloud_llm": 0,
+        "local_fallback": 0,
+        "fallback_count": 0,
+        "total_latency_ms": 0,
+        "last_local_success": None,
+        "recent_inferences": [],
+        "provider_errors": [],
+        "fallback_reasons": [],
+    }
+    try:
+        from flask import has_app_context
+        if not has_app_context():
+            return empty
+        from .db import get_db
+        db = get_db()
+        rows = db.execute(
+            """
+            SELECT id,task_type,provider,model,routing_reason,latency_ms,success,fallback_used,
+                   error_category,privacy_class,fallback_reason,created_at
+            FROM model_execution_logs ORDER BY id DESC LIMIT 25
+            """
+        ).fetchall()
+        all_stats = db.execute(
+            """
+            SELECT COUNT(*) requests,
+                   COALESCE(SUM(latency_ms),0) total_latency_ms,
+                   COALESCE(SUM(CASE WHEN routing_reason IN ('deterministic_safety','deterministic_policy') THEN 1 ELSE 0 END),0) deterministic,
+                   COALESCE(SUM(CASE WHEN provider LIKE 'local_%' AND provider!='local_fallback' AND success=1 THEN 1 ELSE 0 END),0) local_slm,
+                   COALESCE(SUM(CASE WHEN provider LIKE 'cloud_llm_%' AND success=1 THEN 1 ELSE 0 END),0) cloud_llm,
+                   COALESCE(SUM(CASE WHEN provider='local_fallback' THEN 1 ELSE 0 END),0) local_fallback,
+                   COALESCE(SUM(CASE WHEN success=1 AND fallback_used=1 THEN 1 ELSE 0 END),0) fallback_count
+            FROM model_execution_logs
+            """
+        ).fetchone()
+        last_local = db.execute(
+            "SELECT created_at FROM model_execution_logs WHERE provider LIKE 'local_%' AND provider!='local_fallback' AND success=1 ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        reasons = db.execute(
+            "SELECT fallback_reason,COUNT(*) count FROM model_execution_logs WHERE fallback_reason IS NOT NULL GROUP BY fallback_reason ORDER BY count DESC,fallback_reason LIMIT 10"
+        ).fetchall()
+        safe_rows = [dict(row) for row in rows]
+        return {
+            "requests": all_stats["requests"],
+            "deterministic": all_stats["deterministic"],
+            "local_slm": all_stats["local_slm"],
+            "cloud_llm": all_stats["cloud_llm"],
+            "local_fallback": all_stats["local_fallback"],
+            "fallback_count": all_stats["fallback_count"],
+            "total_latency_ms": all_stats["total_latency_ms"],
+            "last_local_success": last_local["created_at"] if last_local else None,
+            "recent_inferences": safe_rows,
+            "provider_errors": [row for row in safe_rows if not row["success"]],
+            "fallback_reasons": [dict(row) for row in reasons],
+        }
+    except Exception:
+        return empty
+
+
+def _current_configuration_fingerprint() -> tuple:
+    settings = LocalAISettings.from_runtime()
+    cloud = CloudLLMProvider()
+    return (settings.fingerprint(), cloud.fingerprint())
+
+
+def _routing_mode(local_status: dict, cloud_status: dict) -> str:
+    local_ready = local_status.get("status") == "ready"
+    cloud_configured = cloud_status.get("status") == "configured"
+    if local_ready and cloud_configured:
+        return "local_primary_policy_approved_cloud_fallback"
+    if local_ready:
+        return "local_primary_deterministic_fallback"
+    if cloud_configured:
+        return "policy_approved_cloud_or_deterministic_fallback"
     return "deterministic_local_fallback"
 
 
-def _deterministic_response(intent: str, prompt: str = "") -> str:
+def _deterministic_response(intent: str, prompt: str = "", task_type: str = "general") -> str:
+    if task_type in DETERMINISTIC_ONLY_TASKS - {"emergency"}:
+        return "This action cannot be performed by a language model. Use the authorized ZENDOC workflow and required human approval."
     responses = {
         "emergency": (
             "This appears to be an emergency. Call emergency services immediately (108 or 112). "
@@ -545,20 +698,63 @@ def _deterministic_response(intent: str, prompt: str = "") -> str:
             "I can guide you, but I cannot confirm a diagnosis. Describe your symptoms in detail, "
             "and consider booking a consultation if they persist or worsen."
         ),
-        "appointment": (
-            "You can book appointments through ZENDOC. "
-            "Use the Appointments section to schedule with a verified provider."
-        ),
-        "pharmacy": (
-            "ZENDOC Pharmacy lets you search medicines and request delivery. "
-            "Always follow your doctor's prescription."
-        ),
-        "fitness": (
-            "ZENDOC Fitness Coach can create a personalized plan. "
-            "Start with your fitness profile to get recommendations."
-        ),
+        "appointment": "Use the ZENDOC Appointments section to schedule with a verified provider.",
+        "pharmacy": "Use ZENDOC Pharmacy for medicine information and requests, and follow your doctor's prescription.",
+        "fitness": "Start with your ZENDOC fitness profile to receive bounded wellness guidance.",
     }
-    return responses.get(intent) or (
-        "I can guide you to the right ZENDOC service and suggest safe next steps. "
-        "Tell me what you need help with."
+    return responses.get(intent) or "I can guide you to the appropriate ZENDOC service and safe next step."
+
+
+def _runtime_value(config_key: str, env_key: str, default: str) -> str:
+    try:
+        from flask import current_app, has_app_context
+        if has_app_context() and config_key in current_app.config:
+            value = current_app.config.get(config_key)
+            return str(value if value is not None else default).strip()
+    except (ImportError, RuntimeError):
+        pass
+    return str(os.environ.get(env_key, default) or default).strip()
+
+
+def _safe_cloud_base_url(value: str) -> bool:
+    parsed = urlsplit(str(value or "").strip())
+    return bool(
+        parsed.scheme in {"http", "https"}
+        and parsed.hostname
+        and not parsed.username
+        and not parsed.password
+        and not parsed.query
+        and not parsed.fragment
+        and parsed.path in {"", "/"}
     )
+
+
+def _cloud_system_prompt(extra: str) -> str:
+    base = (
+        "Return JSON matching the supplied schema. Provide low-risk advisory text only. "
+        "Never emit tool calls, commands, diagnoses, prescriptions, permission changes, or claims of execution."
+    )
+    extra = str(extra or "").strip()[:1_000]
+    return f"{base}\nAdditional task context: {extra}" if extra else base
+
+
+def _classify_cloud_error(exc: Exception) -> str:
+    message = str(exc).lower()
+    if isinstance(exc, TimeoutError) or "timeout" in message or "timed out" in message:
+        return "timeout"
+    if isinstance(exc, urllib.error.URLError):
+        return "provider_unavailable"
+    if isinstance(exc, (json.JSONDecodeError, UnicodeDecodeError, ValueError)):
+        return "malformed_response"
+    return "provider_error"
+
+
+def _bounded_int(value, minimum: int, maximum: int, default: int) -> int:
+    try:
+        return max(minimum, min(int(value), maximum))
+    except (TypeError, ValueError):
+        return default
+
+
+def _elapsed(started: float) -> int:
+    return max(0, int((time.perf_counter() - started) * 1000))

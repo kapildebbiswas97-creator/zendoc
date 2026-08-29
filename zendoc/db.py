@@ -907,6 +907,9 @@ def init_db():
             success INTEGER NOT NULL DEFAULT 1,
             fallback_used INTEGER NOT NULL DEFAULT 0,
             error_category TEXT,
+            privacy_class TEXT NOT NULL DEFAULT 'INTERNAL',
+            fallback_reason TEXT,
+            structured_output INTEGER NOT NULL DEFAULT 1,
             created_at TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_model_exec_logs_actor ON model_execution_logs(actor_id, created_at);
@@ -1305,6 +1308,11 @@ def migrate_schema(db):
             "resolved_by": "INTEGER REFERENCES users(id) ON DELETE SET NULL",
             "dedupe_key": "TEXT",
         },
+        "model_execution_logs": {
+            "privacy_class": "TEXT NOT NULL DEFAULT 'INTERNAL'",
+            "fallback_reason": "TEXT",
+            "structured_output": "INTEGER NOT NULL DEFAULT 1",
+        },
     }.items():
         existing_columns = table_columns(db, table)
         for column, ddl in additions.items():
@@ -1325,8 +1333,13 @@ def migrate_schema(db):
     db.execute("CREATE INDEX IF NOT EXISTS idx_agent_approvals_status ON agent_approvals(status, requested_at)")
     db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_platform_events_idempotency ON platform_events(idempotency_key) WHERE idempotency_key IS NOT NULL")
     db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_alerts_dedupe ON agent_alerts(dedupe_key) WHERE dedupe_key IS NOT NULL AND status='active'")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_model_exec_logs_privacy ON model_execution_logs(privacy_class, created_at)")
     db.execute(
         "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES ('m8_agent_platform_v1', ?)",
+        (now_iso(),),
+    )
+    db.execute(
+        "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES ('m8_1_local_ai_runtime_v1', ?)",
         (now_iso(),),
     )
     db.commit()

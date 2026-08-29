@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Milestones 1 through 8 are implemented as an advanced MVP foundation. ZENDOC is not a certified medical product, emergency dispatch system, pharmacy inventory network, production telemedicine system, or regulated medical device platform. M8 adds an owner-bound Admin invariant, bounded planner/executor, model router and real local-provider adapter foundation, specialized agent/tool registries, persistent tasks/events/approvals/alerts, authenticated polling, provider abstractions, and Owner Command Center 2.0 while preserving M1-M7.1 subsystems.
+Milestones 1 through 8.1 are implemented as an advanced MVP foundation. ZENDOC is not a certified medical product, emergency dispatch system, pharmacy inventory network, production telemedicine system, or regulated medical device platform. M8 adds an owner-bound Admin invariant and bounded agent operations; M8.1 adds a real optional local inference path, strict structured output, privacy-aware routing, truthful runtime health, and owner-only AI observability while preserving M1-M8 subsystems.
 
 ## Implemented
 
@@ -46,18 +46,18 @@ Milestones 1 through 8 are implemented as an advanced MVP foundation. ZENDOC is 
 - Human operations staff profiles and task lifecycle.
 - Single environment-configured owner enforcement across Admin web/API/tool workflows; Admin registration and self-promotion remain blocked.
 - Bounded deterministic Core Agent plans executed only through registered server handlers.
-- Local SLM and OpenAI-compatible cloud adapters with deterministic fallback and metadata-only routing logs.
+- Real optional Ollama and OpenAI-compatible local inference adapters, privacy-approved cloud routing, strict structured output, deterministic fallback, and metadata-only routing logs.
 - Persistent agent tasks, attempts, idempotency, categorized retries, events, approvals, and proactive alerts.
 - Authenticated actor-scoped event polling as the real-time messaging foundation.
 - Medical-record storage, notifications, telehealth, database-readiness, and infrastructure status provider boundaries.
 - Owner Command Center 2.0 with working commands, retries, approvals, and alert controls.
-- Truthful M8 capability registry and report in `docs/MILESTONE8.md`.
+- Truthful M8/M8.1 capability registry and reports in `docs/MILESTONE8.md` and `docs/MILESTONE8_1.md`.
 
 ## Not Yet Production-Certified
 
 - No HIPAA/GDPR/DPDP legal review.
 - No clinical validation or medical-device certification.
-- No configured/tested local SLM or proprietary ZENDOC-trained model. Local SLM integration is ready, but a model is not configured.
+- No model is bundled or automatically downloaded. Local inference is available only when an operator installs a supported server and configures a model; no local model is claimed medically trained or certified. ZENDOC has no proprietary trained model.
 - No OCR/document extraction provider or clinically validated report interpretation.
 - Consent controls are a technical foundation, not a legal compliance certification.
 - No payment, insurance, medicine delivery, or telemedicine video module.

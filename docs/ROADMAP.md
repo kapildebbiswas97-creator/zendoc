@@ -41,6 +41,16 @@ Complete in this codebase: security and authentication hardening, central AI saf
 - Owner Command Center 2.0 with real workflow controls and capability matrix.
 - PostgreSQL/external storage/notification/WebRTC readiness boundaries without fabricated integration.
 
+## Milestone 8.1: Local AI Runtime And Intelligent Routing
+
+- Real optional Ollama and OpenAI-compatible local inference adapters.
+- Configurable small-model selection with no automatic install or download.
+- Deterministic emergency and restricted-task handling before model routing.
+- Privacy-aware local/cloud/fallback selection and explicit cloud consent policy.
+- Strict structured-output validation with no direct model-to-tool execution.
+- Truthful provider/server/model health and owner-only AI Runtime observability.
+- Metadata-only inference logs, safe fallback reasons, and legacy M8 database compatibility.
+
 ## Milestone 9: Mental Wellness
 
 - Context-aware check-ins, journaling, breathing, sleep, and stress tracking.

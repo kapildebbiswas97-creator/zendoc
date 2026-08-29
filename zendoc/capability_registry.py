@@ -27,15 +27,29 @@ def _env_bool(key: str, default: bool = False) -> bool:
     return val.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _local_ai_env(new_key: str, legacy_key: str, default: str = "") -> str:
+    value = os.environ.get(new_key)
+    if value is not None:
+        return value.strip()
+    return _env(legacy_key, default)
+
+
+def _local_ai_enabled() -> bool:
+    if "ZENDOC_LOCAL_AI_ENABLED" in os.environ:
+        return _env_bool("ZENDOC_LOCAL_AI_ENABLED")
+    return _env_bool("ZENDOC_SLM_ENABLED")
+
+
 def get_capability_registry() -> dict:
     """
     Returns the complete truthful capability matrix.
     Used by the Command Center, API, and capability status endpoint.
     """
-    slm_configured = (
-        _env_bool("ZENDOC_SLM_ENABLED")
-        and _env("ZENDOC_SLM_PROVIDER", "ollama") in {"ollama", "openai_compatible"}
-        and bool(_env("ZENDOC_SLM_MODEL"))
+    local_ai_provider = _local_ai_env("ZENDOC_LOCAL_AI_PROVIDER", "ZENDOC_SLM_PROVIDER", "ollama").lower()
+    local_ai_configured = (
+        _local_ai_enabled()
+        and local_ai_provider in {"ollama", "openai_compatible"}
+        and bool(_local_ai_env("ZENDOC_LOCAL_AI_MODEL", "ZENDOC_SLM_MODEL"))
     )
     cloud_llm = bool(
         _env("ZENDOC_AI_PROVIDER") in {"openai", "openai_compatible"} and _env("ZENDOC_AI_API_KEY")
@@ -66,10 +80,10 @@ def get_capability_registry() -> dict:
             "description": "Emergency detection — always first, never routed to LLM.",
         },
         "local_slm": {
-            "status": STATUS_BETA if slm_configured else STATUS_INTEGRATION_REQUIRED,
+            "status": STATUS_BETA if local_ai_configured else STATUS_INTEGRATION_REQUIRED,
             "label": "Local SLM (Small Language Model)",
-            "description": "Ollama/llama.cpp/OpenAI-compatible local inference adapter."
-                           if slm_configured else
+            "description": "Local inference is configured; owner runtime health verifies server and model readiness."
+                           if local_ai_configured else
                            "Local SLM integration ready — model not configured.",
         },
         "cloud_llm": {
@@ -82,7 +96,7 @@ def get_capability_registry() -> dict:
         "model_router": {
             "status": STATUS_WORKING,
             "label": "Model Router",
-            "description": "Routes tasks: deterministic safety → local SLM → cloud → fallback.",
+            "description": "Routes tasks by safety, privacy, risk, complexity, and explicit cloud approval; model output cannot invoke tools.",
         },
         "agent_task_engine": {
             "status": STATUS_WORKING,

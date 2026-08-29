@@ -89,7 +89,27 @@ def api_model_router_status():
     user, error = _api_owner()
     if error:
         return error
-    return jsonify(get_model_router().status())
+    return jsonify(get_model_router().status(check_health=True))
+
+
+@bp.post("/api/v1/admin/model-router/test")
+def api_test_local_ai():
+    """Run one fixed, harmless local-only inference; no caller prompt is accepted."""
+    user, error = _api_owner()
+    if error:
+        return error
+    result = get_model_router().test_local_ai(actor_id=user["id"])
+    audit(
+        "test_local_ai",
+        "model_provider",
+        f"{result.provider}:{'success' if result.success else result.error_category or 'failed'}",
+        actor=user,
+    )
+    get_db().commit()
+    return jsonify({
+        "result": result.to_dict(),
+        "runtime": get_model_router().status(check_health=True),
+    })
 
 
 @bp.get("/api/v1/admin/infrastructure")
@@ -294,6 +314,25 @@ def api_events():
 def owner_alert_check():
     created = run_proactive_alert_check()
     flash(f"Operational scan completed: {len(created)} new alert(s).", "success")
+    return redirect(url_for("milestone7.admin_agent_command_center"))
+
+
+@bp.post("/admin/ai-runtime/test")
+@owner_required
+def owner_test_local_ai():
+    """Owner UI action for the same fixed local-only readiness prompt."""
+    result = get_model_router().test_local_ai(actor_id=g.user["id"])
+    audit(
+        "test_local_ai",
+        "model_provider",
+        f"{result.provider}:{'success' if result.success else result.error_category or 'failed'}",
+        actor=g.user,
+    )
+    get_db().commit()
+    if result.success:
+        flash(f"Local AI test succeeded in {result.latency_ms} ms.", "success")
+    else:
+        flash(f"Local AI test did not run: {result.error_category or 'provider error'}.", "error")
     return redirect(url_for("milestone7.admin_agent_command_center"))
 
 

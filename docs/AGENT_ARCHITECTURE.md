@@ -6,7 +6,7 @@ The ZENDOC Core Agent coordinates workflows through permissioned tools. It does 
 
 ## Safety Order
 
-Authenticated command -> Safety Agent -> bounded planner -> specialized agent -> permissioned tool registry -> bounded executor -> persistent task/event/audit -> user-facing result.
+Authenticated command -> deterministic Safety Agent -> bounded planner -> privacy-aware Model Router -> specialized agent -> permissioned tool registry -> approval gate where required -> bounded executor -> persistent task/event/audit -> user-facing result.
 
 Emergency detection runs before ordinary agent routing and never waits for complex chains.
 
@@ -45,9 +45,9 @@ The M8 executor has no generic shell, SQL, Python, filesystem, database, or comm
 
 ## Model Router
 
-Emergency safety is deterministic. Configured local SLM inference is preferred before privacy-approved cloud inference, with deterministic fallback always available. Provider configuration never grants permissions and never exposes agent tools directly. Routing logs contain metadata only, not prompts or hidden reasoning.
+Emergency safety and deterministic-only tasks run before model selection. For allowed low-risk tasks, configured local inference is preferred before explicitly approved cloud inference; deterministic fallback is always available. `HEALTH_SENSITIVE` and `HIGH_RISK` content is never sent to cloud, while `PERSONAL` cloud routing requires consent. Provider configuration never grants permissions and model output never exposes or invokes agent tools directly. Strict structured output is validated before any later planning, permission, approval, or execution stage. Routing logs contain metadata only, not prompts, responses, credentials, or hidden reasoning.
 
-Current truthful status: **Local SLM integration ready — model not configured.**
+Ollama and OpenAI-compatible local adapters are implemented as beta capabilities. Runtime status is checked against the real server and model inventory; without an installed/running configured model the truthful status remains **Integration Required** or **Unavailable**. See [Milestone 8.1](MILESTONE8_1.md).
 
 ## Owner Authority
 

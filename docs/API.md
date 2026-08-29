@@ -199,6 +199,7 @@ All M8 endpoints require a bearer token. `/api/v1/admin/*` endpoints additionall
 - `GET /api/v1/events?after_id={id}&limit={n}`
 - `POST /api/v1/admin/agent/tasks`
 - `GET /api/v1/admin/model-router`
+- `POST /api/v1/admin/model-router/test` (owner-only, fixed harmless local prompt; caller prompts are ignored)
 - `GET /api/v1/admin/infrastructure`
 - `GET /api/v1/admin/approvals`
 - `POST /api/v1/admin/approvals/{id}/decision`

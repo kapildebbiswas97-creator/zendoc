@@ -375,7 +375,7 @@ def admin_command_center_data():
         "agent_tasks": list_agent_tasks(limit=25),
         "pending_approvals": list_pending_approvals(),
         "active_alerts": list_alerts("active", limit=25),
-        "model_router": get_model_router().status(),
+        "model_router": get_model_router().status(check_health=True),
         "capabilities": get_capability_registry(),
         "infrastructure": infrastructure_status(),
         "tool_registry": [tool.to_dict() for tool in TOOL_REGISTRY.values()],

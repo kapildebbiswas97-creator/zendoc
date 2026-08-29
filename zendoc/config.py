@@ -12,12 +12,24 @@ def env_bool(name, default=False):
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def env_int(name, default, minimum=1, maximum=120):
+    try:
+        value = int(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        value = default
+    return max(minimum, min(value, maximum))
+
+
 def load_config(base_dir, overrides=None):
     env = os.environ.get("ZENDOC_ENV", "development").strip().lower()
     testing = bool(overrides and overrides.get("TESTING"))
     secret_key = os.environ.get("ZENDOC_SECRET_KEY")
     if not secret_key and (env == "production" and not testing):
         raise ConfigError("ZENDOC_SECRET_KEY is required in production.")
+    ai_provider = os.environ.get("ZENDOC_AI_PROVIDER", "").strip().lower()
+    ai_base_url = os.environ.get(
+        "ZENDOC_AI_BASE_URL", "https://api.openai.com" if ai_provider == "openai" else ""
+    ).strip()
 
     config = {
         "ZENDOC_ENV": env,
@@ -44,10 +56,34 @@ def load_config(base_dir, overrides=None):
         "SLM_PROVIDER": os.environ.get("ZENDOC_SLM_PROVIDER", "ollama").strip().lower(),
         "SLM_BASE_URL": os.environ.get("ZENDOC_SLM_BASE_URL", "http://127.0.0.1:11434").strip(),
         "SLM_MODEL": os.environ.get("ZENDOC_SLM_MODEL", "").strip(),
-        "SLM_TIMEOUT": int(os.environ.get("ZENDOC_SLM_TIMEOUT", "10")),
-        "AI_PROVIDER": os.environ.get("ZENDOC_AI_PROVIDER", "").strip().lower(),
-        "AI_BASE_URL": os.environ.get("ZENDOC_AI_BASE_URL", "").strip(),
+        "SLM_TIMEOUT": env_int("ZENDOC_SLM_TIMEOUT", 10),
+        # Milestone 8.1 canonical local-AI configuration. The older SLM names
+        # remain readable during the compatibility window.
+        "LOCAL_AI_ENABLED": env_bool(
+            "ZENDOC_LOCAL_AI_ENABLED", env_bool("ZENDOC_SLM_ENABLED", False)
+        ),
+        "LOCAL_AI_PROVIDER": os.environ.get(
+            "ZENDOC_LOCAL_AI_PROVIDER", os.environ.get("ZENDOC_SLM_PROVIDER", "ollama")
+        ).strip().lower(),
+        "LOCAL_AI_BASE_URL": os.environ.get(
+            "ZENDOC_LOCAL_AI_BASE_URL",
+            os.environ.get("ZENDOC_SLM_BASE_URL", "http://127.0.0.1:11434"),
+        ).strip(),
+        "LOCAL_AI_MODEL": os.environ.get(
+            "ZENDOC_LOCAL_AI_MODEL", os.environ.get("ZENDOC_SLM_MODEL", "")
+        ).strip(),
+        "LOCAL_AI_TIMEOUT": env_int(
+            "ZENDOC_LOCAL_AI_TIMEOUT",
+            env_int("ZENDOC_SLM_TIMEOUT", 10),
+        ),
+        "LOCAL_AI_ALLOW_PRIVATE_NETWORK": env_bool(
+            "ZENDOC_LOCAL_AI_ALLOW_PRIVATE_NETWORK", False
+        ),
+        "AI_PROVIDER": ai_provider,
+        "AI_API_KEY": os.environ.get("ZENDOC_AI_API_KEY", "").strip(),
+        "AI_BASE_URL": ai_base_url,
         "AI_MODEL": os.environ.get("ZENDOC_AI_MODEL", "").strip(),
+        "AI_TIMEOUT": env_int("ZENDOC_AI_TIMEOUT", 20),
     }
     if overrides:
         config.update(overrides)

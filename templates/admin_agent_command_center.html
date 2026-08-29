@@ -26,14 +26,24 @@
   </form>
 
   <article class="panel model-card">
-    <p class="eyebrow">Intelligence routing</p>
-    <h2>{{ data.model_router.routing_mode.replace('_', ' ').title() }}</h2>
+    <div class="panel-head"><div><p class="eyebrow">AI Runtime · Milestone 8.1</p><h2>{{ data.model_router.routing_mode.replace('_', ' ').title() }}</h2></div>
+      <form method="post" action="{{ url_for('milestone8.owner_test_local_ai') }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit" class="secondary-action">Test Local AI</button></form>
+    </div>
     <div class="summary-row"><strong>Deterministic safety</strong><span class="status-badge active">Working</span></div>
-    <div class="summary-row"><strong>Local SLM</strong><span class="status-badge {{ 'active' if data.model_router.local_slm.status == 'configured' else 'integration' }}">{{ data.model_router.local_slm.status.replace('_', ' ') }}</span><p>{{ data.model_router.local_slm.message }}</p></div>
+    <div class="summary-row"><strong>Local AI · {{ data.model_router.local_ai.provider }}</strong><span class="status-badge {{ 'active' if data.model_router.local_ai.status == 'ready' else 'integration' }}">{{ data.model_router.local_ai.status.replace('_', ' ') }}</span><p>{{ data.model_router.local_slm.message }}</p><small>Server: {{ data.model_router.local_ai.server_status or 'not checked' }} · Model: {{ data.model_router.local_ai.model or 'not configured' }} ({{ data.model_router.local_ai.model_status or 'unknown' }}){% if data.model_router.local_ai.latency_ms is not none %} · {{ data.model_router.local_ai.latency_ms }} ms{% endif %}</small>{% if data.model_router.local_ai.capabilities %}<small>Capabilities: {{ data.model_router.local_ai.capabilities|join(', ') }}</small>{% endif %}{% if data.model_router.local_ai.last_successful_inference %}<small>Last successful inference: {{ data.model_router.local_ai.last_successful_inference }}</small>{% endif %}</div>
     <div class="summary-row"><strong>Cloud LLM</strong><span class="status-badge {{ 'active' if data.model_router.cloud_llm.status == 'configured' else 'integration' }}">{{ data.model_router.cloud_llm.status.replace('_', ' ') }}</span><p>{{ data.model_router.cloud_llm.message }}</p></div>
-    <div class="model-metrics"><span>{{ data.model_router.stats.requests }} routed</span><span>{{ data.model_router.stats.fallback_count }} fallbacks</span><span>{{ data.model_router.stats.avg_latency_ms }} ms avg</span></div>
+    <div class="summary-row"><strong>Privacy boundary</strong><p>Health-sensitive and high-risk content never routes to cloud. Personal content requires explicit cloud approval and consent. Model output cannot invoke tools.</p></div>
+    <div class="model-metrics"><span>{{ data.model_router.stats.requests }} executions</span><span>{{ data.model_router.stats.fallback_count }} fallbacks</span><span>{{ data.model_router.stats.avg_latency_ms }} ms avg</span></div>
   </article>
 </div>
+
+<section class="panel spaced-panel">
+  <div class="panel-head"><div><p class="eyebrow">Metadata-only observability</p><h2>Recent AI routing</h2></div><span class="count-pill">{{ data.model_router.recent_inferences|length }} recent</span></div>
+  {% if data.model_router.recent_inferences %}<div class="table-shell"><table><thead><tr><th>Task</th><th>Privacy</th><th>Provider</th><th>Result</th><th>Fallback</th><th>Latency</th><th>When</th></tr></thead><tbody>
+    {% for inference in data.model_router.recent_inferences %}<tr><td>{{ inference.task_type.replace('_', ' ') }}</td><td>{{ inference.privacy_class.replace('_', ' ') }}</td><td>{{ inference.provider }}<br><small>{{ inference.model }}</small></td><td>{{ 'success' if inference.success else inference.error_category or 'failed' }}</td><td>{{ inference.fallback_reason or '—' }}</td><td>{{ inference.latency_ms or 0 }} ms</td><td>{{ inference.created_at }}</td></tr>{% endfor %}
+  </tbody></table></div>{% else %}<p class="empty-state">No model routing metadata yet. Prompts and responses are never stored here.</p>{% endif %}
+  {% if data.model_router.fallback_reasons %}<p><strong>Fallback reasons:</strong> {% for item in data.model_router.fallback_reasons %}{{ item.fallback_reason }} ({{ item.count }}){% if not loop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+</section>
 
 {% if agent_result %}
 <section class="result command-result"><div><p class="eyebrow">{{ agent_result.plan.assigned_agent }} · {{ agent_result.intent.replace('_', ' ').title() }}</p><h2>Run #{{ agent_result.run_id }} · Task #{{ agent_result.task_id }}</h2><p>{{ agent_result.message }}</p></div><span class="status-badge active">{{ 'Waiting for confirmation' if agent_result.requires_confirmation else 'Completed' }}</span></section>

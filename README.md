@@ -39,14 +39,14 @@ Milestone 6 adds the consumer-grade healthcare ecosystem layer:
 
 Milestone 7 & 7.1 adds the agentic core, telehealth beta workflows, ZENDOC Connect permissioned messaging, camera intelligence foundations, video intelligence, and human operations. Details, limitations, files changed, and validation notes are in `docs/MILESTONE6.md`, `docs/MILESTONE7.md`, and `docs/ZENDOC_CONNECT.md`.
 
-Milestone 8 adds the environment-bound single owner invariant, bounded Core Agent planner/executor, truthful local/cloud model-router adapters, specialized agent and permissioned tool registries, persistent tasks/events/approvals/alerts, provider boundaries, and Owner Command Center 2.0. Current local SLM status is: **Local SLM integration ready — model not configured.** See `docs/MILESTONE8.md`.
+Milestone 8 adds the environment-bound single owner invariant, bounded Core Agent planner/executor, specialized agent and permissioned tool registries, persistent tasks/events/approvals/alerts, provider boundaries, and Owner Command Center 2.0. Milestone 8.1 adds real optional Ollama/OpenAI-compatible local inference, strict structured output, privacy-aware routing, truthful provider/model health, metadata-only observability, and a safe owner runtime test. Local AI remains optional and deterministic fallback is always available. See `docs/MILESTONE8.md` and `docs/MILESTONE8_1.md`.
 
 ## Production Notes
 
 Set `ZENDOC_ENV=production`, `ZENDOC_SECRET_KEY`, `ZENDOC_ADMIN_EMAIL`, and `ZENDOC_ADMIN_PASSWORD` in the environment. Use PostgreSQL and external object storage before production healthcare data.
 
-Optional model providers are controlled with the `ZENDOC_SLM_*` and `ZENDOC_AI_*` environment variables. If no tested provider is configured, ZENDOC uses the deterministic local fallback and never claims model inference occurred.
+Optional local model providers are controlled with `ZENDOC_LOCAL_AI_*` (`ZENDOC_SLM_*` is retained as a legacy compatibility alias); cloud providers use `ZENDOC_AI_*`. If a provider is not ready or privacy policy disallows it, ZENDOC uses deterministic local fallback and never claims model inference occurred.
 
 Healthcare finder external integrations are controlled by `ZENDOC_PLACES_PROVIDER` and provider-specific keys such as `ZENDOC_GOOGLE_PLACES_API_KEY`. With no key, the app still runs and returns a truthful unavailable message.
 
-Health Memory architecture is documented in `docs/HEALTH_MEMORY.md`. Milestone 6 ecosystem architecture is documented in `docs/MILESTONE6.md`; Milestone 7/7.1 agent, telehealth, Connect, and operations architecture is documented in `docs/MILESTONE7.md` and `docs/ZENDOC_CONNECT.md`; M8 is documented in `docs/MILESTONE8.md`. ZENDOC does not claim clinical validation, emergency dispatch capability, production telemedicine capability, a proprietary trained SLM, real provider inventory, or regulatory compliance.
+Health Memory architecture is documented in `docs/HEALTH_MEMORY.md`. Milestone 6 ecosystem architecture is documented in `docs/MILESTONE6.md`; Milestone 7/7.1 agent, telehealth, Connect, and operations architecture is documented in `docs/MILESTONE7.md` and `docs/ZENDOC_CONNECT.md`; M8 and M8.1 are documented in `docs/MILESTONE8.md` and `docs/MILESTONE8_1.md`. ZENDOC does not claim clinical validation, emergency dispatch capability, production telemedicine capability, a proprietary trained SLM, real provider inventory, or regulatory compliance.
