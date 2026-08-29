@@ -915,6 +915,102 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_model_exec_logs_actor ON model_execution_logs(actor_id, created_at);
         CREATE INDEX IF NOT EXISTS idx_model_exec_logs_provider ON model_execution_logs(provider, created_at);
 
+        CREATE TABLE IF NOT EXISTS model_candidates (
+            model_id TEXT PRIMARY KEY,
+            display_name TEXT NOT NULL,
+            family TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            local_model_name TEXT NOT NULL,
+            metadata_json TEXT NOT NULL,
+            enabled_for_evaluation INTEGER NOT NULL DEFAULT 0,
+            development_baseline INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS evaluation_case_versions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            dataset_name TEXT NOT NULL,
+            version TEXT NOT NULL,
+            dataset_sha256 TEXT NOT NULL,
+            case_count INTEGER NOT NULL,
+            synthetic_only INTEGER NOT NULL DEFAULT 1,
+            source_category TEXT NOT NULL,
+            license_provenance TEXT NOT NULL,
+            allowed_use TEXT NOT NULL,
+            phi_pii_status TEXT NOT NULL,
+            quality_review TEXT,
+            safety_review TEXT,
+            created_at TEXT NOT NULL,
+            UNIQUE(dataset_name, version)
+        );
+
+        CREATE TABLE IF NOT EXISTS model_evaluation_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            candidate_id TEXT NOT NULL REFERENCES model_candidates(model_id),
+            candidate_snapshot_json TEXT NOT NULL,
+            dataset_name TEXT NOT NULL,
+            dataset_version TEXT NOT NULL,
+            dataset_sha256 TEXT NOT NULL,
+            mode TEXT NOT NULL CHECK(mode IN ('dry_run','mock','real_local')),
+            status TEXT NOT NULL,
+            requested_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            selected_case_count INTEGER NOT NULL,
+            limits_json TEXT NOT NULL,
+            safety_status TEXT,
+            readiness_status TEXT,
+            safety_score REAL,
+            capability_score REAL,
+            efficiency_score REAL,
+            structured_output_score REAL,
+            hallucination_score REAL,
+            intent_score REAL,
+            multilingual_score REAL,
+            agent_boundary_score REAL,
+            critical_failure_count INTEGER NOT NULL DEFAULT 0,
+            resource_class TEXT,
+            model_load_ms INTEGER,
+            average_latency_ms REAL,
+            timeout_rate REAL,
+            failure_rate REAL,
+            approximate_memory_mb REAL,
+            cpu_percent REAL,
+            gpu_utilization REAL,
+            context_size_used INTEGER,
+            runtime_size_bytes INTEGER,
+            stop_requested INTEGER NOT NULL DEFAULT 0,
+            error_category TEXT,
+            created_at TEXT NOT NULL,
+            started_at TEXT,
+            completed_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_model_eval_runs_candidate ON model_evaluation_runs(candidate_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_model_eval_runs_status ON model_evaluation_runs(status, created_at);
+
+        CREATE TABLE IF NOT EXISTS model_evaluation_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id INTEGER NOT NULL REFERENCES model_evaluation_runs(id) ON DELETE CASCADE,
+            case_id TEXT NOT NULL,
+            category TEXT NOT NULL,
+            status TEXT NOT NULL,
+            safety_status TEXT NOT NULL,
+            scores_json TEXT NOT NULL,
+            flags_json TEXT NOT NULL DEFAULT '[]',
+            critical_failures_json TEXT NOT NULL DEFAULT '[]',
+            latency_ms INTEGER NOT NULL DEFAULT 0,
+            timeout INTEGER NOT NULL DEFAULT 0,
+            error_category TEXT,
+            response_sha256 TEXT,
+            human_review_required_json TEXT NOT NULL DEFAULT '[]',
+            human_review_score INTEGER,
+            human_review_notes TEXT,
+            human_reviewed_at TEXT,
+            created_at TEXT NOT NULL,
+            UNIQUE(run_id, case_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_model_eval_results_run ON model_evaluation_results(run_id, id);
+        CREATE INDEX IF NOT EXISTS idx_model_eval_results_safety ON model_evaluation_results(safety_status, created_at);
+
         CREATE TABLE IF NOT EXISTS notification_deliveries (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -939,6 +1035,7 @@ def init_db():
     migrate_schema(db)
     seed_admin()
     _seed_exercises_safe()
+    _seed_model_evaluation_catalog_safe()
 
 
 def table_columns(db, table):
@@ -1342,6 +1439,10 @@ def migrate_schema(db):
         "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES ('m8_1_local_ai_runtime_v1', ?)",
         (now_iso(),),
     )
+    db.execute(
+        "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES ('m8_2_model_evaluation_lab_v1', ?)",
+        (now_iso(),),
+    )
     db.commit()
 
 
@@ -1566,3 +1667,12 @@ def _seed_exercises_safe():
         seed_exercises()
     except Exception:
         pass  # Exercise seeding failure must not block app startup
+
+
+def _seed_model_evaluation_catalog_safe():
+    """Sync fixed M8.2 metadata without making the optional lab startup-critical."""
+    try:
+        from .model_evaluation import sync_evaluation_catalog
+        sync_evaluation_catalog(get_db())
+    except Exception:
+        pass

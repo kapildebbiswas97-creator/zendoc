@@ -51,6 +51,16 @@ Complete in this codebase: security and authentication hardening, central AI saf
 - Truthful provider/server/model health and owner-only AI Runtime observability.
 - Metadata-only inference logs, safe fallback reasons, and legacy M8 database compatibility.
 
+## Milestone 8.2: Base Model Evaluation Lab And ZENDOC-SLM Foundation
+
+- Fixed, claim-conscious registry for development baseline and future candidate metadata; no automatic model download.
+- Versioned synthetic-only ZENDOC evaluation cases with provenance, allowed-use, PHI/PII, quality, and safety governance fields.
+- Dry-run and mock defaults plus an owner-only, default-off, explicitly confirmed real-local runner.
+- Deterministic structured-output, policy-boundary, timeout, and safety scoring with explicit human-review dimensions.
+- Critical safety disqualification before capability or efficiency comparison.
+- Additive metadata-only result persistence and laptop-safe execution bounds.
+- Future ZENDOC-SLM architecture documented without training, fine-tuning, or proprietary-model claims.
+
 ## Milestone 9: Mental Wellness
 
 - Context-aware check-ins, journaling, breathing, sleep, and stress tracking.

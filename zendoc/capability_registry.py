@@ -1,5 +1,5 @@
 """
-ZENDOC Capability Registry — Milestone 8
+ZENDOC Capability Registry — Milestones 8 through 8.2
 Central truthful registry of platform capabilities.
 
 Statuses: WORKING | BETA | INTEGRATION_REQUIRED | DISABLED | FUTURE
@@ -61,6 +61,7 @@ def get_capability_registry() -> dict:
     database_url = bool(_env("DATABASE_URL"))
     storage_provider = _env("ZENDOC_STORAGE_PROVIDER", "local")
     s3_configured = storage_provider != "local" and bool(_env("ZENDOC_STORAGE_BUCKET"))
+    real_evaluation_enabled = _env_bool("ZENDOC_MODEL_EVALUATION_REAL_ENABLED")
 
     return {
         # Core platform
@@ -97,6 +98,20 @@ def get_capability_registry() -> dict:
             "status": STATUS_WORKING,
             "label": "Model Router",
             "description": "Routes tasks by safety, privacy, risk, complexity, and explicit cloud approval; model output cannot invoke tools.",
+        },
+        "model_evaluation_lab": {
+            "status": STATUS_WORKING,
+            "label": "ZENDOC Model Evaluation Lab",
+            "description": "Owner-only synthetic dataset validation, dry runs, mocked scoring, safety gating, metadata-only results, and comparison reports.",
+        },
+        "real_local_model_evaluation": {
+            "status": STATUS_BETA if real_evaluation_enabled and local_ai_configured else STATUS_INTEGRATION_REQUIRED,
+            "label": "Real Local Model Evaluation",
+            "description": (
+                "Explicit owner-confirmed, bounded local evaluation is enabled; provider and model readiness must still be verified at run time."
+                if real_evaluation_enabled and local_ai_configured else
+                "Requires an explicitly enabled evaluation gate plus an already-installed, configured local provider and candidate model."
+            ),
         },
         "agent_task_engine": {
             "status": STATUS_WORKING,
@@ -242,7 +257,7 @@ def get_capability_registry() -> dict:
         "zendoc_proprietary_slm": {
             "status": STATUS_FUTURE,
             "label": "ZENDOC Proprietary SLM (Future)",
-            "description": "ZENDOC has NOT trained a proprietary medical SLM yet. Infrastructure is ready for future fine-tuning.",
+            "description": "ZENDOC has NOT trained a proprietary medical SLM. M8.2 provides evaluation and dataset-governance foundations only; adaptation remains future work.",
         },
         "autonomous_prescribing": {
             "status": STATUS_FUTURE,

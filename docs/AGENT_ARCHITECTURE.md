@@ -49,6 +49,12 @@ Emergency safety and deterministic-only tasks run before model selection. For al
 
 Ollama and OpenAI-compatible local adapters are implemented as beta capabilities. Runtime status is checked against the real server and model inventory; without an installed/running configured model the truthful status remains **Integration Required** or **Unavailable**. See [Milestone 8.1](MILESTONE8_1.md).
 
+## Model Evaluation Boundary
+
+The M8.2 Model Evaluation Lab tests language-model advisory output outside the agent executor. Synthetic prompts can contain hostile requests, but the evaluation adapter exposes no tools, permissions, arbitrary endpoint, SQL, shell, or filesystem capability. Output is treated as untrusted data, strictly validated and scored, then persisted only as metadata and hashes. It cannot create an agent task or bypass the deterministic safety, owner, consent, approval, and tool controls described above.
+
+Dry run and mock are the defaults. Real-local evaluation requires a separate default-off environment gate and explicit two-step owner confirmation, uses the existing M8.1 local-provider boundary, and remains bounded to one candidate/call at a time with no retries. See [Milestone 8.2](MILESTONE8_2.md) and the [ZENDOC-SLM roadmap](ZENDOC_SLM_ROADMAP.md).
+
 ## Owner Authority
 
 Admin means the single environment-configured ZENDOC owner. Public registration and self-promotion are blocked. Every privileged route, API, approval, alert, task, and tool checks the configured owner identity server-side.

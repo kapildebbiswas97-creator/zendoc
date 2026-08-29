@@ -166,8 +166,11 @@ class SLMProvider:
         *,
         task_type: str = "general",
         privacy_class: str = PrivacyClass.INTERNAL,
+        max_output_tokens: int = 512,
     ) -> ModelResponse:
-        result = self.adapter.infer(LocalInferenceRequest(prompt, task_type, privacy_class, system_prompt))
+        result = self.adapter.infer(
+            LocalInferenceRequest(prompt, task_type, privacy_class, system_prompt, max_output_tokens)
+        )
         return _model_response_from_local(result)
 
 

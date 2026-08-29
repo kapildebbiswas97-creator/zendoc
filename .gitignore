@@ -6,6 +6,7 @@ instance/
 uploads/*
 !uploads/.gitkeep
 .pytest_cache/
+.venv/
 backups/
 .codex_deps/
 vendor_deps/

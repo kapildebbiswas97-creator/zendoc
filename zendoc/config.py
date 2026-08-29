@@ -79,6 +79,9 @@ def load_config(base_dir, overrides=None):
         "LOCAL_AI_ALLOW_PRIVATE_NETWORK": env_bool(
             "ZENDOC_LOCAL_AI_ALLOW_PRIVATE_NETWORK", False
         ),
+        "MODEL_EVALUATION_REAL_ENABLED": env_bool(
+            "ZENDOC_MODEL_EVALUATION_REAL_ENABLED", False
+        ),
         "AI_PROVIDER": ai_provider,
         "AI_API_KEY": os.environ.get("ZENDOC_AI_API_KEY", "").strip(),
         "AI_BASE_URL": ai_base_url,

@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Milestones 1 through 8.1 are implemented as an advanced MVP foundation. ZENDOC is not a certified medical product, emergency dispatch system, pharmacy inventory network, production telemedicine system, or regulated medical device platform. M8 adds an owner-bound Admin invariant and bounded agent operations; M8.1 adds a real optional local inference path, strict structured output, privacy-aware routing, truthful runtime health, and owner-only AI observability while preserving M1-M8 subsystems.
+Milestones 1 through 8.2 are implemented as an advanced MVP foundation. ZENDOC is not a certified medical product, emergency dispatch system, pharmacy inventory network, production telemedicine system, or regulated medical device platform. M8 adds an owner-bound Admin invariant and bounded agent operations; M8.1 adds a real optional local inference path, strict structured output, privacy-aware routing, truthful runtime health, and owner-only AI observability; M8.2 adds a synthetic, safety-first base-model evaluation framework without downloading, training, or automatically running a model.
 
 ## Implemented
 
@@ -52,12 +52,15 @@ Milestones 1 through 8.1 are implemented as an advanced MVP foundation. ZENDOC i
 - Medical-record storage, notifications, telehealth, database-readiness, and infrastructure status provider boundaries.
 - Owner Command Center 2.0 with working commands, retries, approvals, and alert controls.
 - Truthful M8/M8.1 capability registry and reports in `docs/MILESTONE8.md` and `docs/MILESTONE8_1.md`.
+- Owner-only M8.2 Model Evaluation Lab with fixed candidate metadata, versioned synthetic test cases, dry/mock execution, deterministic and human-review scoring, safety-first comparison, metadata-only persistence, and a default-off two-step real-local workflow.
+- Truthful M8.2 capability and future ZENDOC-SLM boundaries in `docs/MILESTONE8_2.md` and `docs/ZENDOC_SLM_ROADMAP.md`.
 
 ## Not Yet Production-Certified
 
 - No HIPAA/GDPR/DPDP legal review.
 - No clinical validation or medical-device certification.
 - No model is bundled or automatically downloaded. Local inference is available only when an operator installs a supported server and configures a model; no local model is claimed medically trained or certified. ZENDOC has no proprietary trained model.
+- No real base-model benchmark, automatic model recommendation, training, or fine-tuning has been performed. M8.2 dry/mock results are framework verification only; real-local evaluation remains Integration Required and explicitly owner initiated.
 - No OCR/document extraction provider or clinically validated report interpretation.
 - Consent controls are a technical foundation, not a legal compliance certification.
 - No payment, insurance, medicine delivery, or telemedicine video module.

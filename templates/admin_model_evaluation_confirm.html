@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Confirm Real Model Evaluation - ZENDOC{% endblock %}
+{% block content %}
+<section class="section-head command-hero"><div><p class="eyebrow">Owner-only · explicit confirmation</p><h1>Confirm Real Local Evaluation</h1><p class="section-copy">This is the only step that can contact the configured local provider. It runs one registered candidate sequentially with bounded cases, output, timeout, no retries, and no tool execution.</p></div></section>
+<section class="panel command-console">
+  <h2>{{ candidate.display_name }}</h2>
+  <p>Model: {{ candidate.local_model_name }} · maximum {{ confirmation.limits.max_cases }} cases · {{ confirmation.limits.max_output_tokens }} output tokens · {{ confirmation.limits.timeout_seconds }} second timeout · {{ confirmation.limits.cooldown_ms }} ms cooldown.</p>
+  <p><strong>No model download, training, fine-tuning, cloud routing, or automatic winner selection occurs.</strong></p>
+  <form method="post" action="{{ url_for('milestone82.owner_run_real_evaluation') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="candidate_id" value="{{ candidate.model_id }}"><input type="hidden" name="confirmation_token" value="{{ confirmation.token }}">
+    <label>Type exactly: <code>{{ phrase }}</code><input name="confirmation_phrase" autocomplete="off" required></label>
+    <div class="form-actions"><button type="submit" class="danger-button">Run bounded real local evaluation</button><a href="{{ url_for('milestone82.owner_evaluation_lab') }}" class="secondary-action">Cancel</a></div>
+  </form>
+</section>
+{% endblock %}

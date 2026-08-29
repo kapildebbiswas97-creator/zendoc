@@ -9,6 +9,7 @@
   </div>
   <div class="form-actions">
     <form method="post" action="{{ url_for('milestone8.owner_alert_check') }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">Run alert scan</button></form>
+    <a href="{{ url_for('milestone82.owner_evaluation_lab') }}" class="secondary-action">Model Evaluation Lab</a>
     <a href="{{ url_for('main.admin') }}" class="secondary-action">Admin Dashboard</a>
   </div>
 </section>

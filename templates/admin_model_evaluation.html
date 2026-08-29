@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Model Evaluation Lab - ZENDOC{% endblock %}
+{% block content %}
+<section class="section-head command-hero">
+  <div>
+    <p class="eyebrow">Owner-only · Milestone 8.2</p>
+    <h1>ZENDOC Model Evaluation Lab</h1>
+    <p class="section-copy">A synthetic, safety-gated framework for comparing open-weight base-model candidates. This lab does not train models, download artifacts, or grant model output access to tools.</p>
+  </div>
+  <div class="form-actions"><a href="{{ url_for('milestone7.admin_agent_command_center') }}" class="secondary-action">Command Center</a></div>
+</section>
+
+<section class="result command-result">
+  <div><p class="eyebrow">Development baseline</p><h2>{{ data.development_baseline.display_name }}</h2><p>{{ data.development_baseline.intended_use_notes }}</p></div>
+  <span class="status-badge integration">Evaluation baseline only</span>
+</section>
+
+<div class="grid two command-columns">
+  <section class="panel">
+    <p class="eyebrow">Laptop-safe controls</p><h2>Framework checks</h2>
+    <p>Dry Run validates selection and persistence. Mock Evaluation scores fixed synthetic responses. Neither contacts a model.</p>
+    <form method="post" action="{{ url_for('milestone82.owner_run_safe_evaluation', mode='dry_run') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="candidate_id" value="{{ data.development_baseline.model_id }}">
+      <input type="hidden" name="max_cases" value="12"><input type="hidden" name="max_output_tokens" value="256"><input type="hidden" name="timeout_seconds" value="15"><input type="hidden" name="cooldown_ms" value="0">
+      <button type="submit" class="secondary-action">Dry Run</button>
+    </form>
+    <form method="post" action="{{ url_for('milestone82.owner_run_safe_evaluation', mode='mock') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="candidate_id" value="{{ data.development_baseline.model_id }}">
+      <input type="hidden" name="max_cases" value="12"><input type="hidden" name="max_output_tokens" value="256"><input type="hidden" name="timeout_seconds" value="15"><input type="hidden" name="cooldown_ms" value="0">
+      <button type="submit">Mock Evaluation</button>
+    </form>
+  </section>
+  <section class="panel">
+    <p class="eyebrow">Explicit human initiation required</p><h2>Prepare Real Local Evaluation</h2>
+    <p>Preparation alone never contacts Ollama. A second page requires a one-time token and an exact confirmation phrase before one candidate runs sequentially.</p>
+    {% if not data.real_local_enabled %}<p><span class="status-badge integration">Environment gate disabled</span> Set <code>ZENDOC_MODEL_EVALUATION_REAL_ENABLED=true</code> only for a deliberate manual evaluation session.</p>{% endif %}
+    <form method="post" action="{{ url_for('milestone82.owner_prepare_real_evaluation') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label>Enabled candidate<select name="candidate_id">{% for candidate in data.candidates if candidate.enabled_for_evaluation %}<option value="{{ candidate.model_id }}">{{ candidate.display_name }}</option>{% endfor %}</select></label>
+      <label>Maximum cases<input type="number" name="max_cases" min="1" max="20" value="12"></label>
+      <label>Timeout seconds<input type="number" name="timeout_seconds" min="1" max="30" value="15"></label>
+      <label>Cooldown milliseconds<input type="number" name="cooldown_ms" min="0" max="2000" value="250"></label>
+      <input type="hidden" name="max_output_tokens" value="256">
+      <button type="submit" class="danger-button" {% if not data.real_local_enabled %}disabled{% endif %}>Prepare — do not run yet</button>
+    </form>
+  </section>
+</div>
+
+<section class="panel spaced-panel">
+  <div class="panel-head"><div><p class="eyebrow">Fixed registry</p><h2>Candidate models</h2></div><span class="count-pill">{{ data.candidates|length }}</span></div>
+  <div class="agent-grid">{% for candidate in data.candidates %}<article class="agent-card"><div class="agent-card-head"><strong>{{ candidate.display_name }}</strong><span class="status-badge {{ 'active' if candidate.enabled_for_evaluation else 'integration' }}">{{ 'Enabled' if candidate.enabled_for_evaluation else 'Placeholder' }}</span></div><p>{{ candidate.family }} · {{ candidate.parameter_class }} · {{ candidate.provider }}</p><small>{{ candidate.local_model_name }} · {{ candidate.structured_output_support }}</small><p>{{ candidate.medical_claim_status }}</p><small>{{ candidate.license_reference }}</small></article>{% endfor %}</div>
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head"><div><p class="eyebrow">Versioned synthetic test set</p><h2>{{ data.dataset.name }} · {{ data.dataset.version }}</h2></div><span class="status-badge active">Synthetic only</span></div>
+  <p>{{ data.dataset.case_count }} bounded cases · PHI/PII: {{ data.dataset.governance.phi_pii_status }} · Use: {{ data.dataset.governance.allowed_use }}</p>
+  <div class="capability-list">{% for category, count in data.dataset.categories.items() %}<div class="capability-row"><strong>{{ category.replace('_', ' ').title() }}</strong><span class="count-pill">{{ count }}</span></div>{% endfor %}</div>
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head"><div><p class="eyebrow">Safety before quality</p><h2>Comparison</h2></div><span class="status-badge integration">{{ data.comparison.recommendation_status }}</span></div>
+  {% if data.comparison.candidates %}<div class="table-shell"><table><thead><tr><th>Candidate</th><th>Mode</th><th>Safety</th><th>Capability</th><th>Efficiency</th><th>Critical</th><th>Resource</th><th>Eligibility</th></tr></thead><tbody>{% for row in data.comparison.candidates %}<tr><td>{{ row.candidate_id }}</td><td>{{ row.mode }}</td><td>{{ row.safety or 'not evaluated' }}</td><td>{{ row.capability_score if row.capability_score is not none else '—' }}</td><td>{{ row.efficiency_score if row.efficiency_score is not none else '—' }}</td><td>{{ row.critical_failures }}</td><td>{{ row.resource_class or '—' }}</td><td>{{ 'Human review eligible' if row.overall_eligibility else 'Not eligible' }}</td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="empty-state">No evaluation runs yet. Mock scores never become a model recommendation.</p>{% endif %}
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head"><div><p class="eyebrow">Metadata-only history</p><h2>Evaluation runs</h2></div><span class="count-pill">{{ data.runs|length }}</span></div>
+  {% if data.runs %}<div class="table-shell"><table><thead><tr><th>Run</th><th>Candidate</th><th>Mode</th><th>Status</th><th>Safety</th><th>Readiness</th><th>Latency</th><th>When</th></tr></thead><tbody>{% for run in data.runs %}<tr><td>#{{ run.id }}</td><td>{{ run.candidate_id }}</td><td>{{ run.mode.replace('_', ' ') }}</td><td>{{ run.status }}</td><td>{{ run.safety_status or 'not evaluated' }}</td><td>{{ run.readiness_status or 'NOT READY' }}</td><td>{{ run.average_latency_ms if run.average_latency_ms is not none else '—' }}{% if run.average_latency_ms is not none %} ms{% endif %}</td><td>{{ run.created_at }}</td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="empty-state">No runs recorded. Prompts, responses, secrets, and chain-of-thought are not stored.</p>{% endif %}
+</section>
+{% endblock %}

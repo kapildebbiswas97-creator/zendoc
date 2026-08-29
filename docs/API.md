@@ -209,3 +209,13 @@ All M8 endpoints require a bearer token. `/api/v1/admin/*` endpoints additionall
 - `POST /api/v1/admin/alerts/{id}/resolve`
 
 See [Milestone 8](MILESTONE8.md) for schemas, status, and safety boundaries.
+
+## Milestone 8.2 Model Evaluation APIs
+
+These endpoints require a bearer token belonging to the single environment-configured owner:
+
+- `GET /api/v1/admin/model-evaluation`
+- `POST /api/v1/admin/model-evaluation/runs` with fixed candidate ID and `dry_run` or `mock` mode
+- `GET /api/v1/admin/model-evaluation/runs/{run_id}`
+
+The API rejects `real_local` mode. A real-local evaluation is available only through the owner web UI's default-off, short-lived, two-step confirmation workflow. Requests cannot supply a provider endpoint, arbitrary model name, raw dataset path, prompt, or executable tool/action. Result payloads contain scores and metadata, not raw prompts, responses, credentials, patient information, or hidden reasoning. See [Milestone 8.2](MILESTONE8_2.md).

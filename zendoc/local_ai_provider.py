@@ -16,6 +16,7 @@ from urllib.parse import urlsplit
 MAX_PROMPT_CHARS = 8_000
 MAX_RESPONSE_BYTES = 1_048_576
 MAX_OUTPUT_TEXT_CHARS = 12_000
+MAX_INFERENCE_OUTPUT_TOKENS = 1_024
 FORBIDDEN_ACTION_KEYS = {
     "arguments",
     "command",
@@ -113,6 +114,7 @@ class LocalInferenceRequest:
     task_type: str
     privacy_class: str
     system_prompt: str = ""
+    max_output_tokens: int = 512
 
 
 @dataclass
@@ -291,7 +293,10 @@ class OllamaLocalAIProvider(BaseLocalAIProvider):
                 "stream": False,
                 "think": False,
                 "format": STRUCTURED_OUTPUT_SCHEMA,
-                "options": {"temperature": 0},
+                "options": {
+                    "temperature": 0,
+                    "num_predict": _bounded_int(request.max_output_tokens, 16, MAX_INFERENCE_OUTPUT_TOKENS, 512),
+                },
             }
             data = _request_json(
                 f"{self.settings.validated_base_url()}/api/chat",
@@ -381,6 +386,7 @@ class OpenAICompatibleLocalAIProvider(BaseLocalAIProvider):
                         {"role": "user", "content": _bounded_prompt(request.prompt)},
                     ],
                     "temperature": 0,
+                    "max_tokens": _bounded_int(request.max_output_tokens, 16, MAX_INFERENCE_OUTPUT_TOKENS, 512),
                     "response_format": {"type": "json_schema", "json_schema": {"name": "zendoc_output", "schema": STRUCTURED_OUTPUT_SCHEMA}},
                 },
                 timeout=self.settings.timeout,
