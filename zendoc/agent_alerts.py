@@ -10,6 +10,8 @@ Alert statuses: active → acknowledged → resolved
 """
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 from .db import get_db, now_iso
 
 
@@ -136,14 +138,17 @@ def run_proactive_alert_check() -> list[dict]:
     """
     created = []
     db = get_db()
+    now_dt = datetime.now(timezone.utc)
 
     # 1. Pending owner approvals waiting > 6 hours
+    cutoff_6h = (now_dt - timedelta(hours=6)).isoformat(timespec="seconds")
     old_approvals = db.execute(
         """
         SELECT COUNT(*) c FROM agent_approvals
         WHERE status='pending'
-        AND julianday(created_at) < julianday('now', '-6 hours')
-        """
+        AND created_at < ?
+        """,
+        (cutoff_6h,),
     ).fetchone()["c"]
     if old_approvals > 0:
         created.append(_maybe_create_alert(
@@ -153,12 +158,14 @@ def run_proactive_alert_check() -> list[dict]:
         ))
 
     # 2. Failed agent tasks with retries exhausted
+    cutoff_24h = (now_dt - timedelta(hours=24)).isoformat(timespec="seconds")
     perm_failed = db.execute(
         """
         SELECT COUNT(*) c FROM agent_tasks
         WHERE status='failed' AND attempt_count >= max_attempts
-        AND julianday(created_at) > julianday('now', '-24 hours')
-        """
+        AND created_at > ?
+        """,
+        (cutoff_24h,),
     ).fetchone()["c"]
     if perm_failed > 0:
         created.append(_maybe_create_alert(
@@ -168,12 +175,14 @@ def run_proactive_alert_check() -> list[dict]:
         ))
 
     # 3. High platform error event rate
+    cutoff_1h = (now_dt - timedelta(hours=1)).isoformat(timespec="seconds")
     error_count = db.execute(
         """
         SELECT COUNT(*) c FROM platform_events
         WHERE status IN ('failed','error')
-        AND julianday(created_at) > julianday('now', '-1 hour')
-        """
+        AND created_at > ?
+        """,
+        (cutoff_1h,),
     ).fetchone()["c"]
     if error_count >= 10:
         created.append(_maybe_create_alert(

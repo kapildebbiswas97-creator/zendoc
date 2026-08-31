@@ -10,18 +10,30 @@ import re
 
 
 LASTROWID_TABLES = {
+    "agent_actions",
     "agent_alerts",
     "agent_approvals",
     "agent_runs",
+    "agent_task_attempts",
     "agent_tasks",
+    "agent_tool_calls",
+    "ai_conversations",
+    "ai_interactions",
     "ambulance_requests",
+    "api_tokens",
+    "appointments",
+    "audit_logs",
     "communication_permissions",
     "consultation_messages",
     "consultation_requests",
+    "consultation_rooms",
     "conversations",
+    "duplicate_account_groups",
+    "exercises",
     "family_access_grants",
     "family_care_tasks",
     "family_members",
+    "fitness_pose_feedback",
     "fitness_pose_sessions",
     "health_access_grants",
     "health_devices",
@@ -32,17 +44,30 @@ LASTROWID_TABLES = {
     "medical_records",
     "medicine_orders",
     "medicine_reminders",
+    "message_attachments",
     "messages",
+    "model_evaluation_results",
     "model_evaluation_runs",
+    "model_execution_logs",
     "notification_deliveries",
+    "notifications",
     "nutrition_logs",
     "platform_events",
+    "provider_profiles",
+    "provider_schedules",
+    "report_metadata",
     "report_results",
     "saved_locations",
+    "staff_profiles",
+    "staff_task_events",
     "staff_tasks",
+    "users",
+    "video_search_history",
+    "workout_plan_items",
     "workout_plans",
     "workout_session_items",
     "workout_sessions",
+    "workout_set_logs",
 }
 
 
@@ -82,12 +107,26 @@ def translate_sql(sql: str, *, return_inserted_id: bool = True) -> tuple[str, bo
         flags=re.IGNORECASE,
     )
     translated = re.sub(
-        r"\bINTEGER(\s+(?:NOT\s+NULL\s+)?REFERENCES\b)",
+        r"\bINTEGER(\s+[^,;()]*\bREFERENCES\b)",
         r"BIGINT\1",
         translated,
         flags=re.IGNORECASE,
     )
     translated = re.sub(r"\bAUTOINCREMENT\b", "", translated, flags=re.IGNORECASE)
+
+    # Translate SQLite datetime('now') expressions to PostgreSQL CURRENT_TIMESTAMP
+    translated = re.sub(
+        r"\bdatetime\s*\(\s*'now'\s*,\s*'([+-]?\d+\s+[a-zA-Z]+)'\s*\)",
+        r"(CURRENT_TIMESTAMP + INTERVAL '\1')",
+        translated,
+        flags=re.IGNORECASE,
+    )
+    translated = re.sub(
+        r"\bdatetime\s*\(\s*'now'\s*(?:,\s*'localtime')?\s*\)",
+        "CURRENT_TIMESTAMP",
+        translated,
+        flags=re.IGNORECASE,
+    )
 
     ignore_insert = bool(re.search(r"^\s*INSERT\s+OR\s+IGNORE\s+INTO\b", translated, re.IGNORECASE))
     if ignore_insert:

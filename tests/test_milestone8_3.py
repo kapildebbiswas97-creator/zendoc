@@ -410,16 +410,49 @@ def test_postgresql_adapter_translation_is_parameterized_and_migration_ready():
     assert query.endswith("RETURNING id")
     assert returns_id is True
 
+    ai_conv_query, ai_conv_returns_id = translate_sql(
+        "INSERT INTO ai_conversations (user_id, title, last_intent, created_at, updated_at) VALUES (?,?,?,?,?)"
+    )
+    assert ai_conv_query.endswith("RETURNING id")
+    assert ai_conv_returns_id is True
+
     ignored, _ = translate_sql(
         "INSERT OR IGNORE INTO schema_migrations (version,applied_at) VALUES (?,?)"
     )
     assert "INSERT OR IGNORE" not in ignored
     assert "ON CONFLICT DO NOTHING" in ignored
+
     ddl, _ = translate_sql(
         "CREATE TABLE sample (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES users(id))"
     )
     assert "BIGSERIAL PRIMARY KEY" in ddl
     assert "user_id BIGINT NOT NULL REFERENCES" in ddl
+
+    # Test datetime('now') and variants translation to PostgreSQL CURRENT_TIMESTAMP
+    exercise_ddl, _ = translate_sql(
+        "CREATE TABLE exercises (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL DEFAULT (datetime('now')))"
+    )
+    assert "BIGSERIAL PRIMARY KEY" in exercise_ddl
+    assert "datetime('now')" not in exercise_ddl
+    assert "DEFAULT (CURRENT_TIMESTAMP)" in exercise_ddl
+
+    datetime_interval_sql, _ = translate_sql(
+        "SELECT * FROM logs WHERE created_at < datetime('now', '-6 hours')"
+    )
+    assert "datetime(" not in datetime_interval_sql
+    assert "(CURRENT_TIMESTAMP + INTERVAL '-6 hours')" in datetime_interval_sql
+
+    # Test all foreign key constraint combinations are translated to BIGINT
+    fk_unique_ddl, _ = translate_sql(
+        "CREATE TABLE consultation_rooms (consultation_id INTEGER NOT NULL UNIQUE REFERENCES consultation_requests(id))"
+    )
+    assert "consultation_id BIGINT NOT NULL UNIQUE REFERENCES" in fk_unique_ddl
+
+    fk_pk_ddl, _ = translate_sql(
+        "CREATE TABLE patient_health_profiles (patient_id INTEGER PRIMARY KEY REFERENCES users(id))"
+    )
+    assert "patient_id BIGINT PRIMARY KEY REFERENCES" in fk_pk_ddl
+
     assert split_sql_script("CREATE TABLE one (id TEXT); CREATE TABLE two (note TEXT DEFAULT ';');") == [
         "CREATE TABLE one (id TEXT)",
         "CREATE TABLE two (note TEXT DEFAULT ';')",
