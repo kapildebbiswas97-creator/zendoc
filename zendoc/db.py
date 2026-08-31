@@ -612,6 +612,40 @@ def init_db():
         );
         CREATE INDEX IF NOT EXISTS idx_agent_tool_calls_run ON agent_tool_calls(run_id);
 
+        CREATE TABLE IF NOT EXISTS agent_tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_type TEXT NOT NULL,
+            requested_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            assigned_agent TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'queued',
+            priority TEXT NOT NULL DEFAULT 'normal',
+            risk_level TEXT NOT NULL DEFAULT 'low_risk',
+            attempt_count INTEGER NOT NULL DEFAULT 0,
+            max_attempts INTEGER NOT NULL DEFAULT 3,
+            idempotency_key TEXT UNIQUE,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            result_summary TEXT,
+            last_error_category TEXT,
+            duration_ms INTEGER,
+            started_at TEXT,
+            completed_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_agent_tasks_status ON agent_tasks(status, created_at);
+        CREATE INDEX IF NOT EXISTS idx_agent_tasks_requested_by ON agent_tasks(requested_by);
+
+        CREATE TABLE IF NOT EXISTS agent_task_attempts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id INTEGER NOT NULL REFERENCES agent_tasks(id) ON DELETE CASCADE,
+            status TEXT NOT NULL,
+            message TEXT,
+            error_category TEXT,
+            duration_ms INTEGER,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_agent_task_attempts_task ON agent_task_attempts(task_id);
+
         CREATE TABLE IF NOT EXISTS agent_approvals (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             run_id INTEGER REFERENCES agent_runs(id) ON DELETE CASCADE,
@@ -859,40 +893,6 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_video_search_user ON video_search_history(user_id, created_at);
 
         -- Milestone 8: Intelligence, Task Engine, Approvals, Alerts, Events
-
-        CREATE TABLE IF NOT EXISTS agent_tasks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            task_type TEXT NOT NULL,
-            requested_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
-            assigned_agent TEXT NOT NULL,
-            status TEXT NOT NULL DEFAULT 'queued',
-            priority TEXT NOT NULL DEFAULT 'normal',
-            risk_level TEXT NOT NULL DEFAULT 'low_risk',
-            attempt_count INTEGER NOT NULL DEFAULT 0,
-            max_attempts INTEGER NOT NULL DEFAULT 3,
-            idempotency_key TEXT UNIQUE,
-            metadata_json TEXT NOT NULL DEFAULT '{}',
-            result_summary TEXT,
-            last_error_category TEXT,
-            duration_ms INTEGER,
-            started_at TEXT,
-            completed_at TEXT,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS idx_agent_tasks_status ON agent_tasks(status, created_at);
-        CREATE INDEX IF NOT EXISTS idx_agent_tasks_requested_by ON agent_tasks(requested_by);
-
-        CREATE TABLE IF NOT EXISTS agent_task_attempts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            task_id INTEGER NOT NULL REFERENCES agent_tasks(id) ON DELETE CASCADE,
-            status TEXT NOT NULL,
-            message TEXT,
-            error_category TEXT,
-            duration_ms INTEGER,
-            created_at TEXT NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS idx_agent_task_attempts_task ON agent_task_attempts(task_id);
 
         CREATE TABLE IF NOT EXISTS agent_alerts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

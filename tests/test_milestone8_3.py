@@ -459,6 +459,71 @@ def test_postgresql_adapter_translation_is_parameterized_and_migration_ready():
     ]
 
 
+def test_fresh_postgresql_schema_ordering_has_no_forward_references():
+    import re
+    from zendoc.postgres_backend import split_sql_script, translate_sql
+
+    # Read the init_db DDL from db.py
+    import zendoc.db as zdb
+    import inspect
+    init_src = inspect.getsource(zdb.init_db)
+    m = re.search(r'db\.executescript\(\s*"""(.*?)"""\s*\)', init_src, re.DOTALL)
+    assert m is not None, "Could not find init_db executescript DDL"
+    init_sql = m.group(1)
+
+    statements = split_sql_script(init_sql)
+    created_tables = set()
+    table_order = []
+
+    for idx, stmt in enumerate(statements):
+        t_stmt, _ = translate_sql(stmt)
+
+        # Verify CREATE TABLE statements
+        create_match = re.search(
+            r"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([A-Za-z0-9_]+)\s*\((.*)\)",
+            t_stmt,
+            re.DOTALL | re.IGNORECASE,
+        )
+        if create_match:
+            table_name = create_match.group(1).lower()
+            table_order.append(table_name)
+            body = create_match.group(2)
+
+            # All referenced foreign key tables must already exist in created_tables
+            fks = re.findall(r"REFERENCES\s+([A-Za-z0-9_]+)\s*\(", body, re.IGNORECASE)
+            for fk in fks:
+                fk_table = fk.lower()
+                assert fk_table == table_name or fk_table in created_tables, (
+                    f"PostgreSQL forward reference error at statement {idx+1}: "
+                    f"table '{table_name}' references '{fk_table}' before '{fk_table}' is created."
+                )
+
+            created_tables.add(table_name)
+            continue
+
+        # Verify CREATE INDEX statements
+        idx_match = re.search(
+            r"CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?([A-Za-z0-9_]+)\s+ON\s+([A-Za-z0-9_]+)",
+            t_stmt,
+            re.IGNORECASE,
+        )
+        if idx_match:
+            idx_name = idx_match.group(1)
+            on_table = idx_match.group(2).lower()
+            assert on_table in created_tables, (
+                f"PostgreSQL index error at statement {idx+1}: "
+                f"index '{idx_name}' created on '{on_table}' before '{on_table}' is created."
+            )
+
+    # Specific assertion for agent_tasks before agent_approvals
+    assert "agent_tasks" in table_order
+    assert "agent_approvals" in table_order
+    assert table_order.index("agent_tasks") < table_order.index("agent_approvals"), (
+        "agent_tasks must be created before agent_approvals"
+    )
+
+
+
 def test_patient_and_provider_demo_routes_smoke_without_ai_providers(tmp_path):
     app = make_m83_app(
         tmp_path,
