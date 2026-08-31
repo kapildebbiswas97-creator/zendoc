@@ -61,7 +61,7 @@ Complete in this codebase: security and authentication hardening, central AI saf
 - Additive metadata-only result persistence and laptop-safe execution bounds.
 - Future ZENDOC-SLM architecture documented without training, fine-tuning, or proprietary-model claims.
 
-## Milestone 8.3: Demo Stabilization And Persistent Accounts
+## Milestone 8.3: Demo Stabilization And Persistent Accounts — COMPLETE (HEAD: 4f5d952)
 
 - Correct production database selection so `DATABASE_URL` is no longer ignored.
 - Preserve local/test SQLite while adding a managed-PostgreSQL adapter and additive migration tracking.
@@ -70,6 +70,18 @@ Complete in this codebase: security and authentication hardening, central AI saf
 - Surface persistence engine, durability, and redeploy-verification status in the owner Command Center without exposing credentials.
 - Add restart/data/role persistence, legacy migration, configuration, security, and demo-route verification.
 - Keep external tester readiness blocked until production persistence is configured and manually redeploy-verified.
+
+## Selection Beta Hardening — COMPLETE (post-M8.3, pre-M9)
+
+Final pre-selection release-hardening phase. No new features. Scope: fix P0/P1 issues, verify all critical journeys, classify features truthfully.
+
+- **AUD-01 (FIXED)**: CSRF tokens added to 18 POST forms across 10 templates. Re-scan: 0 forms missing protection.
+- **AUD-02 (FIXED)**: Missing `get_db().commit()` in `create_measurement()` — IoT measurements now persist correctly.
+- **AUD-03/04 (CONFIRMED)**: Ambulance endpoint and doctor status values confirmed; `docs/API.md` verified accurate.
+- **Tests**: 10-suite functional E2E regression added to `tests/test_final_release_hardening.py`. Full suite: **192 passed** in 206.76 seconds.
+- **Docs**: `docs/FEATURE_TRUTH_MATRIX.md`, `docs/FINAL_RELEASE_AUDIT.md`, `docs/EXTERNAL_BETA_CHECKLIST.md`, `docs/SELECTION_DEMO_RUNBOOK.md` produced.
+- **Persistence**: Intentionally not configured for production before selection round. Disclosed truthfully. Does not block Selection Beta.
+- **Launch recommendation**: SELECTION BETA READY — PERSISTENCE LIMITATION DISCLOSED.
 
 ## Milestone 9: Mental Wellness
 

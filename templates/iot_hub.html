@@ -28,6 +28,7 @@
   <article class="panel">
     <h2>Connect a New Device</h2>
     <form method="post" action="{{ url_for('ecosystem.iot_hub_page') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="action" value="connect">
       
       <label>Device Type
@@ -71,6 +72,7 @@
             
             <!-- Quick Manual Sync Form for Testing -->
             <form method="post" action="{{ url_for('ecosystem.iot_hub_page') }}" class="inline-form" style="margin-top:8px;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
               <input type="hidden" name="action" value="sync">
               <input type="hidden" name="device_id" value="{{ dev.id }}">
               <select name="metric_type" style="min-width:130px;font-size:12px;min-height:34px;">

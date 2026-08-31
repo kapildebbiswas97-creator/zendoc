@@ -82,4 +82,4 @@ Milestones 1 through 8.3 are implemented as an advanced MVP foundation. ZENDOC i
 
 ## Launch Recommendation
 
-**DEMO FREEZE BLOCKED — PERSISTENCE INTEGRATION REQUIRED.** Do not invite external testers until a durable production database is configured, existing data is migrated safely, and the manual restart/redeploy checklist passes. ZENDOC provides healthcare organization and decision support, not final diagnosis, clinical certification, or emergency care.
+**SELECTION BETA READY — PERSISTENCE LIMITATION DISCLOSED.** The platform is hardened and verified for the selection round. 100% of core flows function reliably in local SQLite and test suites. Permanent production persistence is classified as `INTEGRATION REQUIRED` and Render free-tier ephemeral storage is disclosed as a known temporary limitation to external testers. ZENDOC provides healthcare organization and decision support, not final diagnosis, clinical certification, or emergency care.

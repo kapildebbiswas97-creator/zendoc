@@ -44,6 +44,7 @@
   <article class="panel">
     <h2>Log Food / Meal</h2>
     <form method="post" action="{{ url_for('fitness.nutrition_page') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="action" value="log_food">
       <label>Food / Meal Name
         <input type="text" name="food_name" placeholder="e.g. Oatmeal with berries &amp; protein powder" required>

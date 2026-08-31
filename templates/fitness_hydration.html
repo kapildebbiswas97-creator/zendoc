@@ -34,6 +34,7 @@
   <article class="panel">
     <h2>Log Water Intake</h2>
     <form method="post" action="{{ url_for('fitness.hydration_page') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <label>Amount (ml)
         <input type="number" name="ml" value="250" min="1" max="5000" step="50" required>
       </label>

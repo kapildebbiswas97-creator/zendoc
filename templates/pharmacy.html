@@ -39,6 +39,7 @@
             <p style="margin:2px 0 6px;font-size:13px;color:var(--muted);">{{ med.uses }}</p>
             
             <form method="post" action="{{ url_for('ecosystem.pharmacy_page') }}" class="inline-form" style="margin-top:4px;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
               <input type="hidden" name="action" value="order">
               <input type="hidden" name="medicine_name" value="{{ med.name }}">
               <input type="text" name="delivery_address" placeholder="Enter delivery address" style="flex:1;min-height:36px;font-size:12px;" required>
@@ -77,6 +78,7 @@
 
     <h3 style="margin-top:22px;">Add Medicine Reminder</h3>
     <form method="post" action="{{ url_for('ecosystem.pharmacy_page') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="action" value="add_reminder">
       <label>Medicine Name
         <input type="text" name="medicine_name" placeholder="e.g. Amlodipine 5mg" required>

@@ -45,6 +45,26 @@ Milestone 8 adds the environment-bound single owner invariant, bounded Core Agen
 
 Set `ZENDOC_ENV=production`, `ZENDOC_SECRET_KEY`, `ZENDOC_ADMIN_EMAIL`, and `ZENDOC_ADMIN_PASSWORD` in the environment. Configure a secret managed-PostgreSQL `DATABASE_URL` (recommended) or an explicitly verified persistent SQLite mount before external testing. Service-local SQLite on Render free is ephemeral and is reported as **INTEGRATION REQUIRED**. Follow `docs/PRODUCTION_PERSISTENCE.md`; do not switch an existing account database without a reviewed backup/import.
 
+## Selection Beta — Truthful Status Disclosure
+
+ZENDOC is currently in **Selection Beta** (Milestone 8.3 hardened). All 192 automated tests pass. The following persistence tiers are available:
+
+| Tier | Status |
+|---|---|
+| Local / test SQLite | WORKING |
+| Same-database restart persistence | WORKING |
+| PostgreSQL adapter (code complete) | BETA — requires DATABASE_URL |
+| Permanent production cloud persistence | INTEGRATION REQUIRED |
+| Render free-tier ephemeral SQLite | Known selection-beta limitation |
+
+Permanent production persistence is intentionally not configured before the selection round. This limitation is disclosed to testers and does not block the Selection Beta from proceeding.
+
+Relevant documentation:
+- `docs/FEATURE_TRUTH_MATRIX.md` — Complete 43-capability truthful classification
+- `docs/EXTERNAL_BETA_CHECKLIST.md` — 9-journey tester checklist with seed accounts
+- `docs/SELECTION_DEMO_RUNBOOK.md` — 5-minute live demo script
+- `docs/FINAL_RELEASE_AUDIT.md` — Full audit report (issues found, fixed, verified)
+
 Optional local model providers are controlled with `ZENDOC_LOCAL_AI_*` (`ZENDOC_SLM_*` is retained as a legacy compatibility alias); cloud providers use `ZENDOC_AI_*`. If a provider is not ready or privacy policy disallows it, ZENDOC uses deterministic local fallback and never claims model inference occurred.
 
 Real-local model evaluation is separately disabled by default. It requires `ZENDOC_MODEL_EVALUATION_REAL_ENABLED=true`, an already-installed configured local runtime/model, and a two-step owner confirmation. Tests and startup never download or run models.

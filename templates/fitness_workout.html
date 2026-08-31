@@ -21,6 +21,7 @@
       <p style="margin:4px 0 0; color:var(--muted);">Started at {{ session.started_at[:16] }}</p>
     </div>
     <form method="post" action="{{ url_for('fitness.workout_page') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="action" value="finish">
       <input type="hidden" name="session_id" value="{{ session.id }}">
       <label style="margin-bottom:6px;">Session Notes (optional)
@@ -50,6 +51,7 @@
 
       <!-- Quick Set Logger Form -->
       <form method="post" action="{{ url_for('fitness.workout_page') }}" class="inline-form" style="margin-top:14px;align-items:center;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="action" value="log_set">
         <input type="hidden" name="session_id" value="{{ session.id }}">
         <input type="hidden" name="exercise_id" value="{{ item.exercise_id }}">
@@ -77,6 +79,7 @@
 <article class="panel" style="max-width:600px; margin:0 auto;">
   <h2>Start a New Workout</h2>
   <form method="post" action="{{ url_for('fitness.workout_page') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="action" value="start">
     <label>Workout Name
       <input type="text" name="name" value="{% if latest_plan %}{{ latest_plan.name }}{% else %}Quick Workout{% endif %}" required>

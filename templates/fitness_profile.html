@@ -13,6 +13,7 @@
 
 <div class="auth-panel" style="width:100%; max-width:800px; margin:0 auto;">
   <form method="post" action="{{ url_for('fitness.profile_page') }}" class="profile-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <fieldset>
       <legend>Goal &amp; Experience</legend>
       <div class="form-grid">

@@ -93,6 +93,7 @@ def create_measurement(actor, data, patient_id=None, trusted_source=False):
             numeric_value, secondary_value, source, str(data.get("notes") or "").strip()[:500] or None,
         ),
     )
+    get_db().commit()
     return cursor.lastrowid
 
 

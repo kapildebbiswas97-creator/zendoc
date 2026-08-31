@@ -53,6 +53,8 @@ Access and password-reset tokens are purpose-separated. A reset token expires af
 - `POST /home-health/requests`
 - `GET /ambulance/requests`
 - `POST /ambulance/requests`
+
+> **Verified (Selection Beta Hardening Audit):** The ambulance transport endpoint is `/api/v1/ambulance/requests` (not `/api/v1/transport/requests`). The response key for a created request is `ambulance_request` (not `request`). Doctor availability `status` accepts `"available"`, `"busy"`, `"offline"`, or `"consultation_only"` — not `"online"`. These were confirmed correct by end-to-end functional tests during the final hardening phase.
 - `GET /pharmacy/medicines?q=<query>`
 - `GET /pharmacy/stores?city=<city>`
 - `POST /pharmacy/orders`

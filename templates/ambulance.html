@@ -36,6 +36,7 @@
   <article class="panel">
     <h2>Request Medical Transport</h2>
     <form method="post" action="{{ url_for('ecosystem.ambulance_page') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <label>Transport Type
         <select name="transport_type" required>
           {% for t in transport_types %}

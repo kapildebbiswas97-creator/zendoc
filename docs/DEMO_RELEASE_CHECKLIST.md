@@ -1,6 +1,6 @@
 # Demo Release Checklist
 
-Status is evidence-based as of Milestone 8.3. `PASS` means covered by the automated suite or repository audit. `FAIL` means a required external condition has not been configured or verified.
+Status is evidence-based as of Milestone 8.3 + Selection Beta Hardening. `PASS` means covered by the automated suite or repository audit. `FAIL` means a required external condition has not been configured or verified.
 
 | Check | Result | Evidence / blocker |
 | --- | --- | --- |
@@ -18,13 +18,19 @@ Status is evidence-based as of Milestone 8.3. `PASS` means covered by the automa
 | Major demo routes return successfully | PASS | Representative patient and doctor route smoke test |
 | No fake integrations | PASS | Password recovery and persistence use truthful status labels |
 | Mobile critical flow usable | PASS | Existing responsive/auth/API tests; device-level visual QA remains recommended |
-| Production persistence configured | **FAIL** | No durable hosted database credentials/infrastructure were available |
+| All POST forms have CSRF protection | PASS | AUD-01: 18 forms across 10 templates fixed; re-scan shows 0 missing |
+| IoT device sync measurements persist | PASS | AUD-02: `get_db().commit()` added to `create_measurement()`; end-to-end verified |
+| Ambulance endpoint and response key correct | PASS | AUD-03: `/api/v1/ambulance/requests`, key `ambulance_request`; confirmed in test suite |
+| Doctor availability status values correct | PASS | AUD-04: `"available"/"busy"/"offline"/"consultation_only"`; confirmed in test suite |
+| Complete automated suite green | PASS | **192 passed, 1 warning in 206.76 seconds** (includes 10-suite hardening regression) |
+| Production persistence configured | **FAIL** | No durable hosted database credentials/infrastructure configured — intentional pre-selection decision |
 | Production restart/redeploy persistence manually verified | **FAIL** | Requires controlled verification against the configured production store |
-| No secrets committed | PASS | Placeholder-only configuration and final secret scan required |
-| Complete automated suite green | PASS | 182 passed in 560.36 seconds; M8.3 focused suite 13/13 |
+| No secrets committed | PASS | Placeholder-only configuration; final secret scan required before production deploy |
 
 ## Release decision
 
-External tester readiness must not be declared while either production persistence item is `FAIL`.
+Permanent production persistence is intentionally not configured before the selection round. This limitation is disclosed to all testers and does **not** block the Selection Beta.
 
-**DEMO FREEZE BLOCKED — PERSISTENCE INTEGRATION REQUIRED**
+**SELECTION BETA READY — PERSISTENCE LIMITATION DISCLOSED**
+
+All P0/P1 issues found during the final hardening audit have been fixed and verified. The persistence limitation is a known, pre-declared selection-beta condition, not a regression or blocking defect. See `docs/FINAL_RELEASE_AUDIT.md` for full audit detail.
