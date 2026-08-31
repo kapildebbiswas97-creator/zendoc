@@ -52,7 +52,7 @@ def test_duplicate_registration_blocked_after_email_normalization(tmp_path):
 
     duplicate = register_web(client, "patient", "mixedcase@example.com", "Duplicate")
     assert duplicate.status_code == 409
-    assert b"An account with this email already exists. Please log in or reset your password." in duplicate.data
+    assert b"An account with this email already exists. Please log in." in duplicate.data
 
     with app.app_context():
         rows = get_db().execute("SELECT email, email_normalized FROM users WHERE email_normalized='mixedcase@example.com'").fetchall()
@@ -95,9 +95,9 @@ def test_login_survives_app_restart_and_normalizes_case_whitespace(tmp_path):
 def test_wrong_password_correct_password_role_and_remember_me(tmp_path):
     _app, client = make_client(tmp_path)
     register_web(client, "patient", "remember@example.com")
-    assert b"Invalid login details" in login_web(client, "patient", "remember@example.com", "wrong").data
+    assert b"Email or password is incorrect." in login_web(client, "patient", "remember@example.com", "wrong").data
     assert login_web(client, "doctor", "remember@example.com").status_code == 200
-    assert b"Invalid login details" in login_web(client, "doctor", "remember@example.com").data
+    assert b"Email or password is incorrect." in login_web(client, "doctor", "remember@example.com").data
 
     page = client.get("/login/patient")
     token = csrf(page.data.decode())
@@ -540,4 +540,3 @@ def test_universal_search_includes_contacts_and_videos_without_leaks(tmp_path):
         results = search_all(user, "squat video")
         categories = [c["category"] for c in results["categories"]]
         assert "Video Guidance" in categories
-

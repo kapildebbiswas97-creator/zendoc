@@ -16,7 +16,7 @@ def test_configured_admin_bootstrap_login_and_no_duplicate(tmp_path):
     app, client = make_client(tmp_path)
 
     wrong = login_web(client, "admin", "admin@example.com", "wrong-password")
-    assert b"Invalid login details" in wrong.data
+    assert b"Email or password is incorrect." in wrong.data
 
     ok = login_web(client, "admin", "admin@example.com", "AdminStrong123")
     assert b"Admin Dashboard" in ok.data

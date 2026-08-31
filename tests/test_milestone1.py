@@ -76,7 +76,7 @@ def test_invalid_login_fails(tmp_path):
     _app, client = make_client(tmp_path)
     register_web(client, "patient", "patient@example.com")
     response = login_web(client, "patient", "patient@example.com", "wrong-password")
-    assert b"Invalid login details" in response.data
+    assert b"Email or password is incorrect." in response.data
 
 
 def test_admin_route_is_protected(tmp_path):

@@ -3,6 +3,7 @@
 {% block content %}
 <section class="auth-panel">
   <h1>{{ role.title() }} Login</h1>
+  <p class="section-copy">A session can expire, but your account does not. Log in again with your registered credentials.</p>
   <form method="post">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <label>Email <input name="email" type="email" required></label>

@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Milestones 1 through 8.2 are implemented as an advanced MVP foundation. ZENDOC is not a certified medical product, emergency dispatch system, pharmacy inventory network, production telemedicine system, or regulated medical device platform. M8 adds an owner-bound Admin invariant and bounded agent operations; M8.1 adds a real optional local inference path, strict structured output, privacy-aware routing, truthful runtime health, and owner-only AI observability; M8.2 adds a synthetic, safety-first base-model evaluation framework without downloading, training, or automatically running a model.
+Milestones 1 through 8.3 are implemented as an advanced MVP foundation. ZENDOC is not a certified medical product, emergency dispatch system, pharmacy inventory network, production telemedicine system, or regulated medical device platform. M8 adds an owner-bound Admin invariant and bounded agent operations; M8.1 adds a real optional local inference path, strict structured output, privacy-aware routing, truthful runtime health, and owner-only AI observability; M8.2 adds a synthetic, safety-first base-model evaluation framework without downloading, training, or automatically running a model; M8.3 stabilizes persistent identity, sessions, recovery tokens, database selection, and demo release checks.
 
 ## Implemented
 
@@ -54,6 +54,12 @@ Milestones 1 through 8.2 are implemented as an advanced MVP foundation. ZENDOC i
 - Truthful M8/M8.1 capability registry and reports in `docs/MILESTONE8.md` and `docs/MILESTONE8_1.md`.
 - Owner-only M8.2 Model Evaluation Lab with fixed candidate metadata, versioned synthetic test cases, dry/mock execution, deterministic and human-review scoring, safety-first comparison, metadata-only persistence, and a default-off two-step real-local workflow.
 - Truthful M8.2 capability and future ZENDOC-SLM boundaries in `docs/MILESTONE8_2.md` and `docs/ZENDOC_SLM_ROADMAP.md`.
+- Register-once/login-again behavior with NFKC/case/whitespace-normalized email identity, clear duplicate/credential messages, rotating sessions, idle-expiry-to-login, and CSRF-protected production logout.
+- Purpose-bound, expiring local-beta reset tokens that cannot authenticate as API bearer tokens; production recovery delivery remains Integration Required.
+- Explicit SQLite/PostgreSQL database target resolution, a BETA psycopg compatibility adapter, additive M8.3 migration tracking, and isolated-test protection from production `DATABASE_URL`.
+- Owner-visible persistence engine/durability/redeploy status with no credential disclosure, plus a strict optional production fail-closed mode.
+- Restart persistence tests retaining stable patient/provider IDs, roles, profiles, health data, appointments, schedules, notifications, conversations, and messages.
+- M8.3 release, production-persistence, rollback, and evidence-based demo checklist documentation.
 
 ## Not Yet Production-Certified
 
@@ -70,9 +76,10 @@ Milestones 1 through 8.2 are implemented as an advanced MVP foundation. ZENDOC i
 - No production WebRTC signaling/TURN/STUN telemedicine stack yet.
 - No MediaPipe or clinical-grade pose estimation yet.
 - No real staff dispatch/mobile workforce system yet.
-- SQLite and local file storage remain unsuitable for scaled production health data; PostgreSQL and external object storage are Integration Required.
+- Live managed-PostgreSQL provisioning, existing-data import rehearsal, and production restart/redeploy verification remain Integration Required. The adapter is BETA until that evidence exists.
+- Local uploaded medical files still require external object storage or a verified persistent mount.
 - No object storage, queue worker, background extraction job, or cloud deployment automation.
 
 ## Launch Recommendation
 
-Launch only as a controlled internal or closed beta after infrastructure and security review. ZENDOC provides healthcare organization and decision support, not final diagnosis, clinical certification, or emergency care.
+**DEMO FREEZE BLOCKED — PERSISTENCE INTEGRATION REQUIRED.** Do not invite external testers until a durable production database is configured, existing data is migrated safely, and the manual restart/redeploy checklist passes. ZENDOC provides healthcare organization and decision support, not final diagnosis, clinical certification, or emergency care.

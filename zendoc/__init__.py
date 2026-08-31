@@ -26,7 +26,8 @@ def create_app(test_config=None):
     app.config.from_mapping(load_config(BASE_DIR, test_config))
 
     Path(app.config["UPLOAD_FOLDER"]).mkdir(parents=True, exist_ok=True)
-    Path(app.config["DATABASE"]).parent.mkdir(parents=True, exist_ok=True)
+    if app.config.get("DATABASE_ENGINE") == "sqlite" and app.config["DATABASE"] != ":memory:":
+        Path(app.config["DATABASE"]).parent.mkdir(parents=True, exist_ok=True)
 
     app.register_blueprint(bp)
     app.register_blueprint(health_memory_bp)

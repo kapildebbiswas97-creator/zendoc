@@ -58,7 +58,9 @@ def get_capability_registry() -> dict:
     )
     places = _env("ZENDOC_PLACES_PROVIDER", "none") not in {"", "none"}
     video_provider = _env("ZENDOC_VIDEO_PROVIDER", "none") not in {"", "none"}
-    database_url = bool(_env("DATABASE_URL"))
+    database_url = _env("DATABASE_URL")
+    postgresql_configured = database_url.startswith(("postgresql://", "postgres://", "postgresql+psycopg://"))
+    persistence_verified = _env_bool("ZENDOC_PERSISTENCE_VERIFIED")
     storage_provider = _env("ZENDOC_STORAGE_PROVIDER", "local")
     s3_configured = storage_provider != "local" and bool(_env("ZENDOC_STORAGE_BUCKET"))
     real_evaluation_enabled = _env_bool("ZENDOC_MODEL_EVALUATION_REAL_ENABLED")
@@ -234,11 +236,15 @@ def get_capability_registry() -> dict:
 
         # Infrastructure
         "postgresql": {
-            "status": STATUS_INTEGRATION_REQUIRED,
+            "status": STATUS_WORKING if postgresql_configured and persistence_verified else (STATUS_BETA if postgresql_configured else STATUS_INTEGRATION_REQUIRED),
             "label": "PostgreSQL Database",
-            "description": "Configure DATABASE_URL for production database."
-                           if not database_url else
-                           "DATABASE_URL is present, but the PostgreSQL driver and production migration run are still required.",
+            "description": (
+                "Managed PostgreSQL adapter is configured and operator-verified."
+                if postgresql_configured and persistence_verified
+                else "Managed PostgreSQL adapter is configured; restart/redeploy verification is still required."
+                if postgresql_configured
+                else "Configure DATABASE_URL and complete the documented production migration and redeploy verification."
+            ),
         },
         "object_storage": {
             "status": STATUS_INTEGRATION_REQUIRED if s3_configured else STATUS_WORKING,

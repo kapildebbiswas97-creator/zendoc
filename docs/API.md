@@ -16,6 +16,10 @@ Use the returned token as:
 Authorization: Bearer <token>
 ```
 
+Registration normalizes email case, compatible Unicode forms, and outer whitespace. A duplicate returns HTTP 409 with `An account with this email already exists. Please log in.` Login uses the same safe response for a wrong password and an unknown account: `Email or password is incorrect.`
+
+Access and password-reset tokens are purpose-separated. A reset token expires after 30 minutes and is never accepted as a bearer token. The reset-token response is a clearly labeled local-development beta; production returns HTTP 503 `integration_required` until a real delivery provider is configured.
+
 ## Endpoints
 
 - `GET /health`

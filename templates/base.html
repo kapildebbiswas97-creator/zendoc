@@ -36,7 +36,10 @@
         <a href="{{ url_for('main.notifications') }}">Notifications</a>
         {% if current_user.role == 'admin' %}<a href="{{ url_for('main.admin') }}">Admin</a>{% endif %}
         {% if current_user.role == 'admin' %}<a href="{{ url_for('milestone7.admin_agent_command_center') }}">Agent Center</a>{% endif %}
-        <a href="{{ url_for('main.logout') }}">Logout</a>
+        <form method="post" action="{{ url_for('main.logout') }}" class="nav-logout">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit">Logout</button>
+        </form>
       {% else %}
         <a href="{{ url_for('ecosystem.marketplace_page') }}">Services</a>
         <a href="{{ url_for('main.login', role='patient') }}">Login</a>

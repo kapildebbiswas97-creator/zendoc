@@ -1,6 +1,5 @@
-import secrets
-import sqlite3
 import time
+from datetime import datetime, timedelta, timezone
 
 from flask import (
     Blueprint,
@@ -18,8 +17,8 @@ from flask import (
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from .ai import MODEL_VERSION, assistant_answer, doctor_prediction, mental_health_support
-from .auth import ACCOUNT_EXISTS_MESSAGE, email_exists, user_by_normalized_email, validate_email
-from .db import ROLES, get_db, now_iso
+from .auth import ACCOUNT_EXISTS_MESSAGE, INVALID_CREDENTIALS_MESSAGE, email_exists, user_by_normalized_email, validate_email
+from .db import ROLES, get_db, is_integrity_error, now_iso
 from .health_analytics import METRIC_TYPES, create_measurement, get_health_trend
 from .healthcare_finder import HealthcareFinder, normalize_query
 from .intelligence import ZendocIntelligence
@@ -35,7 +34,7 @@ from .provider_service import (
 )
 from .report_intelligence import REPORT_TYPES, store_report_upload
 from .record_storage import get_record_storage
-from .security import csrf_token, hash_token, is_owner, load_user_and_check_csrf, login_required, new_token, owner_required, role_required
+from .security import csrf_token, hash_token, is_owner, load_user_and_check_csrf, login_required, new_token, owner_required, role_required, start_user_session
 
 
 bp = Blueprint("main", __name__)
@@ -46,8 +45,14 @@ RATE_BUCKETS = {}
 
 @bp.before_app_request
 def before_request():
-    load_user_and_check_csrf()
+    auth_response = load_user_and_check_csrf()
+    if auth_response is not None:
+        return auth_response
     check_rate_limit()
+
+
+def future_iso(minutes):
+    return (datetime.now(timezone.utc) + timedelta(minutes=minutes)).isoformat(timespec="seconds")
 
 
 @bp.app_errorhandler(400)
@@ -153,12 +158,12 @@ def get_or_create_conversation(user_id, conversation_id=None, title=None):
         if row:
             return row
     now = now_iso()
-    db.execute(
+    cursor = db.execute(
         "INSERT INTO ai_conversations (user_id,title,created_at,updated_at) VALUES (?,?,?,?)",
         (user_id, title or "ZENDOC conversation", now, now),
     )
     db.commit()
-    return db.execute("SELECT * FROM ai_conversations WHERE id=last_insert_rowid()").fetchone()
+    return db.execute("SELECT * FROM ai_conversations WHERE id=?", (cursor.lastrowid,)).fetchone()
 
 
 def log_ai_interaction(user_id, feature, input_text, result, latency_ms=None, conversation_id=None):
@@ -283,7 +288,10 @@ def register(role):
             get_db().commit()
             flash("Registration complete. Please log in.", "success")
             return redirect(url_for("main.login", role=role))
-        except sqlite3.IntegrityError:
+        except Exception as error:
+            if not is_integrity_error(error):
+                raise
+            get_db().rollback()
             flash(ACCOUNT_EXISTS_MESSAGE, "error")
             return render_template("register.html", role=role), 409
     return render_template("register.html", role=role)
@@ -303,21 +311,23 @@ def login(role):
         if user and user["role"] == "admin" and not is_owner(user):
             user = None
         if user and check_password_hash(user["password_hash"], request.form.get("password", "")):
-            session.clear()
-            session["user_id"] = user["id"]
-            session["csrf_token"] = secrets.token_urlsafe(32)
-            if request.form.get("remember_me"):
-                session.permanent = True
+            start_user_session(user, remember=bool(request.form.get("remember_me")))
             audit("login", "user", str(user["id"]))
             get_db().commit()
             return redirect(url_for("main.dashboard"))
-        flash("Invalid login details.", "error")
+        flash(INVALID_CREDENTIALS_MESSAGE, "error")
     return render_template("login.html", role=role)
 
 
 @bp.route("/forgot-password", methods=("GET", "POST"))
 def forgot_password():
     if request.method == "POST":
+        if current_app.config.get("PASSWORD_RECOVERY_MODE") != "local_demo":
+            flash(
+                "Password recovery delivery is not integrated yet. Contact the ZENDOC owner for controlled account recovery.",
+                "warning",
+            )
+            return render_template("forgot_password.html"), 503
         email = ""
         try:
             email = validate_email(request.form.get("email", ""))
@@ -327,11 +337,11 @@ def forgot_password():
         if user:
             token = new_token()
             get_db().execute(
-                "INSERT INTO api_tokens (user_id, token_hash, created_at) VALUES (?, ?, ?)",
-                (user["id"], hash_token(token), now_iso()),
+                "INSERT INTO api_tokens (user_id, token_hash, token_type, expires_at, created_at) VALUES (?, ?, 'password_reset', ?, ?)",
+                (user["id"], hash_token(token), future_iso(30), now_iso()),
             )
             get_db().commit()
-            flash("Password reset token generated. Reset your password below.", "success")
+            flash("Local beta recovery token generated. It expires in 30 minutes; email delivery is not connected.", "success")
             return redirect(url_for("main.reset_password", token=token))
         flash("If the account exists, instructions have been generated.", "success")
     return render_template("forgot_password.html")
@@ -346,21 +356,30 @@ def reset_password():
             flash("Password must be at least 8 characters.", "error")
             return render_template("reset_password.html", token=token), 400
         token_digest = hash_token(token)
-        tok_row = get_db().execute("SELECT * FROM api_tokens WHERE token_hash=? AND revoked_at IS NULL", (token_digest,)).fetchone()
+        tok_row = get_db().execute(
+            """
+            SELECT * FROM api_tokens
+            WHERE token_hash=? AND token_type='password_reset' AND revoked_at IS NULL
+              AND expires_at IS NOT NULL AND expires_at>?
+            """,
+            (token_digest, now_iso()),
+        ).fetchone()
         if not tok_row:
             flash("Invalid or expired password reset token.", "error")
             return render_template("reset_password.html", token=token), 400
         user_id = tok_row["user_id"]
         get_db().execute("UPDATE users SET password_hash=?, updated_at=? WHERE id=?", (generate_password_hash(password), now_iso(), user_id))
-        get_db().execute("UPDATE api_tokens SET revoked_at=? WHERE id=?", (now_iso(), tok_row["id"]))
+        get_db().execute("UPDATE api_tokens SET revoked_at=? WHERE user_id=? AND revoked_at IS NULL", (now_iso(), user_id))
         get_db().commit()
         flash("Password reset successful. Please log in with your new password.", "success")
         return redirect(url_for("main.login", role="patient"))
     return render_template("reset_password.html", token=token)
 
 
-@bp.get("/logout")
+@bp.route("/logout", methods=("GET", "POST"))
 def logout():
+    if request.method == "GET" and not current_app.config.get("ALLOW_LEGACY_GET_LOGOUT", False):
+        abort(405)
     session.clear()
     flash("Logged out.", "success")
     return redirect(url_for("main.home"))
@@ -749,7 +768,7 @@ def api_user():
         """
         SELECT u.*, t.id AS token_id FROM api_tokens t
         JOIN users u ON u.id=t.user_id
-        WHERE t.token_hash=? AND t.revoked_at IS NULL AND u.active=1
+        WHERE t.token_hash=? AND t.token_type='access' AND t.revoked_at IS NULL AND u.active=1
         """,
         (token_digest,),
     ).fetchone()
@@ -759,7 +778,7 @@ def api_user():
         """
         SELECT u.*, t.id AS token_id FROM api_tokens t
         JOIN users u ON u.id=t.user_id
-        WHERE t.token=? AND t.revoked_at IS NULL AND u.active=1
+        WHERE t.token=? AND t.token_type='access' AND t.revoked_at IS NULL AND u.active=1
         """,
         (token,),
     ).fetchone()
@@ -822,7 +841,10 @@ def api_register():
         )
         get_db().commit()
         return jsonify({"status": "created"}), 201
-    except sqlite3.IntegrityError:
+    except Exception as error:
+        if not is_integrity_error(error):
+            raise
+        get_db().rollback()
         return jsonify({"error": {"code": 409, "message": ACCOUNT_EXISTS_MESSAGE}}), 409
 
 
@@ -841,10 +863,10 @@ def api_login():
     if user and user["role"] == "admin" and not is_owner(user):
         user = None
     if not user or not check_password_hash(user["password_hash"], data.get("password", "")):
-        return jsonify({"error": "Invalid credentials"}), 401
+        return jsonify({"error": INVALID_CREDENTIALS_MESSAGE}), 401
     token = new_token()
     get_db().execute(
-        "INSERT INTO api_tokens (user_id,token_hash,created_at) VALUES (?,?,?)",
+        "INSERT INTO api_tokens (user_id,token_hash,token_type,created_at) VALUES (?,?,'access',?)",
         (user["id"], hash_token(token), now_iso()),
     )
     get_db().commit()
@@ -868,6 +890,11 @@ def api_logout():
 
 @bp.post("/api/v1/auth/forgot-password")
 def api_forgot_password():
+    if current_app.config.get("PASSWORD_RECOVERY_MODE") != "local_demo":
+        return jsonify({
+            "status": "integration_required",
+            "message": "Password recovery delivery is not integrated.",
+        }), 503
     data = request.get_json(silent=True) or {}
     try:
         email = validate_email(data.get("email", ""))
@@ -877,12 +904,12 @@ def api_forgot_password():
     if user:
         token = new_token()
         get_db().execute(
-            "INSERT INTO api_tokens (user_id, token_hash, created_at) VALUES (?, ?, ?)",
-            (user["id"], hash_token(token), now_iso()),
+            "INSERT INTO api_tokens (user_id, token_hash, token_type, expires_at, created_at) VALUES (?, ?, 'password_reset', ?, ?)",
+            (user["id"], hash_token(token), future_iso(30), now_iso()),
         )
         get_db().commit()
-        return jsonify({"status": "reset_token_generated", "reset_token": token, "message": "Password reset token generated."})
-    return jsonify({"status": "reset_token_generated", "message": "If account exists, instructions were processed."})
+        return jsonify({"status": "local_demo_token_generated", "reset_token": token, "message": "Local beta token generated; email delivery is not integrated."})
+    return jsonify({"status": "local_demo_token_generated", "message": "If the account exists, the local beta recovery request was processed."})
 
 
 @bp.post("/api/v1/auth/reset-password")
@@ -895,12 +922,19 @@ def api_reset_password():
     if len(password) < 8:
         return jsonify({"error": "Password must be at least 8 characters"}), 400
     token_digest = hash_token(token)
-    tok_row = get_db().execute("SELECT * FROM api_tokens WHERE token_hash=? AND revoked_at IS NULL", (token_digest,)).fetchone()
+    tok_row = get_db().execute(
+        """
+        SELECT * FROM api_tokens
+        WHERE token_hash=? AND token_type='password_reset' AND revoked_at IS NULL
+          AND expires_at IS NOT NULL AND expires_at>?
+        """,
+        (token_digest, now_iso()),
+    ).fetchone()
     if not tok_row:
         return jsonify({"error": "Invalid or expired reset token"}), 400
     user_id = tok_row["user_id"]
     get_db().execute("UPDATE users SET password_hash=?, updated_at=? WHERE id=?", (generate_password_hash(password), now_iso(), user_id))
-    get_db().execute("UPDATE api_tokens SET revoked_at=? WHERE id=?", (now_iso(), tok_row["id"]))
+    get_db().execute("UPDATE api_tokens SET revoked_at=? WHERE user_id=? AND revoked_at IS NULL", (now_iso(), user_id))
     get_db().commit()
     return jsonify({"status": "password_reset_success"})
 

@@ -3,9 +3,9 @@
 {% block content %}
 <section class="section-head command-hero">
   <div>
-    <p class="eyebrow">Owner Operations · Milestone 8</p>
+    <p class="eyebrow">Owner Operations · Milestone 8.3</p>
     <h1>Owner Command Center 2.0</h1>
-    <p class="section-copy">A live, owner-only view of permissioned agents, bounded tasks, approvals, alerts, model routing, infrastructure, and audit events.</p>
+    <p class="section-copy">A live, owner-only view of persistence safety, permissioned agents, bounded tasks, approvals, alerts, model routing, infrastructure, and audit events.</p>
   </div>
   <div class="form-actions">
     <form method="post" action="{{ url_for('milestone8.owner_alert_check') }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">Run alert scan</button></form>
@@ -16,6 +16,20 @@
 
 <section class="command-strip" aria-label="Agent architecture status">
   <span>Owner</span><b>→</b><span>Core Agent</span><b>→</b><span>Safety Gate</span><b>→</b><span>Model Router</span><b>→</b><span>Specialized Agents</span><b>→</b><span>Permissioned Tools</span><b>→</b><span>Human Approval</span>
+</section>
+
+{% set persistence = data.infrastructure.database %}
+<section class="panel spaced-panel" aria-label="Persistence status">
+  <div class="panel-head">
+    <div><p class="eyebrow">Release-critical persistence</p><h2>{{ persistence.persistence.replace('_', ' ').upper() }}</h2></div>
+    <span class="status-badge {{ 'active' if persistence.status == 'working' else 'integration' }}">{{ persistence.status.replace('_', ' ') }}</span>
+  </div>
+  <div class="grid three">
+    <div class="summary-row"><strong>Database engine</strong><span>{{ persistence.engine }}</span></div>
+    <div class="summary-row"><strong>Durability</strong><span>{{ persistence.durability.replace('_', ' ') }}</span></div>
+    <div class="summary-row"><strong>Redeploy check</strong><span>{{ persistence.redeploy_verification.replace('_', ' ') }}</span></div>
+  </div>
+  <p class="section-copy">{{ persistence.message }}</p>
 </section>
 
 <div class="command-layout">

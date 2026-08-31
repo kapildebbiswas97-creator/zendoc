@@ -1,5 +1,6 @@
 import json
 import sqlite3
+import unicodedata
 from datetime import datetime, timezone
 
 from flask import current_app, g
@@ -9,6 +10,7 @@ from werkzeug.security import generate_password_hash
 ROLES = ("patient", "doctor", "hospital", "pharmacy", "government", "admin")
 LEGACY_ADMIN_FALLBACK_ROLE = "patient"
 LEGACY_ADMIN_RECONCILIATION_VERSION = "m8_legacy_admin_reconciliation_v1"
+MILESTONE83_MIGRATION_VERSION = "m8_3_auth_persistence_v1"
 
 
 def now_iso():
@@ -17,10 +19,24 @@ def now_iso():
 
 def get_db():
     if "db" not in g:
-        g.db = sqlite3.connect(current_app.config["DATABASE"])
-        g.db.row_factory = sqlite3.Row
-        g.db.execute("PRAGMA foreign_keys = ON")
+        if current_app.config.get("DATABASE_ENGINE") == "postgresql":
+            from .postgres_backend import connect_postgresql
+
+            g.db = connect_postgresql(current_app.config["DATABASE_URL"])
+        else:
+            g.db = sqlite3.connect(current_app.config["DATABASE"], timeout=15)
+            g.db.row_factory = sqlite3.Row
+            g.db.execute("PRAGMA foreign_keys = ON")
+            g.db.execute("PRAGMA busy_timeout = 5000")
     return g.db
+
+
+def is_integrity_error(error):
+    if isinstance(error, sqlite3.IntegrityError):
+        return True
+    from .postgres_backend import is_postgresql_integrity_error
+
+    return is_postgresql_integrity_error(error)
 
 
 def close_db(_error=None):
@@ -279,6 +295,8 @@ def init_db():
             user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             token TEXT,
             token_hash TEXT UNIQUE,
+            token_type TEXT NOT NULL DEFAULT 'access',
+            expires_at TEXT,
             revoked_at TEXT,
             created_at TEXT NOT NULL
         );
@@ -1039,11 +1057,36 @@ def init_db():
 
 
 def table_columns(db, table):
+    if getattr(db, "dialect", "sqlite") == "postgresql":
+        rows = db.execute(
+            """
+            SELECT column_name AS name
+            FROM information_schema.columns
+            WHERE table_schema=current_schema() AND table_name=?
+            ORDER BY ordinal_position
+            """,
+            (table,),
+        ).fetchall()
+        return {row["name"] for row in rows}
     rows = db.execute(f"PRAGMA table_info({table})").fetchall()
     return {row["name"] for row in rows}
 
 
 def column_info(db, table):
+    if getattr(db, "dialect", "sqlite") == "postgresql":
+        rows = db.execute(
+            """
+            SELECT column_name AS name,
+                   CASE WHEN is_nullable='NO' THEN 1 ELSE 0 END AS notnull,
+                   data_type AS type,
+                   column_default AS dflt_value
+            FROM information_schema.columns
+            WHERE table_schema=current_schema() AND table_name=?
+            ORDER BY ordinal_position
+            """,
+            (table,),
+        ).fetchall()
+        return {row["name"]: dict(row) for row in rows}
     return {row["name"]: dict(row) for row in db.execute(f"PRAGMA table_info({table})").fetchall()}
 
 
@@ -1058,6 +1101,8 @@ def migrate_schema(db):
                 user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                 token TEXT,
                 token_hash TEXT UNIQUE,
+                token_type TEXT NOT NULL DEFAULT 'access',
+                expires_at TEXT,
                 revoked_at TEXT,
                 created_at TEXT NOT NULL
             );
@@ -1072,6 +1117,11 @@ def migrate_schema(db):
         db.execute("ALTER TABLE api_tokens ADD COLUMN token_hash TEXT")
     if "revoked_at" not in token_columns:
         db.execute("ALTER TABLE api_tokens ADD COLUMN revoked_at TEXT")
+    if "token_type" not in token_columns:
+        db.execute("ALTER TABLE api_tokens ADD COLUMN token_type TEXT NOT NULL DEFAULT 'access'")
+    if "expires_at" not in token_columns:
+        db.execute("ALTER TABLE api_tokens ADD COLUMN expires_at TEXT")
+    db.execute("UPDATE api_tokens SET token_type='access' WHERE token_type IS NULL OR token_type=''")
 
     user_columns = table_columns(db, "users")
     for column, ddl in {
@@ -1105,6 +1155,7 @@ def migrate_schema(db):
     db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_normalized ON users(email_normalized)")
     db.execute("CREATE INDEX IF NOT EXISTS idx_users_duplicate_of ON users(duplicate_of_user_id)")
     db.execute("CREATE INDEX IF NOT EXISTS idx_tokens_hash ON api_tokens(token_hash)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_tokens_purpose_expiry ON api_tokens(token_type, expires_at, revoked_at)")
 
     ai_columns = table_columns(db, "ai_interactions")
     for column, ddl in {
@@ -1443,6 +1494,10 @@ def migrate_schema(db):
         "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES ('m8_2_model_evaluation_lab_v1', ?)",
         (now_iso(),),
     )
+    db.execute(
+        "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+        (MILESTONE83_MIGRATION_VERSION, now_iso()),
+    )
     db.commit()
 
 
@@ -1450,7 +1505,7 @@ def repair_normalized_email_index(db):
     rows = db.execute("SELECT id, email, active, created_at FROM users ORDER BY id ASC").fetchall()
     groups = {}
     for row in rows:
-        normalized = (row["email"] or "").strip().lower()
+        normalized = unicodedata.normalize("NFKC", str(row["email"] or "")).strip().casefold()
         if not normalized:
             continue
         groups.setdefault(normalized, []).append(row)

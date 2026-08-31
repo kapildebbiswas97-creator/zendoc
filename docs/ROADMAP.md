@@ -61,6 +61,16 @@ Complete in this codebase: security and authentication hardening, central AI saf
 - Additive metadata-only result persistence and laptop-safe execution bounds.
 - Future ZENDOC-SLM architecture documented without training, fine-tuning, or proprietary-model claims.
 
+## Milestone 8.3: Demo Stabilization And Persistent Accounts
+
+- Correct production database selection so `DATABASE_URL` is no longer ignored.
+- Preserve local/test SQLite while adding a managed-PostgreSQL adapter and additive migration tracking.
+- Distinguish durable account identity from expiring browser sessions.
+- Harden identifier normalization, duplicate handling, reset-token purpose/expiry, session rotation, and production logout CSRF.
+- Surface persistence engine, durability, and redeploy-verification status in the owner Command Center without exposing credentials.
+- Add restart/data/role persistence, legacy migration, configuration, security, and demo-route verification.
+- Keep external tester readiness blocked until production persistence is configured and manually redeploy-verified.
+
 ## Milestone 9: Mental Wellness
 
 - Context-aware check-ins, journaling, breathing, sleep, and stress tracking.
@@ -79,7 +89,7 @@ Complete in this codebase: security and authentication hardening, central AI saf
 
 ## Milestone 12: Mobile And Production Hardening
 
-- PostgreSQL migrations.
+- Operational PostgreSQL migration/import rehearsal, backup/restore drills, and production cutover verification.
 - S3-compatible file storage.
 - Redis/worker queue for notifications, extraction, and AI jobs.
 - OpenAPI schema and generated Flutter client models.

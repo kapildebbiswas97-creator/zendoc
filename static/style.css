@@ -6,6 +6,7 @@ a{color:var(--primary)}
 .brand{font-size:24px;font-weight:900;color:var(--ink);text-decoration:none}
 nav{display:flex;flex-wrap:wrap;gap:12px;justify-content:flex-end}
 nav a{font-size:14px;font-weight:800;color:var(--muted);text-decoration:none}
+.nav-logout{display:inline;margin:0}.nav-logout button{min-height:0;padding:0;background:transparent;color:var(--muted);font-size:14px}.nav-logout button:hover{background:transparent;color:var(--primary)}
 .page{width:min(1180px,calc(100% - 32px));margin:0 auto;padding:30px 0 56px}
 .hero,.section-head{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;padding:28px 0}
 .hero h1,.section-head h1,.auth-panel h1{margin:0;font-size:44px;line-height:1.05}

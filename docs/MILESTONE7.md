@@ -10,7 +10,7 @@ Milestone 7 adds the ZENDOC Core Agent foundation, admin command center, beta te
 - Admin bootstrap now uses only `ZENDOC_ADMIN_EMAIL` and `ZENDOC_ADMIN_PASSWORD`, or explicit test config fixtures.
 - Added normalized email handling through `email_normalized`.
 - Added duplicate detection that documents legacy duplicates in `duplicate_account_groups` without deleting accounts.
-- Registration blocks duplicate normalized emails with: `An account with this email already exists. Please log in or reset your password.`
+- Registration blocks duplicate normalized emails with: `An account with this email already exists. Please log in.`
 - Login, password reset, and API auth lookup trim and lowercase email consistently.
 
 ## Working
@@ -64,4 +64,3 @@ Commands run:
 - `python -m compileall zendoc tests`
 - Auth-first & Milestone 7.1 tests: `python -m pytest tests/test_milestone7.py -v` passed, 22/22 tests.
 - Full regression: `python -m pytest` passed, 90/90 tests across Milestones 1-7.1.
-

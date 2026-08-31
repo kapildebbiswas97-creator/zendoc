@@ -1,14 +1,16 @@
 import re
+import unicodedata
 
 from .db import get_db
 
 
-ACCOUNT_EXISTS_MESSAGE = "An account with this email already exists. Please log in or reset your password."
+ACCOUNT_EXISTS_MESSAGE = "An account with this email already exists. Please log in."
+INVALID_CREDENTIALS_MESSAGE = "Email or password is incorrect."
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 def normalize_email(email):
-    return str(email or "").strip().lower()
+    return unicodedata.normalize("NFKC", str(email or "")).strip().casefold()
 
 
 def validate_email(email):

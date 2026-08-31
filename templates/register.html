@@ -3,6 +3,7 @@
 {% block content %}
 <section class="auth-panel">
   <h1>{{ role.title() }} Register</h1>
+  <p class="section-copy">Create this account once. Returning users should log in with the same email and password.</p>
   <form method="post">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <label>Full Name <input name="name" required></label>
@@ -24,6 +25,7 @@
     <label>Emergency Contact <input name="emergency_contact"></label>
     <button type="submit">Register</button>
   </form>
+  <a class="text-link" href="{{ url_for('main.login', role=role) }}">Already registered? Log in</a>
 </section>
 <script src="{{ url_for('static', filename='auth.js') }}"></script>
 {% endblock %}
