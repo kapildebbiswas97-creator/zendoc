@@ -30,6 +30,7 @@ from .provider_service import (
     book_provider_slot,
     create_schedule,
     get_provider_profile_for_user,
+    get_public_provider_profile,
     upsert_provider_profile,
 )
 from .report_intelligence import REPORT_TYPES, store_report_upload
@@ -675,6 +676,45 @@ def finder():
         audit("search", "healthcare_finder", query["category"])
         get_db().commit()
     return render_template("finder.html", result=result, query=query)
+
+
+@bp.get("/providers/<int:profile_id>")
+@login_required
+def provider_detail(profile_id):
+    profile = get_public_provider_profile(profile_id)
+    if not profile:
+        abort(404)
+
+    selected_date = (request.args.get("date") or "").strip()
+    slots = available_slots(profile_id, selected_date) if selected_date else []
+    if not selected_date:
+        today = datetime.now(timezone.utc).date()
+        for day_offset in range(0, 15):
+            candidate = (today + timedelta(days=day_offset)).isoformat()
+            candidate_slots = available_slots(profile_id, candidate)
+            if candidate_slots:
+                selected_date = candidate
+                slots = candidate_slots
+                break
+        if not selected_date:
+            selected_date = (today + timedelta(days=1)).isoformat()
+
+    schedules = get_db().execute(
+        """
+        SELECT weekday, start_time, end_time, slot_minutes
+        FROM provider_schedules
+        WHERE provider_profile_id=? AND active=1
+        ORDER BY weekday, start_time
+        """,
+        (profile_id,),
+    ).fetchall()
+    return render_template(
+        "provider_detail.html",
+        profile=profile,
+        schedules=schedules,
+        selected_date=selected_date,
+        slots=slots,
+    )
 
 
 @bp.route("/provider/profile", methods=("GET", "POST"))

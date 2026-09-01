@@ -36,7 +36,7 @@
             <p>{{ item.address }} {{ item.city }} {{ item.state }} {{ item.postal_code }}</p>
             {% if item.phone %}<p>Call: {{ item.phone }}</p>{% endif %}
             {% if item.id and item.source == 'zendoc_provider_network' %}
-              <a href="{{ url_for('main.appointments') }}?provider_profile_id={{ item.id }}">Book Appointment</a>
+              <a href="{{ url_for('main.provider_detail', profile_id=item.id) }}">View profile &amp; availability</a>
             {% endif %}
           </article>
         {% endfor %}

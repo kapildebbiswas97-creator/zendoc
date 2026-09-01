@@ -2,7 +2,7 @@
 {% block title %}Pose Coach - ZENDOC{% endblock %}
 {% block content %}
 <section class="section-head">
-  <div><p class="eyebrow">Camera Intelligence Beta</p><h1>Fitness Pose Coach</h1><p class="section-copy">Start the camera only when ready. Frames stay in the browser for this beta flow and are not uploaded.</p></div>
+  <div><p class="eyebrow">Camera Preview Prototype</p><h1>Fitness Camera Preview</h1><p class="section-copy">Start the camera only when ready. Frames stay in the browser and are not uploaded. Automatic pose analysis and rep counting are not connected.</p></div>
   <a href="{{ url_for('fitness.overview') }}" class="secondary-action">Fitness</a>
 </section>
 
@@ -16,31 +16,29 @@
     <div class="form-actions">
       <button id="pose-start" type="button">Start Camera</button>
       <button id="pose-stop" type="button" class="danger-button">Stop Camera</button>
-      <button id="pose-save" type="button" class="secondary-action">Save Session</button>
+      <button id="pose-save" type="button" class="secondary-action">Save preview duration</button>
     </div>
     <video id="pose-preview" autoplay playsinline muted style="width:100%;max-height:420px;background:#111;border-radius:8px;margin-top:14px;"></video>
     <p id="pose-status" class="section-copy">Camera off.</p>
   </article>
   <article class="panel">
-    <h2>Session Summary</h2>
+    <h2>Prototype status</h2>
     <div class="stats" style="grid-template-columns:repeat(2,minmax(0,1fr));">
-      <article><span>Reps</span><strong id="pose-reps">0</strong></article>
-      <article><span>Sets</span><strong id="pose-sets">0</strong></article>
-      <article><span>Timer</span><strong id="pose-timer">0s</strong></article>
-      <article><span>Confidence</span><strong id="pose-confidence">0%</strong></article>
+      <article><span>Preview duration</span><strong id="pose-timer">0s</strong></article>
+      <article><span>Pose analysis</span><strong style="font-size:18px;">Not connected</strong></article>
     </div>
-    <p id="pose-feedback" class="privacy-banner">Basic movement counter ready. This is not injury diagnosis or clinical assessment.</p>
+    <p id="pose-feedback" class="privacy-banner">Camera preview and duration capture only. This does not count reps, assess form, diagnose injury, or provide a confidence score.</p>
   </article>
 </section>
 
 <section class="panel">
-  <h2>Recent Pose Sessions</h2>
+  <h2>Recent Camera Preview Sessions</h2>
   {% if sessions %}
-    <table><thead><tr><th>Exercise</th><th>Reps</th><th>Sets</th><th>Duration</th><th>When</th></tr></thead><tbody>
-    {% for session in sessions %}<tr><td>{{ session.exercise }}</td><td>{{ session.reps }}</td><td>{{ session.sets }}</td><td>{{ session.duration_seconds }}s</td><td>{{ session.created_at }}</td></tr>{% endfor %}
+    <table><thead><tr><th>Exercise</th><th>Duration</th><th>Mode</th><th>When</th></tr></thead><tbody>
+    {% for session in sessions %}<tr><td>{{ session.exercise }}</td><td>{{ session.duration_seconds }}s</td><td>Camera preview only</td><td>{{ session.created_at }}</td></tr>{% endfor %}
     </tbody></table>
   {% else %}
-    <p>No pose sessions saved yet.</p>
+    <p>No camera preview sessions saved yet.</p>
   {% endif %}
 </section>
 <script>window.ZENDOC_CSRF = "{{ csrf_token }}";</script>

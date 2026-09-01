@@ -3,6 +3,7 @@ import os
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 
 sys.path.insert(0, r"C:\Users\SAMSUNG USER\Documents\Codex\2026-04-21-create-a-world-class-ai-powered")
 
@@ -139,7 +140,11 @@ class CompleteReleaseHardeningAudit(unittest.TestCase):
         self.register_user_api("Bob Patient", "bob@example.com", "Password123!", "patient")
         self.register_user_api("Dr. Clara Smith", "dr.clara@example.com", "Password123!", "doctor")
 
-        # Doctor setups profile and schedule
+        # Doctor setups profile and schedule for a stable future date
+        target_date = datetime.now(timezone.utc).date() + timedelta(days=7)
+        target_weekday = target_date.weekday()
+        target_date_str = target_date.isoformat()
+
         doc_token = self.api_login("dr.clara@example.com", "Password123!", "doctor")
         res = self.client.post("/api/v1/provider/profile", headers={"Authorization": f"Bearer {doc_token}"}, json={
             "provider_type": "doctor",
@@ -154,7 +159,7 @@ class CompleteReleaseHardeningAudit(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
 
         res = self.client.post("/api/v1/provider/schedules", headers={"Authorization": f"Bearer {doc_token}"}, json={
-            "weekday": 1,
+            "weekday": target_weekday,
             "start_time": "09:00",
             "end_time": "12:00",
             "slot_minutes": 30
@@ -173,7 +178,7 @@ class CompleteReleaseHardeningAudit(unittest.TestCase):
 
         # Patient books slot
         pat_token = self.api_login("bob@example.com", "Password123!", "patient")
-        res = self.client.get(f"/api/v1/providers/{prof_id}/slots?date=2026-09-01", headers={"Authorization": f"Bearer {pat_token}"})
+        res = self.client.get(f"/api/v1/providers/{prof_id}/slots?date={target_date_str}", headers={"Authorization": f"Bearer {pat_token}"})
         self.assertEqual(res.status_code, 200)
         slots = res.get_json()["slots"]
         self.assertTrue(len(slots) > 0)

@@ -45,7 +45,7 @@ def assistant_answer(message):
         return "Medicine delivery is planned for a future phase. Pharmacy users can already register."
     if "emergency" in text:
         return "For emergencies, use local emergency services immediately. ZENDOC is not a replacement for urgent care."
-    return "I can guide appointments, medical records, health monitoring, AI Doctor, and account navigation."
+    return "I can guide appointments, medical records, health monitoring, symptom guidance, and account navigation."
 
 
 def mental_health_support(age_group, context, stress_level):

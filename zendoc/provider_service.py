@@ -41,6 +41,20 @@ def get_provider_profile_for_user(user_id):
     return get_db().execute("SELECT * FROM provider_profiles WHERE user_id=?", (user_id,)).fetchone()
 
 
+def get_public_provider_profile(profile_id):
+    """Return one active, internally verified provider for patient discovery."""
+    row = get_db().execute(
+        """
+        SELECT p.*, u.name AS provider_name
+        FROM provider_profiles p
+        JOIN users u ON u.id=p.user_id
+        WHERE p.id=? AND p.verification_status='verified' AND u.active=1
+        """,
+        (int(profile_id),),
+    ).fetchone()
+    return dict(row) if row else None
+
+
 def upsert_provider_profile(user, data):
     if user["role"] not in PROVIDER_ROLES:
         raise PermissionError("Only provider roles can manage provider profiles.")
@@ -117,6 +131,7 @@ def public_provider(row):
     return {
         "id": row["id"],
         "name": row["organization"] or row["name"],
+        "provider_name": row["name"],
         "category": row["provider_type"],
         "specialty": row["specialty"],
         "address": row["address"],

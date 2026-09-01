@@ -13,6 +13,7 @@ STATUS_WORKING              = "WORKING"
 STATUS_BETA                 = "BETA"
 STATUS_INTEGRATION_REQUIRED = "INTEGRATION_REQUIRED"
 STATUS_DISABLED             = "DISABLED"
+STATUS_PROTOTYPE            = "PROTOTYPE"
 STATUS_FUTURE               = "FUTURE"
 
 
@@ -170,9 +171,9 @@ def get_capability_registry() -> dict:
             "description": "Workout plans, session tracking, exercise library, nutrition/hydration logs.",
         },
         "pose_coach": {
-            "status": STATUS_BETA,
-            "label": "AI Pose Coach (Camera)",
-            "description": "Camera-based form feedback via MediaPipe. Beta — not a medical device.",
+            "status": STATUS_PROTOTYPE,
+            "label": "Fitness Camera Preview",
+            "description": "Browser-local camera preview and duration capture only. No pose model, form analysis, rep counting, or medical-device claim.",
         },
         "fitness_videos": {
             "status": STATUS_WORKING,

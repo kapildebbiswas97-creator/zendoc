@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}{{ profile.organization or profile.provider_name }} — ZENDOC{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Verified ZENDOC directory profile</p>
+    <h1>{{ profile.organization or profile.provider_name }}</h1>
+    <p class="section-copy">
+      {{ profile.provider_name }}{% if profile.specialty %} · {{ profile.specialty }}{% endif %}
+      {% if profile.city %} · {{ profile.city }}{% endif %}
+    </p>
+  </div>
+  <a href="{{ url_for('main.finder') }}" class="secondary-action">Back to Find Care</a>
+</section>
+
+<div class="privacy-banner">
+  <strong>ZENDOC review status: verified.</strong>
+  This directory status reflects ZENDOC's internal provider-review workflow; it is not a claim of regulatory endorsement or guaranteed availability.
+</div>
+
+<section class="grid two spaced-panel">
+  <article class="panel">
+    <div class="panel-head">
+      <h2>Provider profile</h2>
+      <span class="status-badge active">Verified</span>
+    </div>
+    <dl class="detail-list spaced-panel">
+      <dt>Provider</dt><dd>{{ profile.provider_name }}</dd>
+      <dt>Type</dt><dd>{{ profile.provider_type.replace('_', ' ').title() }}</dd>
+      <dt>Specialty</dt><dd>{{ profile.specialty or 'General care' }}</dd>
+      <dt>Organization</dt><dd>{{ profile.organization or 'Independent provider' }}</dd>
+      <dt>Location</dt><dd>{{ profile.address or 'Address not listed' }}{% if profile.city %}, {{ profile.city }}{% endif %}{% if profile.state %}, {{ profile.state }}{% endif %}</dd>
+      <dt>Profile notes</dt><dd>{{ profile.qualifications or 'No public profile notes supplied.' }}</dd>
+    </dl>
+  </article>
+
+  <article class="panel">
+    <h2>Appointment availability</h2>
+    <form method="get" action="{{ url_for('main.provider_detail', profile_id=profile.id) }}" class="inline-form">
+      <label>Choose a date
+        <input type="date" name="date" value="{{ selected_date }}" required>
+      </label>
+      <button type="submit">Check slots</button>
+    </form>
+
+    {% if slots %}
+      {% if current_user.role == 'patient' %}
+        <form method="post" action="{{ url_for('main.appointments') }}" class="spaced-panel">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="provider_profile_id" value="{{ profile.id }}">
+          <label>Available slot
+            <select name="scheduled_for" required>
+              {% for slot in slots %}<option value="{{ slot }}">{{ slot.replace('T', ' · ') }}</option>{% endfor %}
+            </select>
+          </label>
+          <label>Reason for visit
+            <textarea name="reason" rows="3" placeholder="Brief, non-emergency reason" required></textarea>
+          </label>
+          <button type="submit">Request this appointment</button>
+          <p class="form-note">The provider must confirm the request. This is not guaranteed availability.</p>
+        </form>
+      {% else %}
+        <p class="form-note">{{ slots|length }} slot(s) are currently open. Sign in as a patient to request one.</p>
+      {% endif %}
+    {% else %}
+      <div class="empty-state"><h3>No open slots on this date</h3><p>Choose another date or return to Find Care. Availability is based on the provider's current ZENDOC schedule.</p></div>
+    {% endif %}
+  </article>
+</section>
+
+<section class="panel spaced-panel">
+  <h2>Weekly schedule</h2>
+  {% if schedules %}
+    <div class="schedule-grid">
+      {% set weekday_names = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'] %}
+      {% for schedule in schedules %}
+        <div class="summary-row"><strong>{{ weekday_names[schedule.weekday] }}</strong><span>{{ schedule.start_time }}–{{ schedule.end_time }} · {{ schedule.slot_minutes }} minute slots</span></div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="empty-state">This provider has not published a schedule yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

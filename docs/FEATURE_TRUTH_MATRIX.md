@@ -3,7 +3,7 @@
 **Release Target**: Selection Beta  
 **Branch**: `main`  
 **Evaluation Date**: August 2026  
-**Durability & Persistence Status**: Local SQLite Persistence (`WORKING`), Same-DB Restart Persistence (`WORKING`), PostgreSQL Adapter (`BETA`), Cloud Production Persistence (`INTEGRATION REQUIRED`).
+**Durability & Persistence Status**: Local SQLite Persistence (`WORKING`), Live Managed PostgreSQL Connection (`WORKING` via `DATABASE_URL`), Enterprise Multi-Region HA & Backups (`INTEGRATION REQUIRED`).
 
 ---
 
@@ -14,8 +14,8 @@ Each capability in ZENDOC is evaluated and classified into one of the following 
 1. **`WORKING`**: Feature is fully implemented, functionally verified, covered by automated test suites, and operates end-to-end with persistent data storage in local/test SQLite.
 2. **`BETA`**: Feature is functional in the reference web application with browser-local or deterministic fallbacks when external cloud services (e.g. third-party LLM keys, TURN servers) are not provisioned.
 3. **`INTEGRATION REQUIRED`**: Feature provides complete frontend workflows, validation, and database records, but requires external physical infrastructure, live carrier integrations, or merchant fleet agreements for live external execution (e.g., real ambulance dispatch, live pharmacy doorstep delivery).
-4. **`FUTURE`**: Long-term roadmap capability scheduled for post-selection development (e.g., native mobile app binary packages, on-device Edge TPU hardware acceleration).
-5. **`HIDDEN FROM BETA`**: Placeholders or speculative features excluded from the Selection Beta to prevent any user confusion.
+4. **`PROTOTYPE`**: Working browser-local prototype or UI intake demonstrating user experience and schema design without live AI model evaluation or physical hardware integration (e.g., Fitness Camera Preview).
+5. **`FUTURE`**: Long-term roadmap capability scheduled for post-selection development (e.g., native mobile app binary packages, on-device Edge TPU hardware acceleration, autonomous logistics).
 
 ---
 
@@ -30,9 +30,8 @@ Each capability in ZENDOC is evaluated and classified into one of the following 
 | **Auth & Security** | Session Rotation & Logout Invalidation | `WORKING` | Secure cookie rotation on login/logout, legacy GET logout compatibility | Unit & Integration tests |
 | **Auth & Security** | Password Reset & Recovery | `BETA` | Local demo recovery token flow; email transport requires SMTP credentials | Web test flow |
 | **Database & Durability** | Local SQLite File Persistence | `WORKING` | ACID transactions, foreign keys, write-ahead logging (WAL), table triggers | Full suite restart tests |
-| **Database & Durability** | Same-Database Restart Persistence | `WORKING` | Data survives application restart when backed by disk SQLite file | Verified in M8.3 & audit |
-| **Database & Durability** | PostgreSQL Enterprise Adapter | `BETA` | Schema & query layer compatible with PostgreSQL via connection string | Architecture & schema audit |
-| **Database & Durability** | Cloud Ephemeral Restart Durability | `INTEGRATION REQUIRED` | Cloud host (e.g. Render free tier) disk reset on cold boot; requires managed PostgreSQL for permanent cloud storage | Explicitly documented limitation |
+| **Database & Durability** | Managed PostgreSQL Backend | `WORKING` | Schema-ordered migrations applied; active for live Render selection deployment via `DATABASE_URL` | Automated Tests & Schema Verification |
+| **Database & Durability** | Enterprise Multi-Region HA & Disaster Recovery | `INTEGRATION REQUIRED` | Multi-region failover and automated backups not provisioned in selection tier | Documented Infrastructure Scope |
 | **Appointments & Finder** | Healthcare Provider Directory & Filters | `WORKING` | Filter by specialty, city, provider type, ratings, and verified badge | Web & API tests |
 | **Appointments & Finder** | Provider Schedule & Slot Management | `WORKING` | Doctors create weekly recurring schedules with custom slot durations | Automated Tests |
 | **Appointments & Finder** | Real-Time Slot Booking & Double-Booking Prevention | `WORKING` | Atomic appointment reservation, prevents double-booking same slot | Automated Tests |
@@ -51,7 +50,7 @@ Each capability in ZENDOC is evaluated and classified into one of the following 
 | **Fitness Coach** | Interactive Workout Session & Set Logger | `WORKING` | Live set/rep logging, timer tracking, automatic timeline recording | Automated Tests |
 | **Fitness Coach** | Nutrition & Meal Logging | `WORKING` | Food, macro, and calorie tracking without fabricated calorie claims | Automated Tests |
 | **Fitness Coach** | Daily Hydration Tracker | `WORKING` | Quick-log presets (250ml, 500ml, 750ml) with daily wellness target progress | Automated Tests |
-| **Camera & Video** | Real-Time Browser Pose Estimation | `BETA` | HTML5 MediaDevices camera integration with local canvas rendering; demo fallback | Camera test suite |
+| **Camera & Video** | Fitness Camera Preview Prototype | `PROTOTYPE` | Browser-local camera preview and duration capture; automatic pose analysis and rep counting not connected | Camera test suite |
 | **Camera & Video** | Curated Educational Exercise Videos | `BETA` | Searches verified educational fitness videos; graceful offline fallback | Video search tests |
 | **Family Care** | Family Member & Dependent Management | `WORKING` | Add parents, children, spouse with proxy permissions and emergency flags | Family test suite |
 | **Family Care** | Care Tasks & Medication Reminders | `WORKING` | Assign and mark completed care tasks for dependents | Automated Tests |
@@ -74,5 +73,5 @@ Each capability in ZENDOC is evaluated and classified into one of the following 
 ## 3. Truthful Testing Disclosure Summary
 
 - **Local/Test Environment**: 100% of capabilities function reliably using SQLite.
-- **Production Server (Render Free Tier)**: Application state persists across normal web requests and user logins. If the ephemeral container restarts due to inactivity, local database state resets to initial seeded demo data unless connected to an external PostgreSQL database.
+- **Production Server (Render Selection Beta)**: Connected to managed PostgreSQL database via `DATABASE_URL` with ordered schema migrations applied. Application state persists across service lifecycles. Temporary web service sleep/cold-start characteristics after prolonged inactivity remain disclosed.
 - **No Deceptive Demos**: ZENDOC does not simulate fake ambulance dispatches, fake camera AI detections, or fake payment confirmations. All external execution boundaries are truthfully labeled.

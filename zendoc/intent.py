@@ -1,5 +1,5 @@
 INTENT_KEYWORDS = {
-    "emergency": ("emergency", "urgent", "ambulance", "chest pain", "shortness of breath", "stroke"),
+    "emergency": ("emergency", "ambulance", "chest pain", "shortness of breath", "stroke"),
     "symptoms": ("fever", "cough", "pain", "headache", "rash", "nausea", "fatigue", "symptom", "sick"),
     "report_intelligence": ("explain my blood", "explain my report", "explain my latest report", "explain my lab", "interpret my report"),
     "report_history": ("show my latest report", "show my report", "report history"),

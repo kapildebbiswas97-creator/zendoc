@@ -17,9 +17,9 @@
 <!-- Emergency Shortcut Banner -->
 <div class="privacy-banner" style="background:#fff5f5;border-color:var(--danger);color:#b42318;margin-bottom:24px;display:flex;justify-content:space-between;align-items:center;">
   <div>
-    <strong>Emergency Care Required?</strong> Call 108 immediately for acute chest pain, severe shortness of breath, stroke symptoms, or severe injury.
+    <strong>Emergency care required?</strong> Contact local emergency services now (112/108 in India) for acute chest pain, severe shortness of breath, stroke symptoms, or severe injury. ZENDOC cannot dispatch help.
   </div>
-  <a href="{{ url_for('ecosystem.ambulance_page') }}" class="primary-action danger-button" style="min-height:36px;padding:4px 12px;font-size:13px;">Request Ambulance</a>
+  <a href="{{ url_for('ecosystem.ambulance_page') }}" class="primary-action danger-button" style="min-height:36px;padding:4px 12px;font-size:13px;">Open transport intake</a>
 </div>
 
 <!-- Quick Action Grid (One-Tap Access) -->
@@ -28,7 +28,7 @@
   <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(130px, 1fr));gap:12px;">
     <a href="{{ url_for('main.ai_center') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;background:#eef4ff;border-color:#b2ddff;">
       <strong style="color:var(--primary);font-size:14px;">Ask AI</strong>
-      <small style="color:var(--muted);font-size:11px;">Instant Advice</small>
+      <small style="color:var(--muted);font-size:11px;">Guidance &amp; next steps</small>
     </a>
     <a href="{{ url_for('milestone7.messages_page') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
       <strong style="font-size:14px;">Messages</strong>
@@ -36,11 +36,11 @@
     </a>
     <a href="{{ url_for('milestone7.telehealth_page') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
       <strong style="font-size:14px;">Telehealth</strong>
-      <small style="color:var(--muted);font-size:11px;">Chat &amp; Video</small>
+      <small style="color:var(--muted);font-size:11px;">Beta request workflow</small>
     </a>
     <a href="{{ url_for('milestone7.videos_page') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
       <strong style="font-size:14px;">Videos</strong>
-      <small style="color:var(--muted);font-size:11px;">Video Guidance</small>
+      <small style="color:var(--muted);font-size:11px;">Provider-aware guidance</small>
     </a>
     <a href="{{ url_for('main.finder') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
       <strong style="font-size:14px;">Find Doctor</strong>
@@ -52,15 +52,15 @@
     </a>
     <a href="{{ url_for('main.records') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
       <strong style="font-size:14px;">Upload Report</strong>
-      <small style="color:var(--muted);font-size:11px;">Smart Extract</small>
+      <small style="color:var(--muted);font-size:11px;">Organize health records</small>
     </a>
     <a href="{{ url_for('ecosystem.pharmacy_page') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
       <strong style="font-size:14px;">Medicines</strong>
-      <small style="color:var(--muted);font-size:11px;">Order &amp; Reminders</small>
+      <small style="color:var(--muted);font-size:11px;">Reference &amp; reminders</small>
     </a>
     <a href="{{ url_for('ecosystem.home_health_page') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
       <strong style="font-size:14px;">Home Health</strong>
-      <small style="color:var(--muted);font-size:11px;">Nurse &amp; Physio</small>
+      <small style="color:var(--muted);font-size:11px;">Integration-required intake</small>
     </a>
     {% if current_user.role == 'patient' %}
     <a href="{{ url_for('family.family_page') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
@@ -77,7 +77,7 @@
     </a>
     <a href="{{ url_for('ecosystem.iot_hub_page') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
       <strong style="font-size:14px;">IoT Devices</strong>
-      <small style="color:var(--muted);font-size:11px;">Smart Sync</small>
+      <small style="color:var(--muted);font-size:11px;">Manual provenance prototype</small>
     </a>
     {% endif %}
     <a href="{{ url_for('ecosystem.marketplace_page') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
@@ -154,12 +154,12 @@
       </div>
       <div class="summary-row">
         <strong>Home Healthcare</strong>
-        <span>Book doctor home visits, trained nursing care, physiotherapy, or sample collection.</span>
-        <a href="{{ url_for('ecosystem.home_health_page') }}" class="text-link" style="margin-top:4px;">Book Home Care &rarr;</a>
+        <span>Submit structured requests for future provider-integrated home visits and care services.</span>
+        <a href="{{ url_for('ecosystem.home_health_page') }}" class="text-link" style="margin-top:4px;">Open Home Care Intake &rarr;</a>
       </div>
       <div class="summary-row">
         <strong>IoT Connected Devices</strong>
-        <span>Sync smartwatches, BP monitors, glucometers, and scales into your Health Memory.</span>
+        <span>Register demo device records and log measurements with device provenance; live SDK sync requires integration.</span>
         <a href="{{ url_for('ecosystem.iot_hub_page') }}" class="text-link" style="margin-top:4px;">Connect Devices &rarr;</a>
       </div>
     </div>

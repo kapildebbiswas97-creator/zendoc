@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}AI Center{% endblock %}
 {% block content %}
-<section class="section-head"><div><p class="eyebrow">AI support with clinical guardrails</p><h1>AI Center</h1></div></section>
+<section class="section-head"><div><p class="eyebrow">AI-supported guidance with deterministic safety checks</p><h1>ZENDOC AI Assistant</h1><p class="section-copy">Describe a need in everyday language. ZENDOC can organize next steps and connect you to platform services; it does not diagnose, prescribe, or dispatch emergency care.</p></div></section>
 {% if intelligence_result %}
 <section class="result {% if intelligence_result.emergency %}emergency{% endif %}">
   {% if intelligence_result.emergency %}
@@ -22,7 +22,33 @@
   {% if intelligence_result.possible_actions %}
     <div class="chips actions">
       {% for action in intelligence_result.possible_actions %}
-        <span>{{ action.label }}</span>
+        {% set action_url = action.url if action.url else none %}
+        {% if action.type in ['appointment', 'find_healthcare'] %}
+          {% set action_url = url_for('main.finder', category='doctor', specialty=action.specialty or intelligence_result.specialist or '') %}
+        {% elif action.type in ['medical_records', 'report_history', 'report_intelligence'] %}
+          {% set action_url = url_for('main.records') %}
+        {% elif action.type == 'health_timeline' %}
+          {% set action_url = url_for('health_memory.timeline_page') %}
+        {% elif action.type in ['health_monitor', 'health_analytics', 'health_profile'] %}
+          {% set action_url = url_for('main.health') %}
+        {% elif action.type == 'family_care' %}
+          {% set action_url = url_for('family.family_page') %}
+        {% elif action.type == 'parent_care' %}
+          {% set action_url = url_for('family.parent_care_page') %}
+        {% elif action.type == 'home_health' %}
+          {% set action_url = url_for('ecosystem.home_health_page') %}
+        {% elif action.type in ['ambulance', 'future_nearby_emergency'] %}
+          {% set action_url = url_for('ecosystem.ambulance_page') %}
+        {% elif action.type in ['pharmacy', 'medicine_intelligence'] %}
+          {% set action_url = url_for('ecosystem.pharmacy_page') %}
+        {% elif action.type == 'iot_hub' %}
+          {% set action_url = url_for('ecosystem.iot_hub_page') %}
+        {% elif action.type == 'telehealth' %}
+          {% set action_url = url_for('milestone7.telehealth_page') %}
+        {% elif action.type in ['video_intelligence', 'fitness_video_search'] %}
+          {% set action_url = url_for('milestone7.videos_page') %}
+        {% endif %}
+        {% if action_url %}<a href="{{ action_url }}">{{ action.label }}</a>{% else %}<span>{{ action.label }}</span>{% endif %}
       {% endfor %}
     </div>
   {% endif %}
@@ -62,7 +88,7 @@
   </div>
 </section>
 <section class="grid three">
-  <form class="panel" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="feature" value="doctor"><h2>AI Doctor</h2><label>Symptoms <textarea name="symptoms" rows="5" required></textarea></label><button type="submit">Predict</button></form>
+  <form class="panel" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="feature" value="doctor"><h2>Symptom Guidance</h2><p class="form-note">Rule-based educational guidance with an emergency-first safety check. Not a diagnosis.</p><label>Symptoms <textarea name="symptoms" rows="5" required></textarea></label><button type="submit">Review symptoms safely</button></form>
   <form class="panel" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="feature" value="assistant"><h2>Smart Assistant</h2><label>Question <textarea name="message" rows="5" required></textarea></label><button type="submit">Ask</button></form>
   <form class="panel" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="feature" value="mental_health"><h2>Mental Health AI</h2><label>Age Group <select name="age_group"><option>student</option><option>working professional</option><option>elderly</option><option>adult</option></select></label><label>Stress 0-10 <input name="stress_level" type="number" min="0" max="10" value="5"></label><label>Context <textarea name="context" rows="3"></textarea></label><button type="submit">Analyze</button></form>
 </section>
