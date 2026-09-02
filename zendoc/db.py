@@ -981,6 +981,11 @@ def init_db():
             capability_score REAL,
             efficiency_score REAL,
             structured_output_score REAL,
+            relevance_score REAL,
+            action_validity_score REAL,
+            hallucination_penalty REAL,
+            privacy_penalty REAL,
+            overall_score REAL,
             hallucination_score REAL,
             intent_score REAL,
             multilingual_score REAL,
@@ -1461,6 +1466,13 @@ def migrate_schema(db):
             "fallback_reason": "TEXT",
             "structured_output": "INTEGER NOT NULL DEFAULT 1",
         },
+        "model_evaluation_runs": {
+            "relevance_score": "REAL",
+            "action_validity_score": "REAL",
+            "hallucination_penalty": "REAL",
+            "privacy_penalty": "REAL",
+            "overall_score": "REAL",
+        },
     }.items():
         existing_columns = table_columns(db, table)
         for column, ddl in additions.items():
@@ -1492,6 +1504,10 @@ def migrate_schema(db):
     )
     db.execute(
         "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES ('m8_2_model_evaluation_lab_v1', ?)",
+        (now_iso(),),
+    )
+    db.execute(
+        "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES ('m9_slm_scorecard_v1', ?)",
         (now_iso(),),
     )
     db.execute(

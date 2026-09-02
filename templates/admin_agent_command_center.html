@@ -15,7 +15,7 @@
 </section>
 
 <section class="command-strip" aria-label="Agent architecture status">
-  <span>Owner</span><b>→</b><span>Core Agent</span><b>→</b><span>Safety Gate</span><b>→</b><span>Model Router</span><b>→</b><span>Specialized Agents</span><b>→</b><span>Permissioned Tools</span><b>→</b><span>Human Approval</span>
+  <span>Owner</span><b>→</b><span>Core Agent</span><b>→</b><span>Safety Gate</span><b>→</b><span>Knowledge Layer</span><b>→</b><span>ZENDOC-SLM v1</span><b>→</b><span>Validator</span><b>→</b><span>Permissioned Tools</span><b>→</b><span>Human Approval</span>
 </section>
 
 {% set persistence = data.infrastructure.database %}
@@ -41,10 +41,12 @@
   </form>
 
   <article class="panel model-card">
-    <div class="panel-head"><div><p class="eyebrow">AI Runtime · Milestone 8.1</p><h2>{{ data.model_router.routing_mode.replace('_', ' ').title() }}</h2></div>
+    <div class="panel-head"><div><p class="eyebrow">AI Runtime · M9 product layer</p><h2>{{ data.model_router.routing_mode.replace('_', ' ').title() }}</h2></div>
       <form method="post" action="{{ url_for('milestone8.owner_test_local_ai') }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit" class="secondary-action">Test Local AI</button></form>
     </div>
-    <div class="summary-row"><strong>Deterministic safety</strong><span class="status-badge active">Working</span></div>
+    <div class="summary-row"><strong>Deterministic safety gate</strong><span class="status-badge active">Working · first</span><p>Emergency and critical policy checks run before any model or tool path.</p></div>
+    <div class="summary-row"><strong>ZENDOC-SLM v1 product layer</strong><span class="status-badge active">Working</span><p>Language intelligence suggests structured advisory text; it does not own permissions or execution.</p></div>
+    <div class="summary-row"><strong>Approved knowledge layer</strong><span class="status-badge active">Working</span><p>Curated ZENDOC product facts and safety guidance only. External web retrieval is disabled.</p></div>
     <div class="summary-row"><strong>Local AI · {{ data.model_router.local_ai.provider }}</strong><span class="status-badge {{ 'active' if data.model_router.local_ai.status == 'ready' else 'integration' }}">{{ data.model_router.local_ai.status.replace('_', ' ') }}</span><p>{{ data.model_router.local_slm.message }}</p><small>Server: {{ data.model_router.local_ai.server_status or 'not checked' }} · Model: {{ data.model_router.local_ai.model or 'not configured' }} ({{ data.model_router.local_ai.model_status or 'unknown' }}){% if data.model_router.local_ai.latency_ms is not none %} · {{ data.model_router.local_ai.latency_ms }} ms{% endif %}</small>{% if data.model_router.local_ai.capabilities %}<small>Capabilities: {{ data.model_router.local_ai.capabilities|join(', ') }}</small>{% endif %}{% if data.model_router.local_ai.last_successful_inference %}<small>Last successful inference: {{ data.model_router.local_ai.last_successful_inference }}</small>{% endif %}</div>
     <div class="summary-row"><strong>Cloud LLM</strong><span class="status-badge {{ 'active' if data.model_router.cloud_llm.status == 'configured' else 'integration' }}">{{ data.model_router.cloud_llm.status.replace('_', ' ') }}</span><p>{{ data.model_router.cloud_llm.message }}</p></div>
     <div class="summary-row"><strong>Privacy boundary</strong><p>Health-sensitive and high-risk content never routes to cloud. Personal content requires explicit cloud approval and consent. Model output cannot invoke tools.</p></div>

@@ -85,10 +85,25 @@ def get_capability_registry() -> dict:
         },
         "local_slm": {
             "status": STATUS_BETA if local_ai_configured else STATUS_INTEGRATION_REQUIRED,
-            "label": "Local SLM (Small Language Model)",
+            "label": "ZENDOC-SLM v1 — Local Model Layer",
             "description": "Local inference is configured; owner runtime health verifies server and model readiness."
                            if local_ai_configured else
                            "Local SLM integration ready — model not configured.",
+        },
+        "slm_product_layer": {
+            "status": STATUS_WORKING,
+            "label": "ZENDOC-SLM v1 Product Layer",
+            "description": "Language intelligence boundary with deterministic safety, privacy-aware routing, approved context, and validated advisory output.",
+        },
+        "slm_knowledge_layer": {
+            "status": STATUS_WORKING,
+            "label": "Approved Knowledge Layer",
+            "description": "Repository-owned ZENDOC product facts and approved synthetic safety guidance with provenance; no web retrieval.",
+        },
+        "slm_output_validator": {
+            "status": STATUS_WORKING,
+            "label": "Structured Output & Safety Validator",
+            "description": "Rejects malformed or action-like model output before it reaches user-facing guidance or workflows.",
         },
         "cloud_llm": {
             "status": STATUS_BETA if cloud_llm else STATUS_INTEGRATION_REQUIRED,

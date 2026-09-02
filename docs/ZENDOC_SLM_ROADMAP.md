@@ -18,6 +18,18 @@ Open-weight base model
 
 An upstream base model remains subject to its own license and provenance. Evaluation does not make it proprietary. A future adapted checkpoint, dataset, configuration, and evaluation record would each need separate legal and technical ownership analysis.
 
+## Current Product Layer: M9
+
+M9 adds the truthful product identity around the existing runtime foundation:
+
+- ZENDOC-SLM v1 language layer with deterministic safety-first entry and post-output validation;
+- repository-owned approved product/safety knowledge with provenance metadata;
+- structured user-facing intent, urgency, guidance, recommended-action, route, and model metadata fields;
+- safety-dominant evaluation scorecard for structure, relevance, action validity, hallucination, privacy, and overall outcome;
+- explicit Core Agent / Safety Gate / Knowledge Layer / ZENDOC-SLM separation in the Owner Command Center.
+
+M9 does not train or fine-tune a proprietary model, download model artifacts, ingest patient records, enable web RAG, or grant model output execution authority.
+
 ## Current Foundation: M8.2
 
 M8.2 provides:
@@ -88,4 +100,3 @@ Before any healthcare production claim: complete legal/privacy/security review, 
 ## Decision Record for a Future Base Model
 
 A human selection record should identify the exact model tag/hash, license verification, runtime and quantization, dataset version/hash, run IDs, safety status and critical failures, component scores, human reviews, resource conditions, known limitations, and approval/rejection rationale. “Highest score” alone is insufficient.
-

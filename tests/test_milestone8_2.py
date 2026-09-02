@@ -80,12 +80,12 @@ def test_candidate_identifiers_and_unenabled_placeholders_fail_closed():
 
 def test_versioned_dataset_has_all_required_categories_and_case_fields():
     dataset = load_evaluation_dataset()
-    assert dataset["version"] == "1.0.0"
+    assert dataset["version"] == "1.1.0"
     assert dataset["synthetic_only"] is True
     assert dataset["governance"]["phi_pii_status"] == "NONE"
     assert dataset["governance"]["training_use_allowed"] is False
     assert ALLOWED_CATEGORIES == {case["category"] for case in dataset["cases"]}
-    assert len(dataset["cases"]) == 12
+    assert len(dataset["cases"]) == 20
     assert all(case["synthetic"] for case in dataset["cases"])
 
 

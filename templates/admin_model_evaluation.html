@@ -5,7 +5,7 @@
   <div>
     <p class="eyebrow">Owner-only · Milestone 8.2</p>
     <h1>ZENDOC Model Evaluation Lab</h1>
-    <p class="section-copy">A synthetic, safety-gated framework for comparing open-weight base-model candidates. This lab does not train models, download artifacts, or grant model output access to tools.</p>
+    <p class="section-copy">A synthetic, safety-gated framework for comparing laptop-safe local model candidates for the ZENDOC-SLM v1 product layer. This lab does not train models, download artifacts, or grant model output access to tools.</p>
   </div>
   <div class="form-actions"><a href="{{ url_for('milestone7.admin_agent_command_center') }}" class="secondary-action">Command Center</a></div>
 </section>
@@ -59,7 +59,7 @@
 
 <section class="panel spaced-panel">
   <div class="panel-head"><div><p class="eyebrow">Safety before quality</p><h2>Comparison</h2></div><span class="status-badge integration">{{ data.comparison.recommendation_status }}</span></div>
-  {% if data.comparison.candidates %}<div class="table-shell"><table><thead><tr><th>Candidate</th><th>Mode</th><th>Safety</th><th>Capability</th><th>Efficiency</th><th>Critical</th><th>Resource</th><th>Eligibility</th></tr></thead><tbody>{% for row in data.comparison.candidates %}<tr><td>{{ row.candidate_id }}</td><td>{{ row.mode }}</td><td>{{ row.safety or 'not evaluated' }}</td><td>{{ row.capability_score if row.capability_score is not none else '—' }}</td><td>{{ row.efficiency_score if row.efficiency_score is not none else '—' }}</td><td>{{ row.critical_failures }}</td><td>{{ row.resource_class or '—' }}</td><td>{{ 'Human review eligible' if row.overall_eligibility else 'Not eligible' }}</td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="empty-state">No evaluation runs yet. Mock scores never become a model recommendation.</p>{% endif %}
+  {% if data.comparison.candidates %}<div class="table-shell"><table><thead><tr><th>Candidate</th><th>Mode</th><th>Safety</th><th>Overall</th><th>Structure</th><th>Relevance</th><th>Action validity</th><th>Hallucination penalty</th><th>Privacy penalty</th><th>Critical</th><th>Resource</th><th>Eligibility</th></tr></thead><tbody>{% for row in data.comparison.candidates %}<tr><td>{{ row.candidate_id }}</td><td>{{ row.mode }}</td><td>{{ row.safety or 'not evaluated' }}</td><td>{{ row.overall_score if row.overall_score is not none else '—' }}</td><td>{{ row.structure_score if row.structure_score is not none else '—' }}</td><td>{{ row.relevance_score if row.relevance_score is not none else '—' }}</td><td>{{ row.action_validity_score if row.action_validity_score is not none else '—' }}</td><td>{{ row.hallucination_penalty if row.hallucination_penalty is not none else '—' }}</td><td>{{ row.privacy_penalty if row.privacy_penalty is not none else '—' }}</td><td>{{ row.critical_failures }}</td><td>{{ row.resource_class or '—' }}</td><td>{{ 'Human review eligible' if row.overall_eligibility else 'Not eligible' }}</td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="empty-state">No evaluation runs yet. Mock scores never become a model recommendation.</p>{% endif %}
 </section>
 
 <section class="panel spaced-panel">

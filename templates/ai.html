@@ -10,6 +10,12 @@
   <span class="status-badge working">Safety checks active</span>
 </section>
 
+<section class="ai-architecture" aria-label="ZENDOC AI architecture">
+  <div class="ai-identity"><span class="brand-spark" aria-hidden="true">✦</span><div><strong>ZENDOC-SLM v1</strong><small>Healthcare-focused local model layer</small></div></div>
+  <div class="ai-pipeline" aria-label="User to care workflow"><span>User</span><b>→</b><span>Safety Gate</span><b>→</b><span>Approved Knowledge</span><b>→</b><span>Language Layer</span><b>→</b><span>Care actions</span></div>
+  <div class="ai-identity-note">Core Agent handles permissions and workflows. The language layer can suggest; it cannot execute tools or change records.</div>
+</section>
+
 {% if intelligence_result %}
 <section class="result ai-response {% if intelligence_result.emergency %}emergency{% endif %}" aria-live="polite">
   <div class="panel-head">
@@ -46,6 +52,12 @@
         </div>
       {% else %}<p>Continue the conversation with any missing detail.</p>{% endif %}
     </div>
+  </div>
+  <div class="ai-response-meta" aria-label="AI response provenance">
+    <span><strong>Layer</strong> {{ intelligence_result.model_metadata.product_layer or 'deterministic ZENDOC guidance' }}</span>
+    <span><strong>Route</strong> {{ intelligence_result.provider_route.provider or intelligence_result.provider }}</span>
+    {% if intelligence_result.provider_route.knowledge_refs %}<span><strong>Approved context</strong> {{ intelligence_result.provider_route.knowledge_refs|length }} sourced item(s)</span>{% endif %}
+    <span><strong>Safety</strong> {{ intelligence_result.safety_notice or 'Educational guidance only.' }}</span>
   </div>
   {% if intelligence_result.follow_up_questions %}
     <div style="margin-top:16px;"><strong>Helpful follow-up</strong><div class="chips">{% for question in intelligence_result.follow_up_questions %}<button type="button" data-prompt="{{ question }}">{{ question }}</button>{% endfor %}</div></div>

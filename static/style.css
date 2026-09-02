@@ -496,3 +496,9 @@ td .inline-form{margin:0}
   html{scroll-behavior:auto}
   *,*:before,*:after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
 }
+
+/* M9 AI product layer identity and provenance */
+.ai-architecture{display:grid;grid-template-columns:auto minmax(0,1fr) minmax(220px,.75fr);align-items:center;gap:18px;margin:-2px 0 20px;padding:14px 16px;border:1px solid #c7e4df;border-radius:var(--radius-lg);background:linear-gradient(115deg,#f2fbf8,#fff);box-shadow:var(--shadow-sm)}
+.ai-identity{display:flex;align-items:center;gap:10px;min-width:210px}.ai-identity .brand-spark{display:grid;place-items:center;width:34px;height:34px;border-radius:11px;background:var(--primary);color:#fff}.ai-identity strong,.ai-identity small{display:block}.ai-identity strong{font-size:.9rem}.ai-identity small{margin-top:2px;color:var(--muted);font-size:.72rem}.ai-pipeline{display:flex;align-items:center;gap:8px;min-width:0;overflow-x:auto;white-space:nowrap;color:var(--primary);font-size:.72rem;font-weight:850;text-transform:uppercase;letter-spacing:.045em}.ai-pipeline span{padding:7px 9px;border:1px solid #c7e4df;border-radius:999px;background:#fff}.ai-pipeline b{color:#93bdb6}.ai-identity-note{color:var(--muted);font-size:.76rem;line-height:1.45}.ai-response-meta{display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:16px;padding-top:13px;border-top:1px dashed var(--line);color:var(--muted);font-size:.75rem;line-height:1.45}.ai-response-meta strong{color:var(--ink-soft)}
+
+@media(max-width:960px){.ai-architecture{grid-template-columns:1fr}.ai-identity-note{max-width:680px}}

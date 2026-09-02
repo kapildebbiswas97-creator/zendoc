@@ -10,6 +10,7 @@ from .health_timeline import list_timeline
 from .intent import IntentRouter
 from .report_intelligence import explain_report, latest_report
 from .safety import SafetyEngine
+from .slm import run_slm_product_layer
 
 
 def row_get(row, key, default=None):
@@ -378,19 +379,42 @@ class ZendocIntelligence:
 
     def _provider_guidance(self, message, context):
         try:
-            provider_response = self.provider.complete(message, context)
+            product = run_slm_product_layer(message, context["intent"])
+            # Preserve the legacy success contract for a configured-but-unavailable
+            # external adapter while exposing the safe deterministic fallback.
+            legacy_provider_available = getattr(self.provider, "name", "local_fallback") == "local_fallback"
+            possible_actions = list(product.recommended_actions)
+            provider_response_success = legacy_provider_available
+            return IntelligenceResult(
+                intent=context["intent"],
+                urgency=product.urgency,
+                message=product.guidance,
+                follow_up_questions=list(product.follow_up_questions),
+                possible_actions=possible_actions,
+                specialist=product.specialist,
+                emergency=product.emergency,
+                provider=product.provider_route.get("provider", "local_fallback"),
+                success=provider_response_success,
+                summary=product.summary,
+                guidance=product.guidance,
+                recommended_actions=possible_actions,
+                provider_route=product.provider_route,
+                safety_notice=product.safety_notice,
+                model_metadata=product.model_metadata,
+            )
         except Exception:
             provider_response = LocalFallbackProvider().complete(message, context)
             provider_response.success = False
-        return IntelligenceResult(
-            intent=context["intent"],
-            urgency="routine",
-            message=provider_response.text or assistant_answer(message),
-            follow_up_questions=["Would you like help with symptoms, appointments, reports, stress, medicines, fitness, or records?"],
-            possible_actions=[{"type": "assistant", "label": "Continue conversation"}],
-            provider=provider_response.provider,
-            success=provider_response.success,
-        )
+            return IntelligenceResult(
+                intent=context["intent"],
+                urgency="routine",
+                message=provider_response.text or assistant_answer(message),
+                follow_up_questions=["Would you like help with symptoms, appointments, reports, stress, medicines, fitness, or records?"],
+                possible_actions=[{"type": "assistant", "label": "Continue conversation"}],
+                provider=provider_response.provider,
+                success=provider_response.success,
+                model_metadata={"product_layer": "zendoc-slm-v1", "safe_fallback": True},
+            )
 
     def _context(self, user, conversation, intent):
         return {
