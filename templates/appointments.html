@@ -1,42 +1,62 @@
 {% extends "base.html" %}
-{% block title %}Appointments{% endblock %}
+{% block title %}Appointments — ZENDOC{% endblock %}
 {% block content %}
-<section class="section-head"><div><p class="eyebrow">Care coordination</p><h1>Appointments</h1></div></section>
-<section class="grid two">
-  <form class="panel" method="post">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <h2>Request Appointment</h2>
-    <label>Verified ZENDOC Provider
-      <select name="provider_profile_id">
-        <option value="">Use legacy/manual provider fields</option>
-        {% for provider in providers or [] %}
-          <option value="{{ provider.id }}">{{ provider.organization or provider.name }} · {{ provider.specialty or provider.provider_type }}</option>
-        {% endfor %}
-      </select>
-    </label>
-    <label>Provider Email <input name="provider_email" type="email"></label>
-    <label>Provider Name <input name="provider_name" required></label>
-    <label>Date And Time <input name="scheduled_for" type="datetime-local" required></label>
-    <label>Reason <textarea name="reason" rows="4" required></textarea></label>
-    <button type="submit">Save Appointment</button>
-  </form>
-  <div class="panel">
-    <h2>Appointments</h2>
+<section class="section-head">
+  <div><p class="eyebrow">Care coordination</p><h1>Appointments</h1><p class="section-copy">{% if current_user.role == 'patient' %}Review requests, confirmations, and upcoming care in one place.{% else %}Review appointment requests and keep each patient’s status current.{% endif %}</p></div>
+  {% if current_user.role == 'patient' %}<a href="{{ url_for('main.finder') }}" class="primary-action">Find care &amp; book</a>{% endif %}
+</section>
+
+{% if confirmation %}
+<section class="booking-confirmation" role="status" aria-labelledby="confirmation-title">
+  <span class="confirmation-mark" aria-hidden="true">✓</span>
+  <div><h2 id="confirmation-title">Appointment requested</h2><p>Your request has been saved and is waiting for provider confirmation.</p><div class="confirmation-details"><strong>{{ confirmation.provider_name }}</strong><span>{{ confirmation.scheduled_for.replace('T',' · ') }}</span><span class="status-badge beta">{{ confirmation.status }}</span></div></div>
+  <div class="form-actions"><a href="{{ url_for('milestone7.messages_page') }}" class="secondary-action">Open messages</a></div>
+</section>
+{% endif %}
+
+<section class="{% if current_user.role == 'patient' %}grid two{% endif %}">
+  <article class="panel">
+    <div class="panel-head"><div><p class="eyebrow">Your schedule</p><h2>{{ 'My appointments' if current_user.role == 'patient' else 'Patient appointments' }}</h2></div><span class="count-pill">{{ appointments|length }}</span></div>
     {% if appointments %}
-    <table><thead><tr><th>Patient</th><th>Provider</th><th>When</th><th>Status</th></tr></thead><tbody>
-      {% for item in appointments %}
-      <tr><td>{{ item.patient_name }}</td><td>{{ item.provider_name }}</td><td>{{ item.scheduled_for }}</td><td>
-        {% if current_user.role in ['doctor','hospital','admin'] %}
-        <form class="inline-form" method="post" action="{{ url_for('main.appointment_status', appointment_id=item.id) }}">
+      <div class="appointment-list">
+        {% for item in appointments %}
+          <article class="appointment-card">
+            <div><h3>{{ item.provider_name if current_user.role == 'patient' else item.patient_name }}</h3><p>{{ item.scheduled_for.replace('T',' · ') }}{% if item.reason %} · {{ item.reason }}{% endif %}</p></div>
+            {% if current_user.role in ['doctor','hospital','admin'] %}
+              <form class="inline-form" method="post" action="{{ url_for('main.appointment_status', appointment_id=item.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <label class="sr-only" for="appointment-status-{{ item.id }}">Appointment status</label>
+                <select id="appointment-status-{{ item.id }}" name="status">{% for status in ['requested','confirmed','completed','cancelled'] %}<option value="{{ status }}" {% if status == item.status %}selected{% endif %}>{{ status.title() }}</option>{% endfor %}</select>
+                <button type="submit" class="secondary-action" data-submitting-label="Updating…">Update</button>
+              </form>
+            {% else %}<span class="status-badge {{ 'active' if item.status in ['confirmed','completed'] else 'inactive' if item.status == 'cancelled' else 'beta' }}">{{ item.status }}</span>{% endif %}
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state"><h3>No appointments yet</h3><p>{% if current_user.role == 'patient' %}Find a reviewed provider, choose an available time, and send your first request.{% else %}New patient requests will appear here when they are submitted.{% endif %}</p>{% if current_user.role == 'patient' %}<a href="{{ url_for('main.finder') }}" class="primary-action">Find a provider</a>{% endif %}</div>
+    {% endif %}
+  </article>
+
+  {% if current_user.role == 'patient' %}
+  <aside class="panel subtle-panel">
+    <p class="eyebrow">Another provider</p><h2>Request an appointment manually</h2>
+    <p class="section-copy">Use Find Care for the clearest booking experience. If your provider is not in the reviewed directory, you can still save a manual request here.</p>
+    <details class="progressive-fields" style="margin-top:18px;">
+      <summary>Enter provider and time</summary>
+      <div>
+        <form method="post">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <select name="status">{% for status in ['requested','confirmed','completed','cancelled'] %}<option value="{{ status }}" {% if status == item.status %}selected{% endif %}>{{ status }}</option>{% endfor %}</select>
-          <button type="submit">Update</button>
+          <label>Provider name <input name="provider_name" autocomplete="organization" required></label>
+          <label>Provider email <input name="provider_email" type="email" inputmode="email" placeholder="Optional"></label>
+          <label>Date and time <input name="scheduled_for" type="datetime-local" required></label>
+          <label>Reason for visit <textarea name="reason" rows="3" maxlength="500" required></textarea></label>
+          <button type="submit" data-submitting-label="Saving request…">Save appointment request</button>
+          <p class="form-note">A manually saved request may not be connected to a provider account. Confirm directly with the provider when needed.</p>
         </form>
-        {% else %}{{ item.status }}{% endif %}
-      </td></tr>
-      {% endfor %}
-    </tbody></table>
-    {% else %}<p>No appointments saved.</p>{% endif %}
-  </div>
+      </div>
+    </details>
+  </aside>
+  {% endif %}
 </section>
 {% endblock %}

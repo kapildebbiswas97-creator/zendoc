@@ -4,109 +4,108 @@
 {% block content %}
 <section class="section-head">
   <div>
-    <p class="eyebrow">Caregiving &amp; Dependents</p>
+    <p class="eyebrow">Caregiving &amp; dependents</p>
     <h1>Family Care</h1>
-    <p class="section-copy">Manage healthcare for parents, children, spouse, and dependents with explicit consent and proxy permissions.</p>
+    <p class="section-copy">Manage healthcare for parents, children, a spouse, and dependents with explicit consent and proxy permissions.</p>
   </div>
   <div class="form-actions">
-    <a href="{{ url_for('family.parent_care_page') }}" class="primary-action">Remote Parent Care Dashboard</a>
+    <a href="{{ url_for('family.parent_care_page') }}" class="primary-action">Remote Parent Care</a>
     <a href="{{ url_for('main.dashboard') }}" class="secondary-action">Dashboard</a>
   </div>
 </section>
 
-<div class="grid two">
-  <!-- Left column: Add Family Member & List -->
+<aside class="trust-note">
+  <strong>Consent-first approach</strong><br>
+  Add a family member only when you have their consent or appropriate authority. Information shared with care providers depends on the patient's own privacy settings.
+</aside>
+
+<div class="grid two spaced-panel">
+  <!-- Left: Members list and add form -->
   <article class="panel">
-    <h2>Family Members</h2>
+    <div class="panel-head">
+      <div><p class="eyebrow">Your care network</p><h2>Family members</h2></div>
+      <span class="count-pill">{{ members|length }}</span>
+    </div>
     {% if members %}
-      <div class="summary-block">
+      <div class="appointment-list">
         {% for m in members %}
-          <div class="summary-row" style="display:flex;justify-content:space-between;align-items:center;">
+          <div class="appointment-card">
             <div>
-              <strong>{{ m.member_name }}</strong>
-              <p style="margin:2px 0 0;color:var(--muted);font-size:13px;">
-                {{ m.relationship.title() }} &bull; Age: {{ m.age or 'N/A' }} &bull; {{ m.city or 'Local' }}
-                {% if m.is_remote_parent %}&bull; <span class="status-badge active">Remote Parent</span>{% endif %}
-              </p>
+              <h3>{{ m.member_name }}</h3>
+              <p>{{ m.relationship.title() }}{% if m.age %} · Age {{ m.age }}{% endif %}{% if m.city %} · {{ m.city }}{% endif %}{% if m.is_remote_parent %} · <span class="status-badge active">Remote parent</span>{% endif %}</p>
             </div>
-            <a href="{{ url_for('family.family_page', member_id=m.id) }}" class="secondary-action" style="padding:4px 10px;min-height:auto;font-size:12px;">Tasks &amp; Care</a>
+            <a href="{{ url_for('family.family_page', member_id=m.id) }}" class="secondary-action">Tasks &amp; care</a>
           </div>
         {% endfor %}
       </div>
     {% else %}
       <div class="empty-state">
-        <p>No family members added yet.</p>
+        <h3>No family members added</h3>
+        <p>Add a dependent only when you have the appropriate consent or authority. You can then organize care tasks for them in one place.</p>
       </div>
     {% endif %}
 
-    <h3 style="margin-top:22px;">Add Family Member</h3>
-    <form method="post" action="{{ url_for('family.family_page') }}">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <input type="hidden" name="action" value="add_member">
-      <label>Member Full Name
-        <input type="text" name="member_name" placeholder="e.g. Ramesh Chandra Biswas" required>
-      </label>
-
-      <div class="form-grid">
-        <label>Relationship
-          <select name="relationship" required>
-            <option value="father">Father</option>
-            <option value="mother">Mother</option>
-            <option value="spouse">Spouse</option>
-            <option value="son">Son</option>
-            <option value="daughter">Daughter</option>
-            <option value="grandfather">Grandfather</option>
-            <option value="grandmother">Grandmother</option>
-            <option value="guardian">Guardian</option>
-            <option value="other">Other</option>
-          </select>
-        </label>
-        <label>Age
-          <input type="number" name="age" min="0" max="150" placeholder="e.g. 68">
-        </label>
+    <details class="progressive-fields spaced-panel">
+      <summary>Add a family member</summary>
+      <div>
+        <form method="post" action="{{ url_for('family.family_page') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="action" value="add_member">
+          <label>Full name <input type="text" name="member_name" placeholder="e.g. Ramesh Chandra Biswas" required></label>
+          <div class="form-grid">
+            <label>Relationship
+              <select name="relationship" required>
+                <option value="father">Father</option>
+                <option value="mother">Mother</option>
+                <option value="spouse">Spouse</option>
+                <option value="son">Son</option>
+                <option value="daughter">Daughter</option>
+                <option value="grandfather">Grandfather</option>
+                <option value="grandmother">Grandmother</option>
+                <option value="guardian">Guardian</option>
+                <option value="other">Other</option>
+              </select>
+            </label>
+            <label>Age <input type="number" name="age" min="0" max="150" placeholder="e.g. 68"></label>
+          </div>
+          <div class="form-grid">
+            <label>Gender
+              <select name="gender">
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+                <option value="other">Other</option>
+                <option value="prefer_not_to_say">Prefer not to say</option>
+              </select>
+            </label>
+            <label>City <input type="text" name="city" placeholder="e.g. Kolkata"></label>
+          </div>
+          <label class="check-option"><input type="checkbox" name="is_remote_parent" value="1" checked> Mark as remote parent or senior dependent</label>
+          <button type="submit" data-submitting-label="Adding…">Add family member</button>
+        </form>
       </div>
-
-      <div class="form-grid" style="margin-top:12px;">
-        <label>Gender
-          <select name="gender">
-            <option value="male">Male</option>
-            <option value="female">Female</option>
-            <option value="other">Other</option>
-            <option value="prefer_not_to_say">Prefer not to say</option>
-          </select>
-        </label>
-        <label>City
-          <input type="text" name="city" placeholder="e.g. Kolkata, India">
-        </label>
-      </div>
-
-      <label class="check-option" style="margin-top:12px;">
-        <input type="checkbox" name="is_remote_parent" value="1" checked> Flag as Remote Parent / Senior Dependent
-      </label>
-
-      <button type="submit" class="primary-action" style="margin-top:14px;">Add Family Member</button>
-    </form>
+    </details>
   </article>
 
-  <!-- Right column: Family Care Tasks -->
+  <!-- Right: Care tasks -->
   <article class="panel">
-    <h2>Care Tasks &amp; Reminders</h2>
+    <div class="panel-head">
+      <div><p class="eyebrow">Upcoming care</p><h2>Care tasks &amp; reminders</h2></div>
+      <span class="count-pill">{{ tasks|length }}</span>
+    </div>
     {% if tasks %}
-      <div class="summary-block">
+      <div class="appointment-list">
         {% for t in tasks %}
-          <div class="summary-row" style="display:flex;justify-content:space-between;align-items:center;">
+          <div class="appointment-card">
             <div>
-              <strong>{{ t.title }}</strong>
-              <p style="margin:2px 0 0;color:var(--muted);font-size:13px;">
-                For: {{ t.member_name or 'General' }} &bull; Due: {{ t.due_date or 'Anytime' }} &bull; Status: {{ t.status.title() }}
-              </p>
+              <h3>{{ t.title }}</h3>
+              <p>For: {{ t.member_name or 'General' }} · Due: {{ t.due_date or 'Anytime' }}</p>
             </div>
             {% if t.status == 'pending' %}
-              <form method="post" action="{{ url_for('family.family_page') }}" style="margin:0;">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <form method="post" action="{{ url_for('family.family_page') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <input type="hidden" name="action" value="complete_task">
                 <input type="hidden" name="task_id" value="{{ t.id }}">
-                <button type="submit" class="secondary-action" style="padding:4px 8px;min-height:auto;font-size:12px;">Mark Done ✓</button>
+                <button type="submit" class="secondary-action" data-submitting-label="Saving…">Mark done</button>
               </form>
             {% else %}
               <span class="status-badge active">Completed</span>
@@ -116,43 +115,41 @@
       </div>
     {% else %}
       <div class="empty-state">
-        <p>No care tasks set yet.</p>
+        <h3>No care tasks yet</h3>
+        <p>Create a reminder for a family member to keep the next action visible in one place.</p>
       </div>
     {% endif %}
 
-    <h3 style="margin-top:22px;">Create Care Task</h3>
-    <form method="post" action="{{ url_for('family.family_page') }}">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <input type="hidden" name="action" value="add_task">
-      <label>Family Member
-        <select name="family_member_id">
-          <option value="">Select Family Member...</option>
-          {% for m in members %}
-            <option value="{{ m.id }}">{{ m.member_name }} ({{ m.relationship.title() }})</option>
-          {% endfor %}
-        </select>
-      </label>
-
-      <label style="margin-top:12px;">Task Title
-        <input type="text" name="title" placeholder="e.g. Schedule monthly BP checkup" required>
-      </label>
-
-      <div class="form-grid" style="margin-top:12px;">
-        <label>Task Type
-          <select name="task_type">
-            <option value="checkup">Doctor Checkup</option>
-            <option value="medicine">Medicine Refill</option>
-            <option value="home_care">Home Care Visit</option>
-            <option value="general" selected>General Task</option>
-          </select>
-        </label>
-        <label>Due Date
-          <input type="date" name="due_date">
-        </label>
+    <details class="progressive-fields spaced-panel">
+      <summary>Create a care task</summary>
+      <div>
+        <form method="post" action="{{ url_for('family.family_page') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="action" value="add_task">
+          <label>Family member
+            <select name="family_member_id">
+              <option value="">Choose a family member…</option>
+              {% for m in members %}
+                <option value="{{ m.id }}">{{ m.member_name }} ({{ m.relationship.title() }})</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Task title <input type="text" name="title" placeholder="e.g. Schedule monthly blood pressure checkup" required></label>
+          <div class="form-grid">
+            <label>Task type
+              <select name="task_type">
+                <option value="checkup">Doctor checkup</option>
+                <option value="medicine">Medicine refill</option>
+                <option value="home_care">Home care visit</option>
+                <option value="general" selected>General task</option>
+              </select>
+            </label>
+            <label>Due date <input type="date" name="due_date"></label>
+          </div>
+          <button type="submit" data-submitting-label="Saving…">Add care task</button>
+        </form>
       </div>
-
-      <button type="submit" class="primary-action" style="margin-top:14px;">Add Care Task</button>
-    </form>
+    </details>
   </article>
 </div>
 {% endblock %}

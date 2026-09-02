@@ -7,15 +7,21 @@ if (button) {
       statusNode.textContent = "Geolocation is not supported by this browser. Please enter a manual location.";
       return;
     }
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
     statusNode.textContent = "Requesting location permission...";
     navigator.geolocation.getCurrentPosition(
       (position) => {
         document.querySelector("input[name='latitude']").value = position.coords.latitude.toFixed(6);
         document.querySelector("input[name='longitude']").value = position.coords.longitude.toFixed(6);
         statusNode.textContent = "Location added. Submit the search when ready.";
+        button.disabled = false;
+        button.removeAttribute("aria-busy");
       },
       () => {
         statusNode.textContent = "Location permission was denied or unavailable. You can enter a location manually.";
+        button.disabled = false;
+        button.removeAttribute("aria-busy");
       },
       { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 }
     );

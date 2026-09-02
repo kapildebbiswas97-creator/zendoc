@@ -1,8 +1,45 @@
 {% extends "base.html" %}
-{% block title %}Health Summary{% endblock %}
+{% block title %}Health Snapshot — ZENDOC{% endblock %}
 {% block content %}
-<section class="section-head"><div><p class="eyebrow">Private overview</p><h1>{{ summary.patient.name }} Health Summary</h1><p class="section-copy">{{ summary.privacy }}</p></div>{% if not provider_view %}<a class="secondary-action" href="{{ url_for('health_memory.health_export_page') }}">Export JSON</a>{% endif %}</section>
-{% if summary.profile is defined %}<section class="grid three"><article class="panel summary-block"><h2>Known Allergies</h2>{% if summary.profile.allergies %}<ul>{% for item in summary.profile.allergies %}<li>{{ item }}</li>{% endfor %}</ul>{% else %}<p>None provided.</p>{% endif %}</article><article class="panel summary-block"><h2>Current Medications</h2>{% if summary.profile.current_medications %}<ul>{% for item in summary.profile.current_medications %}<li>{{ item }}</li>{% endfor %}</ul>{% else %}<p>None provided.</p>{% endif %}</article><article class="panel summary-block"><h2>Known Conditions</h2>{% if summary.profile.chronic_conditions %}<ul>{% for item in summary.profile.chronic_conditions %}<li>{{ item }}</li>{% endfor %}</ul>{% else %}<p>None provided.</p>{% endif %}{% if summary.current_bmi %}<p><strong>Current calculated BMI:</strong> {{ summary.current_bmi }}</p>{% endif %}</article></section>{% endif %}
-<section class="grid three spaced-panel">{% if summary.recent_appointments is defined %}<article class="panel"><h2>Recent Appointments</h2>{% if summary.recent_appointments %}{% for item in summary.recent_appointments %}<div class="summary-row"><strong>{{ item.provider_name }}</strong><span>{{ item.scheduled_for[:10] }} - {{ item.status }}</span></div>{% endfor %}{% else %}<p>No appointments yet.</p>{% endif %}</article>{% endif %}{% if summary.recent_reports is defined %}<article class="panel"><h2>Recent Reports</h2>{% if summary.recent_reports %}{% for item in summary.recent_reports %}<div class="summary-row"><strong>{{ item.title }}</strong><span>{{ item.report_type.replace('_',' ').title() }} - {{ item.document_date[:10] }}</span></div>{% endfor %}{% else %}<p>No reports yet.</p>{% endif %}</article>{% endif %}{% if summary.recent_measurements is defined %}<article class="panel"><h2>Recent Measurements</h2>{% if summary.recent_measurements %}{% for item in summary.recent_measurements[:5] %}<div class="summary-row"><strong>{{ item.metric_type.replace('_',' ').title() }}</strong><span>{{ item.metric_value }} {{ item.unit or '' }} - {{ item.source }}</span></div>{% endfor %}{% else %}<p>No measurements yet.</p>{% endif %}</article>{% endif %}</section>
-{% if provider_view %}<p class="privacy-banner">Visible scopes: {{ summary.access_scopes|join(', ') }}. Information outside the patient's active consent is not included.</p>{% else %}<div class="form-actions"><a class="primary-action" href="{{ url_for('health_memory.health_profile_page') }}">Update Health Profile</a><a class="secondary-action" href="{{ url_for('health_memory.health_access_page') }}">Manage Provider Access</a></div>{% endif %}
+<section class="section-head">
+  <div><p class="eyebrow">{{ 'Consent-shared view' if provider_view else 'Your private Health Memory' }}</p><h1>{{ summary.patient.name }}’s Health Snapshot</h1><p class="section-copy">{{ summary.privacy }}</p></div>
+  {% if not provider_view %}<a class="secondary-action" href="{{ url_for('health_memory.health_export_page') }}">Download my data</a>{% endif %}
+</section>
+{% if not provider_view %}{% include "components/_health_memory_nav.html" %}{% endif %}
+
+{% if provider_view %}<aside class="trust-note"><strong>Consent-controlled access</strong><br>You can see: {{ summary.access_scopes|join(', ') }}. Information outside the patient’s active permission is not included.</aside>{% endif %}
+
+{% if summary.profile is defined %}
+<section class="panel health-snapshot" aria-labelledby="snapshot-title">
+  <div class="panel-head"><div><p class="eyebrow">At a glance</p><h2 id="snapshot-title">Important health information</h2></div>{% if not provider_view %}<a href="{{ url_for('health_memory.health_profile_page') }}" class="secondary-action">Update profile</a>{% endif %}</div>
+  <div class="snapshot-list">
+    <div class="snapshot-item"><span>Known allergies</span><strong>{{ summary.profile.allergies|join(', ') if summary.profile.allergies else 'Not added yet' }}</strong></div>
+    <div class="snapshot-item"><span>Current medications</span><strong>{{ summary.profile.current_medications|join(', ') if summary.profile.current_medications else 'Not added yet' }}</strong></div>
+    <div class="snapshot-item"><span>Known conditions</span><strong>{{ summary.profile.chronic_conditions|join(', ') if summary.profile.chronic_conditions else 'Not added yet' }}</strong>{% if summary.current_bmi %}<span>Calculated BMI: {{ summary.current_bmi }}</span>{% endif %}</div>
+  </div>
+</section>
+{% endif %}
+
+<section class="grid three spaced-panel" aria-label="Recent Health Memory activity">
+  {% if summary.recent_appointments is defined %}
+  <article class="panel">
+    <div class="panel-head"><h2>Appointments</h2>{% if not provider_view %}<a class="text-link" href="{{ url_for('main.appointments') }}">View all</a>{% endif %}</div>
+    {% if summary.recent_appointments %}{% for item in summary.recent_appointments %}<div class="summary-row"><strong>{{ item.provider_name }}</strong><span>{{ item.scheduled_for[:10] }} · {{ item.status.title() }}</span></div>{% endfor %}{% else %}<div class="empty-state"><h3>No appointments yet</h3><p>Requested and completed appointments will build your care history here.</p>{% if not provider_view %}<a href="{{ url_for('main.finder') }}" class="secondary-action">Find care</a>{% endif %}</div>{% endif %}
+  </article>
+  {% endif %}
+  {% if summary.recent_reports is defined %}
+  <article class="panel">
+    <div class="panel-head"><h2>Reports</h2>{% if not provider_view %}<a class="text-link" href="{{ url_for('main.records') }}">View all</a>{% endif %}</div>
+    {% if summary.recent_reports %}{% for item in summary.recent_reports %}<div class="summary-row"><strong>{{ item.title }}</strong><span>{{ item.report_type.replace('_',' ').title() }}{% if item.document_date %} · {{ item.document_date[:10] }}{% endif %}</span></div>{% endfor %}{% else %}<div class="empty-state"><h3>No reports added</h3><p>Upload a report to keep important health documents organized.</p>{% if not provider_view %}<a href="{{ url_for('main.records') }}" class="secondary-action">Upload report</a>{% endif %}</div>{% endif %}
+  </article>
+  {% endif %}
+  {% if summary.recent_measurements is defined %}
+  <article class="panel">
+    <div class="panel-head"><h2>Vitals</h2>{% if not provider_view %}<a class="text-link" href="{{ url_for('main.health') }}">View all</a>{% endif %}</div>
+    {% if summary.recent_measurements %}{% for item in summary.recent_measurements[:5] %}<div class="summary-row"><strong>{{ item.metric_type.replace('_',' ').title() }}</strong><span>{{ item.metric_value }} {{ item.unit or '' }} · {{ item.source.replace('_',' ') }}</span></div>{% endfor %}{% else %}<div class="empty-state"><h3>No measurements yet</h3><p>Add a vital to begin a private trend history.</p>{% if not provider_view %}<a href="{{ url_for('main.health') }}" class="secondary-action">Add measurement</a>{% endif %}</div>{% endif %}
+  </article>
+  {% endif %}
+</section>
+
+{% if not provider_view %}<div class="form-actions spaced-panel"><a class="primary-action" href="{{ url_for('health_memory.timeline_page') }}">View health timeline</a><a class="secondary-action" href="{{ url_for('health_memory.health_access_page') }}">Manage privacy &amp; access</a></div>{% endif %}
 {% endblock %}

@@ -1,31 +1,47 @@
 {% extends "base.html" %}
-{% block title %}Medical Records{% endblock %}
+{% block title %}Records &amp; Reports — ZENDOC{% endblock %}
 {% block content %}
-<section class="section-head"><div><p class="eyebrow">Private documents</p><h1>Medical Records</h1></div><a class="secondary-action" href="{{ url_for('health_memory.timeline_page') if current_user.role == 'patient' else url_for('main.dashboard') }}">Health Timeline</a></section>
+<section class="section-head"><div><p class="eyebrow">Private health documents</p><h1>Records &amp; reports</h1><p class="section-copy">Keep important documents organized and available in your Health Memory. Automatic extraction is only shown when it actually succeeds.</p></div></section>
+{% if current_user.role == 'patient' %}{% include "components/_health_memory_nav.html" %}{% endif %}
+
 <section class="grid two">
   <form class="panel" method="post" enctype="multipart/form-data">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <h2>Upload Report</h2>
-    <label>Title <input name="title" required></label>
-    <label>Document category <input name="category" value="Medical report" required></label>
-    <label>Report type
-      <select name="report_type">{% for report_type in report_types %}<option value="{{ report_type }}">{{ report_type.replace('_',' ').title() }}</option>{% endfor %}</select>
-    </label>
-    <label>Document date <input name="document_date" type="date"></label>
-    <label>Provider or clinician <input name="provider_name" maxlength="160"></label>
-    <label>Lab or facility <input name="lab_name" maxlength="160"></label>
-    <label>Description <textarea name="description" rows="3"></textarea></label>
-    <label>File <input name="record_file" type="file" accept=".pdf,.png,.jpg,.jpeg,.txt,.doc,.docx" required></label>
-    <button type="submit">Upload</button>
-    <p class="form-note">Files are stored privately. Automatic extraction is only shown when it actually succeeds.</p>
+    <p class="eyebrow">Add to Health Memory</p><h2>Upload a report</h2>
+    <label>Report title <input name="title" placeholder="e.g. Annual blood test" required></label>
+    <div class="form-grid">
+      <label>Document category
+        <select name="category" required><option value="Medical report">Medical report</option><option value="Prescription">Prescription</option><option value="Discharge summary">Discharge summary</option><option value="Imaging">Imaging</option><option value="Other health document">Other health document</option></select>
+      </label>
+      <label>Report type
+        <select name="report_type">{% for report_type in report_types %}<option value="{{ report_type }}">{{ report_type.replace('_',' ').title() }}</option>{% endfor %}</select>
+      </label>
+    </div>
+    <label>Choose file <input name="record_file" type="file" accept=".pdf,.png,.jpg,.jpeg,.txt,.doc,.docx" required></label>
+    <p class="helper-text">Accepted formats: PDF, image, text, Word. Files are stored privately.</p>
+    <details class="progressive-fields"><summary>Add optional report details</summary><div>
+      <label>Document date <input name="document_date" type="date"></label>
+      <label>Provider or clinician <input name="provider_name" maxlength="160" autocomplete="organization"></label>
+      <label>Lab or facility <input name="lab_name" maxlength="160" autocomplete="organization"></label>
+      <label>Notes <textarea name="description" rows="3" maxlength="500"></textarea></label>
+    </div></details>
+    <button type="submit" data-submitting-label="Uploading securely…">Upload report</button>
   </form>
-  <div class="panel">
-    <h2>Records</h2>
+
+  <article class="panel">
+    <div class="panel-head"><div><p class="eyebrow">Your documents</p><h2>Recent records</h2></div><span class="count-pill">{{ records|length }}</span></div>
     {% if records %}
-    <table><thead><tr><th>Title</th><th>Type</th><th>Date</th><th>File</th><th></th></tr></thead><tbody>
-      {% for item in records %}<tr><td><a href="{{ url_for('health_memory.report_detail_page', record_id=item.id) }}">{{ item.title }}</a></td><td>{{ (item.report_type or item.category).replace('_',' ').title() }}</td><td>{{ (item.document_date or item.created_at)[:10] }}</td><td>{{ item.original_filename }}</td><td><a href="{{ url_for('main.download_record', record_id=item.id) }}">Download</a></td></tr>{% endfor %}
-    </tbody></table>
-    {% else %}<div class="empty-state"><h3>No medical reports yet</h3><p>Upload your first medical report when you are ready.</p></div>{% endif %}
-  </div>
+      <div class="appointment-list">
+        {% for item in records %}
+          <article class="appointment-card">
+            <div><h3><a href="{{ url_for('health_memory.report_detail_page', record_id=item.id) }}">{{ item.title }}</a></h3><p>{{ (item.report_type or item.category).replace('_',' ').title() }} · {{ (item.document_date or item.created_at)[:10] }} · {{ item.original_filename }}</p></div>
+            <a href="{{ url_for('main.download_record', record_id=item.id) }}" class="secondary-action">Download</a>
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state"><h3>No health records yet</h3><p>Upload your first report to start building a searchable, chronological Health Memory.</p><span class="form-note">Use the upload form on this page when you are ready.</span></div>
+    {% endif %}
+  </article>
 </section>
 {% endblock %}

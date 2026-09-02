@@ -1,12 +1,34 @@
 {% extends "base.html" %}
-{% block title %}My Health Timeline{% endblock %}
+{% block title %}Health Timeline — ZENDOC{% endblock %}
 {% block content %}
-<section class="section-head"><div><p class="eyebrow">One connected health journey</p><h1>My Health Timeline</h1><p class="section-copy">Appointments, reports, records, measurements, and relevant ZENDOC AI events in chronological order.</p></div><a class="secondary-action" href="{{ url_for('health_memory.health_summary_page') }}">Health Summary</a></section>
-<form class="filter-bar" method="get"><label>Search history <input name="q" value="{{ request.args.get('q','') }}" placeholder="Blood test, cardiology, fever, 2026"></label><label>Event type <select name="type"><option value="all">All events</option>{% for event_type in timeline_types %}<option value="{{ event_type }}" {% if request.args.get('type') == event_type %}selected{% endif %}>{{ event_type.replace('_',' ').title() }}</option>{% endfor %}</select></label><label>Sort <select name="order"><option value="desc" {% if timeline.order == 'desc' %}selected{% endif %}>Newest first</option><option value="asc" {% if timeline.order == 'asc' %}selected{% endif %}>Oldest first</option></select></label><button type="submit">Apply</button></form>
+<section class="section-head"><div><p class="eyebrow">One connected health journey</p><h1>Health timeline</h1><p class="section-copy">Review appointments, reports, records, measurements, and relevant ZENDOC AI activity in chronological order.</p></div></section>
+{% include "components/_health_memory_nav.html" %}
+
+<form class="filter-bar" method="get" role="search">
+  <label>Search your history <input type="search" name="q" value="{{ request.args.get('q','') }}" placeholder="e.g. blood test or cardiology"></label>
+  <label>Activity type <select name="type"><option value="all">All activity</option>{% for event_type in timeline_types %}<option value="{{ event_type }}" {% if request.args.get('type') == event_type %}selected{% endif %}>{{ event_type.replace('_',' ').title() }}</option>{% endfor %}</select></label>
+  <label>Order <select name="order"><option value="desc" {% if timeline.order == 'desc' %}selected{% endif %}>Newest first</option><option value="asc" {% if timeline.order == 'asc' %}selected{% endif %}>Oldest first</option></select></label>
+  <button type="submit">Apply filters</button>
+</form>
+
 <section class="timeline" aria-label="Health timeline">
   {% if timeline.events %}
-    {% for event in timeline.events %}<article class="timeline-event"><div class="timeline-marker"></div><div class="timeline-body"><div class="timeline-meta"><span class="event-type">{{ event.event_type.replace('_',' ').title() }}</span><time>{{ event.event_at[:10] }}</time></div><h2>{{ event.title }}</h2>{% if event.summary %}<p>{{ event.summary }}</p>{% endif %}<div class="timeline-source"><span>Source: {{ event.source.replace('_',' ').title() }}</span>{% if event.provider_name %}<span>Provider: {{ event.provider_name }}</span>{% endif %}</div>{% if event.details_url %}<a class="text-link" href="{{ event.details_url }}">View details</a>{% endif %}</div></article>{% endfor %}
-  {% else %}<div class="empty-state panel"><h2>No health events found</h2><p>{% if request.args.get('q') or request.args.get('type') %}Try a broader search or view all event types.{% else %}Your appointments, uploaded reports, and measurements will appear here automatically.{% endif %}</p></div>{% endif %}
+    {% for event in timeline.events %}
+      <article class="timeline-event">
+        <div class="timeline-marker" aria-hidden="true"></div>
+        <div class="timeline-body">
+          <div class="timeline-meta"><span class="event-type">{{ event.event_type.replace('_',' ').title() }}</span><time datetime="{{ event.event_at }}">{{ event.event_at[:10] }}</time></div>
+          <h2>{{ event.title }}</h2>
+          {% if event.summary %}<p>{{ event.summary }}</p>{% endif %}
+          <div class="timeline-source"><span>Added through {{ event.source.replace('_',' ').title() }}</span>{% if event.provider_name %}<span>Provider: {{ event.provider_name }}</span>{% endif %}</div>
+          {% if event.details_url %}<a class="text-link" href="{{ event.details_url }}">View details</a>{% endif %}
+        </div>
+      </article>
+    {% endfor %}
+  {% else %}
+    <div class="empty-state panel"><h2>{% if request.args.get('q') or (request.args.get('type') and request.args.get('type') != 'all') %}No matching health activity{% else %}Your timeline is ready{% endif %}</h2><p>{% if request.args.get('q') or (request.args.get('type') and request.args.get('type') != 'all') %}Try a broader search or view all activity types.{% else %}Appointments, uploaded reports, and measurements will appear here automatically as you use ZENDOC.{% endif %}</p><div class="form-actions" style="justify-content:center;"><a href="{{ url_for('main.records') }}" class="primary-action">Upload a report</a><a href="{{ url_for('main.health') }}" class="secondary-action">Add a measurement</a></div></div>
+  {% endif %}
 </section>
+
 {% if timeline.page > 1 or timeline.page * timeline.per_page < timeline.total %}<nav class="pagination" aria-label="Timeline pages">{% if timeline.page > 1 %}<a href="{{ url_for('health_memory.timeline_page', page=timeline.page-1, q=request.args.get('q'), type=request.args.get('type'), order=timeline.order) }}">Previous</a>{% endif %}<span>Page {{ timeline.page }}</span>{% if timeline.page * timeline.per_page < timeline.total %}<a href="{{ url_for('health_memory.timeline_page', page=timeline.page+1, q=request.args.get('q'), type=request.args.get('type'), order=timeline.order) }}">Next</a>{% endif %}</nav>{% endif %}
 {% endblock %}

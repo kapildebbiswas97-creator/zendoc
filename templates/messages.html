@@ -5,7 +5,7 @@
   <div>
     <p class="eyebrow">ZENDOC Connect</p>
     <h1>Messages</h1>
-    <p class="section-copy">Permissioned care conversations for patients, doctors, family, pharmacy, and operations teams.</p>
+    <p class="section-copy">Private care conversations with the people your account is allowed to contact.</p>
   </div>
   <span class="status-badge active">{{ unread_total }} Unread</span>
 </section>
@@ -13,14 +13,14 @@
 <section class="connect-shell">
   <aside class="connect-list {% if selected %}has-selected{% endif %}">
     <form method="get" action="{{ url_for('milestone7.messages_page') }}" class="search-form">
-      <label>Find Permitted Contacts
+      <label>Find a care contact
         <input name="q" value="{{ q }}" placeholder="Search by name, role, or specialty">
       </label>
       <button type="submit">Search</button>
     </form>
     {% if contacts %}
       <div class="connect-group">
-        <h2>Permitted Contacts</h2>
+        <h2>People you can message</h2>
         {% for contact in contacts %}
           <form method="post" class="connect-contact">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -51,7 +51,7 @@
           {% endif %}
         </a>
       {% else %}
-        <p class="empty-state">No conversations yet. Search above to find permitted care contacts.</p>
+        <div class="empty-state"><h3>No conversations yet</h3><p>Search above to find a care contact your account is allowed to message.</p></div>
       {% endfor %}
     </div>
   </aside>
@@ -134,30 +134,24 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="action" value="send">
         <input type="hidden" name="conversation_id" value="{{ selected.id }}">
-        <div class="composer-type-row">
-          <label>Type:
-            <select name="message_type">
-              {% for type in ['text','appointment','consultation','record','report','video','service_update','task_update'] %}
-                <option value="{{ type }}">{{ type.replace('_', ' ').title() }}</option>
-              {% endfor %}
-            </select>
-          </label>
-        </div>
         <div class="composer-input-row">
-          <textarea name="body" rows="2" placeholder="Write a care-context message..." required></textarea>
-          <button type="submit" class="send-btn">Send</button>
+          <div style="flex:1;display:grid;gap:8px;">
+            <textarea name="body" rows="2" maxlength="1500" placeholder="Write a message…" aria-label="Message" required></textarea>
+            <details class="progressive-fields"><summary>Add message context</summary><div><label>Context type<select name="message_type">{% for type in ['text','appointment','consultation','record','report','video','service_update','task_update'] %}<option value="{{ type }}">{{ type.replace('_', ' ').title() }}</option>{% endfor %}</select></label><p class="helper-text">Choose a context only when the message is about a specific care item.</p></div></details>
+          </div>
+          <button type="submit" class="send-btn" data-submitting-label="Sending…">Send</button>
         </div>
       </form>
     {% else %}
       <div class="empty-state thread-empty-notice">
         <h2>Select or start a conversation</h2>
-        <p>Search only returns contacts your account is allowed to message based on the ZENDOC centralized communication policy.</p>
+        <p>Search returns only care contacts your account has permission to message.</p>
       </div>
     {% endif %}
   </section>
 
   <aside class="connect-info">
-    <h2>Conversation Info</h2>
+    <h2>Conversation details</h2>
     {% if selected %}
       <div class="participants-list">
         <h3>Participants</h3>
@@ -171,7 +165,7 @@
       </div>
       <div class="connect-policy-notice">
         <p class="privacy-banner">
-          <strong>Privacy Enforced:</strong> Private emails, phone numbers, and internal IDs are never exposed. Admin metrics do not expose casual private conversation contents.
+          <strong>Privacy protected:</strong> Private emails, phone numbers, and internal IDs are not shown here. Operational metrics do not expose casual private conversation contents.
         </p>
       </div>
     {% else %}

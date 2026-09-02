@@ -1,118 +1,125 @@
 {% extends "base.html" %}
-{% block title %}Pharmacy Services &amp; Medicines — ZENDOC{% endblock %}
+{% block title %}Pharmacy & Medicines — ZENDOC{% endblock %}
 
 {% block content %}
 <section class="section-head">
   <div>
-    <p class="eyebrow">Medicines &amp; Pharmacy Network</p>
-    <h1>Pharmacy &amp; Medicines</h1>
-    <p class="section-copy">Search essential medicines, locate verified nearby pharmacies, order doorstep medicine delivery, and set refill reminders.</p>
+    <p class="eyebrow">Medicines &amp; pharmacy · Delivery integration required</p>
+    <h1>Pharmacy &amp; medicines</h1>
+    <p class="section-copy">Search medicine reference information, view reviewed pharmacy profiles, record delivery requests, and set personal reminders.</p>
   </div>
   <a href="{{ url_for('main.dashboard') }}" class="secondary-action">Dashboard</a>
 </section>
 
-<!-- Search bar -->
-<form method="get" action="{{ url_for('ecosystem.pharmacy_page') }}" class="filter-bar">
-  <label style="grid-column: 1 / -2;">Search Medicines Catalog
-    <input type="text" name="q" value="{{ q }}" placeholder="e.g. Paracetamol, Amoxicillin, Cetirizine, Metformin">
+<aside class="trust-note warning">
+  <strong>Reference and request workflow only</strong><br>
+  ZENDOC does not prescribe medicine, confirm stock, price, or guarantee delivery. Prescription requirements still apply, and fulfilment needs a connected pharmacy partner.
+</aside>
+
+<form method="get" action="{{ url_for('ecosystem.pharmacy_page') }}" class="filter-bar spaced-panel" role="search">
+  <label style="grid-column:1 / -2">Search medicine catalogue
+    <input type="search" name="q" value="{{ q }}" placeholder="e.g. Paracetamol, Amoxicillin, Metformin" autocomplete="off">
   </label>
-  <button type="submit" class="primary-action">Search Medicine</button>
+  <button type="submit" data-submitting-label="Searching…">Search</button>
 </form>
 
 <div class="grid two">
-  <!-- Left column: Medicine Search & Order -->
   <article class="panel">
-    <h2>Medicine Catalog Search</h2>
+    <div class="panel-head">
+      <div><p class="eyebrow">Reference</p><h2>Medicine catalogue</h2></div>
+    </div>
     {% if medicines %}
-      <div class="summary-block">
+      <div class="appointment-list">
         {% for med in medicines %}
-          <div class="summary-row">
-            <div style="display:flex;justify-content:space-between;align-items:center;">
-              <strong>{{ med.name }}</strong>
+          <div class="appointment-card" style="flex-direction:column;align-items:stretch;gap:10px;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
+              <div>
+                <h3>{{ med.name }}</h3>
+                <p>{{ med.category }} · {{ med.uses }}</p>
+              </div>
               {% if med.rx_required %}
-                <span class="status-badge inactive" style="font-size:10px;">Prescription Required</span>
+                <span class="status-badge inactive">Prescription required</span>
               {% else %}
-                <span class="status-badge active" style="font-size:10px;">OTC Available</span>
+                <span class="status-badge active">OTC available</span>
               {% endif %}
             </div>
-            <span>Category: {{ med.category }}</span>
-            <p style="margin:2px 0 6px;font-size:13px;color:var(--muted);">{{ med.uses }}</p>
-            
-            <form method="post" action="{{ url_for('ecosystem.pharmacy_page') }}" class="inline-form" style="margin-top:4px;">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <form method="post" action="{{ url_for('ecosystem.pharmacy_page') }}" class="inline-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
               <input type="hidden" name="action" value="order">
               <input type="hidden" name="medicine_name" value="{{ med.name }}">
-              <input type="text" name="delivery_address" placeholder="Enter delivery address" style="flex:1;min-height:36px;font-size:12px;" required>
-              <button type="submit" class="primary-action" style="min-height:36px;padding:4px 10px;font-size:12px;">Order Delivery</button>
+              <label class="sr-only" for="addr-{{ loop.index }}">Delivery address</label>
+              <input id="addr-{{ loop.index }}" type="text" name="delivery_address" placeholder="Delivery address" required>
+              <button type="submit" class="secondary-action" data-submitting-label="Sending…">Request delivery</button>
             </form>
           </div>
         {% endfor %}
       </div>
     {% else %}
       <div class="empty-state">
-        <p>No medicines found matching "{{ q }}".</p>
+        <h3>No medicine reference found</h3>
+        <p>Try the generic medicine name or a broader search. Do not delay professional advice when a medicine is urgent.</p>
       </div>
     {% endif %}
   </article>
 
-  <!-- Right column: Refill Reminders & Orders -->
   <article class="panel">
-    <h2>Refill &amp; Dosage Reminders</h2>
+    <div class="panel-head">
+      <div><p class="eyebrow">Your reminders</p><h2>Refill &amp; dosage reminders</h2></div>
+      <span class="count-pill">{{ reminders|length }}</span>
+    </div>
     {% if reminders %}
-      <div class="summary-block">
+      <div class="appointment-list">
         {% for r in reminders %}
-          <div class="summary-row" style="display:flex;justify-content:space-between;align-items:center;">
+          <div class="appointment-card">
             <div>
-              <strong>{{ r.medicine_name }}</strong>
-              <p style="margin:2px 0 0;color:var(--muted);font-size:13px;">
-                Dosage: {{ r.dosage or 'Standard' }} &bull; Time: <strong>{{ r.reminder_time }}</strong> ({{ r.frequency.title() }})
-              </p>
+              <h3>{{ r.medicine_name }}</h3>
+              <p>{{ r.dosage or 'Standard dosage' }} · {{ r.reminder_time }} · {{ r.frequency.title() }}</p>
             </div>
             <span class="status-badge active">Active</span>
           </div>
         {% endfor %}
       </div>
     {% else %}
-      <p class="empty-state">No medicine reminders set.</p>
+      <div class="empty-state">
+        <h3>No medicine reminders set</h3>
+        <p>Add a reminder for a medicine already recommended by your clinician.</p>
+      </div>
     {% endif %}
 
-    <h3 style="margin-top:22px;">Add Medicine Reminder</h3>
-    <form method="post" action="{{ url_for('ecosystem.pharmacy_page') }}">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <input type="hidden" name="action" value="add_reminder">
-      <label>Medicine Name
-        <input type="text" name="medicine_name" placeholder="e.g. Amlodipine 5mg" required>
-      </label>
-
-      <div class="form-grid" style="margin-top:12px;">
-        <label>Dosage / Quantity
-          <input type="text" name="dosage" placeholder="e.g. 1 tablet after breakfast">
-        </label>
-        <label>Reminder Time
-          <input type="time" name="reminder_time" value="08:00" required>
-        </label>
+    <details class="progressive-fields spaced-panel">
+      <summary>Add a medicine reminder</summary>
+      <div>
+        <form method="post" action="{{ url_for('ecosystem.pharmacy_page') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="action" value="add_reminder">
+          <label>Medicine name <input type="text" name="medicine_name" placeholder="e.g. Amlodipine 5mg" required></label>
+          <div class="form-grid">
+            <label>Dosage or quantity <input type="text" name="dosage" placeholder="e.g. 1 tablet after breakfast"></label>
+            <label>Reminder time <input type="time" name="reminder_time" value="08:00" required></label>
+          </div>
+          <button type="submit" data-submitting-label="Saving…">Set reminder</button>
+        </form>
       </div>
-
-      <button type="submit" class="primary-action" style="margin-top:14px;">Set Medicine Reminder</button>
-    </form>
+    </details>
   </article>
 </div>
 
-<!-- Verified Pharmacies Section -->
-<article class="panel" style="margin-top:24px;">
-  <h2>Verified Network Pharmacies</h2>
-  {% if pharmacies %}
-    <div class="grid three" style="margin-top:14px;">
-      {% for p in pharmacies %}
-        <div class="summary-row" style="padding:12px;background:var(--bg);border-radius:6px;">
+{% if pharmacies %}
+<section class="panel spaced-panel" aria-labelledby="pharmacy-network-title">
+  <div class="panel-head">
+    <div><p class="eyebrow">Directory</p><h2 id="pharmacy-network-title">Reviewed network pharmacies</h2></div>
+  </div>
+  <div class="grid three">
+    {% for p in pharmacies %}
+      <article class="panel subtle-panel">
+        <div class="panel-head">
           <strong>{{ p.pharmacy_name }}</strong>
-          <span style="font-size:13px;color:var(--muted);">City: {{ p.user_city or 'Local' }} &bull; Phone: {{ p.phone or 'N/A' }}</span>
-          <span class="status-badge active" style="margin-top:4px;">Verified Partner</span>
+          <span class="status-badge active">Reviewed</span>
         </div>
-      {% endfor %}
-    </div>
-  {% else %}
-    <p class="empty-state">No registered pharmacy providers in your local area yet. You can still submit delivery requests for partner processing.</p>
-  {% endif %}
-</article>
+        <p class="form-note">{{ p.user_city or 'Local' }}{% if p.phone %} · {{ p.phone }}{% endif %}</p>
+      </article>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
 {% endblock %}

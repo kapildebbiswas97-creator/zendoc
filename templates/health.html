@@ -1,39 +1,36 @@
 {% extends "base.html" %}
-{% block title %}Health Monitoring{% endblock %}
+{% block title %}Vitals — ZENDOC{% endblock %}
 {% block content %}
-<section class="section-head"><div><p class="eyebrow">Vitals and wellness</p><h1>Health Monitoring</h1></div>{% if current_user.role == 'patient' %}<a class="secondary-action" href="{{ url_for('health_memory.health_summary_page') }}">Health Summary</a>{% endif %}</section>
+<section class="section-head"><div><p class="eyebrow">Health Memory</p><h1>Vitals</h1><p class="section-copy">Record measurements you already know and review trends over time. Manual entries are clearly labeled.</p></div></section>
+{% if current_user.role == 'patient' %}{% include "components/_health_memory_nav.html" %}{% endif %}
+
 <section class="grid two">
   <form class="panel" method="post">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <input type="hidden" name="source" value="manual">
-    <h2>Add Measurement</h2>
-    <label>Metric
-      {% if metric_types %}<select name="metric_type" required>{% for metric_type in metric_types %}<option value="{{ metric_type }}">{{ metric_type.replace('_',' ').title() }}</option>{% endfor %}</select>{% else %}<input name="metric_type" required>{% endif %}
-    </label>
-    <label>Value <input name="metric_value" type="number" step="any" required></label>
-    <label>Second value <input name="secondary_value" type="number" step="any" placeholder="Diastolic for blood pressure"></label>
-    <label>Unit <input name="unit" placeholder="mmHg, mg/dL, kg"></label>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="source" value="manual">
+    <p class="eyebrow">New entry</p><h2>Add a measurement</h2>
+    <label>What did you measure? {% if metric_types %}<select name="metric_type" required>{% for metric_type in metric_types %}<option value="{{ metric_type }}">{{ metric_type.replace('_',' ').title() }}</option>{% endfor %}</select>{% else %}<input name="metric_type" required>{% endif %}</label>
+    <div class="form-grid">
+      <label>Value <input name="metric_value" type="number" inputmode="decimal" step="any" required></label>
+      <label>Unit <input name="unit" list="unit-options" placeholder="e.g. kg or mmHg"><datalist id="unit-options"><option value="kg"><option value="mmHg"><option value="mg/dL"><option value="bpm"><option value="°C"><option value="%"></datalist></label>
+    </div>
+    <label>Second value <input name="secondary_value" type="number" inputmode="decimal" step="any" aria-describedby="second-value-help"></label>
+    <p id="second-value-help" class="helper-text">Use only for paired readings such as diastolic blood pressure.</p>
     <label>Measured at <input name="recorded_at" type="datetime-local"></label>
-    <label>Notes <textarea name="notes" rows="2"></textarea></label>
-    <button type="submit">Save Measurement</button>
-    <p class="form-note">This entry is labeled as manually entered data.</p>
+    <label>Notes <textarea name="notes" rows="2" maxlength="300" placeholder="Optional context"></textarea></label>
+    <button type="submit" data-submitting-label="Saving measurement…">Save measurement</button>
+    <p class="form-note">This will be labeled as a manually entered measurement, not device-synced data.</p>
   </form>
-  <div class="panel">
-    <h2>Recent Measurements</h2>
-    {% if metrics %}<table><thead><tr><th>Metric</th><th>Value</th><th>Source</th><th>Date</th></tr></thead><tbody>
-      {% for item in metrics %}<tr><td>{{ item.metric_type.replace('_',' ').title() }}</td><td>{{ item.metric_value }} {{ item.unit or '' }}</td><td>{{ item.source or 'legacy manual' }}</td><td>{{ item.recorded_at[:10] }}</td></tr>{% endfor %}
-    </tbody></table>{% else %}<div class="empty-state"><h3>No measurements yet</h3><p>Add a health measurement to begin your private trend history.</p></div>{% endif %}
-  </div>
+
+  <article class="panel">
+    <div class="panel-head"><div><p class="eyebrow">Latest entries</p><h2>Recent measurements</h2></div><span class="count-pill">{{ metrics|length }}</span></div>
+    {% if metrics %}<div class="table-shell"><table><thead><tr><th>Measurement</th><th>Value</th><th>Source</th><th>Date</th></tr></thead><tbody>{% for item in metrics %}<tr><td>{{ item.metric_type.replace('_',' ').title() }}</td><td><strong>{{ item.metric_value }} {{ item.unit or '' }}</strong></td><td>{{ (item.source or 'manual').replace('_',' ').title() }}</td><td>{{ item.recorded_at[:10] }}</td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="empty-state"><h3>No measurements yet</h3><p>Add your first known vital to begin a private trend history.</p><span class="form-note">Use the form on this page; do not estimate a health measurement.</span></div>{% endif %}
+  </article>
 </section>
+
 {% if current_user.role == 'patient' %}
 <section class="panel spaced-panel">
-  <div class="panel-head"><div><p class="eyebrow">Truthful data only</p><h2>{{ selected_metric.replace('_',' ').title() }} Trend</h2></div>
-    <form class="inline-form" method="get"><select name="metric">{% for metric_type in metric_types %}<option value="{{ metric_type }}" {% if metric_type == selected_metric %}selected{% endif %}>{{ metric_type.replace('_',' ').title() }}</option>{% endfor %}</select><select name="period"><option value="7d">7 days</option><option value="30d">30 days</option><option value="90d" selected>90 days</option></select><button type="submit">View</button></form>
-  </div>
-  {% if trend and trend.series %}
-    {% for series in trend.series %}<div class="trend-series"><div class="trend-meta"><strong>{{ series.unit }}</strong><span>Direction: {{ series.direction }}</span></div><div class="trend-bars" role="img" aria-label="{{ selected_metric }} trend in {{ series.unit }}">{% for point in series.points %}<span style="height:{{ point.chart_percent }}%" title="{{ point.date[:10] }}: {{ point.value }} {{ series.unit }}"></span>{% endfor %}</div></div>{% endfor %}
-    {% if trend.unit_mismatch %}<p class="form-note">{{ trend.message }}</p>{% endif %}
-  {% else %}<div class="empty-state"><h3>No trend data for this range</h3><p>Add measurements to build a 7, 30, or 90-day view.</p></div>{% endif %}
+  <div class="panel-head"><div><p class="eyebrow">Recorded data only</p><h2>{{ selected_metric.replace('_',' ').title() }} trend</h2></div><form class="inline-form" method="get"><label class="sr-only" for="trend-metric">Measurement</label><select id="trend-metric" name="metric">{% for metric_type in metric_types %}<option value="{{ metric_type }}" {% if metric_type == selected_metric %}selected{% endif %}>{{ metric_type.replace('_',' ').title() }}</option>{% endfor %}</select><label class="sr-only" for="trend-period">Time period</label><select id="trend-period" name="period"><option value="7d">7 days</option><option value="30d">30 days</option><option value="90d" selected>90 days</option></select><button type="submit" class="secondary-action">Update trend</button></form></div>
+  {% if trend and trend.series %}{% for series in trend.series %}<div class="trend-series"><div class="trend-meta"><strong>{{ series.unit }}</strong><span>Direction: {{ series.direction }}</span></div><div class="trend-bars" role="img" aria-label="{{ selected_metric }} trend in {{ series.unit }}">{% for point in series.points %}<span style="height:{{ point.chart_percent }}%" title="{{ point.date[:10] }}: {{ point.value }} {{ series.unit }}"></span>{% endfor %}</div></div>{% endfor %}{% if trend.unit_mismatch %}<p class="form-note">{{ trend.message }}</p>{% endif %}{% else %}<div class="empty-state"><h3>Not enough data for this range</h3><p>Add measurements over time to build a 7, 30, or 90-day view.</p></div>{% endif %}
 </section>
 {% endif %}
 {% endblock %}

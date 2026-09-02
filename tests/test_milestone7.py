@@ -96,8 +96,12 @@ def test_wrong_password_correct_password_role_and_remember_me(tmp_path):
     _app, client = make_client(tmp_path)
     register_web(client, "patient", "remember@example.com")
     assert b"Email or password is incorrect." in login_web(client, "patient", "remember@example.com", "wrong").data
-    assert login_web(client, "doctor", "remember@example.com").status_code == 200
-    assert b"Email or password is incorrect." in login_web(client, "doctor", "remember@example.com").data
+    role_alias_login = login_web(client, "doctor", "remember@example.com")
+    assert role_alias_login.status_code == 200
+    assert b"Welcome, Test User" in role_alias_login.data
+    with client.session_transaction() as sess:
+        assert sess["role"] == "patient"
+    client.get("/logout")
 
     page = client.get("/login/patient")
     token = csrf(page.data.decode())

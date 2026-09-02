@@ -1,85 +1,78 @@
 {% extends "base.html" %}
-{% block title %}Medical Transport &amp; Ambulance — ZENDOC{% endblock %}
+{% block title %}Medical Transport — ZENDOC{% endblock %}
 
 {% block content %}
 <section class="section-head">
   <div>
-    <p class="eyebrow">Medical Transport &amp; Emergency Dispatch</p>
-    <h1>Ambulance &amp; Transport</h1>
-    <p class="section-copy">Request emergency ambulances (108), Basic Life Support, ICU vans, wheelchair transport, and inter-hospital patient transfers.</p>
+    <p class="eyebrow">Medical transport · Integration required</p>
+    <h1>Medical transport guidance</h1>
+    <p class="section-copy">Review transport types and record a non-confirmed intake request. ZENDOC cannot dispatch an ambulance or confirm a vehicle.</p>
   </div>
   <a href="{{ url_for('main.dashboard') }}" class="secondary-action">Dashboard</a>
 </section>
 
-<!-- Critical Emergency Safety Alert -->
-<div class="privacy-banner" style="background:#fff5f5;border-color:var(--danger);color:#b42318;margin-bottom:24px;">
-  <strong style="font-size:16px;">CRITICAL EMERGENCY DIRECTIVE:</strong>
-  <p style="margin:4px 0 0;font-size:14px;line-height:1.4;">
-    If the patient is experiencing chest pain, severe shortness of breath, sudden stroke symptoms, severe bleeding, or loss of consciousness, <strong>CALL 108 IMMEDIATELY</strong> or go directly to the nearest hospital emergency room. Do not delay emergency medical treatment.
-  </p>
-</div>
+<aside class="trust-note danger">
+  <strong>If this is a life-threatening emergency</strong><br>
+  For chest pain, severe breathing difficulty, stroke signs, serious bleeding, or loss of consciousness — <strong>call local emergency services now</strong> (108 / 112 in India) or go to the nearest emergency department. Do not wait for a ZENDOC response.
+</aside>
 
-<!-- Transport Options -->
-<h2 style="margin-bottom:14px;">Available Transport Types</h2>
-<div class="grid three" style="margin-bottom:28px;">
-  {% for t in transport_types %}
-    <article class="panel" {% if t.is_emergency %}style="border-color:#f2b8b5;"{% endif %}>
-      <span class="status-badge {% if t.is_emergency %}inactive{% else %}active{% endif %}" style="font-size:11px;">{{ t.badge }}</span>
-      <h3 style="margin:10px 0 6px;">{{ t.name }}</h3>
-      <p style="font-size:13px;line-height:1.4;color:var(--muted);">{{ t.description }}</p>
-    </article>
-  {% endfor %}
-</div>
+<section class="spaced-panel" aria-labelledby="transport-types-title">
+  <div class="panel-head">
+    <div><p class="eyebrow">Request types</p><h2 id="transport-types-title">Transport request types</h2></div>
+  </div>
+  <div class="grid three">
+    {% for t in transport_types %}
+      <article class="panel feature-card {% if t.is_emergency %}result emergency{% endif %}">
+        <span class="status-badge {% if t.is_emergency %}inactive{% else %}integration{% endif %}">{{ t.badge }}</span>
+        <h3>{{ t.name }}</h3>
+        <p>{{ t.description }}</p>
+      </article>
+    {% endfor %}
+  </div>
+</section>
 
-<div class="grid two">
-  <!-- Dispatch Form -->
+<div class="grid two spaced-panel">
   <article class="panel">
-    <h2>Request Medical Transport</h2>
+    <p class="eyebrow">Request intake</p>
+    <h2>Record a transport request</h2>
     <form method="post" action="{{ url_for('ecosystem.ambulance_page') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <label>Transport Type
+      <label>Transport type
         <select name="transport_type" required>
           {% for t in transport_types %}
             <option value="{{ t.id }}">{{ t.name }} ({{ t.badge }})</option>
           {% endfor %}
         </select>
       </label>
-
-      <label style="margin-top:12px;">Pickup Address
-        <textarea name="pickup_address" rows="2" placeholder="Full pickup location with landmark" required></textarea>
-      </label>
-
-      <label style="margin-top:12px;">Destination Hospital / Clinic (optional)
-        <input type="text" name="destination_address" placeholder="e.g. City General Hospital, Emergency Ward">
-      </label>
-
-      <label style="margin-top:12px;">Patient Condition / Notes
-        <input type="text" name="notes" placeholder="e.g. Elderly patient, needs stretcher support">
-      </label>
-
-      <button type="submit" class="primary-action danger-button" style="margin-top:16px;">Dispatch Transport Request</button>
+      <label>Pickup address <textarea name="pickup_address" rows="2" placeholder="Full pickup location with landmark" required></textarea></label>
+      <label>Destination hospital or clinic <input type="text" name="destination_address" placeholder="e.g. City General Hospital, Emergency Ward (optional)"></label>
+      <label>Patient condition or notes <input type="text" name="notes" placeholder="e.g. Elderly patient, needs stretcher support"></label>
+      <button type="submit" data-submitting-label="Recording…">Record transport request</button>
+      <p class="form-note">This saves an intake request only. It does not contact or dispatch a transport provider.</p>
     </form>
   </article>
 
-  <!-- Transport Request History -->
   <article class="panel">
-    <h2>Recent Transport Requests</h2>
+    <div class="panel-head">
+      <div><p class="eyebrow">Request history</p><h2>Recent transport requests</h2></div>
+      <span class="count-pill">{{ requests|length }}</span>
+    </div>
     {% if requests %}
-      <div class="summary-block">
+      <div class="appointment-list">
         {% for r in requests %}
-          <div class="summary-row">
-            <div style="display:flex;justify-content:space-between;align-items:center;">
-              <strong>{{ r.transport_type.replace('_', ' ').title() }}</strong>
-              <span class="status-badge active">{{ r.status.title() }}</span>
+          <div class="appointment-card">
+            <div>
+              <h3>{{ r.transport_type.replace('_', ' ').title() }}</h3>
+              <p>{{ r.pickup_address[:55] }}{% if r.pickup_address|length > 55 %}…{% endif %} · {{ r.created_at[:10] }}</p>
             </div>
-            <span>Pickup: {{ r.pickup_address[:40] }}... &bull; Urgency: {{ r.urgency.title() }}</span>
-            <small style="color:var(--muted);">Requested at {{ r.created_at[:16] }}</small>
+            <span class="status-badge integration">{{ r.status.title() }}</span>
           </div>
         {% endfor %}
       </div>
     {% else %}
       <div class="empty-state">
-        <p>No transport requests registered.</p>
+        <h3>No transport requests yet</h3>
+        <p>Saved intake requests will appear here. For urgent help, call local emergency services directly.</p>
       </div>
     {% endif %}
   </article>

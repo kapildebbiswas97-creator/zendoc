@@ -1,0 +1,9 @@
+{% set memory_endpoint = request.endpoint or '' %}
+<nav class="memory-nav" aria-label="Health Memory sections">
+  <a href="{{ url_for('health_memory.health_summary_page') }}" {% if memory_endpoint == 'health_memory.health_summary_page' %}aria-current="page"{% endif %}>Snapshot</a>
+  <a href="{{ url_for('health_memory.timeline_page') }}" {% if memory_endpoint == 'health_memory.timeline_page' %}aria-current="page"{% endif %}>Timeline</a>
+  <a href="{{ url_for('main.records') }}" {% if memory_endpoint in ['main.records','health_memory.report_detail_page'] %}aria-current="page"{% endif %}>Records &amp; reports</a>
+  <a href="{{ url_for('main.health') }}" {% if memory_endpoint == 'main.health' %}aria-current="page"{% endif %}>Vitals</a>
+  <a href="{{ url_for('health_memory.health_profile_page') }}" {% if memory_endpoint == 'health_memory.health_profile_page' %}aria-current="page"{% endif %}>Health profile</a>
+  <a href="{{ url_for('health_memory.health_access_page') }}" {% if memory_endpoint == 'health_memory.health_access_page' %}aria-current="page"{% endif %}>Privacy &amp; access</a>
+</nav>

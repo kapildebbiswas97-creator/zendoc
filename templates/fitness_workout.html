@@ -41,7 +41,7 @@
           <h4>{{ item.exercise_name }}</h4>
           <p style="margin:2px 0 0; color:var(--muted); font-size:13px;">
             Target: {{ item.planned_sets or 3 }} sets &bull; {{ item.planned_reps or '10' }} reps &bull; Rest {{ item.rest_seconds or 60 }}s
-            {% if item.camera_ready %}&bull; <span style="color:var(--success);font-weight:900;">M6 Camera Ready</span>{% endif %}
+            {% if item.camera_ready %}&bull; <span style="color:var(--success);font-weight:900;">Camera preview compatible</span>{% endif %}
           </p>
         </div>
         <div>
@@ -71,7 +71,7 @@
     </article>
   {% endfor %}
 {% else %}
-  <p class="empty-state">No exercises pre-populated in this session.</p>
+  <div class="empty-state"><h3>No exercises in this session</h3><p>Open your workout plan to generate a structured session, or finish this session and start again.</p></div>
 {% endif %}
 
 {% else %}

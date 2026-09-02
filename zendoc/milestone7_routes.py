@@ -186,7 +186,18 @@ def telehealth_page():
         except (ValueError, LookupError, PermissionError) as error:
             flash(str(error), "error")
         return redirect(url_for("milestone7.telehealth_page"))
-    return render_template("telehealth.html", consultations=list_consultations(g.user))
+    doctors = []
+    if g.user["role"] == "patient":
+        doctors = get_db().execute(
+            """
+            SELECT u.id,u.name,p.organization,p.specialty
+            FROM users u
+            JOIN provider_profiles p ON p.user_id=u.id
+            WHERE u.active=1 AND u.role IN ('doctor','hospital') AND p.verification_status='verified'
+            ORDER BY COALESCE(p.organization,u.name),p.specialty
+            """
+        ).fetchall()
+    return render_template("telehealth.html", consultations=list_consultations(g.user), doctors=doctors)
 
 
 @bp.get("/telehealth/<int:consultation_id>")

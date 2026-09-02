@@ -1,50 +1,74 @@
 {% extends "base.html" %}
-{% block title %}Find Care{% endblock %}
+{% block title %}Find Care — ZENDOC{% endblock %}
 {% block content %}
-<section class="section-head"><div><p class="eyebrow">Healthcare discovery</p><h1>Find Care</h1></div></section>
-<section class="grid two">
-  <form class="panel" method="post">
+<section class="section-head">
+  <div><p class="eyebrow">Healthcare discovery</p><h1>Find the right care</h1><p class="section-copy">Choose the type of care you need and where you need it. Reviewed ZENDOC profiles show booking availability when a schedule is published.</p></div>
+</section>
+
+<section class="finder-shell">
+  <form class="filter-bar finder-form" method="post" role="search">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <h2>Search</h2>
-    <label>Category
+    <label>Care type
       <select name="category">
-        {% for category in ['doctor','hospital','clinic','pharmacy','diagnostic_centre','laboratory','emergency'] %}
-          <option value="{{ category }}" {% if query.category == category %}selected{% endif %}>{{ category.replace('_',' ').title() }}</option>
-        {% endfor %}
+        {% for category in ['doctor','hospital','clinic','pharmacy','diagnostic_centre','laboratory','emergency'] %}<option value="{{ category }}" {% if query.category == category %}selected{% endif %}>{{ category.replace('_',' ').title() }}</option>{% endfor %}
       </select>
     </label>
-    <label>Specialty <input name="specialty" value="{{ query.specialty }}" placeholder="Cardiology, Dermatology, General Medicine"></label>
-    <label>Manual Location <input name="location" value="{{ query.location }}" placeholder="City, area, PIN, address"></label>
-    <div class="grid two">
-      <label>Latitude <input name="latitude" value="{{ query.latitude or '' }}" placeholder="Optional"></label>
-      <label>Longitude <input name="longitude" value="{{ query.longitude or '' }}" placeholder="Optional"></label>
-    </div>
-    <label>Radius KM <input name="radius_km" type="number" min="1" max="50" value="{{ query.radius_km }}"></label>
-    <button type="submit">Search Healthcare</button>
-    <button type="button" id="use-location">Use My Location</button>
-    <p id="location-status" class="muted">Location is requested only when you choose to use it.</p>
+    <label>Specialty or service
+      <input name="specialty" value="{{ query.specialty }}" list="specialty-options" placeholder="e.g. Cardiology">
+      <datalist id="specialty-options">{% for specialty in specialties %}<option value="{{ specialty }}">{% endfor %}</datalist>
+    </label>
+    <label>City, area, or PIN code
+      <input name="location" value="{{ query.location }}" autocomplete="address-level2" placeholder="e.g. Kolkata or 700001">
+    </label>
+    <button type="submit" data-submitting-label="Searching…">Find care</button>
+    <details class="progressive-fields finder-options">
+      <summary>Location and distance options</summary>
+      <div>
+        <label>Search distance
+          <select name="radius_km">{% for radius in [5,10,20,30,50] %}<option value="{{ radius }}" {% if query.radius_km == radius %}selected{% endif %}>Within {{ radius }} km</option>{% endfor %}</select>
+        </label>
+        <label>Latitude <input name="latitude" value="{{ query.latitude or '' }}" inputmode="decimal" placeholder="Added when location is allowed"></label>
+        <label>Longitude <input name="longitude" value="{{ query.longitude or '' }}" inputmode="decimal" placeholder="Added when location is allowed"></label>
+        <div><button type="button" id="use-location" class="secondary-action">Use my current location</button><p id="location-status" class="helper-text" role="status" aria-live="polite">Your browser will ask permission first.</p></div>
+      </div>
+    </details>
   </form>
-  <div class="panel">
-    <h2>Results</h2>
-    {% if result %}
-      {% if result.message %}<p>{{ result.message }}</p>{% endif %}
-      {% if result.results %}
+
+  <section aria-labelledby="finder-results-title">
+    <div class="results-head">
+      <div><p class="eyebrow">Care options</p><h2 id="finder-results-title">{% if result %}Search results{% else %}Start your search{% endif %}</h2></div>
+      {% if result and result.results %}<p>{{ result.results|length }} result{% if result.results|length != 1 %}s{% endif %}</p>{% endif %}
+    </div>
+
+    {% if result and result.results %}
+      <div class="provider-results">
         {% for item in result.results %}
-          <article class="notice provider-card">
-            <strong>{{ item.name }}</strong>
-            <p>{{ item.category }}{% if item.specialty %} · {{ item.specialty }}{% endif %}</p>
-            <p>{{ item.address }} {{ item.city }} {{ item.state }} {{ item.postal_code }}</p>
-            {% if item.phone %}<p>Call: {{ item.phone }}</p>{% endif %}
+          <article class="provider-card">
+            <div class="provider-card-head">
+              <div><h3>{{ item.name }}</h3><p>{{ (item.specialty or item.category or 'Healthcare provider').replace('_',' ').title() }}</p></div>
+              {% if item.source == 'zendoc_provider_network' %}<span class="status-badge working">Reviewed profile</span>{% else %}<span class="status-badge beta">External listing</span>{% endif %}
+            </div>
+            <div class="provider-facts">
+              {% if item.city or item.address %}<span>{{ item.address or '' }}{% if item.address and item.city %}, {% endif %}{{ item.city or '' }}{% if item.state %}, {{ item.state }}{% endif %}</span>{% endif %}
+              {% if item.phone %}<span>{{ item.phone }}</span>{% endif %}
+              {% if item.source == 'zendoc_provider_network' %}<span>Availability on profile</span>{% endif %}
+            </div>
             {% if item.id and item.source == 'zendoc_provider_network' %}
-              <a href="{{ url_for('main.provider_detail', profile_id=item.id) }}">View profile &amp; availability</a>
+              <a class="primary-action" href="{{ url_for('main.provider_detail', profile_id=item.id) }}">View profile &amp; availability</a>
+            {% else %}
+              <p class="form-note">Booking is not connected for this external listing. Verify details directly before visiting.</p>
             {% endif %}
           </article>
         {% endfor %}
-      {% endif %}
+      </div>
+    {% elif result %}
+      <div class="empty-state panel"><h3>No matching care options yet</h3><p>{{ result.message or 'Try a broader specialty or nearby city. External search may require an integration.' }}</p><a href="{{ url_for('main.finder') }}" class="secondary-action">Clear search</a></div>
     {% else %}
-      <p>Search by category and manual location, or choose to use browser location.</p>
+      <div class="empty-state panel"><h3>Tell us what kind of care you need</h3><p>Select a care type and enter a location. Specialty is optional, so you can start broad.</p></div>
     {% endif %}
-  </div>
+  </section>
 </section>
+
+<aside class="trust-note"><strong>What “reviewed profile” means</strong><br>ZENDOC has reviewed the provider’s directory profile within its internal workflow. This is not a regulatory endorsement, and appointment requests still require provider confirmation.</aside>
 <script src="{{ url_for('static', filename='finder.js') }}"></script>
 {% endblock %}

@@ -3,61 +3,123 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b6b61">
+  <meta name="description" content="ZENDOC is an AI-powered connected healthcare ecosystem for care guidance, appointments, health records, and everyday wellness.">
+  <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
   <title>{% block title %}ZENDOC{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
+  <a class="skip-link" href="#main-content">Skip to main content</a>
   <header class="topbar">
-    <a class="brand" href="{{ url_for('main.home') }}">ZENDOC</a>
-    <div style="display:flex;align-items:center;gap:12px;flex:1;max-width:320px;">
-      <form action="{{ url_for('ecosystem.search_page') }}" method="get" style="width:100%;margin:0;">
-        <input type="text" name="q" placeholder="Search ZENDOC..." style="min-height:36px;padding:6px 12px;font-size:13px;border-radius:20px;background:#f0f4f9;">
-      </form>
-    </div>
-    <nav>
+    <div class="topbar-inner">
+      <a class="brand" href="{{ url_for('main.home') }}" aria-label="ZENDOC home">
+        <span class="brand-mark" aria-hidden="true">Z</span>
+        <span>ZENDOC</span>
+      </a>
+
       {% if current_user %}
-        <a href="{{ url_for('main.dashboard') }}">Dashboard</a>
-        <a href="{{ url_for('milestone7.messages_page') }}">Messages</a>
-        {% if current_user.role == 'patient' %}<a href="{{ url_for('family.family_page') }}">Family</a>{% endif %}
-        <a href="{{ url_for('ecosystem.marketplace_page') }}">Services</a>
-        <a href="{{ url_for('milestone7.telehealth_page') }}">Telehealth</a>
-        <a href="{{ url_for('milestone7.videos_page') }}">Videos</a>
-        <a href="{{ url_for('main.appointments') }}">Appointments</a>
-        <a href="{{ url_for('main.finder') }}">Find Care</a>
-        <a href="{{ url_for('main.records') }}">Records</a>
-        <a href="{{ url_for('main.health') }}">Health</a>
-        {% if current_user.role == 'patient' %}<a href="{{ url_for('health_memory.timeline_page') }}">Timeline</a>{% endif %}
-        {% if current_user.role == 'patient' %}<a href="{{ url_for('fitness.overview') }}">Fitness</a>{% endif %}
-        {% if current_user.role == 'patient' %}<a href="{{ url_for('milestone7.pose_coach_page') }}">Pose Coach</a>{% endif %}
-        <a href="{{ url_for('main.ai_center') }}">AI Assistant</a>
-        {% if current_user.role in ['doctor','hospital','pharmacy'] %}<a href="{{ url_for('main.provider_profile') }}">Provider</a>{% endif %}
-        {% if current_user.role in ['doctor','hospital'] %}<a href="{{ url_for('milestone7.doctor_availability_page') }}">Availability</a>{% endif %}
-        {% if current_user.role in ['admin','doctor','hospital','pharmacy'] %}<a href="{{ url_for('milestone7.operations_page') }}">Operations</a>{% endif %}
-        <a href="{{ url_for('main.notifications') }}">Notifications</a>
-        {% if current_user.role == 'admin' %}<a href="{{ url_for('main.admin') }}">Admin</a>{% endif %}
-        {% if current_user.role == 'admin' %}<a href="{{ url_for('milestone7.admin_agent_command_center') }}">Agent Center</a>{% endif %}
-        <form method="post" action="{{ url_for('main.logout') }}" class="nav-logout">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <button type="submit">Logout</button>
+        <form action="{{ url_for('ecosystem.search_page') }}" method="get" class="global-search" role="search">
+          <label class="sr-only" for="global-search-input">Search ZENDOC</label>
+          <input id="global-search-input" type="search" name="q" placeholder="Search care, records, services…" autocomplete="off">
         </form>
+
+        <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="primary-navigation">
+          <span class="sr-only">Open navigation</span>
+          <span aria-hidden="true"></span><span aria-hidden="true"></span><span aria-hidden="true"></span>
+        </button>
+
+        <nav id="primary-navigation" class="primary-nav" aria-label="Primary navigation">
+          {% set endpoint = request.endpoint or '' %}
+          <a href="{{ url_for('main.dashboard') }}" {% if endpoint == 'main.dashboard' %}aria-current="page"{% endif %}>Home</a>
+
+          {% if current_user.role == 'patient' %}
+            <a href="{{ url_for('main.ai_center') }}" {% if endpoint == 'main.ai_center' %}aria-current="page"{% endif %}>AI Assistant</a>
+            <a href="{{ url_for('main.finder') }}" {% if endpoint in ['main.finder','main.provider_detail'] %}aria-current="page"{% endif %}>Find Care</a>
+            <a href="{{ url_for('main.appointments') }}" {% if endpoint == 'main.appointments' %}aria-current="page"{% endif %}>Appointments</a>
+            <details class="nav-menu" {% if endpoint in ['health_memory.health_summary_page','health_memory.timeline_page','main.records','main.health','health_memory.health_profile_page','health_memory.health_access_page','health_memory.report_detail_page'] %}data-active="true"{% endif %}>
+              <summary>Health Memory</summary>
+              <div class="nav-menu-panel">
+                <a href="{{ url_for('health_memory.health_summary_page') }}">Health snapshot</a>
+                <a href="{{ url_for('health_memory.timeline_page') }}">Timeline</a>
+                <a href="{{ url_for('main.records') }}">Records &amp; reports</a>
+                <a href="{{ url_for('main.health') }}">Vitals</a>
+                <a href="{{ url_for('health_memory.health_access_page') }}">Privacy &amp; access</a>
+              </div>
+            </details>
+            <a href="{{ url_for('milestone7.messages_page') }}" {% if endpoint == 'milestone7.messages_page' %}aria-current="page"{% endif %}>Messages</a>
+            <a href="{{ url_for('family.family_page') }}" {% if endpoint in ['family.family_page','family.parent_care_page'] %}aria-current="page"{% endif %}>Family</a>
+            <a href="{{ url_for('fitness.overview') }}" {% if endpoint.startswith('fitness.') or endpoint == 'milestone7.pose_coach_page' %}aria-current="page"{% endif %}>Fitness</a>
+          {% elif current_user.role in ['doctor','hospital'] %}
+            <a href="{{ url_for('main.appointments') }}" {% if endpoint == 'main.appointments' %}aria-current="page"{% endif %}>Appointments</a>
+            <a href="{{ url_for('milestone7.doctor_availability_page') }}" {% if endpoint == 'milestone7.doctor_availability_page' %}aria-current="page"{% endif %}>Schedule</a>
+            <a href="{{ url_for('milestone7.messages_page') }}" {% if endpoint == 'milestone7.messages_page' %}aria-current="page"{% endif %}>Messages</a>
+            <a href="{{ url_for('main.records') }}" {% if endpoint == 'main.records' %}aria-current="page"{% endif %}>Shared Records</a>
+            <a href="{{ url_for('main.provider_profile') }}" {% if endpoint == 'main.provider_profile' %}aria-current="page"{% endif %}>Provider Profile</a>
+          {% elif current_user.role == 'pharmacy' %}
+            <a href="{{ url_for('ecosystem.pharmacy_page') }}" {% if endpoint == 'ecosystem.pharmacy_page' %}aria-current="page"{% endif %}>Pharmacy</a>
+            <a href="{{ url_for('milestone7.messages_page') }}" {% if endpoint == 'milestone7.messages_page' %}aria-current="page"{% endif %}>Messages</a>
+            <a href="{{ url_for('main.provider_profile') }}" {% if endpoint == 'main.provider_profile' %}aria-current="page"{% endif %}>Provider Profile</a>
+          {% elif current_user.role == 'admin' %}
+            <a href="{{ url_for('main.admin') }}" {% if endpoint == 'main.admin' %}aria-current="page"{% endif %}>Admin</a>
+            <a href="{{ url_for('milestone7.admin_agent_command_center') }}" {% if endpoint == 'milestone7.admin_agent_command_center' %}aria-current="page"{% endif %}>Agent Center</a>
+            <a href="{{ url_for('milestone7.operations_page') }}" {% if endpoint == 'milestone7.operations_page' %}aria-current="page"{% endif %}>Operations</a>
+          {% else %}
+            <a href="{{ url_for('main.appointments') }}" {% if endpoint == 'main.appointments' %}aria-current="page"{% endif %}>Appointments</a>
+            <a href="{{ url_for('milestone7.messages_page') }}" {% if endpoint == 'milestone7.messages_page' %}aria-current="page"{% endif %}>Messages</a>
+          {% endif %}
+
+          <details class="nav-menu nav-menu-more">
+            <summary>More</summary>
+            <div class="nav-menu-panel nav-menu-panel-right">
+              <a href="{{ url_for('ecosystem.search_page') }}">Universal search</a>
+              <a href="{{ url_for('main.notifications') }}">Notifications</a>
+              <a href="{{ url_for('milestone7.telehealth_page') }}">Telehealth <span class="menu-status">Beta</span></a>
+              <a href="{{ url_for('ecosystem.marketplace_page') }}">All services</a>
+              {% if current_user.role == 'patient' %}
+                <a href="{{ url_for('ecosystem.home_health_page') }}">Home healthcare</a>
+                <a href="{{ url_for('ecosystem.ambulance_page') }}">Medical transport</a>
+                <a href="{{ url_for('ecosystem.pharmacy_page') }}">Pharmacy</a>
+                <a href="{{ url_for('ecosystem.iot_hub_page') }}">Connected devices</a>
+                <a href="{{ url_for('milestone7.videos_page') }}">Health videos</a>
+              {% endif %}
+              {% if current_user.role in ['admin','doctor','hospital','pharmacy'] %}<a href="{{ url_for('milestone7.operations_page') }}">Staff operations</a>{% endif %}
+              <a href="{{ url_for('main.profile') }}">Account profile</a>
+              <form method="post" action="{{ url_for('main.logout') }}" class="nav-logout">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button type="submit">Log out</button>
+              </form>
+            </div>
+          </details>
+        </nav>
       {% else %}
-        <a href="{{ url_for('ecosystem.marketplace_page') }}">Services</a>
-        <a href="{{ url_for('main.login', role='patient') }}">Login</a>
-        <a href="{{ url_for('main.register', role='patient') }}" class="primary-action" style="min-height:36px;padding:6px 14px;">Get Started</a>
+        <nav class="guest-nav" aria-label="Public navigation">
+          <a href="{{ url_for('ecosystem.marketplace_page') }}">Explore services</a>
+          <a href="{{ url_for('main.login') }}">Sign in</a>
+          <a href="{{ url_for('main.register', role='patient') }}" class="primary-action compact-action">Get started</a>
+        </nav>
       {% endif %}
-    </nav>
+    </div>
   </header>
-  <main class="page">
+  <main id="main-content" class="page" tabindex="-1">
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
-        <section class="alerts">
+        <section class="alerts" aria-label="Status messages" aria-live="polite">
           {% for category, message in messages %}
-            <div class="alert {{ category }}">{{ message }}</div>
+            <div class="alert {{ category }}" role="{{ 'alert' if category == 'error' else 'status' }}">
+              <strong>{{ 'Something needs attention' if category == 'error' else 'Update' }}</strong>
+              <span>{{ message }}</span>
+            </div>
           {% endfor %}
         </section>
       {% endif %}
     {% endwith %}
     {% block content %}{% endblock %}
   </main>
+  <footer class="site-footer">
+    <div><strong>ZENDOC</strong><span>Connected healthcare, organized around you.</span></div>
+    <p><span class="status-badge beta">Selection Beta</span> Educational guidance only. For an emergency, contact local emergency services.</p>
+  </footer>
+  <script src="{{ url_for('static', filename='app.js') }}" defer></script>
 </body>
 </html>

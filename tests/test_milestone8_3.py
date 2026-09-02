@@ -101,7 +101,7 @@ def test_session_fixation_role_tampering_and_idle_expiry_return_to_login(tmp_pat
     expired = client.get("/dashboard", follow_redirects=True)
     assert expired.status_code == 200
     assert b"Your session expired. Please log in again." in expired.data
-    assert b"Patient Login" in expired.data
+    assert b"Sign in to ZENDOC" in expired.data
     with client.session_transaction() as session_state:
         assert "user_id" not in session_state
 

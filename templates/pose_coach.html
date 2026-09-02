@@ -38,7 +38,7 @@
     {% for session in sessions %}<tr><td>{{ session.exercise }}</td><td>{{ session.duration_seconds }}s</td><td>Camera preview only</td><td>{{ session.created_at }}</td></tr>{% endfor %}
     </tbody></table>
   {% else %}
-    <p>No camera preview sessions saved yet.</p>
+    <div class="empty-state"><h3>No preview sessions yet</h3><p>Start the camera when ready, then save the preview duration. Pose analysis and rep counting remain unavailable.</p></div>
   {% endif %}
 </section>
 <script>window.ZENDOC_CSRF = "{{ csrf_token }}";</script>

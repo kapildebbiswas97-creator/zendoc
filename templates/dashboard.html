@@ -1,168 +1,119 @@
 {% extends "base.html" %}
 {% block title %}Health Command Center — ZENDOC{% endblock %}
-
 {% block content %}
-<section class="section-head">
+<section class="section-head dashboard-hero">
   <div>
-    <p class="eyebrow">Health Command Center &bull; {{ current_user.role.title() }}</p>
+    <p class="eyebrow">{{ 'Health command center' if current_user.role == 'patient' else current_user.role.replace('_',' ').title() + ' workspace' }}</p>
     <h1>{% if current_user.role == 'admin' %}Admin Dashboard{% else %}Welcome, {{ current_user.name }}{% endif %}</h1>
-    <p class="section-copy">Your central hub for personal healthcare, family wellness, medical records, and AI assistance.</p>
+    <p class="section-copy">
+      {% if current_user.role == 'patient' %}Here is what is happening with your care and the clearest next step.{% elif current_user.role in ['doctor','hospital'] %}Review appointments, schedule availability, patient messages, and consent-shared information.{% elif current_user.role == 'pharmacy' %}Manage pharmacy workflows, care messages, and provider information.{% else %}Your role-specific ZENDOC workspace.{% endif %}
+    </p>
   </div>
   <div class="form-actions">
-    <a href="{{ url_for('ecosystem.search_page') }}" class="secondary-action">Universal Search</a>
-    <a href="{{ url_for('main.ai_center') }}" class="primary-action">Ask ZENDOC AI</a>
+    {% if current_user.role == 'patient' %}<a href="{{ url_for('main.ai_center') }}" class="primary-action">Ask ZENDOC AI</a>{% endif %}
+    <a href="{{ url_for('main.notifications') }}" class="secondary-action">Notifications{% if stats.get('Unread') %} ({{ stats.get('Unread') }}){% endif %}</a>
   </div>
 </section>
 
-<!-- Emergency Shortcut Banner -->
-<div class="privacy-banner" style="background:#fff5f5;border-color:var(--danger);color:#b42318;margin-bottom:24px;display:flex;justify-content:space-between;align-items:center;">
-  <div>
-    <strong>Emergency care required?</strong> Contact local emergency services now (112/108 in India) for acute chest pain, severe shortness of breath, stroke symptoms, or severe injury. ZENDOC cannot dispatch help.
-  </div>
-  <a href="{{ url_for('ecosystem.ambulance_page') }}" class="primary-action danger-button" style="min-height:36px;padding:4px 12px;font-size:13px;">Open transport intake</a>
-</div>
+{% if current_user.role == 'patient' %}
+<aside class="emergency-strip" aria-label="Emergency guidance">
+  <p><strong>Need urgent help?</strong> For chest pain, severe breathing difficulty, stroke signs, or serious injury, contact local emergency services now. ZENDOC cannot dispatch help.</p>
+  <a href="{{ url_for('ecosystem.ambulance_page') }}" class="secondary-action">View transport guidance</a>
+</aside>
 
-<!-- Quick Action Grid (One-Tap Access) -->
-<section style="margin-bottom:24px;">
-  <h3 style="margin:0 0 12px;">Quick Action Shortcuts</h3>
-  <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(130px, 1fr));gap:12px;">
-    <a href="{{ url_for('main.ai_center') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;background:#eef4ff;border-color:#b2ddff;">
-      <strong style="color:var(--primary);font-size:14px;">Ask AI</strong>
-      <small style="color:var(--muted);font-size:11px;">Guidance &amp; next steps</small>
-    </a>
-    <a href="{{ url_for('milestone7.messages_page') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
-      <strong style="font-size:14px;">Messages</strong>
-      <small style="color:var(--muted);font-size:11px;">ZENDOC Connect</small>
-    </a>
-    <a href="{{ url_for('milestone7.telehealth_page') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
-      <strong style="font-size:14px;">Telehealth</strong>
-      <small style="color:var(--muted);font-size:11px;">Beta request workflow</small>
-    </a>
-    <a href="{{ url_for('milestone7.videos_page') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
-      <strong style="font-size:14px;">Videos</strong>
-      <small style="color:var(--muted);font-size:11px;">Provider-aware guidance</small>
-    </a>
-    <a href="{{ url_for('main.finder') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
-      <strong style="font-size:14px;">Find Doctor</strong>
-      <small style="color:var(--muted);font-size:11px;">Search Clinics</small>
-    </a>
-    <a href="{{ url_for('main.appointments') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
-      <strong style="font-size:14px;">Appointments</strong>
-      <small style="color:var(--muted);font-size:11px;">Book &amp; View</small>
-    </a>
-    <a href="{{ url_for('main.records') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
-      <strong style="font-size:14px;">Upload Report</strong>
-      <small style="color:var(--muted);font-size:11px;">Organize health records</small>
-    </a>
-    <a href="{{ url_for('ecosystem.pharmacy_page') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
-      <strong style="font-size:14px;">Medicines</strong>
-      <small style="color:var(--muted);font-size:11px;">Reference &amp; reminders</small>
-    </a>
-    <a href="{{ url_for('ecosystem.home_health_page') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
-      <strong style="font-size:14px;">Home Health</strong>
-      <small style="color:var(--muted);font-size:11px;">Integration-required intake</small>
-    </a>
-    {% if current_user.role == 'patient' %}
-    <a href="{{ url_for('family.family_page') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
-      <strong style="font-size:14px;">Family Care</strong>
-      <small style="color:var(--muted);font-size:11px;">Remote Parents</small>
-    </a>
-    <a href="{{ url_for('fitness.overview') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
-      <strong style="font-size:14px;">Fitness Coach</strong>
-      <small style="color:var(--muted);font-size:11px;">Workouts &amp; Diet</small>
-    </a>
-    <a href="{{ url_for('milestone7.pose_coach_page') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
-      <strong style="font-size:14px;">Pose Coach</strong>
-      <small style="color:var(--muted);font-size:11px;">Camera Beta</small>
-    </a>
-    <a href="{{ url_for('ecosystem.iot_hub_page') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
-      <strong style="font-size:14px;">IoT Devices</strong>
-      <small style="color:var(--muted);font-size:11px;">Manual provenance prototype</small>
-    </a>
+<section class="dashboard-status" aria-label="Your next care steps">
+  <article class="panel next-step-card">
+    <p class="eyebrow" style="color:#bce9e2;">Recommended next step</p>
+    {% if next_appointment %}
+      <h2>Prepare for your upcoming appointment</h2>
+      <p>You have a {{ next_appointment.status }} request with {{ next_appointment.provider_name }} on {{ next_appointment.scheduled_for.replace('T', ' at ') }}.</p>
+      <div class="form-actions"><a href="{{ url_for('main.appointments') }}" class="primary-action">View appointment</a><a href="{{ url_for('milestone7.messages_page') }}" class="secondary-action">Message care team</a></div>
+    {% elif stats.get('Records', 0) == 0 %}
+      <h2>Start building your Health Memory</h2>
+      <p>Add a report or record so your health journey is easier to review in one place.</p>
+      <div class="form-actions"><a href="{{ url_for('main.records') }}" class="primary-action">Upload your first report</a><a href="{{ url_for('health_memory.health_summary_page') }}" class="secondary-action">Open Health Memory</a></div>
+    {% else %}
+      <h2>What would you like help with today?</h2>
+      <p>Ask ZENDOC AI for educational guidance, or find a reviewed provider and request an appointment.</p>
+      <div class="form-actions"><a href="{{ url_for('main.ai_center') }}" class="primary-action">Ask ZENDOC AI</a><a href="{{ url_for('main.finder') }}" class="secondary-action">Find care</a></div>
     {% endif %}
-    <a href="{{ url_for('ecosystem.marketplace_page') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
-      <strong style="font-size:14px;">All Services</strong>
-      <small style="color:var(--muted);font-size:11px;">Ecosystem Catalog</small>
-    </a>
-    {% if current_user.role == 'admin' %}
-    <a href="{{ url_for('milestone7.admin_agent_command_center') }}" class="secondary-action" style="flex-direction:column;gap:4px;padding:12px;text-align:center;height:auto;">
-      <strong style="font-size:14px;">Agent Center</strong>
-      <small style="color:var(--muted);font-size:11px;">Ops Command</small>
-    </a>
+  </article>
+
+  <article class="panel appointment-preview">
+    <div class="panel-head"><div><p class="eyebrow">Coming up</p><h2>Next appointment</h2></div><a href="{{ url_for('main.appointments') }}" class="text-link">View all</a></div>
+    {% if next_appointment %}
+      <time datetime="{{ next_appointment.scheduled_for }}">{{ next_appointment.scheduled_for.replace('T', ' · ') }}</time>
+      <strong>{{ next_appointment.provider_name }}</strong>
+      <div class="appointment-meta"><span>{{ next_appointment.reason or 'Reason not added' }}</span><span class="status-badge {{ 'active' if next_appointment.status == 'confirmed' else 'beta' }}">{{ next_appointment.status }}</span></div>
+    {% else %}
+      <div class="empty-state"><h3>No appointment scheduled</h3><p>Find a provider, review availability, and request a suitable time.</p><a href="{{ url_for('main.finder') }}" class="secondary-action">Find a provider</a></div>
     {% endif %}
+  </article>
+</section>
+
+<section aria-labelledby="quick-actions-title">
+  <div class="panel-head"><div><p class="eyebrow">Common tasks</p><h2 id="quick-actions-title">Quick actions</h2></div></div>
+  <div class="quick-action-grid">
+    <a href="{{ url_for('main.ai_center') }}" class="quick-action primary"><strong>Ask ZENDOC AI</strong><span>Get guidance and next steps</span><span class="quick-action-arrow">→</span></a>
+    <a href="{{ url_for('main.finder') }}" class="quick-action"><strong>Find a doctor</strong><span>Search reviewed care options</span><span class="quick-action-arrow">→</span></a>
+    <a href="{{ url_for('main.appointments') }}" class="quick-action"><strong>Appointments</strong><span>Review requests and status</span><span class="quick-action-arrow">→</span></a>
+    <a href="{{ url_for('main.records') }}" class="quick-action"><strong>Upload report</strong><span>Add to Health Memory</span><span class="quick-action-arrow">→</span></a>
+    <a href="{{ url_for('health_memory.health_summary_page') }}" class="quick-action"><strong>Health Memory</strong><span>See your health snapshot</span><span class="quick-action-arrow">→</span></a>
+    <a href="{{ url_for('milestone7.messages_page') }}" class="quick-action"><strong>Message provider</strong><span>Continue a care conversation</span><span class="quick-action-arrow">→</span></a>
   </div>
 </section>
 
-<!-- Health Snapshot Stats -->
-<section class="stats">
+<section class="stats" aria-label="Account overview">
   {% for label, value in stats.items() %}
-    <article>
-      <span>{{ label }}</span>
-      <strong>{{ value }}</strong>
-    </article>
+    <article><span>{{ label }}</span><strong>{{ value }}</strong><small class="metric-context">{{ 'needs attention' if label == 'Unread' and value else 'in your account' }}</small></article>
   {% endfor %}
 </section>
 
-<div class="grid two">
-  <!-- Left column: Recent Appointments & Reminders -->
+<section class="grid two">
   <article class="panel">
-    <div class="panel-head">
-      <h2>Upcoming Appointments</h2>
-      <a href="{{ url_for('main.appointments') }}" class="secondary-action">Manage</a>
-    </div>
-    {% if appointments %}
-      <table>
-        <thead>
-          <tr>
-            <th>Patient</th>
-            <th>Provider</th>
-            <th>Scheduled</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for item in appointments %}
-            <tr>
-              <td><strong>{{ item.patient_name }}</strong></td>
-              <td>{{ item.provider_name }}</td>
-              <td>{{ item.scheduled_for }}</td>
-              <td><span class="status-badge active">{{ item.status }}</span></td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    {% else %}
-      <div class="empty-state">
-        <p>No upcoming appointments booked.</p>
-        <a href="{{ url_for('main.finder') }}" class="primary-action" style="margin-top:8px;">Find Doctor &amp; Book</a>
+    <div class="panel-head"><div><p class="eyebrow">Health Memory</p><h2>Recent health activity</h2></div><a href="{{ url_for('health_memory.timeline_page') }}" class="text-link">Full timeline</a></div>
+    {% if health_activity %}
+      <div class="dashboard-feed">
+        {% for item in health_activity %}<a class="feed-item" href="{{ item.url }}"><span class="feed-dot" aria-hidden="true"></span><span><strong>{{ item.title }}</strong><p>{{ item.kind }} · {{ item.detail }} · {{ item.when[:10] }}</p></span></a>{% endfor %}
       </div>
+    {% else %}
+      <div class="empty-state"><h3>Your Health Memory is ready</h3><p>Reports and measurements you add will appear here, giving you a quick view of recent activity.</p><a href="{{ url_for('main.records') }}" class="secondary-action">Upload a report</a></div>
     {% endif %}
   </article>
 
-  <!-- Right column: Family & Ecosystem Highlights -->
   <article class="panel">
-    <div class="panel-head">
-      <h2>Ecosystem Connected Care</h2>
-      <a href="{{ url_for('ecosystem.marketplace_page') }}" class="secondary-action">Explore All Services</a>
-    </div>
-    
-    <div class="summary-block" style="margin-top:12px;">
-      <div class="summary-row">
-        <strong>Family &amp; Parent Care</strong>
-        <span>Manage elder care, appointment booking for dependents, and remote caregiver tasks.</span>
-        <a href="{{ url_for('family.family_page') }}" class="text-link" style="margin-top:4px;">Open Family Care &rarr;</a>
-      </div>
-      <div class="summary-row">
-        <strong>Home Healthcare</strong>
-        <span>Submit structured requests for future provider-integrated home visits and care services.</span>
-        <a href="{{ url_for('ecosystem.home_health_page') }}" class="text-link" style="margin-top:4px;">Open Home Care Intake &rarr;</a>
-      </div>
-      <div class="summary-row">
-        <strong>IoT Connected Devices</strong>
-        <span>Register demo device records and log measurements with device provenance; live SDK sync requires integration.</span>
-        <a href="{{ url_for('ecosystem.iot_hub_page') }}" class="text-link" style="margin-top:4px;">Connect Devices &rarr;</a>
-      </div>
+    <div class="panel-head"><div><p class="eyebrow">Important updates</p><h2>Notifications</h2></div><a href="{{ url_for('main.notifications') }}" class="text-link">View all</a></div>
+    {% if recent_notifications %}
+      {% for item in recent_notifications %}<article class="notice"><strong>{{ item.title }}</strong><p>{{ item.message }}</p><span>{{ item.created_at }}</span></article>{% endfor %}
+    {% else %}
+      <div class="empty-state"><h3>You are all caught up</h3><p>Appointment changes and important care updates will appear here.</p></div>
+    {% endif %}
+  </article>
+</section>
+
+{% else %}
+<section class="stats" aria-label="Workspace overview">
+  {% for label, value in stats.items() %}<article><span>{{ label }}</span><strong>{{ value }}</strong><small class="metric-context">in your workspace</small></article>{% endfor %}
+</section>
+
+<section class="grid two">
+  <article class="panel">
+    <div class="panel-head"><div><p class="eyebrow">Priority work</p><h2>Appointments</h2></div><a href="{{ url_for('main.appointments') }}" class="secondary-action">Manage appointments</a></div>
+    {% if appointments %}
+      <div class="appointment-list">{% for item in appointments[:4] %}<div class="appointment-card"><div><h3>{{ item.patient_name }}</h3><p>{{ item.scheduled_for.replace('T',' · ') }} · {{ item.reason or 'No visit reason provided' }}</p></div><span class="status-badge {{ 'active' if item.status in ['confirmed','completed'] else 'beta' }}">{{ item.status }}</span></div>{% endfor %}</div>
+    {% else %}
+      <div class="empty-state"><h3>No appointment activity</h3><p>New requests and upcoming consultations will appear here.</p></div>
+    {% endif %}
+  </article>
+  <article class="panel">
+    <p class="eyebrow">Workspace shortcuts</p><h2>Continue your work</h2>
+    <div class="button-list">
+      {% if current_user.role in ['doctor','hospital'] %}<a href="{{ url_for('milestone7.doctor_availability_page') }}" class="secondary-action">Update schedule availability</a>{% endif %}
+      {% if current_user.role in ['doctor','hospital','pharmacy'] %}<a href="{{ url_for('main.provider_profile') }}" class="secondary-action">Review provider profile</a>{% endif %}
+      <a href="{{ url_for('milestone7.messages_page') }}" class="secondary-action">Open messages</a>
+      {% if current_user.role == 'admin' %}<a href="{{ url_for('milestone7.admin_agent_command_center') }}" class="secondary-action">Open Owner Command Center 2.0</a><a href="{{ url_for('main.admin') }}" class="secondary-action">Review users and providers</a>{% endif %}
     </div>
   </article>
-</div>
+</section>
+{% endif %}
 {% endblock %}

@@ -2,6 +2,7 @@
 {% block title %}My Health Profile{% endblock %}
 {% block content %}
 <section class="section-head"><div><p class="eyebrow">ZENDOC Health Memory</p><h1>My Health Profile</h1><p class="section-copy">Optional health information you control. Your account name, email, and login details remain separate.</p></div><a class="secondary-action" href="{{ url_for('main.profile') }}">Account Profile</a></section>
+{% include "components/_health_memory_nav.html" %}
 <form class="profile-form" method="post">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <section class="panel"><h2>Clinical Basics</h2><div class="form-grid">

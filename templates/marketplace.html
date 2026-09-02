@@ -1,31 +1,23 @@
 {% extends "base.html" %}
-{% block title %}Services Marketplace — ZENDOC Healthcare Ecosystem{% endblock %}
+{% block title %}Healthcare Services — ZENDOC{% endblock %}
 
 {% block content %}
 <section class="section-head">
   <div>
-    <p class="eyebrow">All-in-One Healthcare Ecosystem</p>
-    <h1>ZENDOC Services Marketplace</h1>
-    <p class="section-copy">One unified platform for personal health, family care, doctors, hospitals, diagnostics, pharmacy, emergency transport, home healthcare, and fitness.</p>
+    <p class="eyebrow">More from ZENDOC</p>
+    <h1>Healthcare services</h1>
+    <p class="section-copy">Explore care, family, wellness, pharmacy, transport, and connected-health workflows. Status labels show what is working today.</p>
   </div>
   <a href="{{ url_for('main.dashboard') }}" class="secondary-action">Dashboard</a>
 </section>
 
-<!-- Marketplace Grid -->
 <div class="grid three">
   {% for item in catalog %}
-    <article class="panel" style="display:flex;flex-direction:column;justify-content:space-between;">
-      <div>
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-          <span class="status-badge {% if item.badge_color == 'success' %}active{% else %}inactive{% endif %}">{{ item.badge }}</span>
-        </div>
-        <h2 style="margin:0 0 8px;font-size:22px;">{{ item.title }}</h2>
-        <p style="color:var(--muted);font-size:14px;line-height:1.5;margin:0 0 16px;">{{ item.description }}</p>
-      </div>
-
-      <div>
-        <a href="{{ item.url }}" class="primary-action" style="width:100%;text-align:center;">Open {{ item.title }} &rarr;</a>
-      </div>
+    <article class="panel feature-card">
+      <span class="status-badge {% if item.badge_color == 'success' %}active{% elif item.badge_color == 'warning' %}beta{% else %}prototype{% endif %}">{{ item.badge }}</span>
+      <h2>{{ item.title }}</h2>
+      <p>{{ item.description }}</p>
+      <a href="{{ item.url }}" class="secondary-action" style="margin-top:auto;">Open {{ item.title }}</a>
     </article>
   {% endfor %}
 </div>

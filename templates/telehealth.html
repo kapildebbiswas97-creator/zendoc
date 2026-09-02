@@ -1,39 +1,35 @@
 {% extends "base.html" %}
-{% block title %}Telehealth - ZENDOC{% endblock %}
+{% block title %}Telehealth — ZENDOC{% endblock %}
 {% block content %}
 <section class="section-head">
-  <div><p class="eyebrow">Beta Telehealth</p><h1>Doctor Communication</h1><p class="section-copy">Request secure chat, voice, or video. Doctors must accept before any consultation room is available.</p></div>
-  {% if current_user.role in ['doctor','hospital'] %}<a href="{{ url_for('milestone7.doctor_availability_page') }}" class="secondary-action">Availability</a>{% endif %}
+  <div><p class="eyebrow">Telehealth · Beta</p><h1>Telehealth consultations</h1><p class="section-copy">Request secure chat, voice, or video with a reviewed provider. The provider must accept before consultation controls become available.</p></div>
+  {% if current_user.role in ['doctor','hospital'] %}<a href="{{ url_for('milestone7.doctor_availability_page') }}" class="secondary-action">Manage availability</a>{% endif %}
 </section>
+<aside class="trust-note warning"><strong>Beta workflow</strong><br>Consultation requests, secure messages, and browser-local camera controls are available. This is not yet a production telemedicine service.</aside>
 
-{% if current_user.role == 'patient' %}
-<form method="post" class="panel">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-  <input type="hidden" name="action" value="request_consultation">
-  <div class="form-grid">
-    <label>Doctor User ID <input name="doctor_id" type="number" required></label>
-    <label>Type
-      <select name="consultation_type"><option value="chat">Chat</option><option value="voice">Voice</option><option value="video">Video</option></select>
-    </label>
-  </div>
-  <label>Reason <textarea name="reason" rows="3" required></textarea></label>
-  <button type="submit">Request Consultation</button>
-</form>
-{% endif %}
-
-<section class="panel">
-  <h2>Consultations</h2>
-  {% if consultations %}
-    <table><thead><tr><th>Patient</th><th>Doctor</th><th>Type</th><th>Status</th><th>Action</th></tr></thead><tbody>
-    {% for item in consultations %}
-      <tr>
-        <td>{{ item.patient_name }}</td><td>{{ item.doctor_name }}</td><td>{{ item.consultation_type }}</td><td>{{ item.status }}</td>
-        <td><a class="secondary-action" href="{{ url_for('milestone7.telehealth_detail_page', consultation_id=item.id) }}">Open</a></td>
-      </tr>
-    {% endfor %}
-    </tbody></table>
-  {% else %}
-    <p>No consultation requests yet.</p>
+<section class="{% if current_user.role == 'patient' %}grid two{% endif %} spaced-panel">
+  {% if current_user.role == 'patient' %}
+  <form method="post" class="panel">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="request_consultation">
+    <p class="eyebrow">New request</p><h2>Ask for a consultation</h2>
+    {% if doctors %}
+      <label>Provider <select name="doctor_id" required><option value="">Choose a provider</option>{% for doctor in doctors %}<option value="{{ doctor.id }}">{{ doctor.organization or doctor.name }}{% if doctor.specialty %} · {{ doctor.specialty }}{% endif %}</option>{% endfor %}</select></label>
+      <label>How would you like to connect? <select name="consultation_type"><option value="chat">Secure chat</option><option value="voice">Voice call request</option><option value="video">Video call request</option></select></label>
+      <label>Reason for consultation <textarea name="reason" rows="3" maxlength="500" placeholder="Brief, non-emergency reason" required></textarea></label>
+      <button type="submit" data-submitting-label="Sending request…">Request consultation</button>
+    {% else %}
+      <div class="empty-state"><h3>No telehealth provider is available</h3><p>A reviewed doctor must be available before you can send a consultation request.</p><a href="{{ url_for('main.finder') }}" class="secondary-action">Find care</a></div>
+    {% endif %}
+  </form>
   {% endif %}
+
+  <article class="panel">
+    <div class="panel-head"><div><p class="eyebrow">Your requests</p><h2>Consultations</h2></div><span class="count-pill">{{ consultations|length }}</span></div>
+    {% if consultations %}
+      <div class="appointment-list">{% for item in consultations %}<article class="appointment-card"><div><h3>{{ item.doctor_name if current_user.role == 'patient' else item.patient_name }}</h3><p>{{ item.consultation_type.title() }} consultation{% if item.scheduled_for %} · {{ item.scheduled_for.replace('T',' · ') }}{% endif %}</p></div><div class="form-actions"><span class="status-badge {{ 'active' if item.status in ['accepted','scheduled','ended'] else 'inactive' if item.status == 'rejected' else 'beta' }}">{{ item.status }}</span><a class="secondary-action" href="{{ url_for('milestone7.telehealth_detail_page', consultation_id=item.id) }}">Open</a></div></article>{% endfor %}</div>
+    {% else %}
+      <div class="empty-state"><h3>No consultation requests yet</h3><p>{% if current_user.role == 'patient' %}Choose a reviewed provider and explain how you would like to connect.{% else %}New patient consultation requests will appear here for review.{% endif %}</p></div>
+    {% endif %}
+  </article>
 </section>
 {% endblock %}

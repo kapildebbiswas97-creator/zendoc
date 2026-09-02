@@ -4,9 +4,9 @@
 {% block content %}
 <section class="section-head">
   <div>
-    <p class="eyebrow">Startup Innovation &bull; Remote Caregiving</p>
-    <h1>Remote Parent Care Dashboard</h1>
-    <p class="section-copy">Care for your elderly parents living in another city or country. Schedule doctor visits, order home healthcare, request medicine delivery, and monitor health from anywhere.</p>
+    <p class="eyebrow">Remote caregiving</p>
+    <h1>Remote parent care</h1>
+    <p class="section-copy">Keep care tasks and appropriate proxy actions organised for a parent or senior dependent who lives elsewhere.</p>
   </div>
   <a href="{{ url_for('family.family_page') }}" class="secondary-action">Back to Family Care</a>
 </section>
@@ -18,56 +18,62 @@
         <div class="panel-head">
           <div>
             <span class="status-badge active">{{ parent.relationship.title() }}</span>
-            <h2 style="margin-top:4px;">{{ parent.member_name }}</h2>
-            <p style="margin:2px 0 0;color:var(--muted);font-size:13px;">Age: {{ parent.age or 'N/A' }} &bull; Location: <strong>{{ parent.city or 'India' }}</strong></p>
+            <h2>{{ parent.member_name }}</h2>
+            <p class="form-note">Age: {{ parent.age or 'N/A' }} · {{ parent.city or 'India' }}</p>
           </div>
         </div>
-
-        <h4 style="margin-top:18px;">Quick Proxy Actions for {{ parent.member_name }}</h4>
-        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;">
-          <a href="{{ url_for('main.finder') }}" class="secondary-action" style="font-size:13px;">Book Doctor Consultation</a>
-          <a href="{{ url_for('ecosystem.home_health_page') }}" class="secondary-action" style="font-size:13px;">Request Nurse / Home Visit</a>
-          <a href="{{ url_for('ecosystem.pharmacy_page') }}" class="secondary-action" style="font-size:13px;">Order Medicine Delivery</a>
-          <a href="{{ url_for('ecosystem.ambulance_page') }}" class="secondary-action" style="font-size:13px;border-color:var(--danger);color:var(--danger);">Request Emergency Ambulance</a>
+        <h3>Proxy actions for {{ parent.member_name }}</h3>
+        <div class="button-list">
+          <a href="{{ url_for('main.finder') }}" class="secondary-action">Book doctor consultation</a>
+          <a href="{{ url_for('ecosystem.home_health_page') }}" class="secondary-action">Request nurse / home visit</a>
+          <a href="{{ url_for('ecosystem.pharmacy_page') }}" class="secondary-action">Pharmacy requests</a>
+          <a href="{{ url_for('ecosystem.ambulance_page') }}" class="secondary-action">Emergency &amp; transport guidance</a>
         </div>
       </article>
     {% endfor %}
   </div>
 {% else %}
-  <article class="panel">
-    <div class="empty-state">
-      <h2>No Remote Parents Added Yet</h2>
-      <p>Add your mother, father, or grandparents in Family Care to enable the Remote Parent Care dashboard.</p>
-      <a href="{{ url_for('family.family_page') }}" class="primary-action" style="margin-top:12px;">Add Parent / Dependent Now</a>
-    </div>
-  </article>
+  <div class="empty-state panel">
+    <h2>No remote parents added yet</h2>
+    <p>Add your mother, father, or grandparents in Family Care to enable the Remote Parent Care dashboard.</p>
+    <a href="{{ url_for('family.family_page') }}" class="primary-action">Add parent or dependent</a>
+  </div>
 {% endif %}
 
-<article class="panel" style="margin-top:24px;">
-  <h2>Parent Care Tasks</h2>
+<article class="panel spaced-panel">
+  <div class="panel-head">
+    <div><p class="eyebrow">Care coordination</p><h2>Parent care tasks</h2></div>
+    <a href="{{ url_for('family.family_page') }}" class="secondary-action">Add task</a>
+  </div>
   {% if tasks %}
-    <table>
-      <thead>
-        <tr>
-          <th>Task Title</th>
-          <th>Parent / Member</th>
-          <th>Due Date</th>
-          <th>Status</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for t in tasks %}
+    <div class="table-shell">
+      <table>
+        <thead>
           <tr>
-            <td><strong>{{ t.title }}</strong></td>
-            <td>{{ t.member_name or 'Parent' }}</td>
-            <td>{{ t.due_date or 'Flexible' }}</td>
-            <td><span class="status-badge active">{{ t.status.title() }}</span></td>
+            <th>Task</th>
+            <th>For</th>
+            <th>Due date</th>
+            <th>Status</th>
           </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {% for t in tasks %}
+            <tr>
+              <td><strong>{{ t.title }}</strong></td>
+              <td>{{ t.member_name or 'Parent' }}</td>
+              <td>{{ t.due_date or 'Flexible' }}</td>
+              <td><span class="status-badge {{ 'active' if t.status == 'completed' else 'beta' }}">{{ t.status.title() }}</span></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   {% else %}
-    <p class="empty-state">No parent care tasks currently active.</p>
+    <div class="empty-state">
+      <h3>No active parent care tasks</h3>
+      <p>Create a task in Family Care to keep the next check-in, refill, or appointment visible.</p>
+      <a href="{{ url_for('family.family_page') }}" class="secondary-action">Create a care task</a>
+    </div>
   {% endif %}
 </article>
 {% endblock %}

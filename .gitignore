@@ -12,3 +12,4 @@ backups/
 vendor_deps/
 deps/
 pydeps_m4/
+work/

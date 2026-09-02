@@ -1,35 +1,37 @@
 {% extends "base.html" %}
-{% block title %}Provider Profile{% endblock %}
+{% block title %}Provider Profile — ZENDOC{% endblock %}
 {% block content %}
-<section class="section-head"><div><p class="eyebrow">Provider network</p><h1>Provider Profile</h1></div></section>
+<section class="section-head"><div><p class="eyebrow">Provider workspace</p><h1>Provider profile</h1><p class="section-copy">Keep the public care information patients use to decide and book up to date.</p></div>{% if profile %}<span class="status-badge {{ 'working' if profile.verification_status == 'verified' else 'integration' }}">{{ profile.verification_status }}</span>{% endif %}</section>
+
 <section class="grid two">
   <form class="panel" method="post">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <h2>Public Profile</h2>
-    <label>Specialty <input name="specialty" value="{{ profile.specialty if profile else '' }}" list="specialty-options" required></label>
-    <datalist id="specialty-options">{% for specialty in specialties %}<option value="{{ specialty }}">{% endfor %}</datalist>
-    <label>Qualifications <input name="qualifications" value="{{ profile.qualifications if profile else '' }}"></label>
-    <label>License / Registration ID <input name="license_identifier" value="{{ profile.license_identifier if profile else '' }}"></label>
-    <label>Organization <input name="organization" value="{{ profile.organization if profile else '' }}"></label>
-    <label>Address <textarea name="address" rows="3">{{ profile.address if profile else '' }}</textarea></label>
-    <label>City <input name="city" value="{{ profile.city if profile else '' }}"></label>
-    <label>State <input name="state" value="{{ profile.state if profile else '' }}"></label>
-    <label>Postal Code <input name="postal_code" value="{{ profile.postal_code if profile else '' }}"></label>
-    <label>Public Phone <input name="public_phone" value="{{ profile.public_phone if profile else '' }}"></label>
-    <button type="submit">Save Provider Profile</button>
-    {% if profile %}<p class="muted">Verification status: {{ profile.verification_status }}</p>{% endif %}
+    <p class="eyebrow">Patient-facing details</p><h2>Public profile</h2>
+    <label>Specialty <input name="specialty" value="{{ profile.specialty if profile else '' }}" list="specialty-options" required><datalist id="specialty-options">{% for specialty in specialties %}<option value="{{ specialty }}">{% endfor %}</datalist></label>
+    <label>About your qualifications <textarea name="qualifications" rows="3" maxlength="500" placeholder="A concise, patient-friendly summary">{{ profile.qualifications if profile else '' }}</textarea></label>
+    <label>License or registration ID <input name="license_identifier" value="{{ profile.license_identifier if profile else '' }}" autocomplete="off"></label>
+    <label>Organization <input name="organization" value="{{ profile.organization if profile else '' }}" autocomplete="organization"></label>
+    <label>Address <textarea name="address" rows="2" autocomplete="street-address">{{ profile.address if profile else '' }}</textarea></label>
+    <div class="form-grid"><label>City <input name="city" value="{{ profile.city if profile else '' }}" autocomplete="address-level2"></label><label>State <input name="state" value="{{ profile.state if profile else '' }}" autocomplete="address-level1"></label></div>
+    <div class="form-grid"><label>Postal code <input name="postal_code" value="{{ profile.postal_code if profile else '' }}" autocomplete="postal-code" inputmode="numeric"></label><label>Public phone <input name="public_phone" type="tel" value="{{ profile.public_phone if profile else '' }}" autocomplete="tel" inputmode="tel"></label></div>
+    <button type="submit" data-submitting-label="Saving profile…">Save profile for review</button>
+    <p class="form-note">Saving changes returns the profile to pending review so patient-facing verification stays truthful.</p>
   </form>
-  <div class="panel">
-    <h2>Schedule</h2>
+
+  <article class="panel">
+    <p class="eyebrow">Booking hours</p><h2>Published schedule</h2>
     <form method="post" action="{{ url_for('main.provider_schedule') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <label>Weekday <select name="weekday">{% for day in ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'] %}<option value="{{ loop.index0 }}">{{ day }}</option>{% endfor %}</select></label>
-      <label>Start <input name="start_time" type="time" required></label>
-      <label>End <input name="end_time" type="time" required></label>
-      <label>Slot Minutes <input name="slot_minutes" type="number" min="10" max="180" value="30"></label>
-      <button type="submit">Add Schedule</button>
+      <label>Day <select name="weekday">{% for day in ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'] %}<option value="{{ loop.index0 }}">{{ day }}</option>{% endfor %}</select></label>
+      <div class="form-grid"><label>Starts <input name="start_time" type="time" required></label><label>Ends <input name="end_time" type="time" required></label></div>
+      <label>Appointment length <select name="slot_minutes"><option value="15">15 minutes</option><option value="20">20 minutes</option><option value="30" selected>30 minutes</option><option value="45">45 minutes</option><option value="60">60 minutes</option></select></label>
+      <button type="submit" class="secondary-action" data-submitting-label="Adding hours…">Add hours</button>
     </form>
-    {% if schedules %}<table><thead><tr><th>Day</th><th>Time</th><th>Slot</th></tr></thead><tbody>{% for row in schedules %}<tr><td>{{ row.weekday }}</td><td>{{ row.start_time }}-{{ row.end_time }}</td><td>{{ row.slot_minutes }} min</td></tr>{% endfor %}</tbody></table>{% else %}<p>No schedules yet.</p>{% endif %}
-  </div>
+    {% if schedules %}
+      {% set weekday_names = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'] %}<div class="schedule-grid spaced-panel">{% for row in schedules %}<div class="summary-row"><strong>{{ weekday_names[row.weekday] }}</strong><span>{{ row.start_time }}–{{ row.end_time }} · {{ row.slot_minutes }} minutes</span></div>{% endfor %}</div>
+    {% else %}
+      <div class="empty-state spaced-panel"><h3>No booking hours yet</h3><p>Add your first day and time range so patients can see available appointment slots.</p></div>
+    {% endif %}
+  </article>
 </section>
 {% endblock %}

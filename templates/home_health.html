@@ -4,80 +4,79 @@
 {% block content %}
 <section class="section-head">
   <div>
-    <p class="eyebrow">Doorstep Medical Services</p>
+    <p class="eyebrow">Home healthcare · Integration required</p>
     <h1>Home Healthcare</h1>
-    <p class="section-copy">Book home doctor visits, nursing care, physiotherapy, elder attendants, sample collection, and equipment rental at your home.</p>
+    <p class="section-copy">Submit a structured request for a home visit, nursing care, physiotherapy, sample collection, or equipment service. A live partner network is not yet connected.</p>
   </div>
   <a href="{{ url_for('main.dashboard') }}" class="secondary-action">Dashboard</a>
 </section>
 
-<!-- Available Services Catalog -->
-<h2 style="margin-bottom:14px;">Available Home Health Services</h2>
-<div class="grid three" style="margin-bottom:28px;">
-  {% for s in services %}
-    <article class="panel">
-      <span class="status-badge active" style="font-size:11px;">{{ s.status_badge }}</span>
-      <h3 style="margin:10px 0 6px;">{{ s.title }}</h3>
-      <p style="color:var(--muted);font-size:13px;margin:0 0 12px;">Category: <strong>{{ s.category }}</strong></p>
-      <p style="font-size:13px;line-height:1.4;">{{ s.description }}</p>
-    </article>
-  {% endfor %}
-</div>
+<aside class="trust-note warning">
+  <strong>Request intake only</strong><br>
+  ZENDOC records your request, but a live home-care provider network is not connected. Submission does not confirm a booking or a provider.
+</aside>
 
-<div class="grid two">
-  <!-- Request Booking Form -->
+<section class="spaced-panel" aria-labelledby="service-types-title">
+  <div class="panel-head">
+    <div><p class="eyebrow">Available requests</p><h2 id="service-types-title">Home care request types</h2></div>
+  </div>
+  <div class="grid three">
+    {% for s in services %}
+      <article class="panel feature-card">
+        <span class="status-badge integration">{{ s.status_badge }}</span>
+        <h3>{{ s.title }}</h3>
+        <p>Category: <strong>{{ s.category }}</strong></p>
+        <p>{{ s.description }}</p>
+      </article>
+    {% endfor %}
+  </div>
+</section>
+
+<div class="grid two spaced-panel">
   <article class="panel">
-    <h2>Book Home Healthcare Service</h2>
+    <p class="eyebrow">New request</p>
+    <h2>Submit a home care request</h2>
     <form method="post" action="{{ url_for('ecosystem.home_health_page') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <label>Service Type
+      <label>Service type
         <select name="service_type" required>
           {% for s in services %}
             <option value="{{ s.id }}">{{ s.title }} ({{ s.status_badge }})</option>
           {% endfor %}
         </select>
       </label>
-
-      <div class="form-grid" style="margin-top:12px;">
-        <label>Scheduled Date
-          <input type="date" name="scheduled_date" required>
-        </label>
-        <label>City
-          <input type="text" name="city" placeholder="e.g. Kolkata" required>
-        </label>
+      <div class="form-grid">
+        <label>Preferred date <input type="date" name="scheduled_date" required></label>
+        <label>City <input type="text" name="city" placeholder="e.g. Kolkata" required></label>
       </div>
-
-      <label style="margin-top:12px;">Doorstep Address
-        <textarea name="address" rows="2" placeholder="Full house address with landmark" required></textarea>
-      </label>
-
-      <label style="margin-top:12px;">Special Instructions / Clinical Notes (optional)
-        <input type="text" name="notes" placeholder="e.g. Patient is recovering from knee surgery">
-      </label>
-
-      <button type="submit" class="primary-action" style="margin-top:16px;">Submit Home Care Request</button>
+      <label>Full address <textarea name="address" rows="2" placeholder="House address with landmark" required></textarea></label>
+      <label>Special notes <input type="text" name="notes" placeholder="e.g. Patient recovering from knee surgery (optional)"></label>
+      <button type="submit" data-submitting-label="Submitting…">Submit request</button>
+      <p class="form-note">This saves an intake request only. It does not contact or confirm a provider.</p>
     </form>
   </article>
 
-  <!-- Request History -->
   <article class="panel">
-    <h2>Your Home Care Requests</h2>
+    <div class="panel-head">
+      <div><p class="eyebrow">Request history</p><h2>Your home care requests</h2></div>
+      <span class="count-pill">{{ requests|length }}</span>
+    </div>
     {% if requests %}
-      <div class="summary-block">
+      <div class="appointment-list">
         {% for r in requests %}
-          <div class="summary-row">
-            <div style="display:flex;justify-content:space-between;align-items:center;">
-              <strong>{{ r.service_type.replace('_', ' ').title() }}</strong>
-              <span class="status-badge active">{{ r.status.title() }}</span>
+          <div class="appointment-card">
+            <div>
+              <h3>{{ r.service_type.replace('_', ' ').title() }}</h3>
+              <p>{{ r.scheduled_date }} · {{ r.city }}{% if r.notes %} · {{ r.notes }}{% endif %}</p>
             </div>
-            <span>Date: {{ r.scheduled_date }} &bull; Patient: {{ r.patient_name }} &bull; City: {{ r.city }}</span>
-            {% if r.notes %}<p style="margin:2px 0 0;font-size:12px;color:var(--muted);">{{ r.notes }}</p>{% endif %}
+            <span class="status-badge integration">{{ r.status.title() }}</span>
           </div>
         {% endfor %}
       </div>
     {% else %}
       <div class="empty-state">
-        <p>No home healthcare requests submitted yet.</p>
+        <h3>No home care requests yet</h3>
+        <p>Use the request form to record what you need. Partner fulfilment is integration required.</p>
       </div>
     {% endif %}
   </article>

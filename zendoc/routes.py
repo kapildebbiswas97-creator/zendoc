@@ -298,17 +298,18 @@ def register(role):
     return render_template("register.html", role=role)
 
 
+@bp.route("/login", defaults={"role": None}, methods=("GET", "POST"))
 @bp.route("/login/<role>", methods=("GET", "POST"))
-def login(role):
-    role = normalize_role(role)
+def login(role=None):
+    display_role = normalize_role(role) if role else "patient"
     if request.method == "POST":
         if not require_form_fields("email", "password"):
-            return render_template("login.html", role=role), 400
+            return render_template("login.html", role=display_role), 400
         try:
             email = validate_email(request.form.get("email", ""))
         except ValueError:
             email = ""
-        user = user_by_normalized_email(email, role=role) if email else None
+        user = user_by_normalized_email(email) if email else None
         if user and user["role"] == "admin" and not is_owner(user):
             user = None
         if user and check_password_hash(user["password_hash"], request.form.get("password", "")):
@@ -317,7 +318,7 @@ def login(role):
             get_db().commit()
             return redirect(url_for("main.dashboard"))
         flash(INVALID_CREDENTIALS_MESSAGE, "error")
-    return render_template("login.html", role=role)
+    return render_template("login.html", role=display_role)
 
 
 @bp.route("/forgot-password", methods=("GET", "POST"))
@@ -389,16 +390,73 @@ def logout():
 @bp.get("/dashboard")
 @login_required
 def dashboard():
-    rows = get_db().execute(
+    db = get_db()
+    now_value = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M")
+    rows = db.execute(
         """
         SELECT a.*, p.name patient_name
         FROM appointments a JOIN users p ON p.id=a.patient_id
         WHERE a.patient_id=? OR a.provider_id=? OR ?='admin'
-        ORDER BY a.created_at DESC LIMIT 6
+        ORDER BY
+          CASE WHEN a.scheduled_for>=? AND a.status NOT IN ('completed','cancelled') THEN 0 ELSE 1 END,
+          CASE WHEN a.scheduled_for>=? THEN a.scheduled_for END ASC,
+          a.created_at DESC
+        LIMIT 6
         """,
-        (g.user["id"], g.user["id"], g.user["role"]),
+        (g.user["id"], g.user["id"], g.user["role"], now_value, now_value),
     ).fetchall()
-    return render_template("dashboard.html", stats=stats_for(g.user), appointments=rows)
+    next_appointment = next(
+        (
+            item
+            for item in rows
+            if item["scheduled_for"] >= now_value and item["status"] not in {"completed", "cancelled"}
+        ),
+        None,
+    )
+    notifications = db.execute(
+        "SELECT * FROM notifications WHERE user_id=? AND is_read=0 ORDER BY created_at DESC LIMIT 3",
+        (g.user["id"],),
+    ).fetchall()
+    health_activity = []
+    if g.user["role"] == "patient":
+        recent_records = db.execute(
+            "SELECT id,title,category,created_at FROM medical_records WHERE owner_id=? ORDER BY created_at DESC LIMIT 3",
+            (g.user["id"],),
+        ).fetchall()
+        recent_metrics = db.execute(
+            "SELECT metric_type,metric_value,unit,recorded_at FROM health_metrics WHERE user_id=? ORDER BY recorded_at DESC LIMIT 3",
+            (g.user["id"],),
+        ).fetchall()
+        health_activity.extend(
+            {
+                "kind": "Report",
+                "title": item["title"],
+                "detail": item["category"],
+                "when": item["created_at"],
+                "url": url_for("health_memory.report_detail_page", record_id=item["id"]),
+            }
+            for item in recent_records
+        )
+        health_activity.extend(
+            {
+                "kind": "Vital",
+                "title": item["metric_type"].replace("_", " ").title(),
+                "detail": f"{item['metric_value']} {item['unit'] or ''}".strip(),
+                "when": item["recorded_at"],
+                "url": url_for("main.health"),
+            }
+            for item in recent_metrics
+        )
+        health_activity.sort(key=lambda item: item["when"] or "", reverse=True)
+        health_activity = health_activity[:4]
+    return render_template(
+        "dashboard.html",
+        stats=stats_for(g.user),
+        appointments=rows,
+        next_appointment=next_appointment,
+        recent_notifications=notifications,
+        health_activity=health_activity,
+    )
 
 
 @bp.route("/profile", methods=("GET", "POST"))
@@ -440,8 +498,8 @@ def appointments():
                 create_notification(g.user["id"], "Appointment requested", "Your connected appointment request was saved.")
                 audit("create", "connected_appointment")
                 db.commit()
-                flash("Connected appointment saved.", "success")
-                return redirect(url_for("main.appointments"))
+                flash("Appointment requested. The provider can now review it.", "success")
+                return redirect(url_for("main.appointments", requested="1"))
             except (ValueError, PermissionError) as error:
                 flash(str(error), "error")
                 return redirect(url_for("main.appointments"))
@@ -469,7 +527,7 @@ def appointments():
         audit("create", "appointment")
         db.commit()
         flash("Appointment saved.", "success")
-        return redirect(url_for("main.appointments"))
+        return redirect(url_for("main.appointments", requested="1"))
     rows = db.execute(
         """
         SELECT a.*, p.name patient_name
@@ -487,7 +545,18 @@ def appointments():
         ORDER BY p.specialty, p.organization
         """
     ).fetchall()
-    return render_template("appointments.html", appointments=rows, providers=providers)
+    confirmation = None
+    if request.args.get("requested") and g.user["role"] == "patient":
+        confirmation = db.execute(
+            """
+            SELECT a.*, p.name patient_name
+            FROM appointments a JOIN users p ON p.id=a.patient_id
+            WHERE a.patient_id=?
+            ORDER BY a.created_at DESC LIMIT 1
+            """,
+            (g.user["id"],),
+        ).fetchone()
+    return render_template("appointments.html", appointments=rows, providers=providers, confirmation=confirmation)
 
 
 @bp.post("/appointments/<int:appointment_id>/status")
@@ -891,15 +960,17 @@ def api_register():
 @bp.post("/api/v1/auth/login")
 def api_login():
     data = request.get_json(silent=True) or {}
-    validation_error = require_json_fields(data, "email", "password", "role")
+    # Role is derived from the persisted account. Accepting a legacy role
+    # field keeps older clients compatible, but it must never constrain or
+    # elevate authentication based on client input.
+    validation_error = require_json_fields(data, "email", "password")
     if validation_error:
         return validation_error
     try:
         email = validate_email(data.get("email", ""))
     except ValueError:
         email = ""
-    requested_role = str(data.get("role", "patient") or "patient").strip().lower()
-    user = user_by_normalized_email(email, role=requested_role) if email else None
+    user = user_by_normalized_email(email) if email else None
     if user and user["role"] == "admin" and not is_owner(user):
         user = None
     if not user or not check_password_hash(user["password_hash"], data.get("password", "")):
