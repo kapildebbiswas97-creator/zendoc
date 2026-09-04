@@ -1,5 +1,7 @@
 {% extends "base.html" %}
 {% block title %}ZENDOC — One Connected Healthcare Journey{% endblock %}
+{% block body_class %}landing-page{% endblock %}
+{% block main_class %}landing-main page{% endblock %}
 {% block content %}
 <!-- Hero Section with Ambient Glow and Interactive AI Preview -->
 <section class="home-hero" aria-labelledby="home-title">
@@ -76,11 +78,11 @@
           <div class="preview-ai-response">
             <div class="preview-response-header">
               <span class="urgency-pill routine">Directory Match</span>
-              <span class="preview-response-meta">Verified Network Profiles</span>
+              <span class="preview-response-meta">Example search flow</span>
             </div>
-            <p class="preview-response-text">Matched verified cardiologists in Kolkata with published consultation hours and direct appointment booking.</p>
+            <p class="preview-response-text">Search the current provider directory for cardiology profiles and published availability. Results depend on records currently available in ZENDOC.</p>
             <div class="preview-response-actions">
-              <a href="{{ url_for('main.finder', category='doctor', specialty='Cardiology', location='Kolkata') }}" class="primary-action compact-action">View Cardiologists in Kolkata &rarr;</a>
+              <a href="{{ url_for('main.finder', category='doctor', specialty='Cardiology', location='Kolkata') }}" class="primary-action compact-action">Search Cardiologists in Kolkata &rarr;</a>
             </div>
           </div>
         </div>

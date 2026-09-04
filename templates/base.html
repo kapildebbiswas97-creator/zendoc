@@ -9,9 +9,9 @@
   <title>{% block title %}ZENDOC{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
   <a class="skip-link" href="#main-content">Skip to main content</a>
-  <header class="topbar">
+  <header class="topbar" id="site-topbar">
     <div class="topbar-inner">
       <a class="brand" href="{{ url_for('main.home') }}" aria-label="ZENDOC home">
         <span class="brand-mark" aria-hidden="true">Z</span>
@@ -99,9 +99,15 @@
           <a href="{{ url_for('main.register', role='patient') }}" class="primary-action compact-action">Get started</a>
         </nav>
       {% endif %}
+
+      <button id="theme-toggle-btn" class="theme-toggle-btn" type="button"
+              aria-label="Switch to dark theme" aria-pressed="false">
+        <span class="theme-icon theme-icon-sun" aria-hidden="true">☼</span>
+        <span class="theme-icon theme-icon-moon" aria-hidden="true">☾</span>
+      </button>
     </div>
   </header>
-  <main id="main-content" class="page" tabindex="-1">
+  <main id="main-content" class="{% block main_class %}page{% endblock %}" tabindex="-1">
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
         <section class="alerts" aria-label="Status messages" aria-live="polite">
@@ -117,8 +123,49 @@
     {% block content %}{% endblock %}
   </main>
   <footer class="site-footer">
-    <div><strong>ZENDOC</strong><span>Connected healthcare, organized around you.</span></div>
-    <p><span class="status-badge beta">Selection Beta</span> Educational guidance only. For an emergency, contact local emergency services.</p>
+    <div class="footer-grid">
+      <div class="footer-col brand-col">
+        <a class="brand" href="{{ url_for('main.home') }}" aria-label="ZENDOC home">
+          <span class="brand-mark" aria-hidden="true">Z</span>
+          <span>ZENDOC</span>
+        </a>
+        <p class="footer-tagline">Connected healthcare, organized around you.</p>
+        <span class="status-badge beta">Selection Beta</span>
+      </div>
+
+      <div class="footer-col">
+        <strong>Platform</strong>
+        <a href="{{ url_for('main.ai_center') }}">AI Assistant</a>
+        <a href="{{ url_for('main.finder') }}">Find Care</a>
+        <a href="{{ url_for('ecosystem.pharmacy_page') }}">Pharmacy</a>
+        <a href="{{ url_for('ecosystem.marketplace_page') }}">Diagnostics &amp; Services</a>
+        <a href="{{ url_for('health_memory.health_summary_page') }}">Health Memory</a>
+      </div>
+
+      <div class="footer-col">
+        <strong>Care</strong>
+        <a href="{{ url_for('main.appointments') }}">Appointments</a>
+        <a href="{{ url_for('family.family_page') }}">Family Care</a>
+        <a href="{{ url_for('fitness.overview') }}">Fitness &amp; Wellness</a>
+        <a href="{{ url_for('main.ai_center') }}">Emergency Support</a>
+      </div>
+
+      <div class="footer-col">
+        <strong>Providers</strong>
+        <a href="{{ url_for('main.login', role='doctor') }}">Doctor Portal</a>
+        <a href="{{ url_for('main.login', role='hospital') }}">Hospital Portal</a>
+        <a href="{{ url_for('main.login', role='pharmacy') }}">Pharmacy Portal</a>
+        <a href="{{ url_for('main.login', role='admin') }}">Admin Command Center</a>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <p><span class="status-badge beta">Selection Beta</span> Educational guidance only. For an emergency, contact local emergency services.</p>
+      <div class="footer-bottom-links">
+        <a href="{{ url_for('health_memory.health_access_page') }}">Privacy &amp; Data Control</a>
+        <a href="{{ url_for('ecosystem.marketplace_page') }}">Terms of Service</a>
+      </div>
+    </div>
   </footer>
   <script src="{{ url_for('static', filename='app.js') }}" defer></script>
 </body>

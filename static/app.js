@@ -1,5 +1,48 @@
+// Apply a saved theme before the page becomes interactive. Fail closed if
+// storage is unavailable (for example, in a locked-down browser context).
+(function initializeTheme() {
+  let storedTheme = null;
+  try {
+    storedTheme = window.localStorage.getItem("zendoc-theme");
+  } catch (_error) {
+    // The default light theme remains usable without storage access.
+  }
+  const preferredTheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  document.documentElement.dataset.theme = storedTheme === "dark" || storedTheme === "light" ? storedTheme : preferredTheme;
+})();
+
 const navToggle = document.querySelector(".nav-toggle");
 const primaryNav = document.getElementById("primary-navigation");
+const themeToggle = document.getElementById("theme-toggle-btn");
+const topbar = document.getElementById("site-topbar");
+
+const syncThemeToggle = () => {
+  if (!themeToggle) return;
+  const isDark = document.documentElement.dataset.theme === "dark";
+  themeToggle.setAttribute("aria-pressed", String(isDark));
+  themeToggle.setAttribute("aria-label", isDark ? "Switch to light theme" : "Switch to dark theme");
+};
+
+syncThemeToggle();
+
+if (themeToggle) {
+  themeToggle.addEventListener("click", () => {
+    const nextTheme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = nextTheme;
+    try {
+      window.localStorage.setItem("zendoc-theme", nextTheme);
+    } catch (_error) {
+      // Theme switching still works for the current page without persistence.
+    }
+    syncThemeToggle();
+  });
+}
+
+if (topbar) {
+  const updateTopbar = () => topbar.classList.toggle("topbar--scrolled", window.scrollY > 24);
+  window.addEventListener("scroll", updateTopbar, { passive: true });
+  updateTopbar();
+}
 
 if (navToggle && primaryNav) {
   const navToggleLabel = navToggle.querySelector(".sr-only");
@@ -35,6 +78,23 @@ if (navToggle && primaryNav) {
     if (!event.target.closest(".nav-menu")) {
       document.querySelectorAll(".nav-menu[open]").forEach((menu) => menu.removeAttribute("open"));
     }
+  });
+
+  // Keep the navigation menus mutually exclusive and expose their state to
+  // assistive technology.
+  document.querySelectorAll(".nav-menu").forEach((menu) => {
+    const summary = menu.querySelector("summary");
+    if (!summary) return;
+    const updateExpanded = () => summary.setAttribute("aria-expanded", String(menu.open));
+    menu.addEventListener("toggle", () => {
+      updateExpanded();
+      if (menu.open) {
+        document.querySelectorAll(".nav-menu[open]").forEach((other) => {
+          if (other !== menu) other.removeAttribute("open");
+        });
+      }
+    });
+    updateExpanded();
   });
 }
 
