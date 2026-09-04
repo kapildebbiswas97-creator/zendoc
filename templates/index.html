@@ -1,362 +1,349 @@
 {% extends "base.html" %}
 {% block title %}ZENDOC — One Connected Healthcare Journey{% endblock %}
 {% block body_class %}landing-page{% endblock %}
-{% block main_class %}landing-main page{% endblock %}
+{% block main_class %}landing-main{% endblock %}
 {% block content %}
-<!-- Hero Section with Ambient Glow and Interactive AI Preview -->
-<section class="home-hero" aria-labelledby="home-title">
-  <div class="home-hero-content">
-    <div class="section-kicker">
-      <span class="pulse-dot" aria-hidden="true"></span>
-      <span>AI-Powered Connected Healthcare</span>
-    </div>
-    <h1 id="home-title">One connected <span class="gradient-text">healthcare journey.</span></h1>
-    <p class="hero-copy">Understand your symptoms safely, find reviewed care options, request appointments, and organize your private Health Memory — all in one calm, AI-native platform.</p>
 
-    <div class="form-actions hero-cta-group">
-      <a href="{{ url_for('main.register', role='patient') }}" class="primary-action hero-btn-primary">Get started as Patient</a>
-      <a href="{{ url_for('main.ai_center') }}" class="secondary-action hero-btn-secondary">Try ZENDOC AI</a>
-      <a href="{{ url_for('main.login') }}" class="text-link-action">Sign in &rarr;</a>
-    </div>
+<section class="landing-hero" aria-labelledby="home-title">
+  <video class="landing-hero__video" id="hero-video" autoplay muted loop playsinline aria-hidden="true">
+    <source src="{{ url_for('static', filename='assets/hero.mp4') }}" type="video/mp4">
+  </video>
+  <div class="landing-hero__overlay"></div>
 
-    <div class="hero-trust-badges">
-      <span class="trust-badge-item">✓ Emergency-first safety triage</span>
-      <span class="trust-badge-item">✓ Patient-controlled Health Memory</span>
-      <span class="trust-badge-item">✓ Verified provider directory</span>
-    </div>
-  </div>
+  <div class="landing-hero__inner">
+    <div class="landing-hero__text">
+      <div class="section-kicker landing-hero__kicker">
+        <span class="pulse-dot" aria-hidden="true"></span>
+        <span>AI-Powered Connected Healthcare</span>
+      </div>
+      <h1 id="home-title" class="landing-hero__title">
+        One connected <span class="landing-hero__gradient">healthcare journey.</span>
+      </h1>
+      <p class="landing-hero__copy">
+        Understand your symptoms safely, find care options, request appointments, and organize your private Health Memory — all in one calm, AI-native platform.
+      </p>
 
-  <!-- Interactive Live AI Guidance Widget -->
-  <aside class="hero-ai-preview" aria-label="Interactive preview of ZENDOC AI">
-    <div class="ai-preview-card">
-      <div class="ai-preview-header">
-        <div class="ai-preview-title">
-          <span class="brand-spark" aria-hidden="true">✦</span>
-          <div>
-            <strong>ZENDOC Intelligence</strong>
-            <span class="ai-preview-status">Safety checks active</span>
-          </div>
-        </div>
-        <span class="status-badge working">Live Engine</span>
+      <div class="landing-hero__ctas">
+        <a href="{{ url_for('main.register', role='patient') }}" class="primary-action landing-hero__btn-primary">Get started as Patient &rarr;</a>
+        <a href="{{ url_for('main.ai_center') }}" class="landing-hero__btn-secondary">Try ZENDOC AI</a>
+        <a href="{{ url_for('main.login') }}" class="landing-hero__link">Sign in &rarr;</a>
       </div>
 
-      <!-- Scenario Selector Tabs -->
-      <div class="scenario-selector" role="tablist" aria-label="Example healthcare scenarios">
-        <button type="button" class="scenario-tab active" role="tab" aria-selected="true" data-scenario="symptoms">Symptoms</button>
-        <button type="button" class="scenario-tab" role="tab" aria-selected="false" data-scenario="specialist">Find Care</button>
-        <button type="button" class="scenario-tab" role="tab" aria-selected="false" data-scenario="report">Reports</button>
-        <button type="button" class="scenario-tab" role="tab" aria-selected="false" data-scenario="family">Family</button>
-      </div>
-
-      <!-- Live Scenario Display Panels -->
-      <div class="scenario-content-wrap">
-        <!-- Scenario 1: Symptoms -->
-        <div class="scenario-panel active" id="scenario-symptoms">
-          <div class="preview-user-bubble">
-            <span class="bubble-sender">You</span>
-            <p>“I have had a dry cough and mild fever for 2 days. What should I do?”</p>
-          </div>
-          <div class="preview-ai-response">
-            <div class="preview-response-header">
-              <span class="urgency-pill routine">Routine Guidance</span>
-              <span class="preview-response-meta">Educational • Non-diagnostic</span>
-            </div>
-            <p class="preview-response-text">Monitor hydration and temperature. If you experience shortness of breath, chest tightness, or fever above 39°C (102°F), seek immediate care.</p>
-            <div class="preview-response-actions">
-              <a href="{{ url_for('main.ai_center') }}" class="primary-action compact-action">Ask in ZENDOC AI &rarr;</a>
-              <a href="{{ url_for('main.finder', category='doctor', specialty='General Medicine') }}" class="secondary-action compact-action">Find General Physician</a>
-            </div>
-          </div>
-        </div>
-
-        <!-- Scenario 2: Specialist -->
-        <div class="scenario-panel" id="scenario-specialist">
-          <div class="preview-user-bubble">
-            <span class="bubble-sender">You</span>
-            <p>“Need a verified cardiologist near Kolkata for a routine heart checkup.”</p>
-          </div>
-          <div class="preview-ai-response">
-            <div class="preview-response-header">
-              <span class="urgency-pill routine">Directory Match</span>
-              <span class="preview-response-meta">Example search flow</span>
-            </div>
-            <p class="preview-response-text">Search the current provider directory for cardiology profiles and published availability. Results depend on records currently available in ZENDOC.</p>
-            <div class="preview-response-actions">
-              <a href="{{ url_for('main.finder', category='doctor', specialty='Cardiology', location='Kolkata') }}" class="primary-action compact-action">Search Cardiologists in Kolkata &rarr;</a>
-            </div>
-          </div>
-        </div>
-
-        <!-- Scenario 3: Report -->
-        <div class="scenario-panel" id="scenario-report">
-          <div class="preview-user-bubble">
-            <span class="bubble-sender">You</span>
-            <p>“How do I organize my lipid profile and blood test reports in one place?”</p>
-          </div>
-          <div class="preview-ai-response">
-            <div class="preview-response-header">
-              <span class="urgency-pill routine">Health Memory</span>
-              <span class="preview-response-meta">Encrypted &amp; Private</span>
-            </div>
-            <p class="preview-response-text">Upload your lab PDF or image into Health Memory. Track key biomarkers on your health timeline and share securely with your doctor.</p>
-            <div class="preview-response-actions">
-              <a href="{{ url_for('main.records') }}" class="primary-action compact-action">Upload Lab Report &rarr;</a>
-              <a href="{{ url_for('health_memory.health_summary_page') }}" class="secondary-action compact-action">View Health Snapshot</a>
-            </div>
-          </div>
-        </div>
-
-        <!-- Scenario 4: Family -->
-        <div class="scenario-panel" id="scenario-family">
-          <div class="preview-user-bubble">
-            <span class="bubble-sender">You</span>
-            <p>“Help me coordinate monthly medication refills and BP checks for my parents.”</p>
-          </div>
-          <div class="preview-ai-response">
-            <div class="preview-response-header">
-              <span class="urgency-pill routine">Family Care</span>
-              <span class="preview-response-meta">Consent &amp; Proxy Support</span>
-            </div>
-            <p class="preview-response-text">Set up Remote Parent Care with scheduled task reminders, caregiver coordination, and verified home healthcare requests.</p>
-            <div class="preview-response-actions">
-              <a href="{{ url_for('family.parent_care_page') }}" class="primary-action compact-action">Open Remote Parent Care &rarr;</a>
-              <a href="{{ url_for('family.family_page') }}" class="secondary-action compact-action">Manage Dependents</a>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="preview-footer">
-        <span class="preview-note">Interactive preview connected to real platform routes</span>
+      <div class="landing-hero__badges">
+        <span class="landing-hero__badge-item">✓ Emergency-first safety triage</span>
+        <span class="landing-hero__badge-item">✓ Patient-controlled Health Memory</span>
+        <span class="landing-hero__badge-item">✓ Provider verification status shown when confirmed</span>
       </div>
     </div>
-  </aside>
-</section>
 
-<!-- How ZENDOC Works: 4-Step Connected Journey -->
-<section class="spaced-panel" aria-labelledby="how-it-works-title">
-  <div class="section-intro">
-    <p class="eyebrow">How ZENDOC works</p>
-    <h2 id="how-it-works-title">From your first question to lifelong health continuity</h2>
-    <p>Every capability in ZENDOC is part of the same unified loop, reducing fragmented apps and missing medical history.</p>
-  </div>
+    <aside class="landing-hero__card" aria-label="Interactive preview of ZENDOC AI">
+      <div class="ai-preview-card landing-hero__ai-card">
+        <div class="ai-preview-header">
+          <div class="ai-preview-title">
+            <div class="ai-preview-icon-wrap" aria-hidden="true">✦</div>
+            <div>
+              <strong>ZENDOC AI Assistant</strong>
+              <span class="ai-preview-status">Safety checks active</span>
+            </div>
+          </div>
+          <span class="status-badge working">Safety-aware</span>
+        </div>
 
-  <div class="grid four-journey">
-    <article class="panel journey-card">
-      <div class="journey-card-top">
-        <span class="journey-step-badge">01</span>
-        <span class="journey-category">Guidance</span>
+        <div class="scenario-selector" role="tablist" aria-label="Example healthcare scenarios">
+          <button type="button" class="scenario-tab active" role="tab" aria-selected="true" data-scenario="symptoms">Symptoms</button>
+          <button type="button" class="scenario-tab" role="tab" aria-selected="false" data-scenario="specialist">Find Care</button>
+          <button type="button" class="scenario-tab" role="tab" aria-selected="false" data-scenario="report">Reports</button>
+          <button type="button" class="scenario-tab" role="tab" aria-selected="false" data-scenario="family">Family</button>
+        </div>
+
+        <div class="scenario-content-wrap">
+          <div class="scenario-panel active" id="scenario-symptoms">
+            <div class="preview-user-bubble">
+              <span class="bubble-sender">You</span>
+              <p>“I have had a dry cough and mild fever for 2 days. What should I do?”</p>
+            </div>
+            <div class="preview-ai-response">
+              <div class="preview-response-header">
+                <span class="urgency-pill routine">Routine Guidance</span>
+                <span class="preview-response-meta">Educational • Non-diagnostic</span>
+              </div>
+              <p class="preview-response-text">Monitor hydration and temperature. If you experience shortness of breath, chest tightness, or fever above 39°C (102°F), seek immediate care.</p>
+              <div class="preview-response-actions">
+                <a href="{{ url_for('main.ai_center') }}" class="primary-action compact-action">Ask ZENDOC AI &rarr;</a>
+                <a href="{{ url_for('main.finder', category='doctor', specialty='General Medicine') }}" class="secondary-action compact-action">Find Doctor</a>
+              </div>
+            </div>
+          </div>
+
+          <div class="scenario-panel" id="scenario-specialist">
+            <div class="preview-user-bubble">
+              <span class="bubble-sender">You</span>
+              <p>“Need a cardiologist near Kolkata for a routine heart checkup.”</p>
+            </div>
+            <div class="preview-ai-response">
+              <div class="preview-response-header">
+                <span class="urgency-pill routine">Directory Search</span>
+                <span class="preview-response-meta">Example search flow</span>
+              </div>
+              <p class="preview-response-text">Search the current provider directory for cardiology profiles and published availability. Results depend on records currently available in ZENDOC.</p>
+              <div class="preview-response-actions">
+                <a href="{{ url_for('main.finder', category='doctor', specialty='Cardiology', location='Kolkata') }}" class="primary-action compact-action">Search Cardiologists &rarr;</a>
+              </div>
+            </div>
+          </div>
+
+          <div class="scenario-panel" id="scenario-report">
+            <div class="preview-user-bubble">
+              <span class="bubble-sender">You</span>
+              <p>“How do I organize my lipid profile and blood test reports in one place?”</p>
+            </div>
+            <div class="preview-ai-response">
+              <div class="preview-response-header">
+                <span class="urgency-pill routine">Health Memory</span>
+                <span class="preview-response-meta">Private &amp; consent-controlled</span>
+              </div>
+              <p class="preview-response-text">Upload a supported report into Health Memory, organize records on your timeline, and control what you share with providers.</p>
+              <div class="preview-response-actions">
+                <a href="{{ url_for('main.records') }}" class="primary-action compact-action">Open Records &rarr;</a>
+                <a href="{{ url_for('health_memory.health_summary_page') }}" class="secondary-action compact-action">Health Snapshot</a>
+              </div>
+            </div>
+          </div>
+
+          <div class="scenario-panel" id="scenario-family">
+            <div class="preview-user-bubble">
+              <span class="bubble-sender">You</span>
+              <p>“Help me coordinate monthly medication reminders and BP checks for my parents.”</p>
+            </div>
+            <div class="preview-ai-response">
+              <div class="preview-response-header">
+                <span class="urgency-pill routine">Family Care</span>
+                <span class="preview-response-meta">Consent &amp; proxy support</span>
+              </div>
+              <p class="preview-response-text">Use Parent Care for reminders, caregiving coordination, and supported care-request workflows. Real-world fulfillment depends on connected providers.</p>
+              <div class="preview-response-actions">
+                <a href="{{ url_for('family.parent_care_page') }}" class="primary-action compact-action">Parent Care &rarr;</a>
+                <a href="{{ url_for('family.family_page') }}" class="secondary-action compact-action">Manage Family</a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="preview-footer">
+          <span class="preview-note">Interactive product preview — availability and external actions depend on connected data and integrations.</span>
+        </div>
       </div>
-      <h3>Understand &amp; Triage</h3>
-      <p>Describe symptoms or questions in plain language. Safety rules triage emergencies first before providing educational guidance.</p>
-      <a href="{{ url_for('main.ai_center') }}" class="journey-link">Ask ZENDOC AI &rarr;</a>
-    </article>
-
-    <article class="panel journey-card">
-      <div class="journey-card-top">
-        <span class="journey-step-badge">02</span>
-        <span class="journey-category">Discovery</span>
-      </div>
-      <h3>Find Reviewed Care</h3>
-      <p>Explore reviewed doctors, clinics, and hospitals. See published schedules and request appointments directly.</p>
-      <a href="{{ url_for('main.finder') }}" class="journey-link">Find Care &rarr;</a>
-    </article>
-
-    <article class="panel journey-card">
-      <div class="journey-card-top">
-        <span class="journey-step-badge">03</span>
-        <span class="journey-category">Coordination</span>
-      </div>
-      <h3>Book &amp; Communicate</h3>
-      <p>Manage appointments, send permission-based care messages, and handle family care tasks in one place.</p>
-      <a href="{{ url_for('main.appointments') }}" class="journey-link">View Appointments &rarr;</a>
-    </article>
-
-    <article class="panel journey-card">
-      <div class="journey-card-top">
-        <span class="journey-step-badge">04</span>
-        <span class="journey-category">Health Memory</span>
-      </div>
-      <h3>Remember &amp; Track</h3>
-      <p>Keep your chronological timeline, medical reports, vitals, and consent controls organized over time.</p>
-      <a href="{{ url_for('health_memory.health_summary_page') }}" class="journey-link">Open Health Memory &rarr;</a>
-    </article>
+    </aside>
   </div>
 </section>
 
-<!-- Connected Ecosystem Grid -->
-<section class="spaced-panel" aria-labelledby="ecosystem-title">
-  <div class="section-intro">
-    <p class="eyebrow">Connected around you</p>
-    <h2 id="ecosystem-title">The Complete ZENDOC Healthcare Ecosystem</h2>
-    <p>All core clinical, records, family, and wellness tools designed to communicate seamlessly.</p>
-  </div>
-
-  <div class="grid three">
-    <article class="panel feature-card">
-      <div class="feature-card-header">
-        <h3>ZENDOC AI Assistant</h3>
-        <span class="status-badge working">Working</span>
-      </div>
-      <p>Safety-aware educational guidance with clear next steps, symptom check-ins, and emergency-first routing.</p>
-      <div class="feature-card-foot">
-        <a href="{{ url_for('main.ai_center') }}" class="secondary-action compact-action">Open AI Assistant</a>
-      </div>
-    </article>
-
-    <article class="panel feature-card">
-      <div class="feature-card-header">
-        <h3>Find Care &amp; Booking</h3>
-        <span class="status-badge working">Working</span>
-      </div>
-      <p>Verified provider network, searchable by specialty and location, with published schedule booking.</p>
-      <div class="feature-card-foot">
-        <a href="{{ url_for('main.finder') }}" class="secondary-action compact-action">Find Providers</a>
-      </div>
-    </article>
-
-    <article class="panel feature-card">
-      <div class="feature-card-header">
-        <h3>Health Memory</h3>
-        <span class="status-badge working">Working</span>
-      </div>
-      <p>A unified patient health snapshot, chronological timeline, lab report repository, and vitals tracking.</p>
-      <div class="feature-card-foot">
-        <a href="{{ url_for('health_memory.health_summary_page') }}" class="secondary-action compact-action">Open Health Memory</a>
-      </div>
-    </article>
-
-    <article class="panel feature-card">
-      <div class="feature-card-header">
-        <h3>Family &amp; Parent Care</h3>
-        <span class="status-badge working">Working</span>
-      </div>
-      <p>Permission-based caregiving, dependent profiles, proxy workflows, and remote senior care tracking.</p>
-      <div class="feature-card-foot">
-        <a href="{{ url_for('family.family_page') }}" class="secondary-action compact-action">Manage Family</a>
-      </div>
-    </article>
-
-    <article class="panel feature-card">
-      <div class="feature-card-header">
-        <h3>Fitness &amp; Wellness</h3>
-        <span class="status-badge working">Working</span>
-      </div>
-      <p>Workouts, exercise tracking, hydration, and camera-based preview sessions linked to your health timeline.</p>
-      <div class="feature-card-foot">
-        <a href="{{ url_for('fitness.overview') }}" class="secondary-action compact-action">Fitness Hub</a>
-      </div>
-    </article>
-
-    <article class="panel feature-card">
-      <div class="feature-card-header">
-        <h3>Services &amp; Connected Care</h3>
-        <span class="status-badge prototype">Prototype / Beta</span>
-      </div>
-      <p>Telehealth consultations, pharmacy catalog, home healthcare requests, and IoT device provenance records.</p>
-      <div class="feature-card-foot">
-        <a href="{{ url_for('ecosystem.marketplace_page') }}" class="secondary-action compact-action">Explore Services</a>
-      </div>
-    </article>
-  </div>
-</section>
-
-<!-- Trust, Safety & Privacy Architecture -->
-<section class="grid two spaced-panel" aria-labelledby="trust-title">
-  <article class="panel trust-pillar-card">
-    <div class="pillar-icon" aria-hidden="true">🛡️</div>
-    <p class="eyebrow">Safety Architecture</p>
-    <h2 id="trust-title">Clinical boundaries by design</h2>
-    <ul class="benefit-list">
-      <li><strong>Emergency triage first:</strong> Emergency keywords are checked and escalated before any generative response.</li>
-      <li><strong>Educational guidance only:</strong> AI recommendations never fabricate prescriptions or pretend to replace licensed doctors.</li>
-      <li><strong>Deterministic routing:</strong> Recommendations point to real provider profiles, appointments, and records.</li>
-    </ul>
-  </article>
-
-  <article class="panel trust-pillar-card">
-    <div class="pillar-icon" aria-hidden="true">🔒</div>
-    <p class="eyebrow">Privacy Architecture</p>
-    <h2>You own your health data</h2>
-    <ul class="benefit-list">
-      <li><strong>Consent-controlled sharing:</strong> Providers and specialists only see medical records when explicitly granted.</li>
-      <li><strong>No data monetization:</strong> Your personal vitals, reports, and messages are protected with role-based access.</li>
-      <li><strong>Transparent status:</strong> Every feature is clearly labeled as working, beta, or prototype.</li>
-    </ul>
-  </article>
-</section>
-
-<!-- Dedicated Role Workspaces -->
-<section class="panel spaced-panel role-workspace-section" aria-labelledby="role-title">
-  <div class="panel-head">
-    <div>
-      <p class="eyebrow">For the full care ecosystem</p>
-      <h2 id="role-title">Dedicated workspace for every healthcare role</h2>
-    </div>
-    <span class="status-badge working">Multi-Role Architecture</span>
-  </div>
-
-  <div class="grid three role-grid">
-    <div class="role-card">
-      <h3>Patients &amp; Families</h3>
-      <p class="section-copy">AI assistant, care discovery, appointment booking, Health Memory, family care, and fitness.</p>
-      <div class="role-actions">
-        <a href="{{ url_for('main.register', role='patient') }}" class="primary-action compact-action">Patient Sign Up</a>
-        <a href="{{ url_for('main.login', role='patient') }}" class="secondary-action compact-action">Sign In</a>
-      </div>
+<div class="page">
+  <section class="spaced-panel" aria-labelledby="how-it-works-title">
+    <div class="section-intro">
+      <p class="eyebrow">How ZENDOC works</p>
+      <h2 id="how-it-works-title">From your first question to lifelong health continuity</h2>
+      <p>Every capability is designed to work in one connected loop while keeping safety, consent, provenance, and user control visible.</p>
     </div>
 
-    <div class="role-card">
-      <h3>Doctors &amp; Hospitals</h3>
-      <p class="section-copy">Schedule management, appointment requests, patient messaging, and consent-shared records.</p>
-      <div class="role-actions">
-        <a href="{{ url_for('main.login', role='doctor') }}" class="secondary-action compact-action">Doctor Portal</a>
-        <a href="{{ url_for('main.login', role='hospital') }}" class="secondary-action compact-action">Hospital Portal</a>
+    <div class="grid five-journey">
+      <article class="panel journey-card">
+        <div class="journey-card-top"><span class="journey-step-badge">01</span><span class="journey-category">Guidance</span></div>
+        <h3>Understand &amp; Triage</h3>
+        <p>Describe symptoms or questions in plain language. Safety rules check emergency signals first before educational guidance.</p>
+        <a href="{{ url_for('main.ai_center') }}" class="journey-link">Ask ZENDOC AI &rarr;</a>
+      </article>
+
+      <article class="panel journey-card">
+        <div class="journey-card-top"><span class="journey-step-badge">02</span><span class="journey-category">Discovery</span></div>
+        <h3>Find Care Options</h3>
+        <p>Search provider directory records by specialty and location. Verification and availability are shown only when supported by current records.</p>
+        <a href="{{ url_for('main.finder') }}" class="journey-link">Find Care &rarr;</a>
+      </article>
+
+      <article class="panel journey-card">
+        <div class="journey-card-top"><span class="journey-step-badge">03</span><span class="journey-category">Coordination</span></div>
+        <h3>Request &amp; Communicate</h3>
+        <p>Manage appointment requests, permission-based messages, and family care tasks. A request is not presented as confirmed until confirmation exists.</p>
+        <a href="{{ url_for('main.appointments') }}" class="journey-link">Appointments &rarr;</a>
+      </article>
+
+      <article class="panel journey-card">
+        <div class="journey-card-top"><span class="journey-step-badge">04</span><span class="journey-category">Services</span></div>
+        <h3>Explore Treatment Support</h3>
+        <p>Search pharmacy, diagnostic, home-care, and connected-service workflows. Stock, price, booking, and fulfillment remain unknown unless confirmed.</p>
+        <a href="{{ url_for('ecosystem.marketplace_page') }}" class="journey-link">Explore Services &rarr;</a>
+      </article>
+
+      <article class="panel journey-card">
+        <div class="journey-card-top"><span class="journey-step-badge">05</span><span class="journey-category">Health Memory</span></div>
+        <h3>Track &amp; Remember</h3>
+        <p>Keep your timeline, reports, vitals, provenance, and consent controls organized over time.</p>
+        <a href="{{ url_for('health_memory.health_summary_page') }}" class="journey-link">Open Health Memory &rarr;</a>
+      </article>
+    </div>
+  </section>
+
+  <section class="spaced-panel" aria-labelledby="ecosystem-title">
+    <div class="section-intro">
+      <p class="eyebrow">Connected around you</p>
+      <h2 id="ecosystem-title">The ZENDOC Healthcare Ecosystem</h2>
+      <p>Care guidance, records, family support, wellness, and service workflows share one platform while keeping real-world status explicit.</p>
+    </div>
+
+    <div class="grid three">
+      <article class="panel feature-card">
+        <div class="feature-card-header"><div class="feature-icon" aria-hidden="true">✦</div><div><h3>ZENDOC AI Assistant</h3><span class="status-badge working">Working</span></div></div>
+        <p>Safety-aware educational guidance with clear next steps and emergency-first routing.</p>
+        <div class="feature-card-foot"><a href="{{ url_for('main.ai_center') }}" class="secondary-action compact-action">Open AI Assistant</a></div>
+      </article>
+
+      <article class="panel feature-card">
+        <div class="feature-card-header"><div class="feature-icon" aria-hidden="true">⌖</div><div><h3>Find Care &amp; Appointments</h3><span class="status-badge working">Working</span></div></div>
+        <p>Search provider records by specialty and location, view available evidence, and request appointments where supported.</p>
+        <div class="feature-card-foot"><a href="{{ url_for('main.finder') }}" class="secondary-action compact-action">Find Providers</a></div>
+      </article>
+
+      <article class="panel feature-card">
+        <div class="feature-card-header"><div class="feature-icon" aria-hidden="true">Rx</div><div><h3>Pharmacy &amp; Medicines</h3><span class="status-badge beta">Beta</span></div></div>
+        <p>Search pharmacy records with confirmed stock shown when available. Unknown or stale inventory stays clearly unconfirmed.</p>
+        <div class="feature-card-foot"><a href="{{ url_for('ecosystem.pharmacy_page') }}" class="secondary-action compact-action">Explore Pharmacy</a></div>
+      </article>
+
+      <article class="panel feature-card">
+        <div class="feature-card-header"><div class="feature-icon" aria-hidden="true">Lab</div><div><h3>Diagnostics &amp; Lab Services</h3><span class="status-badge beta">Beta</span></div></div>
+        <p>Explore diagnostic and home-collection options. Real booking depends on connected provider availability and confirmation.</p>
+        <div class="feature-card-foot"><a href="{{ url_for('ecosystem.marketplace_page') }}" class="secondary-action compact-action">Explore Diagnostics</a></div>
+      </article>
+
+      <article class="panel feature-card">
+        <div class="feature-card-header"><div class="feature-icon" aria-hidden="true">HM</div><div><h3>Health Memory</h3><span class="status-badge working">Working</span></div></div>
+        <p>One patient-controlled snapshot with timeline, reports, vitals, provenance, and consent-aware sharing.</p>
+        <div class="feature-card-foot"><a href="{{ url_for('health_memory.health_summary_page') }}" class="secondary-action compact-action">Open Health Memory</a></div>
+      </article>
+
+      <article class="panel feature-card">
+        <div class="feature-card-header"><div class="feature-icon" aria-hidden="true">Fam</div><div><h3>Family &amp; Parent Care</h3><span class="status-badge working">Working</span></div></div>
+        <p>Permission-based caregiving, dependent profiles, reminders, proxy workflows, and remote parent-care coordination.</p>
+        <div class="feature-card-foot"><a href="{{ url_for('family.family_page') }}" class="secondary-action compact-action">Manage Family</a></div>
+      </article>
+
+      <article class="panel feature-card">
+        <div class="feature-card-header"><div class="feature-icon" aria-hidden="true">Fit</div><div><h3>Fitness &amp; Wellness</h3><span class="status-badge working">Working</span></div></div>
+        <p>Workouts, exercise tracking, hydration, and supported wellness activities linked to your broader health context.</p>
+        <div class="feature-card-foot"><a href="{{ url_for('fitness.overview') }}" class="secondary-action compact-action">Fitness Hub</a></div>
+      </article>
+
+      <article class="panel feature-card">
+        <div class="feature-card-header"><div class="feature-icon" aria-hidden="true">Care</div><div><h3>Connected Care</h3><span class="status-badge prototype">Prototype / Beta</span></div></div>
+        <p>Telehealth, home-care, medical transport guidance, IoT provenance, and external service workflows. Live external execution remains integration-dependent.</p>
+        <div class="feature-card-foot"><a href="{{ url_for('ecosystem.marketplace_page') }}" class="secondary-action compact-action">Explore Connected Care</a></div>
+      </article>
+
+      <article class="panel feature-card">
+        <div class="feature-card-header"><div class="feature-icon" aria-hidden="true">Msg</div><div><h3>ZENDOC Connect</h3><span class="status-badge beta">Beta</span></div></div>
+        <p>Permission-aware care messaging and coordination designed to keep conversations connected to the patient's care context.</p>
+        <div class="feature-card-foot"><a href="{{ url_for('main.dashboard') }}" class="secondary-action compact-action">Open Dashboard</a></div>
+      </article>
+    </div>
+  </section>
+
+  <section class="panel spaced-panel care-path-section" aria-labelledby="care-path-title">
+    <div class="section-intro">
+      <p class="eyebrow">Smart Care Path</p>
+      <h2 id="care-path-title">One guided flow, with confirmation boundaries kept visible</h2>
+      <p>ZENDOC can understand, organize, and prepare next steps. Consequential real-world actions still require the user and, where relevant, a connected provider or integration.</p>
+    </div>
+    <div class="care-path-flow" aria-label="ZENDOC care journey">
+      <div class="care-path-node"><span class="node-icon">1</span><span>Understand</span></div><span class="flow-arrow">→</span>
+      <div class="care-path-node"><span class="node-icon">2</span><span>Organize</span></div><span class="flow-arrow">→</span>
+      <div class="care-path-node"><span class="node-icon">3</span><span>Prepare Action</span></div><span class="flow-arrow">→</span>
+      <div class="care-path-node"><span class="node-icon">4</span><span>User Confirms</span></div><span class="flow-arrow">→</span>
+      <div class="care-path-node"><span class="node-icon">5</span><span>Remember</span></div>
+    </div>
+  </section>
+
+  <section class="spaced-panel" aria-labelledby="marketplace-preview-title">
+    <div class="section-intro">
+      <p class="eyebrow">Healthcare marketplace</p>
+      <h2 id="marketplace-preview-title">Explore services without fabricated live claims</h2>
+      <p>ZENDOC separates confirmed information from unknown, stale, or integration-required states.</p>
+    </div>
+    <div class="marketplace-preview-grid">
+      <article class="marketplace-preview-card"><h3>Pharmacy</h3><p>Confirmed stock is shown only when inventory evidence supports it. Price and distance stay unavailable when missing.</p><a href="{{ url_for('ecosystem.pharmacy_page') }}" class="secondary-action compact-action">Search Pharmacy</a></article>
+      <article class="marketplace-preview-card"><h3>Diagnostics</h3><p>Explore available records and request workflows. External booking confirmation is never implied without a connected provider.</p><a href="{{ url_for('ecosystem.marketplace_page') }}" class="secondary-action compact-action">Explore Diagnostics</a></article>
+      <article class="marketplace-preview-card"><h3>Medical Transport</h3><p>Emergency guidance can direct users to local emergency services. ZENDOC does not claim live ambulance dispatch unless a real integration is connected.</p><a href="{{ url_for('main.ai_center') }}" class="secondary-action compact-action">Open Safety Guidance</a></article>
+    </div>
+  </section>
+
+  <section class="grid two spaced-panel" aria-labelledby="trust-title">
+    <article class="panel trust-pillar-card">
+      <div class="pillar-icon" aria-hidden="true">🛡️</div>
+      <p class="eyebrow">Safety Architecture</p>
+      <h2 id="trust-title">Clinical boundaries by design</h2>
+      <ul class="benefit-list">
+        <li><strong>Emergency-first:</strong> urgent signals are checked before routine guidance.</li>
+        <li><strong>Educational guidance:</strong> AI does not pretend to replace licensed medical care.</li>
+        <li><strong>Truthful actions:</strong> no data or integration is never presented as successful real-world execution.</li>
+      </ul>
+    </article>
+
+    <article class="panel trust-pillar-card">
+      <div class="pillar-icon" aria-hidden="true">🔒</div>
+      <p class="eyebrow">Privacy Architecture</p>
+      <h2>You stay in control of your health data</h2>
+      <ul class="benefit-list">
+        <li><strong>Consent-controlled sharing:</strong> access is governed by explicit permissions.</li>
+        <li><strong>Provenance:</strong> ZENDOC keeps source and status context attached to supported records.</li>
+        <li><strong>Transparent status:</strong> working, beta, prototype, unknown, and integration-required states are kept distinct.</li>
+      </ul>
+    </article>
+  </section>
+
+  <section class="panel spaced-panel role-workspace-section" aria-labelledby="role-title">
+    <div class="panel-head">
+      <div><p class="eyebrow">For the care ecosystem</p><h2 id="role-title">Dedicated workspace for every healthcare role</h2></div>
+      <span class="status-badge working">Multi-Role Architecture</span>
+    </div>
+
+    <div class="grid three role-grid">
+      <div class="role-card">
+        <h3>Patients &amp; Families</h3>
+        <p class="section-copy">AI assistant, care discovery, appointment requests, Health Memory, family care, and fitness.</p>
+        <div class="role-actions"><a href="{{ url_for('main.register', role='patient') }}" class="primary-action compact-action">Patient Sign Up</a><a href="{{ url_for('main.login', role='patient') }}" class="secondary-action compact-action">Sign In</a></div>
+      </div>
+      <div class="role-card">
+        <h3>Doctors &amp; Hospitals</h3>
+        <p class="section-copy">Schedule management, appointment workflows, patient messaging, and consent-shared records.</p>
+        <div class="role-actions"><a href="{{ url_for('main.login', role='doctor') }}" class="secondary-action compact-action">Doctor Portal</a><a href="{{ url_for('main.login', role='hospital') }}" class="secondary-action compact-action">Hospital Portal</a></div>
+      </div>
+      <div class="role-card">
+        <h3>Pharmacies &amp; Operations</h3>
+        <p class="section-copy">Catalog and inventory workflows, order requests, and owner/admin oversight.</p>
+        <div class="role-actions"><a href="{{ url_for('main.login', role='pharmacy') }}" class="secondary-action compact-action">Pharmacy Portal</a><a href="{{ url_for('main.login', role='admin') }}" class="secondary-action compact-action">Admin Sign In</a></div>
       </div>
     </div>
 
-    <div class="role-card">
-      <h3>Pharmacies &amp; Operations</h3>
-      <p class="section-copy">Pharmacy catalog management, order requests, and owner command center oversight.</p>
-      <div class="role-actions">
-        <a href="{{ url_for('main.login', role='pharmacy') }}" class="secondary-action compact-action">Pharmacy Portal</a>
-        <a href="{{ url_for('main.login', role='admin') }}" class="secondary-action compact-action">Admin Sign In</a>
-      </div>
-    </div>
-  </div>
-
-  <details class="progressive-fields role-more-links" style="margin-top:20px;">
-    <summary>View all login and registration options</summary>
-    <div class="grid two">
-      <div>
-        <h3>Direct Sign In</h3>
-        <div class="button-list">
-          {% for role in ['patient','doctor','hospital','pharmacy','government','admin'] %}
-            <a href="{{ url_for('main.login', role=role) }}" class="secondary-action">{{ role.replace('_',' ').title() }} Sign In</a>
-          {% endfor %}
+    <details class="progressive-fields role-more-links" style="margin-top:20px;">
+      <summary>View all login and registration options</summary>
+      <div class="grid two">
+        <div>
+          <h3>Direct Sign In</h3>
+          <div class="button-list">
+            {% for role in ['patient','doctor','hospital','pharmacy','government','admin'] %}
+              <a href="{{ url_for('main.login', role=role) }}" class="secondary-action">{{ role.replace('_',' ').title() }} Sign In</a>
+            {% endfor %}
+          </div>
+        </div>
+        <div>
+          <h3>Register New Account</h3>
+          <div class="button-list">
+            {% for role in ['patient','doctor','hospital','pharmacy','government'] %}
+              <a href="{{ url_for('main.register', role=role) }}" class="secondary-action">Register as {{ role.replace('_',' ').title() }}</a>
+            {% endfor %}
+          </div>
         </div>
       </div>
-      <div>
-        <h3>Register New Account</h3>
-        <div class="button-list">
-          {% for role in ['patient','doctor','hospital','pharmacy','government'] %}
-            <a href="{{ url_for('main.register', role=role) }}" class="secondary-action">Register as {{ role.replace('_',' ').title() }}</a>
-          {% endfor %}
-        </div>
-      </div>
-    </div>
-  </details>
-</section>
-
-<!-- Final Conversion CTA Banner -->
-<section class="final-cta">
-  <div class="final-cta-content">
-    <h2>Ready for a more connected health journey?</h2>
-    <p>Create your private account once, then access one clear, intelligent command center for all your care needs.</p>
-  </div>
-  <div class="form-actions final-cta-actions">
-    <a href="{{ url_for('main.register', role='patient') }}" class="primary-action hero-btn-primary">Create Patient Account</a>
-    <a href="{{ url_for('main.login') }}" class="secondary-action">Sign In</a>
-  </div>
-</section>
+    </details>
+  </section>
+</div>
 {% endblock %}
