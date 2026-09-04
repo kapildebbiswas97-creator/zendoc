@@ -73,15 +73,12 @@ if (navToggle && primaryNav) {
     }
   });
 
-  // Close any open dropdown when clicking outside navigation
   document.addEventListener("click", (event) => {
     if (!event.target.closest(".nav-menu")) {
       document.querySelectorAll(".nav-menu[open]").forEach((menu) => menu.removeAttribute("open"));
     }
   });
 
-  // Keep the navigation menus mutually exclusive and expose their state to
-  // assistive technology.
   document.querySelectorAll(".nav-menu").forEach((menu) => {
     const summary = menu.querySelector("summary");
     if (!summary) return;
@@ -96,6 +93,18 @@ if (navToggle && primaryNav) {
     });
     updateExpanded();
   });
+}
+
+// Senior landing-page motion enhancement. It is visual only and does not
+// change any healthcare workflow, safety state, or action confirmation rule.
+const heroVideo = document.getElementById("hero-video");
+if (heroVideo) {
+  const applyHeroPlayback = () => {
+    heroVideo.playbackRate = 0.6;
+  };
+  heroVideo.addEventListener("loadedmetadata", applyHeroPlayback);
+  heroVideo.addEventListener("canplay", applyHeroPlayback);
+  if (heroVideo.readyState >= 1) applyHeroPlayback();
 }
 
 document.querySelectorAll("form").forEach((form) => {
@@ -151,3 +160,30 @@ document.querySelectorAll(".scenario-tab").forEach((tab) => {
     }
   });
 });
+
+// Bring the senior frontend's subtle reveal behavior into the existing app
+// without making content inaccessible when motion is reduced or JS is absent.
+if (
+  "IntersectionObserver" in window &&
+  !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+) {
+  const revealObserver = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        entry.target.classList.add("reveal-active");
+        revealObserver.unobserve(entry.target);
+      });
+    },
+    { threshold: 0.12 }
+  );
+
+  document
+    .querySelectorAll(
+      ".journey-card, .feature-card, .trust-pillar-card, .role-card, .care-path-node, .marketplace-preview-card"
+    )
+    .forEach((element) => {
+      element.classList.add("reveal-on-scroll");
+      revealObserver.observe(element);
+    });
+}
