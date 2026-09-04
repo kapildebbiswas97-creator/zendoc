@@ -20,7 +20,7 @@ Milestone 11 introduces a central, deterministic orchestrator (`zendoc/orchestra
 ### 2.1 Central Healthcare Orchestrator (`zendoc/orchestrator.py`)
 
 The `HealthcareOrchestrator` implements a phased pipeline:
-1. **Safety Triage**: Scans input against `SafetyEngine`. If acute distress or red flags are detected, execution bypasses all commercial and administrative steps, producing an immediate emergency plan with 108 ambulance dispatch instructions.
+1. **Safety Triage**: Scans input against `SafetyEngine`. If acute distress or red flags are detected, execution bypasses all commercial and administrative steps, producing an immediate emergency guidance plan directing the user to call 108 or go to the nearest emergency department. **Note: ZENDOC does not have a live ambulance-dispatch integration; no real dispatch is triggered — status `INTEGRATION_REQUIRED`.**
 2. **Subject Resolution**: Delegates to `zendoc/subject_resolver.py` to identify whether the request is for the authenticated actor or a family member. For family care, it checks `family_access_grants` and verifies that the requested scope (e.g., `pharmacy`, `diagnostics`) is actively permitted.
 3. **Location & Data Resolution**: Resolves saved parent locations (`parent_home`) or user addresses without repetitive prompts. Fetches the patient's active prescription.
 4. **Clinical Safeguards**: If prescribed medications have low extraction confidence or missing catalogue matches (`ITEM_REVIEW_REQUIRED`), the orchestrator blocks autonomous ordering and directs the user to clinical confirmation.

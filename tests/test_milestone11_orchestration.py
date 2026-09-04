@@ -474,3 +474,108 @@ def test_intelligence_respond_routes_orchestration(tmp_path):
         plan_data = result.model_metadata["orchestration_plan"]
         assert plan_data["subject_relationship"] == "mother"
         assert len(result.possible_actions) > 0
+
+
+# ── 10. PERMANENT REGRESSION: Emergency Detection ≠ Ambulance Dispatch ──────
+#
+# Invariant (must never be broken):
+#   ZENDOC has NO live ambulance-dispatch integration.
+#   Detecting an emergency NEVER means an ambulance was dispatched.
+#   Status EMERGENCY means: user was given guidance to call 108 / go to ER.
+#   Status AMBULANCE_DISPATCHED must never appear in any orchestration plan.
+#
+# This test is a permanent regression guard.  If it ever fails it means
+# a developer introduced fake dispatch behaviour and the build must be stopped.
+
+def test_emergency_dispatch_is_integration_required(tmp_path):
+    """
+    REGRESSION GUARD — DO NOT REMOVE OR WEAKEN.
+
+    Verifies three invariants:
+    1. EMERGENCY_DETECTED (plan.status == "EMERGENCY") is NOT equal to
+       AMBULANCE_DISPATCHED — no dispatch confirmation, ID, ETA, driver,
+       or GPS coordinates are returned.
+    2. The emergency plan contains ONLY: local guidance, call-108 instruction,
+       and find_nearest_er action.  No external service call result is present.
+    3. Care Graph does NOT record an AMBULANCE_DISPATCHED event — only a
+       local EMERGENCY_ALERT event may be recorded.
+    """
+    app = make_m11_app(tmp_path)
+    with app.app_context():
+        db = get_db()
+        user_id = seed_test_user(db, "Audit User", "audit@example.com")
+        user = {"id": user_id, "role": "patient"}
+
+        orch = HealthcareOrchestrator()
+
+        # Use the exact sentence from the audit directive
+        plan = orch.orchestrate(user, "I have severe chest pain and difficulty breathing")
+
+        # ── Invariant 1: status is EMERGENCY, not AMBULANCE_DISPATCHED ───────
+        assert plan.status == "EMERGENCY", (
+            f"Expected status EMERGENCY, got {plan.status!r}"
+        )
+        assert plan.status != "AMBULANCE_DISPATCHED", (
+            "CRITICAL: plan.status must never be AMBULANCE_DISPATCHED — "
+            "no live dispatch integration exists."
+        )
+
+        # ── Invariant 2: no fake dispatch artifacts in plan or steps ─────────
+        plan_dict = plan.to_dict()
+        plan_str = str(plan_dict).lower()
+
+        # These strings must never appear in any orchestration output
+        forbidden_phrases = [
+            "ambulance dispatched",
+            "ambulance_dispatched",
+            "dispatch_id",
+            "dispatch id",
+            "eta_minutes",
+            "driver_name",
+            "driver_id",
+            "fake",
+            "ambulance is on the way",
+            "ambulance has been sent",
+        ]
+        for phrase in forbidden_phrases:
+            assert phrase not in plan_str, (
+                f"CRITICAL: Forbidden phrase {phrase!r} found in emergency "
+                f"orchestration output. ZENDOC has no live dispatch integration. "
+                f"Remove all fake dispatch data immediately."
+            )
+
+        # ── Invariant 3: plan contains truthful guidance, not a real result ──
+        # The escalation step result must only contain action=CALL_108 + guidance
+        escalation_step = next(
+            (s for s in plan.steps if s.step_id == "escalation"), None
+        )
+        assert escalation_step is not None, "escalation step must be present"
+        result_keys = set(escalation_step.result.keys()) if escalation_step.result else set()
+        # Only allowed keys in escalation result
+        assert result_keys <= {"action", "guidance"}, (
+            f"escalation step result contains unexpected keys: {result_keys - {'action', 'guidance'}}. "
+            f"These may represent fake dispatch data."
+        )
+        assert escalation_step.result.get("action") == "CALL_108", (
+            f"escalation action must be CALL_108, got {escalation_step.result.get('action')!r}"
+        )
+
+        # ── Invariant 4: Care Graph does NOT record AMBULANCE_DISPATCHED ─────
+        graph = get_patient_care_graph(user_id, actor=user)
+        events = graph.get("events", [])
+        dispatched_events = [
+            e for e in events
+            if "AMBULANCE_DISPATCHED" in str(e).upper()
+        ]
+        assert len(dispatched_events) == 0, (
+            f"CRITICAL: Care Graph contains AMBULANCE_DISPATCHED events: "
+            f"{dispatched_events}. No real dispatch integration exists — "
+            f"these records are fabricated."
+        )
+
+        # ── Invariant 5: next_safe_actions only reference local actions ───────
+        for action in plan.next_safe_actions:
+            assert action in ("call_108", "call_112", "find_nearest_er"), (
+                f"next_safe_action {action!r} is not a valid local-only action. "
+                f"Only call_108, call_112, find_nearest_er are permitted."
+            )

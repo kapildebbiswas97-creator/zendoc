@@ -36,10 +36,10 @@ MARKETPLACE_CATEGORIES = [
     {
         "id": "ambulance",
         "title": "Ambulance & Transport",
-        "badge": "Working Now",
-        "badge_color": "success",
+        "badge": "Integration Required",
+        "badge_color": "warning",
         "icon": "ambulance",
-        "description": "Emergency ambulance dispatch (108), Basic Life Support, ICU transport, and wheelchair vans.",
+        "description": "108 emergency guidance and nearest emergency department routing. Real-time ambulance dispatch requires a verified external dispatch service integration (INTEGRATION_REQUIRED).",
         "url": "/ambulance",
     },
     {
