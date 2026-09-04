@@ -1,26 +1,20 @@
-"""
-ZENDOC Multi-Pharmacy Fulfilment Optimizer — Milestone 10
-Optimizes multi-medicine fulfilment across local participating pharmacies.
+"""Truthful pharmacy fulfilment planning for Connected Care.
 
-Strategies:
-1. Complete with freshest confirmation
-2. Lowest known landed total
-3. Nearest complete pharmacy
-4. Confirmed split fulfilment (combining two pharmacies when needed or advantageous)
-
-Strictly explainable: never creates opaque scores or fabricates evidence.
-Unknowns are explicitly stated as unknown.
+The planner only turns provider-supplied observations into an order-ready
+plan. Missing providers, prices, distances, fees, or quantities remain
+unknown and are never replaced with a synthetic partner, estimate, or MRP.
 """
 from __future__ import annotations
 
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 import hashlib
 import json
-from dataclasses import asdict, dataclass, field
+import math
 from typing import Any
 
 from .db import get_db, now_iso
-from .inventory_service import search_pharmacy_offers
+from .inventory_service import _data_mode, search_pharmacy_offers
 
 
 @dataclass
@@ -30,15 +24,15 @@ class FulfilmentOption:
     pharmacy_ids: list[int]
     strategy_type: str
     strategy_name: str
-    coverage_ratio: str  # e.g. "4 of 4"
+    coverage_ratio: str
     covered_items_count: int
     total_items_count: int
     distance_summary: str
-    item_total_inr: float
-    delivery_fee_inr: float
-    total_inr: float
+    item_total_inr: float | None
+    delivery_fee_inr: float | None
+    total_inr: float | None
     freshness_summary: str
-    overall_status: str  # CONFIRMED | STALE | UNKNOWN | PARTIAL
+    overall_status: str
     deliveries_count: int
     deliveries_text: str
     why_explanation: list[str]
@@ -51,9 +45,9 @@ class FulfilmentOption:
 
 
 def compute_plan_hash(items: list[dict[str, Any]], pharmacy_ids: list[int], total_inr: float) -> str:
-    """Generate deterministic hash for the plan snapshot to detect tampering or changes before approval."""
+    """Hash the quoted snapshot so confirmation can detect a changed quote."""
     payload = {
-        "pharmacy_ids": sorted(pharmacy_ids),
+        "pharmacy_ids": sorted(int(pid) for pid in pharmacy_ids),
         "total_inr": round(float(total_inr), 2),
         "items": sorted(
             [
@@ -65,11 +59,181 @@ def compute_plan_hash(items: list[dict[str, Any]], pharmacy_ids: list[int], tota
                 }
                 for it in items
             ],
-            key=lambda x: (x.get("sku_id") or 0, x.get("pharmacy_id") or 0),
+            key=lambda value: (value.get("sku_id") or 0, value.get("pharmacy_id") or 0),
         ),
     }
-    raw = json.dumps(payload, sort_keys=True)
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()[:32]
+
+
+def _finite_number(value: Any) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _prescription_items(prescription_id: int, patient_id: int | None) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    from .prescription_service import get_prescription
+
+    prescription = get_prescription(int(prescription_id))
+    owner_id = int(prescription["patient_id"])
+    if patient_id is not None and int(patient_id) != owner_id:
+        raise PermissionError("Prescription does not belong to the requested patient.")
+    return prescription, list(prescription.get("items", []))
+
+
+def _make_item(requested: dict[str, Any], pharmacy: dict[str, Any], observation: dict[str, Any], status: str) -> dict[str, Any]:
+    quantity = int(requested.get("quantity_prescribed") or 1)
+    unit_price = _finite_number(observation.get("price_inr"))
+    subtotal = round(unit_price * quantity, 2) if unit_price is not None else None
+    return {
+        "prescription_item_id": requested.get("id"),
+        "sku_id": int(requested["sku_id"]),
+        "medicine_name": requested.get("medicine_name"),
+        "quantity": quantity,
+        "pharmacy_id": pharmacy.get("user_id"),
+        "pharmacy_name": pharmacy.get("pharmacy_name"),
+        "unit_price_inr": unit_price,
+        "total_price_inr": subtotal,
+        "stock_status": status,
+        "stock_freshness": observation.get("freshness_label") or "Stock not confirmed",
+        "quantity_available": int(observation.get("quantity_available") or 0),
+        "data_mode": observation.get("data_mode") or pharmacy.get("data_mode"),
+    }
+
+
+def _build_option(
+    option_id: str,
+    providers: list[dict[str, Any]],
+    items: list[dict[str, Any]],
+    total_items: int,
+    overall_status: str,
+    strategy_type: str,
+    why: list[str],
+) -> FulfilmentOption:
+    provider_ids = [int(provider["user_id"]) for provider in providers if provider.get("user_id") is not None]
+    names = [str(provider.get("pharmacy_name") or "Unnamed pharmacy") for provider in providers]
+    item_total = None if any(item.get("total_price_inr") is None for item in items) else round(
+        sum(float(item["total_price_inr"]) for item in items), 2
+    )
+    fees = [_finite_number(provider.get("delivery_fee_base_inr")) for provider in providers]
+    delivery_fee = round(sum(fee for fee in fees if fee is not None), 2) if fees and all(fee is not None for fee in fees) else None
+    total = round(item_total + delivery_fee, 2) if item_total is not None and delivery_fee is not None else None
+    distances = [_finite_number(provider.get("distance_km")) for provider in providers]
+    distance_summary = (
+        " + ".join(f"{distance:g} km" for distance in distances if distance is not None)
+        if distances and all(distance is not None for distance in distances)
+        else "Distance unavailable"
+    )
+    unknowns: list[str] = []
+    if item_total is None:
+        unknowns.append("Price unavailable for one or more prescribed items.")
+    if delivery_fee is None:
+        unknowns.append("Delivery fee unavailable until the provider configures a quote.")
+    if any(distance is None for distance in distances):
+        unknowns.append("Distance unavailable because provider or patient coordinates are missing.")
+    if overall_status != "CONFIRMED":
+        unknowns.append("Previously reported stock must be reconfirmed before any order can be placed.")
+    else:
+        unknowns.append("Provider acknowledgement is required before fulfilment begins.")
+    return FulfilmentOption(
+        option_id=option_id,
+        pharmacy_names=names,
+        pharmacy_ids=provider_ids,
+        strategy_type=strategy_type,
+        strategy_name=("Confirmed stock option" if overall_status == "CONFIRMED" else "Previously listed — reconfirm stock"),
+        coverage_ratio=f"{len(items)} of {total_items}",
+        covered_items_count=len(items),
+        total_items_count=total_items,
+        distance_summary=distance_summary,
+        item_total_inr=item_total,
+        delivery_fee_inr=delivery_fee,
+        total_inr=total,
+        freshness_summary="; ".join(sorted({item["stock_freshness"] for item in items if item.get("stock_freshness")})) or "Stock not confirmed",
+        overall_status=overall_status,
+        deliveries_count=len(set(provider_ids)),
+        deliveries_text=(f"{len(set(provider_ids))} delivery" if len(set(provider_ids)) == 1 else f"{len(set(provider_ids))} deliveries"),
+        why_explanation=why,
+        unknowns=unknowns,
+        plan_hash=compute_plan_hash(items, provider_ids, total or 0.0),
+        items=items,
+    )
+
+
+def _stage_options(
+    options: dict[str, dict[str, Any]],
+    patient_id: int,
+    actor_id: int | None,
+    prescription_id: int | None,
+    data_mode: str,
+) -> list[dict[str, Any]]:
+    """Persist only complete, priced, confirmed snapshots."""
+    db = get_db()
+    staged: list[dict[str, Any]] = []
+    now = now_iso()
+    for key, option in options.items():
+        if option.get("overall_status") != "CONFIRMED" or option.get("total_inr") is None:
+            continue
+        if any(item.get("stock_status") != "CONFIRMED" or item.get("unit_price_inr") is None for item in option.get("items", [])):
+            continue
+        plan_uid = f"plan_{int(patient_id)}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')}_{key}"
+        cursor = db.execute(
+            """
+            INSERT INTO fulfilment_plans
+            (plan_uid, patient_id, actor_id, prescription_id, strategy_type, strategy_name, coverage_ratio,
+             item_total_inr, delivery_fee_inr, total_inr, distance_summary, deliveries_count,
+             freshness_summary, overall_status, why_explanation, plan_hash, status, data_mode, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'staged', ?, ?)
+            """,
+            (
+                plan_uid,
+                int(patient_id),
+                actor_id,
+                prescription_id,
+                option["strategy_type"],
+                option["strategy_name"],
+                option["coverage_ratio"],
+                option["item_total_inr"],
+                option["delivery_fee_inr"],
+                option["total_inr"],
+                option["distance_summary"],
+                option["deliveries_count"],
+                option["freshness_summary"],
+                option["overall_status"],
+                "\n".join(option["why_explanation"]),
+                option["plan_hash"],
+                data_mode,
+                now,
+            ),
+        )
+        plan_db_id = int(cursor.lastrowid)
+        option["db_plan_id"] = plan_db_id
+        option["plan_uid"] = plan_uid
+        option["data_mode"] = data_mode
+        staged.append(option)
+        for item in option["items"]:
+            db.execute(
+                """
+                INSERT INTO fulfilment_plan_items
+                (plan_id, prescription_item_id, sku_id, pharmacy_id, quantity, unit_price_inr, total_price_inr, stock_status, stock_freshness)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    plan_db_id,
+                    item.get("prescription_item_id"),
+                    item["sku_id"],
+                    item["pharmacy_id"],
+                    item["quantity"],
+                    item["unit_price_inr"],
+                    item["total_price_inr"],
+                    item["stock_status"],
+                    item["stock_freshness"],
+                ),
+            )
+    if staged:
+        db.commit()
+    return staged
 
 
 def optimize_prescription_fulfilment(
@@ -82,392 +246,198 @@ def optimize_prescription_fulfilment(
     actor_id: int | None = None,
     prescription_id: int | None = None,
     stage_in_db: bool = True,
+    actor: Any = None,
     **kwargs: Any,
 ) -> dict[str, Any]:
-    """
-    Evaluate all nearby pharmacies for the prescribed items and generate transparent options.
-    """
+    """Find real options and stage only a fully quoted, confirmed snapshot."""
     if isinstance(prescribed_items, int):
-        prescription_id = prescribed_items
+        prescription_id = int(prescribed_items)
         prescribed_items = None
-    elif prescription_id is None and kwargs.get("prescription_id"):
-        prescription_id = kwargs["prescription_id"]
+    if prescription_id is None and kwargs.get("prescription_id"):
+        prescription_id = int(kwargs["prescription_id"])
+    if user_lat is None:
+        user_lat = kwargs.get("patient_lat")
+    if user_lon is None:
+        user_lon = kwargs.get("patient_lon")
 
-    if user_lat is None and "patient_lat" in kwargs:
-        user_lat = kwargs["patient_lat"]
-    if user_lon is None and "patient_lon" in kwargs:
-        user_lon = kwargs["patient_lon"]
-
+    prescription = None
     if prescription_id and not prescribed_items:
-        from .prescription_service import get_prescription
-        rx = get_prescription(prescription_id)
-        prescribed_items = rx.get("items", [])
-        if patient_id is None:
-            patient_id = rx.get("patient_id")
-
+        prescription, prescribed_items = _prescription_items(int(prescription_id), patient_id)
+        patient_id = int(prescription["patient_id"])
+    prescribed_items = [dict(item) for item in (prescribed_items or [])]
     if not prescribed_items:
-        return {"options": {}, "total_items": 0, "status": "no_items"}
+        return {
+            "status": "NO_ITEMS",
+            "status_code": "NO_ITEMS",
+            "message": "No prescribed medicine items are available for fulfilment.",
+            "options": {},
+            "total_items": 0,
+            "plan_id": None,
+            "plan_hash": None,
+            "total_cost_inr": None,
+        }
 
-    sku_ids = [it["sku_id"] for it in prescribed_items if it.get("sku_id")]
+    unresolved = [
+        item for item in prescribed_items
+        if not item.get("sku_id") or str(item.get("review_status") or "").lower() == "item_review_required"
+    ]
+    if unresolved:
+        return {
+            "status": "ITEM_REVIEW_REQUIRED",
+            "status_code": "ITEM_REVIEW_REQUIRED",
+            "message": "Every prescribed medicine must have an exact, user-verified catalogue match before fulfilment.",
+            "unresolved_items": [item.get("medicine_name") for item in unresolved],
+            "options": {},
+            "total_items": len(prescribed_items),
+            "plan_id": None,
+            "plan_hash": None,
+            "total_cost_inr": None,
+        }
+
+    target_patient = int(patient_id) if patient_id is not None else None
+    if actor is not None:
+        if target_patient is None:
+            raise PermissionError("A patient must be specified when an actor requests fulfilment.")
+        from .context_engine import verify_context_authorization
+
+        verify_context_authorization(actor, target_patient, "pharmacy_fulfilment")
+        if actor_id is None:
+            try:
+                actor_id = int(actor["id"])
+            except (KeyError, TypeError, ValueError):
+                actor_id = None
+
+    mode = _data_mode(kwargs.get("data_mode"))
     pharmacies = search_pharmacy_offers(
-        medicine_ids=sku_ids,
+        medicine_ids=[int(item["sku_id"]) for item in prescribed_items],
         city=city,
         user_lat=user_lat,
         user_lon=user_lon,
         radius_km=radius_km,
-        include_demo=True,
+        data_mode=mode,
     )
+    total_items = len(prescribed_items)
+    complete: list[FulfilmentOption] = []
+    stale: list[FulfilmentOption] = []
 
-    total_needed = len(prescribed_items)
-    complete_options: list[FulfilmentOption] = []
-    stale_options: list[FulfilmentOption] = []
-
-    # 1. Single pharmacy evaluations
-    for pharm in pharmacies:
-        inv = pharm.get("inventory", {})
-        covered_count = 0
-        stale_count = 0
-        pharm_items = []
-        item_total = 0.0
-
-        for req in prescribed_items:
-            sku_id = req.get("sku_id")
-            obs = inv.get(sku_id)
-            if not obs:
-                continue
-
-            eff_status = obs.get("effective_status")
-            qty_needed = int(req.get("quantity_prescribed") or 1)
-            unit_price = float(obs.get("price_inr") or obs.get("mrp_inr") or 50.0)
-            item_sum = round(unit_price * qty_needed, 2)
-
-            if eff_status == "CONFIRMED":
-                covered_count += 1
-            elif eff_status == "STALE":
-                stale_count += 1
-
-            pharm_items.append({
-                "prescription_item_id": req.get("id"),
-                "sku_id": sku_id,
-                "medicine_name": req.get("medicine_name"),
-                "quantity": qty_needed,
-                "pharmacy_id": pharm["user_id"],
-                "pharmacy_name": pharm["pharmacy_name"],
-                "unit_price_inr": unit_price,
-                "total_price_inr": item_sum,
-                "stock_status": eff_status,
-                "stock_freshness": obs.get("freshness_label", ""),
-            })
-            item_total += item_sum
-
-        delivery_fee = float(pharm.get("delivery_fee_base_inr") or 30.0)
-        dist_km = pharm.get("distance_km")
-        dist_text = f"{dist_km} km" if dist_km is not None else "Distance unconfirmed"
-
-        # Complete confirmed single pharmacy
-        if covered_count == total_needed:
-            opt_hash = compute_plan_hash(pharm_items, [pharm["user_id"]], item_total + delivery_fee)
-            complete_options.append(FulfilmentOption(
-                option_id=f"pharm-{pharm['user_id']}",
-                pharmacy_names=[pharm["pharmacy_name"]],
-                pharmacy_ids=[pharm["user_id"]],
-                strategy_type="single_complete",
-                strategy_name=f"{pharm['pharmacy_name']} (Complete)",
-                coverage_ratio=f"{covered_count} of {total_needed}",
-                covered_items_count=covered_count,
-                total_items_count=total_needed,
-                distance_summary=dist_text,
-                item_total_inr=round(item_total, 2),
-                delivery_fee_inr=round(delivery_fee, 2),
-                total_inr=round(item_total + delivery_fee, 2),
-                freshness_summary=pharm_items[0]["stock_freshness"] if pharm_items else "Confirmed",
-                overall_status="CONFIRMED",
-                deliveries_count=1,
-                deliveries_text="1 delivery",
-                why_explanation=[
-                    f"All {total_needed} exact prescribed items are currently confirmed.",
-                    f"{dist_text} away from patient address.",
-                    "Single direct delivery reduces coordination delay.",
-                    f"Inventory observation: {pharm_items[0]['stock_freshness'] if pharm_items else 'recent'}.",
-                ],
-                unknowns=["Rider transit time depends on local traffic conditions."],
-                plan_hash=opt_hash,
-                items=pharm_items,
+    for pharmacy in pharmacies:
+        inventory = pharmacy.get("inventory") or {}
+        items: list[dict[str, Any]] = []
+        statuses: list[str] = []
+        for requested in prescribed_items:
+            observation = inventory.get(int(requested["sku_id"]))
+            if observation is None:
+                break
+            status = str(observation.get("effective_status") or "UNKNOWN").upper()
+            needed = int(requested.get("quantity_prescribed") or 1)
+            if status == "CONFIRMED" and int(observation.get("quantity_available") or 0) < needed:
+                status = "UNAVAILABLE"
+            statuses.append(status)
+            items.append(_make_item(requested, pharmacy, observation, status))
+        if len(items) != total_items:
+            continue
+        if all(status == "CONFIRMED" for status in statuses):
+            complete.append(_build_option(
+                f"pharmacy-{pharmacy['user_id']}",
+                [pharmacy],
+                items,
+                total_items,
+                "CONFIRMED",
+                "single_complete",
+                [f"All {total_items} exact prescribed items have fresh confirmed observations at this provider."],
+            ))
+        elif all(status in {"CONFIRMED", "STALE"} for status in statuses) and any(status == "STALE" for status in statuses):
+            stale.append(_build_option(
+                f"pharmacy-stale-{pharmacy['user_id']}",
+                [pharmacy],
+                items,
+                total_items,
+                "STALE",
+                "stale_listed",
+                ["Every item was previously observed, but at least one inventory observation is stale and must be reconfirmed."],
             ))
 
-        # Stale single pharmacy (all items listed, but observations are stale)
-        elif (covered_count + stale_count) == total_needed and stale_count > 0:
-            opt_hash = compute_plan_hash(pharm_items, [pharm["user_id"]], item_total + delivery_fee)
-            stale_options.append(FulfilmentOption(
-                option_id=f"pharm-stale-{pharm['user_id']}",
-                pharmacy_names=[pharm["pharmacy_name"]],
-                strategy_type="stale_listed",
-                strategy_name=f"{pharm['pharmacy_name']} (Stale stock)",
-                coverage_ratio=f"{covered_count + stale_count} of {total_needed}",
-                covered_items_count=covered_count + stale_count,
-                total_items_count=total_needed,
-                distance_summary=dist_text,
-                item_total_inr=round(item_total, 2),
-                delivery_fee_inr=round(delivery_fee, 2),
-                total_inr=round(item_total + delivery_fee, 2),
-                freshness_summary=pharm_items[0]["stock_freshness"] if pharm_items else "Stale observation",
-                overall_status="STALE",
-                deliveries_count=1,
-                deliveries_text="1 delivery",
-                why_explanation=[
-                    "Lists all prescribed items at competitive pricing.",
-                    "Inventory timestamp is older than standard freshness threshold; stock cannot be guaranteed.",
-                ],
-                unknowns=["Current real-time shelf stock is unverified."],
-                plan_hash=opt_hash,
-                items=pharm_items,
-            ))
-
-    # 2. Split fulfilment evaluation across pairs of pharmacies
-    split_options: list[FulfilmentOption] = []
-    if len(pharmacies) >= 2:
-        for i in range(len(pharmacies)):
-            for j in range(i + 1, len(pharmacies)):
-                p1, p2 = pharmacies[i], pharmacies[j]
-                inv1, inv2 = p1.get("inventory", {}), p2.get("inventory", {})
-
-                split_items = []
-                covered_items = set()
-                item_total = 0.0
-
-                for req in prescribed_items:
-                    s_id = req.get("sku_id")
-                    qty = int(req.get("quantity_prescribed") or 1)
-
-                    # Prefer confirmed stock from p1 first, then p2
-                    obs1 = inv1.get(s_id)
-                    obs2 = inv2.get(s_id)
-
-                    chosen_pharm = None
-                    chosen_obs = None
-                    if obs1 and obs1.get("effective_status") == "CONFIRMED":
-                        chosen_pharm = p1
-                        chosen_obs = obs1
-                    elif obs2 and obs2.get("effective_status") == "CONFIRMED":
-                        chosen_pharm = p2
-                        chosen_obs = obs2
-
-                    if chosen_pharm and chosen_obs:
-                        covered_items.add(s_id)
-                        unit_p = float(chosen_obs.get("price_inr") or chosen_obs.get("mrp_inr") or 50.0)
-                        subtotal = round(unit_p * qty, 2)
-                        item_total += subtotal
-                        split_items.append({
-                            "prescription_item_id": req.get("id"),
-                            "sku_id": s_id,
-                            "medicine_name": req.get("medicine_name"),
-                            "quantity": qty,
-                            "pharmacy_id": chosen_pharm["user_id"],
-                            "pharmacy_name": chosen_pharm["pharmacy_name"],
-                            "unit_price_inr": unit_p,
-                            "total_price_inr": subtotal,
-                            "stock_status": "CONFIRMED",
-                            "stock_freshness": chosen_obs.get("freshness_label", ""),
-                        })
-
-                # Check if pair completes the prescription and uses both pharmacies
-                used_pharm_ids = {it["pharmacy_id"] for it in split_items}
-                if len(covered_items) == total_needed and len(used_pharm_ids) == 2:
-                    fee1 = float(p1.get("delivery_fee_base_inr") or 30.0)
-                    fee2 = float(p2.get("delivery_fee_base_inr") or 30.0)
-                    comb_fee = round(fee1 + fee2, 2)
-                    comb_total = round(item_total + comb_fee, 2)
-
-                    d1 = f"{p1.get('distance_km')} km" if p1.get('distance_km') is not None else "0.7 km"
-                    d2 = f"{p2.get('distance_km')} km" if p2.get('distance_km') is not None else "1.2 km"
-                    dist_summary = f"{d1} + {d2}"
-
-                    opt_hash = compute_plan_hash(split_items, list(used_pharm_ids), comb_total)
-                    split_options.append(FulfilmentOption(
-                        option_id=f"split-{p1['user_id']}-{p2['user_id']}",
-                        pharmacy_names=[p1["pharmacy_name"], p2["pharmacy_name"]],
-                        pharmacy_ids=list(used_pharm_ids),
-                        strategy_type="split_fulfilment",
-                        strategy_name=f"{p1['pharmacy_name']} + {p2['pharmacy_name']}",
-                        coverage_ratio=f"{total_needed} of {total_needed}",
-                        covered_items_count=total_needed,
-                        total_items_count=total_needed,
-                        distance_summary=dist_summary,
-                        item_total_inr=round(item_total, 2),
-                        delivery_fee_inr=comb_fee,
-                        total_inr=comb_total,
-                        freshness_summary="Confirmed stock across both stores",
-                        overall_status="CONFIRMED",
-                        deliveries_count=2,
-                        deliveries_text="2 deliveries",
-                        why_explanation=[
-                            f"Two nearby pharmacies cover all {total_needed} exact items with confirmed stock.",
-                            f"Combined distances: {dist_summary}.",
-                            "Split routing unlocks 100% item availability when individual stores have partial stock.",
-                        ],
-                        unknowns=["Deliveries will arrive in 2 separate packages at slightly different times."],
-                        plan_hash=opt_hash,
-                        items=split_items,
-                    ))
-
-    # 3. Build ranked structured result
-    result_options: dict[str, Any] = {}
-
-    # Sort complete single options by distance/freshness
-    if complete_options:
-        # Option 1: Freshest / Best Single
-        best_single = sorted(complete_options, key=lambda x: x.distance_summary)[0]
-        best_single.strategy_name = "Complete with freshest confirmation"
-        result_options["green-cross"] = best_single.to_dict()
-
-    # Option 2: Lowest confirmed split or second strategy
-    if split_options:
-        best_split = sorted(split_options, key=lambda x: x.total_inr)[0]
-        best_split.strategy_name = "Lowest confirmed split total"
-        result_options["care-pair"] = best_split.to_dict()
-
-    # Option 3: Stale / Reference store
-    if stale_options:
-        best_stale = stale_options[0]
-        best_stale.strategy_name = "Lowest listed item total (Stale stock)"
-        result_options["health-hub"] = best_stale.to_dict()
-
-    if not result_options and prescribed_items:
-        db = get_db()
-        default_pharm = db.execute("SELECT id FROM users WHERE role='pharmacy' LIMIT 1").fetchone()
-        if not default_pharm:
-            default_pharm = db.execute("SELECT id FROM users LIMIT 1").fetchone()
-        default_pharm_id = default_pharm["id"] if default_pharm else 1
-
-        fallback_items = []
-        item_total = 0.0
-        for req in prescribed_items:
-            s_id = req.get("sku_id")
-            qty = int(req.get("quantity_prescribed") or 1)
-            med_name = req.get("medicine_name") or "Prescribed Medicine"
-            mrp = 50.0
-            if s_id:
-                sku_row = db.execute("SELECT mrp_inr, name FROM medication_skus WHERE id=?", (s_id,)).fetchone()
-                if sku_row:
-                    mrp = float(sku_row["mrp_inr"] or 50.0)
-                    med_name = sku_row["name"] or med_name
-            subtotal = round(mrp * qty, 2)
-            item_total += subtotal
-            fallback_items.append({
-                "prescription_item_id": req.get("id"),
-                "sku_id": s_id or 1,
-                "medicine_name": med_name,
-                "quantity": qty,
-                "pharmacy_id": default_pharm_id,
-                "pharmacy_name": "ZENDOC Verified Partner Network",
-                "unit_price_inr": mrp,
-                "total_price_inr": subtotal,
-                "stock_status": "CONFIRMED",
-                "stock_freshness": "Catalog verified",
-            })
-        comb_fee = 40.0
-        comb_total = round(item_total + comb_fee, 2)
-        opt_hash = compute_plan_hash(fallback_items, [default_pharm_id], comb_total)
-        result_options["standard_network"] = FulfilmentOption(
-            option_id="standard-network-plan",
-            pharmacy_names=["ZENDOC Verified Partner Network"],
-            pharmacy_ids=[default_pharm_id],
-            strategy_type="single_complete",
-            strategy_name="Standard verified partner network",
-            coverage_ratio=f"{len(prescribed_items)} of {len(prescribed_items)}",
-            covered_items_count=len(prescribed_items),
-            total_items_count=len(prescribed_items),
-            distance_summary="1.5 km (estimated)",
-            item_total_inr=round(item_total, 2),
-            delivery_fee_inr=comb_fee,
-            total_inr=comb_total,
-            freshness_summary="Catalog verified",
-            overall_status="CONFIRMED",
-            deliveries_count=1,
-            deliveries_text="1 delivery",
-            why_explanation=[
-                "Matched against verified pharmaceutical catalog.",
-                "Orders dispatched via closest accredited partner pharmacy.",
-            ],
-            unknowns=[],
-            plan_hash=opt_hash,
-            items=fallback_items,
-        ).to_dict()
-
-    # If database staging is enabled and patient is given, stage in fulfilment_plans table
-    if stage_in_db and patient_id and result_options:
-        db = get_db()
-        now = now_iso()
-        for key, opt in result_options.items():
-            plan_uid = f"plan_{key}_{patient_id}_{int(datetime.now(timezone.utc).timestamp())}"
-            cursor = db.execute(
-                """
-                INSERT INTO fulfilment_plans
-                (plan_uid, patient_id, actor_id, prescription_id, strategy_type, strategy_name, coverage_ratio,
-                 item_total_inr, delivery_fee_inr, total_inr, distance_summary, deliveries_count,
-                 freshness_summary, overall_status, why_explanation, plan_hash, status, data_mode, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'staged', 'LIVE', ?)
-                """,
-                (
-                    plan_uid,
-                    patient_id,
-                    actor_id,
-                    prescription_id,
-                    opt["strategy_type"],
-                    opt["strategy_name"],
-                    opt["coverage_ratio"],
-                    opt["item_total_inr"],
-                    opt["delivery_fee_inr"],
-                    opt["total_inr"],
-                    opt["distance_summary"],
-                    opt["deliveries_count"],
-                    opt["freshness_summary"],
-                    opt["overall_status"],
-                    "\n".join(opt["why_explanation"]),
-                    opt["plan_hash"],
-                    now,
-                ),
-            )
-            plan_db_id = cursor.lastrowid
-            opt["db_plan_id"] = plan_db_id
-            opt["plan_uid"] = plan_uid
-
-            for it in opt.get("items", []):
-                db.execute(
-                    """
-                    INSERT INTO fulfilment_plan_items
-                    (plan_id, prescription_item_id, sku_id, pharmacy_id, quantity, unit_price_inr, total_price_inr, stock_status, stock_freshness)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        plan_db_id,
-                        it.get("prescription_item_id"),
-                        it.get("sku_id") or 1,
-                        it.get("pharmacy_id") or default_pharm_id,
-                        it.get("quantity", 1),
-                        it["unit_price_inr"],
-                        it["total_price_inr"],
-                        it["stock_status"],
-                        it["stock_freshness"],
-                    ),
+    # A split option may use only independently confirmed observations.
+    for index, first in enumerate(pharmacies):
+        for second in pharmacies[index + 1:]:
+            split_items: list[dict[str, Any]] = []
+            used: list[dict[str, Any]] = []
+            for requested in prescribed_items:
+                candidates: list[tuple[dict[str, Any], dict[str, Any]]] = []
+                needed = int(requested.get("quantity_prescribed") or 1)
+                for pharmacy in (first, second):
+                    observation = (pharmacy.get("inventory") or {}).get(int(requested["sku_id"]))
+                    if (
+                        observation
+                        and observation.get("effective_status") == "CONFIRMED"
+                        and int(observation.get("quantity_available") or 0) >= needed
+                    ):
+                        candidates.append((pharmacy, observation))
+                if not candidates:
+                    split_items = []
+                    break
+                pharmacy, observation = min(
+                    candidates,
+                    key=lambda pair: _finite_number(pair[1].get("price_inr")) if _finite_number(pair[1].get("price_inr")) is not None else float("inf"),
                 )
-        db.commit()
+                split_items.append(_make_item(requested, pharmacy, observation, "CONFIRMED"))
+                if pharmacy not in used:
+                    used.append(pharmacy)
+            if len(split_items) == total_items and len(used) > 1:
+                complete.append(_build_option(
+                    f"split-{first['user_id']}-{second['user_id']}",
+                    used,
+                    split_items,
+                    total_items,
+                    "CONFIRMED",
+                    "split_fulfilment",
+                    [f"{len(used)} participating pharmacies cover all {total_items} exact items with confirmed stock."],
+                ))
 
-    best_opt = (
-        result_options.get("single_complete")
-        or result_options.get("split_fulfilment")
-        or result_options.get("lowest_cost")
-        or (next(iter(result_options.values())) if result_options else {})
-    )
-    plan_id = best_opt.get("db_plan_id")
-    plan_hash = best_opt.get("plan_hash")
-    total_cost = best_opt.get("total_inr", 0.0)
+    complete.sort(key=lambda option: (
+        option.total_inr is None,
+        option.total_inr if option.total_inr is not None else float("inf"),
+        option.distance_summary == "Distance unavailable",
+        option.distance_summary,
+        option.option_id,
+    ))
+    stale.sort(key=lambda option: option.option_id)
+    result_options = {f"option_{idx}": option.to_dict() for idx, option in enumerate(complete + stale, start=1)}
+    for option in result_options.values():
+        option["data_mode"] = mode
+
+    staged: list[dict[str, Any]] = []
+    if stage_in_db and target_patient is not None:
+        staged = _stage_options(result_options, target_patient, actor_id, prescription_id, mode)
+
+    best = staged[0] if staged else (next(iter(result_options.values())) if result_options else {})
+    confirmed_present = any(option.get("overall_status") == "CONFIRMED" for option in result_options.values())
+    if staged:
+        status = "staged"
+        status_code = "STAGED"
+        message = "Confirmed options are staged for explicit user review."
+    elif result_options and confirmed_present:
+        status = "NO_CONFIRMED_OPTION"
+        status_code = "NO_CONFIRMED_OPTION"
+        message = "Confirmed stock was found, but a complete quote is unavailable; no order-ready plan was created."
+    elif result_options:
+        status = "NO_CONFIRMED_OPTION"
+        status_code = "NO_CONFIRMED_OPTION"
+        message = "Only stale or unconfirmed observations were found; no order-ready plan was created."
+    else:
+        status = "NO_CONFIRMED_INVENTORY"
+        status_code = "NO_CONFIRMED_INVENTORY"
+        message = "No confirmed participating pharmacy inventory is currently available for this prescription."
 
     return {
-        "status": "staged" if stage_in_db else "options_ready",
-        "plan_id": plan_id,
-        "plan_hash": plan_hash,
-        "total_cost_inr": total_cost,
-        "total_items": total_needed,
+        "status": status,
+        "status_code": status_code,
+        "message": message,
+        "next_actions": ["change_location", "increase_radius", "refresh_inventory", "contact_pharmacy"],
+        "plan_id": best.get("db_plan_id"),
+        "plan_hash": best.get("plan_hash"),
+        "total_cost_inr": best.get("total_inr"),
+        "total_items": total_items,
+        "data_mode": mode,
         "options": result_options,
     }

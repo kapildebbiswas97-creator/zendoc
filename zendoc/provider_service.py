@@ -233,7 +233,9 @@ def book_provider_slot(patient, provider_profile_id, scheduled_for, reason):
             patient["id"],
             profile["user_id"],
             profile["id"],
-            profile["organization"] or "ZENDOC Provider",
+            profile["organization"] or get_db().execute(
+                "SELECT name FROM users WHERE id=?", (profile["user_id"],)
+            ).fetchone()["name"],
             profile["specialty"],
             scheduled_for,
             reason,

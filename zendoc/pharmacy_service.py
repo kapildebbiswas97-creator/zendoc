@@ -46,7 +46,7 @@ def search_medicines(query=None):
 def list_nearby_pharmacies(city=None):
     """List verified pharmacy providers from the database."""
     db = get_db()
-    conditions = ["u.role='pharmacy'", "u.active=1"]
+    conditions = ["u.role='pharmacy'", "u.active=1", "LOWER(pp.verification_status)='verified'"]
     params = []
     if city:
         conditions.append("(LOWER(pp.city) LIKE ? OR LOWER(u.city) LIKE ?)")

@@ -12,6 +12,8 @@ from typing import Any
 
 from .db import get_db, now_iso
 
+VALID_PROVENANCE_SOURCES = {"USER_REPORTED", "DOCUMENT_EXTRACTED", "PROVIDER_RECORDED", "DEVICE_RECORDED"}
+
 
 def _user_id(actor: Any) -> int:
     if actor is None:
@@ -47,6 +49,11 @@ def record_care_continuity_event(
     Append an authorized, provenance-tagged continuity event to the patient's Health Memory.
     Casual AI chat is NEVER recorded as clinical fact; only verified logistical, provider, or device events.
     """
+    source = str(source or "").strip().upper()
+    if source not in VALID_PROVENANCE_SOURCES:
+        raise ValueError(f"Unsupported continuity provenance source '{source}'.")
+    if not str(event_type or "").strip() or not str(title or "").strip():
+        raise ValueError("Continuity events require an event type and title.")
     db = get_db()
     now = now_iso()
     cursor = db.execute(
@@ -96,9 +103,10 @@ def get_patient_care_graph(patient_id: int, actor: Any = None) -> dict[str, Any]
     Assemble the full domain Care Graph for a patient:
     Aggregates appointments, prescriptions, orders, diagnostics, timeline events, and the relational edges between them.
     """
-    if actor is not None:
-        from .context_engine import verify_context_authorization
-        verify_context_authorization(actor, patient_id, "care_graph_view")
+    if actor is None:
+        raise PermissionError("Authentication is required to read a patient's care graph.")
+    from .context_engine import verify_context_authorization
+    verify_context_authorization(actor, patient_id, "care_graph_view")
 
     db = get_db()
     patient_row = db.execute("SELECT id, name, city, email FROM users WHERE id=?", (patient_id,)).fetchone()

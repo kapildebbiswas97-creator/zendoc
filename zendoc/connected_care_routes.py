@@ -14,12 +14,14 @@ Architecture invariants enforced here:
 """
 from __future__ import annotations
 
+import hmac
 import json
 from datetime import datetime, timezone
 
 from flask import (
     Blueprint,
     abort,
+    current_app,
     g,
     jsonify,
     redirect,
@@ -58,6 +60,7 @@ from .prescription_service import (
     is_autonomous_prescription_request,
 )
 from .routes import api_user, audit, require_api_user
+from .security import is_owner
 from .trust_service import get_provider_trust_signals
 
 bp = Blueprint("connected_care", __name__)
@@ -78,16 +81,44 @@ def _api_error(error, status=None):
     return jsonify({"error": {"code": status, "message": str(error)}}), status
 
 
-def _api_user():
-    """Return (user_dict, error_response | None)."""
-    user, error = require_api_user()
-    if error:
-        return None, error
-    return user, None
+def _api_user(mutation=False):
+    """Return ``(user_dict, error_response | None)`` for API or browser calls.
+
+    The browser Connected Care page uses the normal Flask session, while API
+    clients use bearer tokens.  ``require_api_user`` intentionally only knows
+    about tokens, so this boundary handles the session case and applies the
+    CSRF check for session-backed mutations.  A malformed bearer token must
+    never fall back to an unrelated browser session.
+    """
+    authorization = request.headers.get("Authorization", "").strip()
+    if authorization:
+        user, error = require_api_user()
+        if error:
+            return None, error
+        return dict(user), None
+
+    user = g.get("user")
+    if user is None and session.get("user_id"):
+        user = get_db().execute(
+            "SELECT * FROM users WHERE id=? AND active=1", (int(session["user_id"]),)
+        ).fetchone()
+    if user is None:
+        return None, (jsonify({"error": "Unauthorized"}), 401)
+    if user["role"] == "admin" and not is_owner(user):
+        return None, (jsonify({"error": {"code": 403, "message": "Only the ZENDOC owner may access Admin operations."}}), 403)
+
+    if mutation:
+        supplied = request.headers.get("X-CSRF-Token") or request.headers.get("X-CSRFToken")
+        expected = session.get("csrf_token")
+        if not expected or not supplied or not hmac.compare_digest(str(supplied), str(expected)):
+            return None, (jsonify({"error": {"code": 400, "message": "A valid CSRF token is required for browser mutations."}}), 400)
+    return dict(user), None
 
 
 def _current_user_id():
     """Return logged-in user id or None."""
+    if getattr(g, "user", None):
+        return g.user["id"]
     if getattr(g, "current_user", None):
         return g.current_user["id"]
     if session.get("user_id"):
@@ -124,6 +155,7 @@ def connected_care_home():
     if not user:
         abort(401)
     user = dict(user)
+    data_mode = str(current_app.config.get("CONNECTED_CARE_DATA_MODE", "LIVE")).upper()
 
     # Fetch active prescriptions summary for display (limit 5)
     try:
@@ -146,13 +178,13 @@ def connected_care_home():
 
     # Health memory provenance summary
     try:
-        provenance = get_health_memory_provenance_summary(user)
+        provenance = get_health_memory_provenance_summary(user, actor=user)
     except Exception:
         provenance = {"total_events": 0, "latest_event": None}
 
     # Next safe actions
     try:
-        next_actions = determine_next_safe_actions(user)
+        next_actions = determine_next_safe_actions(user, actor=user)
     except Exception:
         next_actions = []
 
@@ -163,7 +195,8 @@ def connected_care_home():
         recent_orders=[dict(o) for o in orders],
         provenance=provenance,
         next_actions=next_actions,
-        demo_mode=True,  # synthetic demo data banner
+        data_mode=data_mode,
+        demo_mode=data_mode == "DEMO",
     )
 
 
@@ -182,8 +215,9 @@ def prescriptions_page():
         prescriptions = [dict(r) for r in presc_rows]
     except Exception as e:
         prescriptions = []
+    data_mode = str(current_app.config.get("CONNECTED_CARE_DATA_MODE", "LIVE")).upper()
     return render_template("connected_care.html", user=user, prescriptions=prescriptions,
-                           page_tab="prescriptions", demo_mode=True)
+                           page_tab="prescriptions", data_mode=data_mode, demo_mode=data_mode == "DEMO")
 
 
 @bp.get("/connected-care/orders")
@@ -200,9 +234,10 @@ def orders_page():
         """,
         (uid, uid),
     ).fetchall()
+    data_mode = str(current_app.config.get("CONNECTED_CARE_DATA_MODE", "LIVE")).upper()
     return render_template("connected_care.html", user=user,
                            orders=[dict(o) for o in orders],
-                           page_tab="orders", demo_mode=True)
+                           page_tab="orders", data_mode=data_mode, demo_mode=data_mode == "DEMO")
 
 
 @bp.get("/connected-care/diagnostics")
@@ -215,14 +250,17 @@ def diagnostics_page():
     query = request.args.get("q", "")
     try:
         offers = search_lab_offers(query) if query else []
-        catalog = db.execute("SELECT * FROM diagnostic_catalog WHERE active=1 ORDER BY name").fetchall()
+        # The catalog is descriptive only.  Availability and price come from
+        # verified lab offers; diagnostic_catalog has no active flag.
+        catalog = db.execute("SELECT * FROM diagnostic_catalog ORDER BY name").fetchall()
     except Exception:
         offers = []
         catalog = []
+    data_mode = str(current_app.config.get("CONNECTED_CARE_DATA_MODE", "LIVE")).upper()
     return render_template("connected_care.html", user=user,
                            diagnostic_offers=offers,
                            diagnostic_catalog=[dict(c) for c in catalog],
-                           page_tab="diagnostics", demo_mode=True)
+                           page_tab="diagnostics", data_mode=data_mode, demo_mode=data_mode == "DEMO")
 
 
 @bp.get("/connected-care/inbox")
@@ -254,7 +292,9 @@ def inbox_page():
         reverse=True,
     )[:30]
 
-    return render_template("inbox.html", user=user, inbox_items=inbox_items, demo_mode=True)
+    data_mode = str(current_app.config.get("CONNECTED_CARE_DATA_MODE", "LIVE")).upper()
+    return render_template("inbox.html", user=user, inbox_items=inbox_items,
+                           data_mode=data_mode, demo_mode=data_mode == "DEMO")
 
 
 # ── JSON API ───────────────────────────────────────────────────────────────────

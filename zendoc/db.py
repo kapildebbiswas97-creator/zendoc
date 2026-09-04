@@ -1128,6 +1128,7 @@ def init_db():
             stock_status TEXT NOT NULL DEFAULT 'CONFIRMED',
             quantity_available INTEGER NOT NULL DEFAULT 0,
             price_inr REAL NOT NULL,
+            price_available INTEGER NOT NULL DEFAULT 1,
             discount_percent REAL NOT NULL DEFAULT 0.0,
             source TEXT NOT NULL DEFAULT 'pharmacy_manual',
             observed_at TEXT NOT NULL,
@@ -1137,7 +1138,7 @@ def init_db():
             data_mode TEXT NOT NULL DEFAULT 'LIVE',
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
-            UNIQUE(pharmacy_id, sku_id)
+            UNIQUE(pharmacy_id, sku_id, data_mode)
         );
         CREATE INDEX IF NOT EXISTS idx_inventory_pharmacy ON inventory_observations(pharmacy_id);
         CREATE INDEX IF NOT EXISTS idx_inventory_sku ON inventory_observations(sku_id, stock_status);
@@ -1215,8 +1216,9 @@ def init_db():
             home_collection_available INTEGER NOT NULL DEFAULT 1,
             home_collection_fee_inr REAL NOT NULL DEFAULT 0.0,
             verified INTEGER NOT NULL DEFAULT 1,
+            data_mode TEXT NOT NULL DEFAULT 'LIVE',
             created_at TEXT NOT NULL,
-            UNIQUE(lab_id, test_id)
+            UNIQUE(lab_id, test_id, data_mode)
         );
 
         CREATE TABLE IF NOT EXISTS diagnostic_bookings (
@@ -1719,11 +1721,19 @@ def migrate_schema(db):
     for table, additions in {
         "provider_profiles": {
             "digitalization_level": "INTEGER NOT NULL DEFAULT 1",
-            "delivery_available": "INTEGER NOT NULL DEFAULT 1",
-            "pickup_available": "INTEGER NOT NULL DEFAULT 1",
-            "operating_hours": "TEXT NOT NULL DEFAULT '08:00 - 22:00'",
-            "delivery_radius_km": "REAL NOT NULL DEFAULT 5.0",
-            "delivery_fee_base_inr": "REAL NOT NULL DEFAULT 30.0",
+            # These fields are provider configuration, not product defaults.
+            # NULL means the provider has not supplied the value yet.
+            "delivery_available": "INTEGER",
+            "pickup_available": "INTEGER",
+            "operating_hours": "TEXT",
+            "delivery_radius_km": "REAL",
+            "delivery_fee_base_inr": "REAL",
+            "data_mode": "TEXT NOT NULL DEFAULT 'LIVE'",
+        },
+        "inventory_observations": {
+            "price_available": "INTEGER NOT NULL DEFAULT 1",
+        },
+        "diagnostic_offers": {
             "data_mode": "TEXT NOT NULL DEFAULT 'LIVE'",
         },
         "medicine_orders": {
@@ -1825,6 +1835,7 @@ def migrate_schema(db):
             stock_status TEXT NOT NULL DEFAULT 'CONFIRMED',
             quantity_available INTEGER NOT NULL DEFAULT 0,
             price_inr REAL NOT NULL,
+            price_available INTEGER NOT NULL DEFAULT 1,
             discount_percent REAL NOT NULL DEFAULT 0.0,
             source TEXT NOT NULL DEFAULT 'pharmacy_manual',
             observed_at TEXT NOT NULL,
@@ -1834,7 +1845,7 @@ def migrate_schema(db):
             data_mode TEXT NOT NULL DEFAULT 'LIVE',
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
-            UNIQUE(pharmacy_id, sku_id)
+            UNIQUE(pharmacy_id, sku_id, data_mode)
         );
         CREATE INDEX IF NOT EXISTS idx_inventory_pharmacy ON inventory_observations(pharmacy_id);
         CREATE INDEX IF NOT EXISTS idx_inventory_sku ON inventory_observations(sku_id, stock_status);
@@ -1912,8 +1923,9 @@ def migrate_schema(db):
             home_collection_available INTEGER NOT NULL DEFAULT 1,
             home_collection_fee_inr REAL NOT NULL DEFAULT 0.0,
             verified INTEGER NOT NULL DEFAULT 1,
+            data_mode TEXT NOT NULL DEFAULT 'LIVE',
             created_at TEXT NOT NULL,
-            UNIQUE(lab_id, test_id)
+            UNIQUE(lab_id, test_id, data_mode)
         );
 
         CREATE TABLE IF NOT EXISTS diagnostic_bookings (
@@ -2239,4 +2251,3 @@ def _seed_connected_care_demo_safe(db=None):
         db.commit()
     except Exception:
         pass
-

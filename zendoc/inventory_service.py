@@ -21,12 +21,33 @@ import csv
 import io
 import json
 import math
+import os
+import sqlite3
 from datetime import datetime, timezone
 from typing import Any
+
+from flask import current_app
 
 from .db import get_db, now_iso
 
 DEFAULT_STALE_THRESHOLD_HOURS = 2.0
+VALID_STOCK_STATUSES = {"CONFIRMED", "STALE", "UNKNOWN", "UNAVAILABLE"}
+VALID_INVENTORY_SOURCES = {"pharmacy_manual", "csv_import", "pos_integration", "partner_api"}
+VALID_DATA_MODES = {"LIVE", "DEMO"}
+
+
+def _data_mode(explicit: str | None = None) -> str:
+    """Resolve an explicit/live/demo boundary; never mix modes implicitly."""
+    if explicit is not None:
+        mode = str(explicit).strip().upper()
+    else:
+        try:
+            mode = str(current_app.config.get("CONNECTED_CARE_DATA_MODE", "LIVE")).strip().upper()
+        except RuntimeError:
+            mode = str(os.environ.get("ZENDOC_CONNECTED_CARE_DATA_MODE", "LIVE")).strip().upper()
+    if mode not in VALID_DATA_MODES:
+        raise ValueError("Connected Care data mode must be LIVE or DEMO.")
+    return mode
 
 
 def calculate_distance_km(
@@ -93,61 +114,120 @@ def evaluate_freshness(
         days = int(hours // 24)
         label = f"Updated {days} day{'s' if days != 1 else ''} ago"
 
-    if current_status == "UNAVAILABLE":
+    status = str(current_status or "UNKNOWN").strip().upper()
+    if status == "UNAVAILABLE":
         return "UNAVAILABLE", label
+
+    if status in {"UNKNOWN", "PENDING", "INTEGRATION_REQUIRED", "STALE"}:
+        # A caller cannot promote a provider's stale/unknown state merely by
+        # supplying a recent timestamp.  Stale is a warning state until a new
+        # confirmed observation is written.
+        return "STALE" if status == "STALE" else "UNKNOWN", label
 
     if hours > stale_hours:
         return "STALE", label
 
-    return "CONFIRMED", label
+    return "CONFIRMED" if status == "CONFIRMED" else "UNKNOWN", label
 
 
 def update_inventory_observation(
     pharmacy_id: int,
     sku_id: int,
     quantity: int,
-    price_inr: float,
+    price_inr: float | None,
     stock_status: str = "CONFIRMED",
     source: str = "pharmacy_manual",
     discount_percent: float = 0.0,
     notes: str | None = None,
-    data_mode: str = "LIVE",
+    data_mode: str | None = None,
 ) -> dict[str, Any]:
     """
     Digitalization Level 1 (Manual) or single update:
     Record a verified stock observation for a specific medicine SKU.
     """
+    mode = _data_mode(data_mode)
     db = get_db()
-    now = now_iso()
-    price_inr = round(float(price_inr), 2)
-    quantity = max(0, int(quantity))
-    if quantity == 0 and stock_status == "CONFIRMED":
+    pharmacy = db.execute(
+        "SELECT id, role, active FROM users WHERE id=?", (int(pharmacy_id),)
+    ).fetchone()
+    if not pharmacy or pharmacy["role"] != "pharmacy" or not bool(pharmacy["active"]):
+        raise PermissionError("Inventory can only be recorded for an active pharmacy account.")
+    sku = db.execute("SELECT id FROM medication_skus WHERE id=?", (int(sku_id),)).fetchone()
+    if not sku:
+        raise LookupError(f"Medication SKU #{sku_id} not found.")
+    stock_status = str(stock_status or "UNKNOWN").strip().upper()
+    if stock_status not in VALID_STOCK_STATUSES:
+        raise ValueError(f"Unsupported inventory status '{stock_status}'.")
+    source = str(source or "pharmacy_manual").strip().lower()
+    if source not in VALID_INVENTORY_SOURCES:
+        raise ValueError(f"Unsupported inventory source '{source}'.")
+    try:
+        quantity = int(quantity)
+    except (TypeError, ValueError):
+        raise ValueError("Inventory quantity must be a non-negative integer.")
+    if quantity < 0:
+        raise ValueError("Inventory quantity must be non-negative.")
+    if price_inr is None or str(price_inr).strip() == "":
+        stored_price = 0.0
+        price_available = 0
+    else:
+        try:
+            stored_price = round(float(price_inr), 2)
+        except (TypeError, ValueError):
+            raise ValueError("Inventory price must be a non-negative number or null when unavailable.")
+        if not math.isfinite(stored_price) or stored_price < 0:
+            raise ValueError("Inventory price must be a non-negative number or null when unavailable.")
+        price_available = 1
+    if stock_status == "CONFIRMED" and quantity == 0:
         stock_status = "UNAVAILABLE"
+    if stock_status == "UNAVAILABLE":
+        quantity = 0
+    now = now_iso()
 
-    cursor = db.execute(
-        """
-        INSERT INTO inventory_observations
-        (pharmacy_id, sku_id, stock_status, quantity_available, price_inr, discount_percent, source, observed_at, notes, data_mode, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(pharmacy_id, sku_id) DO UPDATE SET
-            stock_status=excluded.stock_status,
-            quantity_available=excluded.quantity_available,
-            price_inr=excluded.price_inr,
-            discount_percent=excluded.discount_percent,
-            source=excluded.source,
-            observed_at=excluded.observed_at,
-            notes=excluded.notes,
-            updated_at=excluded.updated_at
-        """,
-        (pharmacy_id, sku_id, stock_status, quantity, price_inr, discount_percent, source, now, notes, data_mode, now, now),
-    )
+    existing = db.execute(
+        "SELECT id, data_mode FROM inventory_observations WHERE pharmacy_id=? AND sku_id=? AND data_mode=?",
+        (pharmacy_id, sku_id, mode),
+    ).fetchone()
+    values = (stock_status, quantity, stored_price, price_available, discount_percent, source, now, notes, mode, now, pharmacy_id, sku_id)
+    if existing:
+        db.execute(
+            """
+            UPDATE inventory_observations
+            SET stock_status=?, quantity_available=?, price_inr=?, price_available=?,
+                discount_percent=?, source=?, observed_at=?, notes=?, data_mode=?, updated_at=?
+            WHERE pharmacy_id=? AND sku_id=? AND data_mode=?
+            """,
+            (*values, mode),
+        )
+    else:
+        try:
+            db.execute(
+                """
+                INSERT INTO inventory_observations
+                (pharmacy_id, sku_id, stock_status, quantity_available, price_inr, price_available,
+                 discount_percent, source, observed_at, notes, data_mode, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (pharmacy_id, sku_id, stock_status, quantity, stored_price, price_available,
+                 discount_percent, source, now, notes, mode, now, now),
+            )
+        except sqlite3.IntegrityError as exc:
+            # A database created before the data-mode migration has a
+            # (pharmacy_id, sku_id) uniqueness constraint.  Refuse to overwrite
+            # another mode; never let a demo update mutate live data silently.
+            raise ValueError(
+                "Inventory data-mode isolation is not available in this database; run the M10 schema migration before recording this observation."
+            ) from exc
     db.commit()
 
     row = db.execute(
-        "SELECT * FROM inventory_observations WHERE pharmacy_id=? AND sku_id=?",
-        (pharmacy_id, sku_id),
+        "SELECT * FROM inventory_observations WHERE pharmacy_id=? AND sku_id=? AND data_mode=?",
+        (pharmacy_id, sku_id, mode),
     ).fetchone()
-    return dict(row)
+    result = dict(row)
+    result["price_inr"] = float(result["price_inr"]) if result.get("price_available", 1) else None
+    result["data_mode"] = mode
+    return result
 
 
 def import_inventory_csv(pharmacy_id: int, csv_content: str) -> dict[str, Any]:
@@ -174,7 +254,11 @@ def import_inventory_csv(pharmacy_id: int, csv_content: str) -> dict[str, Any]:
 
         try:
             qty = int(row.get("quantity") or 0)
-            price = float(row.get("price_inr") or 0.0)
+            raw_price = row.get("price_inr")
+            if raw_price in (None, ""):
+                errors.append(f"Row {idx}: price_inr is required for an inventory offer (use a separate unknown state instead).")
+                continue
+            price = float(raw_price)
             in_stock = str(row.get("in_stock", "1")).strip().lower() in {"1", "true", "yes"}
             status = "CONFIRMED" if (in_stock and qty > 0) else "UNAVAILABLE"
         except (ValueError, TypeError) as e:
@@ -211,14 +295,17 @@ def search_pharmacy_offers(
     user_lat: float | None = None,
     user_lon: float | None = None,
     radius_km: float = 10.0,
-    include_demo: bool = True,
+    include_demo: bool = False,
     query: str | None = None,
+    data_mode: str | None = None,
+    include_unknown: bool = False,
     **kwargs: Any,
 ) -> list[dict[str, Any]]:
     """
     Query nearby participating pharmacies and return truthful stock observations for the requested SKUs.
     Separates demands from offers; calculates real distance and freshness.
     """
+    mode = _data_mode(data_mode)
     db = get_db()
     if isinstance(medicine_ids, str):
         query = medicine_ids
@@ -229,19 +316,23 @@ def search_pharmacy_offers(
     if "patient_lon" in kwargs and user_lon is None:
         user_lon = kwargs.get("patient_lon")
 
-    if query and not medicine_ids:
+    query_requested = bool(str(query or "").strip())
+    if query_requested and not medicine_ids:
         q_term = f"%{query.strip().lower()}%"
         sku_rows = db.execute(
             "SELECT id FROM medication_skus WHERE LOWER(name) LIKE ? OR LOWER(generic_name) LIKE ?",
             (q_term, q_term),
         ).fetchall()
         medicine_ids = [r["id"] for r in sku_rows]
+        if not medicine_ids:
+            return []
 
     where_clauses = ["u.role='pharmacy'", "u.active=1"]
     params: list[Any] = []
 
-    if not include_demo:
-        where_clauses.append("pp.data_mode != 'DEMO'")
+    # Inventory rows, not UI defaults, determine whether a pharmacy is a
+    # candidate.  Explicit mode matching prevents synthetic rows leaking into
+    # live searches (and vice versa).
 
     if city:
         where_clauses.append("(LOWER(pp.city) LIKE ? OR LOWER(u.city) LIKE ?)")
@@ -282,25 +373,31 @@ def search_pharmacy_offers(
             SELECT io.*, ms.sku_code, ms.name medicine_name, ms.form, ms.strength, ms.mrp_inr, ms.rx_required
             FROM inventory_observations io
             JOIN medication_skus ms ON ms.id=io.sku_id
-            WHERE io.pharmacy_id=? {sku_filter}
+            WHERE io.pharmacy_id=? AND io.data_mode=? {sku_filter}
             """,
-            inv_params,
+            [pharm_uid, mode, *inv_params[1:]],
         ).fetchall()
 
         items_map = {}
         for obs in observations:
             o_dict = dict(obs)
             eff_status, freshness_label = evaluate_freshness(o_dict.get("observed_at"), o_dict.get("stock_status", "CONFIRMED"))
+            if int(o_dict.get("quantity_available") or 0) <= 0 and eff_status == "CONFIRMED":
+                eff_status = "UNAVAILABLE"
             o_dict["effective_status"] = eff_status
             o_dict["freshness_label"] = freshness_label
+            o_dict["price_inr"] = float(o_dict["price_inr"]) if o_dict.get("price_available", 1) else None
             items_map[o_dict["sku_id"]] = o_dict
 
-        if medicine_ids and not items_map:
+        if medicine_ids and not items_map and not include_unknown:
             continue
 
         pharm["distance_km"] = dist
         pharm["distance_text"] = f"{dist} km" if dist is not None else "Distance unavailable"
         pharm["inventory"] = items_map
+        pharm["data_mode"] = mode
+        pharm["is_demo"] = mode == "DEMO"
+        pharm["provider_status"] = str(pharm.get("verification_status") or "UNVERIFIED").upper()
         if items_map:
             first_item = next(iter(items_map.values()))
             pharm["effective_status"] = first_item["effective_status"]

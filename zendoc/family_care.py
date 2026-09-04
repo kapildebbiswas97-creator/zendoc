@@ -27,6 +27,7 @@ SCOPES = (
     "emergency",
     "home_health",
     "pharmacy",
+    "diagnostics",
     "transport",
     "care_tasks",
 )

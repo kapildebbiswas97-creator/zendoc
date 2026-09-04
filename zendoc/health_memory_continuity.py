@@ -111,11 +111,14 @@ def determine_next_safe_actions(patient_id: int | Any, actor: Any = None) -> lis
     if delivered_order:
         actions.append({
             "action_type": "SET_MEDICINE_REMINDER",
-            "title": "Set Dosage & Refill Reminders",
-            "description": f"Medicines for order #{delivered_order['id']} were delivered. Set daily reminders to stay on schedule.",
+            "title": "Set Delivery & Refill Reminders",
+            "description": f"Medicines for order #{delivered_order['id']} were delivered. Set reminders using the schedule you choose.",
             "button_label": "Set Reminders",
+            "cta_label": "Set Reminders",
             "target_url": f"/connected-care/reminders?order_id={delivered_order['id']}",
+            "cta_url": f"/connected-care/reminders?order_id={delivered_order['id']}",
             "priority": "high",
+            "urgency": "high",
         })
 
     # 2. Check for active prescription without fulfilment order -> Prompt pharmacy fulfilment
@@ -136,6 +139,9 @@ def determine_next_safe_actions(patient_id: int | Any, actor: Any = None) -> lis
             "button_label": "Find Medicines",
             "target_url": f"/connected-care/fulfilment?prescription_id={active_presc['id']}",
             "priority": "critical",
+            "cta_label": "Find Medicines",
+            "cta_url": f"/connected-care/fulfilment?prescription_id={active_presc['id']}",
+            "urgency": "critical",
         })
 
     # 3. Check for ready diagnostic reports -> Prompt sharing with doctor
@@ -156,6 +162,9 @@ def determine_next_safe_actions(patient_id: int | Any, actor: Any = None) -> lis
             "button_label": "Share Report",
             "target_url": "/records",
             "priority": "normal",
+            "cta_label": "Share Report",
+            "cta_url": "/records",
+            "urgency": "normal",
         })
 
     # 4. Check for upcoming doctor appointment
@@ -176,6 +185,9 @@ def determine_next_safe_actions(patient_id: int | Any, actor: Any = None) -> lis
             "button_label": "View Appointment",
             "target_url": "/appointments",
             "priority": "normal",
+            "cta_label": "View Appointment",
+            "cta_url": "/appointments",
+            "urgency": "normal",
         })
 
     return actions

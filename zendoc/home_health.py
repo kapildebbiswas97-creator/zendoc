@@ -48,7 +48,7 @@ HOME_HEALTH_SERVICES = [
         "title": "Diagnostic Sample Collection",
         "category": "Diagnostics",
         "description": "Blood and urine sample collection at home for lab testing.",
-        "status_badge": "Verified Provider",
+        "status_badge": "Integration Required",
         "icon": "vial",
     },
     {
@@ -90,7 +90,7 @@ def create_home_health_request(user, data):
     if not address:
         raise ValueError("address is required.")
 
-    city = str(data.get("city") or "Local Area").strip()
+    city = str(data.get("city") or (user.get("city") if hasattr(user, "get") else None) or "Unknown").strip()
     notes = str(data.get("notes") or "").strip() or None
 
     patient_id = data.get("patient_id")

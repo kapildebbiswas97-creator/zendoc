@@ -115,6 +115,12 @@ def load_config(base_dir, overrides=None):
     ).strip()
 
     database_config = resolve_database_config(base_dir, env, testing, overrides)
+    connected_care_data_mode = str(
+        (overrides or {}).get("CONNECTED_CARE_DATA_MODE")
+        or os.environ.get("ZENDOC_CONNECTED_CARE_DATA_MODE", "LIVE")
+    ).strip().upper()
+    if connected_care_data_mode not in {"LIVE", "DEMO"}:
+        raise ConfigError("ZENDOC_CONNECTED_CARE_DATA_MODE must be LIVE or DEMO.")
     config = {
         "ZENDOC_ENV": env,
         "SECRET_KEY": secret_key or "development-only-secret-key",
@@ -182,6 +188,10 @@ def load_config(base_dir, overrides=None):
         "AI_BASE_URL": ai_base_url,
         "AI_MODEL": os.environ.get("ZENDOC_AI_MODEL", "").strip(),
         "AI_TIMEOUT": env_int("ZENDOC_AI_TIMEOUT", 20),
+        # Connected Care never silently falls back to synthetic operational
+        # data. A demo run must opt in explicitly and is labelled at every UI
+        # boundary; production therefore remains LIVE by default.
+        "CONNECTED_CARE_DATA_MODE": connected_care_data_mode,
     }
     config.update(database_config)
     if overrides:

@@ -10,6 +10,7 @@ CLINICAL BOUNDARIES:
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from .db import get_db, now_iso
@@ -19,6 +20,11 @@ RX_RESTRICTED_TERMS = {
     "prednisolone", "dexamethasone", "schedule h", "schedule x", "sedative",
     "alprazolam", "clonazepam", "tramadol", "prescribe", "give me prescription",
 }
+VALID_PROVENANCE_SOURCES = {"USER_REPORTED", "DOCUMENT_EXTRACTED", "PROVIDER_RECORDED", "DEVICE_RECORDED"}
+
+
+def _normalized_medicine_name(value: Any) -> str:
+    return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
 
 
 def is_autonomous_prescription_request(text: str) -> bool:
@@ -45,6 +51,18 @@ def create_prescription(
         raise ValueError("Prescription must contain at least one medication item.")
 
     db = get_db()
+    patient = db.execute("SELECT id, active FROM users WHERE id=?", (int(patient_id),)).fetchone()
+    if not patient or not bool(patient["active"]):
+        raise LookupError("Prescription patient is not an active account.")
+    source = str(source or "DOCUMENT_EXTRACTED").strip().upper()
+    if source not in VALID_PROVENANCE_SOURCES:
+        raise ValueError(f"Unsupported prescription provenance source '{source}'.")
+    data_mode = str(data_mode or "LIVE").strip().upper()
+    if data_mode not in {"LIVE", "DEMO"}:
+        raise ValueError("Prescription data mode must be LIVE or DEMO.")
+    prescriber_name = str(prescriber_name or "").strip()
+    if not prescriber_name:
+        raise ValueError("A prescription must identify its prescriber.")
     now = now_iso()
     uid = f"rx_{patient_id}_{int(db.execute('SELECT COUNT(*) c FROM prescriptions').fetchone()['c']) + 1}_{now[:10].replace('-', '')}"
 
@@ -66,26 +84,46 @@ def create_prescription(
         if not med_name:
             continue
 
-        # Match SKU from catalog
-        sku_row = db.execute(
-            """
-            SELECT id, name, rx_required, form, strength
-            FROM medication_skus
-            WHERE LOWER(name)=LOWER(?) OR LOWER(generic_name)=LOWER(?)
-            LIMIT 1
-            """,
-            (med_name, med_name),
-        ).fetchone()
+        # Only exact catalogue identity is eligible for fulfilment.  The old
+        # first-word fuzzy match could turn an uncertain extraction into a
+        # different medicine/strength, which is unsafe and violates the
+        # extraction-is-not-prescribing boundary.
+        sku_row = None
+        explicit_sku_id = it.get("sku_id")
+        if explicit_sku_id not in (None, ""):
+            try:
+                sku_row = db.execute(
+                    "SELECT id, name, generic_name, rx_required, form, strength FROM medication_skus WHERE id=?",
+                    (int(explicit_sku_id),),
+                ).fetchone()
+            except (TypeError, ValueError):
+                sku_row = None
+            if not sku_row:
+                raise LookupError(f"Medication SKU #{explicit_sku_id} not found.")
+            if _normalized_medicine_name(med_name) != _normalized_medicine_name(sku_row["name"]):
+                # Keep the extracted text for human review, but do not attach a
+                # potentially different SKU that could be ordered.
+                sku_row = None
+        else:
+            normalized = _normalized_medicine_name(med_name)
+            # Compare a canonical form of the full catalogue name so harmless
+            # punctuation/spacing differences (e.g. ``500 mg`` vs ``500mg``)
+            # do not become a fuzzy strength substitution.
+            catalogue_rows = db.execute(
+                "SELECT id, name, generic_name, rx_required, form, strength FROM medication_skus"
+            ).fetchall()
+            matching = [row for row in catalogue_rows if _normalized_medicine_name(row["name"]) == normalized]
+            sku_row = matching[0] if len(matching) == 1 else None
 
-        sku_id = int(it.get("sku_id")) if it.get("sku_id") else (sku_row["id"] if sku_row else None)
-        if not sku_id:
-            first_word = med_name.split()[0] if med_name else ""
-            fuzzy = db.execute("SELECT id FROM medication_skus WHERE LOWER(name) LIKE ? LIMIT 1", (f"%{first_word.lower()}%",)).fetchone()
-            if fuzzy:
-                sku_id = fuzzy["id"]
+        sku_id = int(sku_row["id"]) if sku_row else None
         rx_req = int(sku_row["rx_required"]) if sku_row else int(it.get("rx_required", 1))
-        confidence = float(it.get("extraction_confidence", 1.0))
-        review_status = "item_review_required" if confidence < 0.90 else "verified"
+        try:
+            confidence = float(it.get("extraction_confidence", 1.0))
+        except (TypeError, ValueError):
+            confidence = 0.0
+        if confidence < 0.0 or confidence > 1.0:
+            raise ValueError("extraction_confidence must be between 0 and 1.")
+        review_status = "item_review_required" if confidence < 0.90 or not sku_row else "verified"
         if review_status == "item_review_required":
             has_uncertain_item = True
 
@@ -115,6 +153,10 @@ def create_prescription(
             ),
         )
         inserted_items.append(c_item.lastrowid)
+
+    if not inserted_items:
+        db.rollback()
+        raise ValueError("Prescription must contain at least one non-empty medication item.")
 
     # Record continuity event in Health Memory
     from .care_graph import record_care_continuity_event
@@ -160,7 +202,7 @@ def get_prescription(prescription_id: int, actor: Any = None) -> dict[str, Any]:
     return res
 
 
-def confirm_uncertain_prescription_item(item_id: int, actor: Any) -> dict[str, Any]:
+def confirm_uncertain_prescription_item(item_id: int, actor: Any, sku_id: int | None = None) -> dict[str, Any]:
     """Explicit human confirmation gate for low-confidence medicine extractions."""
     db = get_db()
     row = db.execute(
@@ -178,9 +220,20 @@ def confirm_uncertain_prescription_item(item_id: int, actor: Any) -> dict[str, A
     from .context_engine import verify_context_authorization
     verify_context_authorization(actor, row["patient_id"], "prescription_item_confirm")
 
+    selected_sku_id = row["sku_id"]
+    if sku_id is not None:
+        selected = db.execute("SELECT id, name FROM medication_skus WHERE id=?", (int(sku_id),)).fetchone()
+        if not selected:
+            raise LookupError(f"Medication SKU #{sku_id} not found.")
+        if _normalized_medicine_name(row["medicine_name"]) != _normalized_medicine_name(selected["name"]):
+            raise ValueError("Selected SKU does not exactly match the extracted medicine name.")
+        selected_sku_id = int(selected["id"])
+    if not selected_sku_id:
+        raise ValueError("This extraction still needs an exact medicine/strength selection before confirmation.")
+
     db.execute(
-        "UPDATE prescription_items SET review_status='user_confirmed' WHERE id=?",
-        (item_id,),
+        "UPDATE prescription_items SET review_status='user_confirmed', sku_id=? WHERE id=?",
+        (selected_sku_id, item_id),
     )
     db.commit()
 
