@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+{% block title %}Trust Center & Data Transparency — ZENDOC{% endblock %}
+
+{% block content %}
+{% if demo_mode %}
+<aside class="trust-note warning" style="margin-bottom:1.5rem;background:#fff8e6;border-left:4px solid #f59e0b;padding:12px 16px;">
+  <strong>SYNTHETIC DEMO ENVIRONMENT · TRUST CENTER</strong><br>
+  <span>Demonstrating transparent data provenance, task-scoped consent grants, and caregiver authorization controls.</span>
+</aside>
+{% endif %}
+
+<section class="section-head">
+  <div>
+    <p class="eyebrow" style="color:#0b6b61;font-weight:600;">Privacy, Provenance &amp; Verification</p>
+    <h1>ZENDOC Trust Center</h1>
+    <p class="section-copy">Complete transparency into what data ZENDOC holds, where each fact originated, active consents, and immediate revocation controls.</p>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center;">
+    <a href="{{ url_for('connected_care.connected_care_home') }}" class="secondary-action">Connected Care Hub</a>
+    <a href="{{ url_for('connected_care.inbox_page') }}" class="secondary-action">Unified Inbox</a>
+  </div>
+</section>
+
+<!-- Principles of Trust Grid -->
+<div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));gap:16px;margin-bottom:1.5rem;">
+  <div class="panel" style="padding:16px;border-top:4px solid #0b6b61;">
+    <h4 style="margin:0 0 8px 0;font-size:1rem;">🛡️ Zero Autonomous Actions</h4>
+    <p style="margin:0;font-size:0.88rem;color:#475569;">
+      AI agents stage plans, calculate options, and verify stock. No order is dispatched, test booked, or payment made without your explicit, hash-verified confirmation.
+    </p>
+  </div>
+  <div class="panel" style="padding:16px;border-top:4px solid #0284c7;">
+    <h4 style="margin:0 0 8px 0;font-size:1rem;">🔍 Provenance Tracking</h4>
+    <p style="margin:0;font-size:0.88rem;color:#475569;">
+      Every clinical fact, test result, and stock item is tagged with its immutable source: User Reported, Document Extracted, Provider Recorded, or Device Recorded.
+    </p>
+  </div>
+  <div class="panel" style="padding:16px;border-top:4px solid #10b981;">
+    <h4 style="margin:0 0 8px 0;font-size:1rem;">🚫 Truthful Zero-Data Guarantee</h4>
+    <p style="margin:0;font-size:0.88rem;color:#475569;">
+      In live mode, missing inventory or unavailable doctors are truthfully reported as unavailable. ZENDOC never hallucinates phantom inventory or synthetic doctors.
+    </p>
+  </div>
+</div>
+
+<!-- Health Memory Provenance Breakdown -->
+<section class="panel" style="margin-bottom:1.5rem;">
+  <div class="panel-head">
+    <div>
+      <p class="eyebrow">Health Memory Integrity</p>
+      <h3 style="margin:0;">Data Provenance Summary</h3>
+    </div>
+    <span class="status-badge active">{{ provenance.total_events if provenance else 0 }} Recorded Events</span>
+  </div>
+  <p style="font-size:0.9rem;color:#475569;margin-bottom:16px;">
+    ZENDOC tracks the verifiable origin of all health events to ensure clinical decisions are grounded exclusively in validated facts. Casual chat is never saved as clinical fact.
+  </p>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:12px;">
+    <div style="background:#f8fafc;padding:12px;border-radius:8px;border:1px solid #e2e8f0;">
+      <span style="font-size:0.8rem;color:#64748b;text-transform:uppercase;font-weight:600;">Provider Recorded</span>
+      <h3 style="margin:4px 0 0 0;font-size:1.4rem;color:#0f172a;">{{ provenance.provider_recorded if provenance else 0 }}</h3>
+      <p style="margin:2px 0 0 0;font-size:0.78rem;color:#64748b;">Clinician notes, lab results, pharmacy orders</p>
+    </div>
+    <div style="background:#f8fafc;padding:12px;border-radius:8px;border:1px solid #e2e8f0;">
+      <span style="font-size:0.8rem;color:#64748b;text-transform:uppercase;font-weight:600;">Document Extracted</span>
+      <h3 style="margin:4px 0 0 0;font-size:1.4rem;color:#0f172a;">{{ provenance.document_extracted if provenance else 0 }}</h3>
+      <p style="margin:2px 0 0 0;font-size:0.78rem;color:#64748b;">OCR extractions with confidence scores</p>
+    </div>
+    <div style="background:#f8fafc;padding:12px;border-radius:8px;border:1px solid #e2e8f0;">
+      <span style="font-size:0.8rem;color:#64748b;text-transform:uppercase;font-weight:600;">User Reported</span>
+      <h3 style="margin:4px 0 0 0;font-size:1.4rem;color:#0f172a;">{{ provenance.user_reported if provenance else 0 }}</h3>
+      <p style="margin:2px 0 0 0;font-size:0.78rem;color:#64748b;">Self-reported symptoms, allergies, addresses</p>
+    </div>
+    <div style="background:#f8fafc;padding:12px;border-radius:8px;border:1px solid #e2e8f0;">
+      <span style="font-size:0.8rem;color:#64748b;text-transform:uppercase;font-weight:600;">Device Recorded</span>
+      <h3 style="margin:4px 0 0 0;font-size:1.4rem;color:#0f172a;">{{ provenance.device_recorded if provenance else 0 }}</h3>
+      <p style="margin:2px 0 0 0;font-size:0.78rem;color:#64748b;">Bluetooth/IoT biometric readings</p>
+    </div>
+  </div>
+</section>
+
+<!-- Active Consent Grants -->
+<section class="panel" style="margin-bottom:1.5rem;">
+  <div class="panel-head">
+    <div>
+      <p class="eyebrow">Task-Scoped Delegations</p>
+      <h3 style="margin:0;">Active Consent Grants</h3>
+    </div>
+    <span class="status-badge active">{{ consent_grants|length }} Active Grants</span>
+  </div>
+  <p style="font-size:0.9rem;color:#475569;margin-bottom:14px;">
+    Consent grants authorize specific third-party pharmacies, labs, or providers to view the minimum necessary records required to fulfill a concrete healthcare task.
+  </p>
+  {% if consent_grants %}
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:0.88rem;">
+        <thead>
+          <tr style="border-bottom:2px solid #e2e8f0;text-align:left;color:#64748b;">
+            <th style="padding:8px 10px;">ID</th>
+            <th style="padding:8px 10px;">Purpose</th>
+            <th style="padding:8px 10px;">Authorized Action</th>
+            <th style="padding:8px 10px;">Scopes</th>
+            <th style="padding:8px 10px;">Status</th>
+            <th style="padding:8px 10px;">Granted</th>
+            <th style="padding:8px 10px;text-align:right;">Control</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for grant in consent_grants %}
+            <tr style="border-bottom:1px solid #f1f5f9;">
+              <td style="padding:10px;">#{{ grant.id }}</td>
+              <td style="padding:10px;"><strong>{{ grant.purpose }}</strong></td>
+              <td style="padding:10px;">{{ grant.action or 'Task Fulfillment' }}</td>
+              <td style="padding:10px;"><code>{{ grant.scopes }}</code></td>
+              <td style="padding:10px;"><span class="status-badge active">{{ grant.status }}</span></td>
+              <td style="padding:10px;color:#64748b;">{{ grant.created_at[:10] }}</td>
+              <td style="padding:10px;text-align:right;">
+                <form method="POST" action="{{ url_for('connected_care.api_trust_center_revoke') }}" style="display:inline;" onsubmit="return confirm('Revoke this consent grant immediately?');">
+                  <input type="hidden" name="csrf_token" value="{{ session.get('csrf_token', '') }}">
+                  <input type="hidden" name="grant_type" value="consent">
+                  <input type="hidden" name="grant_id" value="{{ grant.id }}">
+                  <button type="submit" class="secondary-action compact-action" style="color:#ef4444;border-color:#fecaca;">Revoke</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p style="font-size:0.9rem;color:#64748b;font-style:italic;">No third-party consent grants currently active. All health records remain private to your account.</p>
+  {% endif %}
+</section>
+
+<!-- Family Care Authorization -->
+<section class="panel" style="margin-bottom:1.5rem;">
+  <div class="panel-head">
+    <div>
+      <p class="eyebrow">Family Care Network</p>
+      <h3 style="margin:0;">Family Care Access Grants</h3>
+    </div>
+  </div>
+  <p style="font-size:0.9rem;color:#475569;margin-bottom:14px;">
+    Family care grants permit designated family members to coordinate care, manage orders, or schedule consultations on your behalf.
+  </p>
+
+  <h4 style="margin:12px 0 6px 0;font-size:0.95rem;">Caregivers Authorized for Your Care</h4>
+  {% if family_grants_given %}
+    <div style="overflow-x:auto;margin-bottom:1rem;">
+      <table style="width:100%;border-collapse:collapse;font-size:0.88rem;">
+        <thead>
+          <tr style="border-bottom:2px solid #e2e8f0;text-align:left;color:#64748b;">
+            <th style="padding:8px 10px;">Caregiver</th>
+            <th style="padding:8px 10px;">Authorized Scopes</th>
+            <th style="padding:8px 10px;">Granted Date</th>
+            <th style="padding:8px 10px;text-align:right;">Control</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for fg in family_grants_given %}
+            <tr style="border-bottom:1px solid #f1f5f9;">
+              <td style="padding:10px;"><strong>{{ fg.grantee_name or fg.grantee_email or ('User #' ~ fg.grantee_id) }}</strong></td>
+              <td style="padding:10px;"><code>{{ fg.scopes }}</code></td>
+              <td style="padding:10px;color:#64748b;">{{ fg.created_at[:10] }}</td>
+              <td style="padding:10px;text-align:right;">
+                <form method="POST" action="{{ url_for('connected_care.api_trust_center_revoke') }}" style="display:inline;" onsubmit="return confirm('Revoke family access for this caregiver?');">
+                  <input type="hidden" name="csrf_token" value="{{ session.get('csrf_token', '') }}">
+                  <input type="hidden" name="grant_type" value="family">
+                  <input type="hidden" name="grant_id" value="{{ fg.id }}">
+                  <button type="submit" class="secondary-action compact-action" style="color:#ef4444;border-color:#fecaca;">Revoke Access</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p style="font-size:0.88rem;color:#64748b;font-style:italic;margin-bottom:1rem;">You have not authorized any family caregiver to manage your care.</p>
+  {% endif %}
+
+  <h4 style="margin:12px 0 6px 0;font-size:0.95rem;">Family Members You Care For</h4>
+  {% if family_grants_received %}
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:0.88rem;">
+        <thead>
+          <tr style="border-bottom:2px solid #e2e8f0;text-align:left;color:#64748b;">
+            <th style="padding:8px 10px;">Family Member</th>
+            <th style="padding:8px 10px;">Permitted Scopes</th>
+            <th style="padding:8px 10px;">Granted Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for fg in family_grants_received %}
+            <tr style="border-bottom:1px solid #f1f5f9;">
+              <td style="padding:10px;"><strong>{{ fg.grantor_name or fg.grantor_email or ('User #' ~ fg.grantor_id) }}</strong></td>
+              <td style="padding:10px;"><code>{{ fg.scopes }}</code></td>
+              <td style="padding:10px;color:#64748b;">{{ fg.created_at[:10] }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p style="font-size:0.88rem;color:#64748b;font-style:italic;">You currently do not have active caregiver delegation from another family member.</p>
+  {% endif %}
+</section>
+{% endblock %}

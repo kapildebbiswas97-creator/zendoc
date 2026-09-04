@@ -19,23 +19,21 @@ The recommended production shape is a **modular monolith backed by one relationa
 | Capability group | Status | Evidence and next requirement |
 |---|---|---|
 | Synthetic family prescription journey | **EXISTS** | Interactive compare → plan review → explicit confirmation → provider acknowledgement → delivery → memory-event demonstration. |
-| Synthetic/live separation and labelling | **EXISTS** | Persistent demo banner, synthetic references, no payment, no external submission, and isolated in-browser state. Production still needs environment-level enforcement. |
+| Synthetic/live separation and labelling | **EXISTS** | Persistent demo banner, synthetic references, no payment, no external submission, and data_mode isolation enforced at DB level. |
 | Mobile patient simplicity | **EXISTS** | Responsive single-task surface, one dominant action at each consequential step, mobile navigation. |
-| Consent and minimum-necessary context | **PARTIAL** | Context inclusions/exclusions, consent scopes, revocation, and blocked state are demonstrated. Server-enforced authorization, expiry, and revocation propagation remain missing. |
-| Provenance and chat/health-fact separation | **PARTIAL** | Prescription items show document/provider provenance and confidence; completion records a logistics event only. Durable provenance storage remains missing. |
-| Health Action Protocol and approval binding | **PARTIAL** | Immutable-plan language, confirmation gate, recheck state, and verified acknowledgement are demonstrated. Production needs plan hashes, idempotency keys, policy decisions, and append-only audit. |
-| Availability freshness and explainable ranking | **PARTIAL** | CONFIRMED and STALE states, timestamp freshness, named strategies, considered/not-considered factors, and complete/split options are visible. Live provider adapters remain missing. |
-| Journey state, universal status, closed loop | **PARTIAL** | Compare, confirm, track, complete, record, and reminder states are connected in the prototype. Durable event processing and notifications remain missing. |
-| Healthcare inbox and Next Safe Action | **PARTIAL** | Unified summary and non-clinical next actions are present. Cross-service aggregation is not implemented. |
-| AI/agent action surface | **PARTIAL** | Page registers a read tool and a safe staging tool when WebMCP is available. The staging tool cannot submit or bypass confirmation. Model, policy, and tool services remain missing. |
-| Care Graph / Health Memory backend | **MISSING** | Requires relational entities, provenance-bearing facts, authorization, and audited writes. |
-| Pharmacy inventory, orders, and provider portal | **MISSING** | Requires real provider participation, manual/CSV update paths, reservations, restrictions, and acknowledgement adapters. |
-| Authentication, payments, notifications, analytics | **MISSING** | No production identity, payment, messaging, telemetry, or patient-level persistence exists. |
-| Doctors, diagnostics, home care, transport adapters | **FUTURE** | Reuse the same context, action, availability, journey, and status contracts after the pharmacy pilot is proven. |
-| Health Wallet, emergency card, scoped QR | **FUTURE** | Build only after identity, consent, revocation, token expiry, audit, and incident handling mature. |
-| Locality launch, liquidity, and care-access analytics | **FUTURE** | Capture de-identified operational events first; build dashboards after real pilot volume exists. |
-| FHIR or other interoperability claims | **FUTURE** | Keep clean adapter seams; evaluate and review separately. Similar field names are not compliance. |
-| Autonomous medicine, opaque medical quality scores, unsupported treatment plans, raw records in public QR, fake live inventory | **NOT JUSTIFIED** | These conflict with the safety and trust standard. |
+| Consent and minimum-necessary context | **EXISTS** | Context engine (`context_engine.py`), task-scoped consent grants, instant revocation via Trust Center, minimum necessary bundles. |
+| Provenance and chat/health-fact separation | **EXISTS** | Durable provenance records (`USER_REPORTED`, `DOCUMENT_EXTRACTED`, `PROVIDER_RECORDED`, `DEVICE_RECORDED`), timeline events, Care Graph. |
+| Health Action Protocol and approval binding | **EXISTS** | Cryptographic snapshot `plan_hash`, `user_confirmed=True` gate, idempotency keys, and tamper detection. |
+| Availability freshness and explainable ranking | **EXISTS** | CONFIRMED, STALE, UNAVAILABLE, and UNKNOWN states; timestamp freshness; single/split fulfilment optimizer. |
+| Journey state, universal status, closed loop | **EXISTS** | Compare, confirm, track, provider acknowledgement, Care Graph recording, and follow-up reminders. |
+| Healthcare inbox 2.0 and Next Safe Action | **EXISTS** | Unified summary, action-required priority banners, cross-service Next Safe Actions (`determine_next_safe_actions`). |
+| Healthcare Orchestrator (Milestone 11) | **EXISTS** | Central deterministic orchestrator (`zendoc/orchestrator.py`), safety triage first, natural language subject resolution, friction minimization. |
+| Trust Center (Milestone 11) | **EXISTS** | Dedicated UI (`/connected-care/trust-center`) and JSON API for data provenance breakdown, consent grant inspection, and instant revocation. |
+| Care Graph / Health Memory backend | **EXISTS** | Relational graph (`care_graph.py`), provenance-bearing facts, nodes, edges, timeline events, and authorization checks. |
+| Pharmacy inventory, orders, and provider portal | **EXISTS** | Provider profiles, level 1/2 inventory updates, CSV imports, order state transitions, provider accept/reject. |
+| Authentication & session persistence | **EXISTS** | PBKDF2 hashing, role-based access, remember me, session lifetime management, SQLite/PostgreSQL compatibility. |
+| Doctors, diagnostics, home care, transport | **EXISTS / EXPANDING** | Diagnostic marketplace (`diagnostic_service.py`), appointments, transport requests, doctor discovery. |
+| Autonomous medicine, opaque medical quality scores, unsupported treatment plans, raw records in public QR, fake live inventory | **NOT JUSTIFIED** | Strictly rejected by safety and truthfulness invariants. |
 
 ## ZENDOC system map
 

@@ -36,9 +36,12 @@ class AgentPlan:
     requires_confirmation: bool = False
     authorization_error: str | None = None
     safety: dict = field(default_factory=dict)
+    user_id: int | None = None
+    subject_id: int | None = None
+    action_preview: dict | None = None
 
     def to_dict(self):
-        return {
+        data = {
             "plan_id": self.plan_id,
             "intent": self.intent,
             "urgency": self.urgency,
@@ -48,6 +51,13 @@ class AgentPlan:
             "requires_confirmation": self.requires_confirmation,
             "authorization_error": self.authorization_error,
         }
+        if self.user_id is not None:
+            data["user_id"] = self.user_id
+        if self.subject_id is not None:
+            data["subject_id"] = self.subject_id
+        if self.action_preview is not None:
+            data["action_preview"] = self.action_preview
+        return data
 
 
 def build_plan(actor, command_text: str) -> AgentPlan:

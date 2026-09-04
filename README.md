@@ -43,13 +43,15 @@ Milestone 8 adds the environment-bound single owner invariant, bounded Core Agen
 
 Milestone 10 adds Connected Care, Context Engine with minimum privacy disclosure, Hyperlocal Pharmacy Fulfilment Optimizer, Prescription Safety Guard, Diagnostic Marketplace, and Care Continuity Graph. Crucially, Milestone 10 establishes the operational truthfulness invariant: NO DATA ≠ POSITIVE DATA. Missing provider stock, prices, or distances are never replaced with synthetic partners or fabricated estimates in Live mode. Orders strictly require explicit `user_confirmed=True`, concrete delivery addresses, and cryptographically signed snapshot integrity (`plan_hash`). See `docs/MILESTONE10.md` and `ZENDOC_ARCHITECTURE.md`.
 
+Milestone 11 delivers Trust-First Intelligence & Healthcare Orchestration. A central deterministic Healthcare Orchestrator coordinates emergency safety triage, natural language subject resolution (self vs. authorized family members), friction minimization (saved parent locations and active prescriptions), clinical extraction uncertainty guards, and truthful hyperlocal availability. Consequential actions require explicit user confirmation bound to an immutable plan hash and automatically record continuity events to the Care Graph. Milestone 11 introduces the Trust Center (`/connected-care/trust-center`) for data provenance transparency and instant consent revocation, and Inbox 2.0 with action-required prioritization and Next Safe Actions. See `docs/MILESTONE11.md`.
+
 ## Production Notes
 
 Set `ZENDOC_ENV=production`, `ZENDOC_SECRET_KEY`, `ZENDOC_ADMIN_EMAIL`, and `ZENDOC_ADMIN_PASSWORD` in the environment. The live selection deployment is connected to managed PostgreSQL via `DATABASE_URL`. Local development and automated testing default to isolated SQLite. Follow `docs/PRODUCTION_PERSISTENCE.md` for migration guidelines.
 
 ## Selection Beta — Truthful Status Disclosure
 
-ZENDOC is currently in **Selection Beta** (Milestone 10 hardened). All 219 automated tests pass. The persistence architecture is configured as follows:
+ZENDOC is currently in **Selection Beta** (Milestone 11 hardened). All 229 automated tests pass. The persistence architecture is configured as follows:
 
 | Tier | Status |
 |---|---|
@@ -60,6 +62,7 @@ ZENDOC is currently in **Selection Beta** (Milestone 10 hardened). All 219 autom
 | Free-tier container sleep after prolonged inactivity | Disclosed hosting characteristic |
 
 Relevant documentation:
+- `docs/MILESTONE11.md` — Trust-First Intelligence & Healthcare Orchestration
 - `docs/MILESTONE10.md` — Connected Care & Truthfulness Architecture
 - `docs/FEATURE_TRUTH_MATRIX.md` — Complete 43-capability truthful classification
 - `docs/FINAL_SELECTION_VIDEO_RUNBOOK.md` — 5-minute video demonstration runbook

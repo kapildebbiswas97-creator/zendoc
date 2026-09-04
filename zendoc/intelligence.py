@@ -109,7 +109,24 @@ class ZendocIntelligence:
             return result, self._latency(started)
 
         context = self._context(user, conversation, intent)
-        if intent == "symptoms":
+        if intent == "orchestration_request":
+            from .orchestrator import HealthcareOrchestrator
+            orch = HealthcareOrchestrator()
+            plan = orch.orchestrate(user, clean_message)
+            actions = [{"type": a, "label": a.replace("_", " ").title()} for a in plan.next_safe_actions]
+            result = IntelligenceResult(
+                intent="orchestration_request",
+                urgency=plan.urgency,
+                message=plan.explanation,
+                guidance=plan.explanation,
+                summary=plan.explanation,
+                possible_actions=actions,
+                recommended_actions=actions,
+                model_metadata={"orchestration_plan": plan.to_dict()},
+                provider="healthcare_orchestrator",
+                next_step=plan.next_safe_actions[0] if plan.next_safe_actions else None,
+            )
+        elif intent == "symptoms":
             result = self._symptom_guidance(clean_message, context)
         elif intent == "appointment":
             result = self._appointment_guidance(clean_message)
@@ -120,14 +137,33 @@ class ZendocIntelligence:
         elif intent in FITNESS_INTENTS:
             result = self._fitness_action(intent, clean_message, user)
         elif intent == "family_care":
-            result = IntelligenceResult(
-                intent="family_care",
-                urgency="routine",
-                message="ZENDOC Family Care helps you manage appointments, reports, home care, and emergency alerts for your parents and family members.",
-                follow_up_questions=["Would you like to open Family Care or Remote Parent Care?"],
-                possible_actions=[{"type": "family_care", "label": "Open Family Care"}, {"type": "parent_care", "label": "Open Remote Parent Care"}],
-                provider="family_service",
-            )
+            lower_msg = clean_message.lower()
+            if any(k in lower_msg for k in ("prescribe", "medicine", "medication", "drug", "test", "lab", "fulfil")):
+                from .orchestrator import HealthcareOrchestrator
+                orch = HealthcareOrchestrator()
+                plan = orch.orchestrate(user, clean_message)
+                actions = [{"type": a, "label": a.replace("_", " ").title()} for a in plan.next_safe_actions]
+                result = IntelligenceResult(
+                    intent="family_care_orchestration",
+                    urgency=plan.urgency,
+                    message=plan.explanation,
+                    guidance=plan.explanation,
+                    summary=plan.explanation,
+                    possible_actions=actions,
+                    recommended_actions=actions,
+                    model_metadata={"orchestration_plan": plan.to_dict()},
+                    provider="healthcare_orchestrator",
+                    next_step=plan.next_safe_actions[0] if plan.next_safe_actions else None,
+                )
+            else:
+                result = IntelligenceResult(
+                    intent="family_care",
+                    urgency="routine",
+                    message="ZENDOC Family Care helps you manage appointments, reports, home care, and emergency alerts for your parents and family members.",
+                    follow_up_questions=["Would you like to open Family Care or Remote Parent Care?"],
+                    possible_actions=[{"type": "family_care", "label": "Open Family Care"}, {"type": "parent_care", "label": "Open Remote Parent Care"}],
+                    provider="family_service",
+                )
         elif intent == "home_health":
             result = IntelligenceResult(
                 intent="home_health",

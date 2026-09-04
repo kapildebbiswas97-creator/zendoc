@@ -59,6 +59,8 @@ from .prescription_service import (
     get_prescription,
     is_autonomous_prescription_request,
 )
+from .family_care import revoke_family_access_grant
+from .orchestrator import HealthcareOrchestrator
 from .routes import api_user, audit, require_api_user
 from .security import is_owner
 from .trust_service import get_provider_trust_signals
@@ -292,9 +294,106 @@ def inbox_page():
         reverse=True,
     )[:30]
 
+    # Inbox 2.0: Consequential actions requiring user confirmation
+    action_required_items = []
+    staged_plans = db.execute(
+        "SELECT * FROM fulfilment_plans WHERE patient_id=? AND status='staged' ORDER BY id DESC LIMIT 5",
+        (uid,),
+    ).fetchall()
+    for sp in staged_plans:
+        action_required_items.append({
+            "title": f"Staged Fulfilment Plan #{sp['id']} Awaiting Confirmation",
+            "description": f"Strategy: {sp['strategy_name']} · Landed Cost: INR {float(sp['total_inr'] or 0):.2f}",
+            "action_label": "Review & Confirm",
+            "action_url": url_for("connected_care.orders_page"),
+        })
+
+    uncertain_items = db.execute(
+        """
+        SELECT pi.id, pi.medicine_name, p.id as presc_id
+        FROM prescription_items pi
+        JOIN prescriptions p ON p.id=pi.prescription_id
+        WHERE p.patient_id=? AND pi.review_status='item_review_required'
+        ORDER BY pi.id DESC LIMIT 5
+        """,
+        (uid,),
+    ).fetchall()
+    for ui in uncertain_items:
+        action_required_items.append({
+            "title": f"Clinical Review: Extracted Medicine '{ui['medicine_name']}'",
+            "description": f"Prescription #{ui['presc_id']} has an uncertain extraction requiring verification before fulfilment.",
+            "action_label": "Review Item",
+            "action_url": url_for("connected_care.prescriptions_page"),
+        })
+
+    try:
+        next_safe_actions = determine_next_safe_actions(user, actor=user)
+    except Exception:
+        next_safe_actions = []
+
     data_mode = str(current_app.config.get("CONNECTED_CARE_DATA_MODE", "LIVE")).upper()
-    return render_template("inbox.html", user=user, inbox_items=inbox_items,
-                           data_mode=data_mode, demo_mode=data_mode == "DEMO")
+    return render_template(
+        "inbox.html",
+        user=user,
+        inbox_items=inbox_items,
+        action_required_items=action_required_items,
+        next_safe_actions=next_safe_actions,
+        data_mode=data_mode,
+        demo_mode=data_mode == "DEMO",
+    )
+
+
+@bp.get("/connected-care/trust-center")
+def trust_center_page():
+    uid = _current_user_id()
+    if not uid:
+        return redirect(url_for("main.login", role="patient"))
+    db = get_db()
+    user = dict(db.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone() or abort(401))
+
+    try:
+        provenance = get_health_memory_provenance_summary(user, actor=user)
+    except Exception:
+        provenance = {"total_events": 0, "latest_event": None}
+
+    consent_grants = db.execute(
+        "SELECT * FROM consent_grants WHERE subject_id=? AND status='active' AND revoked_at IS NULL ORDER BY id DESC",
+        (uid,),
+    ).fetchall()
+
+    family_grants_given = db.execute(
+        """
+        SELECT g.*, u.name as grantee_name, u.email as grantee_email
+        FROM family_access_grants g
+        JOIN users u ON u.id=g.grantee_id
+        WHERE g.grantor_id=? AND g.revoked_at IS NULL
+        ORDER BY g.id DESC
+        """,
+        (uid,),
+    ).fetchall()
+
+    family_grants_received = db.execute(
+        """
+        SELECT g.*, u.name as grantor_name, u.email as grantor_email
+        FROM family_access_grants g
+        JOIN users u ON u.id=g.grantor_id
+        WHERE g.grantee_id=? AND g.revoked_at IS NULL
+        ORDER BY g.id DESC
+        """,
+        (uid,),
+    ).fetchall()
+
+    data_mode = str(current_app.config.get("CONNECTED_CARE_DATA_MODE", "LIVE")).upper()
+    return render_template(
+        "trust_center.html",
+        user=user,
+        provenance=provenance,
+        consent_grants=[dict(g) for g in consent_grants],
+        family_grants_given=[dict(g) for g in family_grants_given],
+        family_grants_received=[dict(g) for g in family_grants_received],
+        data_mode=data_mode,
+        demo_mode=data_mode == "DEMO",
+    )
 
 
 # ── JSON API ───────────────────────────────────────────────────────────────────
@@ -615,6 +714,149 @@ def api_care_graph():
         _get_patient_id(user, {"patient_id": patient_id, "purpose": "care_graph"})
         graph = get_patient_care_graph(patient_id)
         return jsonify({"care_graph": graph})
+    except PermissionError as e:
+        return _api_error(e, 403)
+    except Exception as e:
+        return _api_error(e)
+@bp.get("/api/v1/connected-care/trust-center")
+def api_trust_center():
+    user, err = _api_user()
+    if err:
+        return err
+    try:
+        uid = int(user["id"])
+        db = get_db()
+        try:
+            provenance = get_health_memory_provenance_summary(user, actor=user)
+        except Exception:
+            provenance = {"total_events": 0, "latest_event": None}
+
+        consent_grants = db.execute(
+            "SELECT * FROM consent_grants WHERE subject_id=? AND status='active' AND revoked_at IS NULL ORDER BY id DESC",
+            (uid,),
+        ).fetchall()
+
+        family_grants_given = db.execute(
+            """
+            SELECT g.*, u.name as grantee_name, u.email as grantee_email
+            FROM family_access_grants g
+            JOIN users u ON u.id=g.grantee_id
+            WHERE g.grantor_id=? AND g.revoked_at IS NULL
+            ORDER BY g.id DESC
+            """,
+            (uid,),
+        ).fetchall()
+
+        family_grants_received = db.execute(
+            """
+            SELECT g.*, u.name as grantor_name, u.email as grantor_email
+            FROM family_access_grants g
+            JOIN users u ON u.id=g.grantor_id
+            WHERE g.grantee_id=? AND g.revoked_at IS NULL
+            ORDER BY g.id DESC
+            """,
+            (uid,),
+        ).fetchall()
+
+        return jsonify({
+            "patient_id": uid,
+            "provenance_summary": provenance,
+            "consent_grants": [dict(g) for g in consent_grants],
+            "family_grants_given": [dict(g) for g in family_grants_given],
+            "family_grants_received": [dict(g) for g in family_grants_received],
+        })
+    except Exception as e:
+        return _api_error(e)
+
+
+@bp.post("/api/v1/connected-care/trust-center/revoke")
+def api_trust_center_revoke():
+    is_form = request.form and ("grant_type" in request.form or "grant_id" in request.form)
+    user, err = _api_user(mutation=True)
+    if err:
+        if is_form:
+            return redirect(url_for("connected_care.trust_center_page"))
+        return err
+    try:
+        body = request.form if is_form else (request.get_json(force=True) or {})
+        grant_type = str(body.get("grant_type") or "").strip().lower()
+        grant_id = int(body.get("grant_id") or 0)
+        if not grant_id:
+            raise ValueError("grant_id is required.")
+
+        if grant_type == "consent":
+            revoked = revoke_consent_grant(grant_id, int(user["id"]))
+            audit("connected_care.consent.revoke", "consent_grants", grant_id, user)
+        elif grant_type == "family":
+            revoked = revoke_family_access_grant(user, grant_id)
+            audit("connected_care.family_grant.revoke", "family_access_grants", grant_id, user)
+        else:
+            raise ValueError(f"Unsupported grant_type '{grant_type}'. Must be 'consent' or 'family'.")
+
+        if is_form:
+            return redirect(url_for("connected_care.trust_center_page"))
+        return jsonify({"status": "OK", "revoked": True, "grant_id": grant_id, "grant_type": grant_type})
+    except (ValueError, LookupError, PermissionError) as e:
+        if is_form:
+            return redirect(url_for("connected_care.trust_center_page"))
+        return _api_error(e)
+    except Exception as e:
+        if is_form:
+            return redirect(url_for("connected_care.trust_center_page"))
+        return _api_error(e)
+
+
+@bp.post("/api/v1/connected-care/orchestrate")
+def api_orchestrate():
+    user, err = _api_user()
+    if err:
+        return err
+    try:
+        body = request.get_json(force=True) or {}
+        message = str(body.get("message") or "").strip()
+        if not message:
+            raise ValueError("message is required for orchestration.")
+        orch = HealthcareOrchestrator()
+        plan = orch.orchestrate(user, message, context=body.get("context") or {})
+        return jsonify({"status": "OK", "plan": plan.to_dict()})
+    except (ValueError, LookupError) as e:
+        return _api_error(e, 400)
+    except PermissionError as e:
+        return _api_error(e, 403)
+    except Exception as e:
+        return _api_error(e)
+
+
+@bp.post("/api/v1/connected-care/orchestrate/confirm")
+def api_orchestrate_confirm():
+    user, err = _api_user(mutation=True)
+    if err:
+        return err
+    try:
+        body = request.get_json(force=True) or {}
+        plan_id = body.get("plan_id")
+        if not plan_id:
+            raise ValueError("plan_id is required for confirmation.")
+        user_confirmed = body.get("user_confirmed") is True
+        if not user_confirmed:
+            raise PermissionError("Explicit user confirmation is strictly required.")
+        delivery_address = str(body.get("delivery_address") or "").strip()
+        if not delivery_address:
+            raise ValueError("A concrete delivery_address is required.")
+
+        orch = HealthcareOrchestrator()
+        result = orch.confirm_and_execute(
+            actor=user,
+            plan_id=int(plan_id),
+            user_confirmed=True,
+            delivery_address=delivery_address,
+            expected_plan_hash=body.get("plan_hash"),
+            idempotency_key=body.get("idempotency_key"),
+        )
+        audit("connected_care.orchestrate.confirm", "medicine_orders", result.get("receipt", {}).get("order_id"), user)
+        return jsonify({"status": "OK", "result": result})
+    except (ValueError, LookupError) as e:
+        return _api_error(e, 400)
     except PermissionError as e:
         return _api_error(e, 403)
     except Exception as e:
