@@ -292,19 +292,37 @@ def test_fulfilment_optimizer_staging_and_plan_hash(tmp_path):
             "INSERT INTO users (name, email, email_normalized, password_hash, role, active, created_at, updated_at) VALUES (?, ?, ?, ?, 'pharmacy', 1, ?, ?)",
             ("City Pharmacy", "cp@example.com", "cp@example.com", "hash", now_iso(), now_iso()),
         ).lastrowid
+        db.execute(
+            "INSERT INTO provider_profiles (user_id, organization, provider_type, city, latitude, longitude, delivery_available, delivery_radius_km, delivery_fee_base_inr, created_at, updated_at) VALUES (?, ?, 'pharmacy', 'Delhi', 28.6300, 77.2100, 1, 10.0, 40.0, ?, ?)",
+            (pharm_id, "City Pharmacy", now_iso(), now_iso()),
+        )
         db.commit()
 
-        # Add inventory for Paracetamol (SKU 5)
+        # Add inventory for Paracetamol 500 mg (SKU 5)
         update_inventory_observation(pharm_id, 5, 100, 35.0, stock_status="CONFIRMED")
 
-        # Create prescription
-        rx = create_prescription(
+        # Invariant: Uncertain / mismatched extraction (650mg vs 500mg) cannot be automatically fulfilled
+        mismatch_rx = create_prescription(
             patient_id=p_id,
             prescriber_name="Dr. Gupta",
             items=[{"medicine_name": "Paracetamol 650mg", "sku_id": 5, "quantity_prescribed": 20}],
         )
+        mismatch_plan = optimize_prescription_fulfilment(
+            prescription_id=mismatch_rx["id"],
+            patient_lat=28.63,
+            patient_lon=77.21,
+            strategy="balanced",
+        )
+        assert mismatch_plan["status"] == "ITEM_REVIEW_REQUIRED"
+        assert mismatch_plan["plan_id"] is None
 
-        # Optimize fulfilment
+        # Invariant: Exact matching catalog item with confirmed stock and fee produces order-ready plan
+        rx = create_prescription(
+            patient_id=p_id,
+            prescriber_name="Dr. Gupta",
+            items=[{"medicine_name": "Paracetamol 500 mg", "sku_id": 5, "quantity_prescribed": 20}],
+        )
+
         plan = optimize_prescription_fulfilment(
             prescription_id=rx["id"],
             patient_lat=28.63,
@@ -332,6 +350,10 @@ def test_order_submission_requires_explicit_user_confirmation(tmp_path):
             "INSERT INTO users (name, email, email_normalized, password_hash, role, active, created_at, updated_at) VALUES (?, ?, ?, ?, 'pharmacy', 1, ?, ?)",
             ("Kavita Meds", "km@example.com", "km@example.com", "hash", now_iso(), now_iso()),
         ).lastrowid
+        db.execute(
+            "INSERT INTO provider_profiles (user_id, organization, provider_type, city, latitude, longitude, delivery_available, delivery_radius_km, delivery_fee_base_inr, created_at, updated_at) VALUES (?, ?, 'pharmacy', 'Delhi', 28.6300, 77.2100, 1, 10.0, 40.0, ?, ?)",
+            (pharm_id, "Kavita Meds", now_iso(), now_iso()),
+        )
         db.commit()
 
         update_inventory_observation(pharm_id, 1, 50, 60.0, stock_status="CONFIRMED")
@@ -339,7 +361,7 @@ def test_order_submission_requires_explicit_user_confirmation(tmp_path):
         rx = create_prescription(
             patient_id=p_id,
             prescriber_name="Dr. Joshi",
-            items=[{"medicine_name": "Amlodipine 5mg", "sku_id": 1, "quantity_prescribed": 30}],
+            items=[{"medicine_name": "Amlodipine 5 mg", "sku_id": 1, "quantity_prescribed": 30}],
         )
         plan = optimize_prescription_fulfilment(rx["id"])
 
@@ -351,10 +373,21 @@ def test_order_submission_requires_explicit_user_confirmation(tmp_path):
                 plan_id=plan["plan_id"],
                 actor=user_actor,
                 user_confirmed=False,
+                delivery_address="102 Palm Grove, Delhi",
             )
         assert "explicit user confirmation" in str(exc.value).lower()
 
-        # Calling with user_confirmed=True succeeds
+        # Invariant: Calling without concrete delivery address fails
+        with pytest.raises(ValueError) as exc_addr:
+            submit_order_from_plan(
+                plan_id=plan["plan_id"],
+                actor=user_actor,
+                user_confirmed=True,
+                delivery_address="",
+            )
+        assert "delivery_address" in str(exc_addr.value).lower()
+
+        # Calling with user_confirmed=True and delivery address succeeds
         order_res = submit_order_from_plan(
             plan_id=plan["plan_id"],
             actor=user_actor,
@@ -381,16 +414,21 @@ def test_order_tracking_status_progression_and_pharmacy_ack(tmp_path):
             "INSERT INTO users (name, email, email_normalized, password_hash, role, active, created_at, updated_at) VALUES (?, ?, ?, ?, 'pharmacy', 1, ?, ?)",
             ("Quick Pharmacy", "qp@example.com", "qp@example.com", "hash", now_iso(), now_iso()),
         ).lastrowid
+        db.execute(
+            "INSERT INTO provider_profiles (user_id, organization, provider_type, city, latitude, longitude, delivery_available, delivery_radius_km, delivery_fee_base_inr, created_at, updated_at) VALUES (?, ?, 'pharmacy', 'Delhi', 28.6300, 77.2100, 1, 10.0, 40.0, ?, ?)",
+            (pharm_id, "Quick Pharmacy", now_iso(), now_iso()),
+        )
         db.commit()
 
-        update_inventory_observation(pharm_id, 3, 20, 180.0, stock_status="CONFIRMED")
-        rx = create_prescription(p_id, "Dr. Sen", [{"medicine_name": "Atorvastatin 10mg", "sku_id": 3}])
+        update_inventory_observation(pharm_id, 3, 50, 180.0, stock_status="CONFIRMED")
+        rx = create_prescription(p_id, "Dr. Sen", [{"medicine_name": "Atorvastatin 10 mg", "sku_id": 3}])
         plan = optimize_prescription_fulfilment(rx["id"])
 
         order = submit_order_from_plan(
             plan_id=plan["plan_id"],
             actor={"id": p_id, "role": "patient"},
             user_confirmed=True,
+            delivery_address="102 Palm Grove, Delhi",
         )
 
         pharm_actor = {"id": pharm_id, "role": "pharmacy"}
@@ -399,15 +437,15 @@ def test_order_tracking_status_progression_and_pharmacy_ack(tmp_path):
         ack = acknowledge_order(pharm_actor, order["order_id"], action="accept")
         assert ack["status"].lower() in ["accepted", "acknowledged"]
 
-        # Tracking progression: packed -> dispatched -> delivered
+        # Tracking progression: packed (PREPARING) -> dispatched (OUT_FOR_DELIVERY) -> delivered
         step1 = update_order_tracking_status(pharm_actor, order["order_id"], "packed")
-        assert step1["tracking_status"].lower() in ["packed", "preparing"]
+        assert step1["tracking_status"].upper() in ["PACKED", "PREPARING"]
 
         step2 = update_order_tracking_status(pharm_actor, order["order_id"], "dispatched")
-        assert step2["tracking_status"].lower() in ["dispatched", "out_for_delivery"]
+        assert step2["tracking_status"].upper() in ["DISPATCHED", "OUT_FOR_DELIVERY"]
 
         step3 = update_order_tracking_status(pharm_actor, order["order_id"], "delivered")
-        assert step3["tracking_status"].lower() == "delivered"
+        assert step3["tracking_status"].upper() == "DELIVERED"
 
 
 # ── 6. Diagnostic Marketplace Tests ────────────────────────────────────────────
@@ -420,25 +458,66 @@ def test_diagnostic_catalog_and_home_collection_booking(tmp_path):
             "INSERT INTO users (name, email, email_normalized, password_hash, role, active, created_at, updated_at) VALUES (?, ?, ?, ?, 'patient', 1, ?, ?)",
             ("Vikas", "vikas@example.com", "vikas@example.com", "hash", now_iso(), now_iso()),
         ).lastrowid
+        lab_id = db.execute(
+            "INSERT INTO users (name, email, email_normalized, password_hash, role, active, created_at, updated_at) VALUES (?, ?, ?, ?, 'hospital', 1, ?, ?)",
+            ("Metropolis Lab", "metro@example.com", "metro@example.com", "hash", now_iso(), now_iso()),
+        ).lastrowid
+        db.execute(
+            "INSERT INTO provider_profiles (user_id, organization, provider_type, city, verification_status, created_at, updated_at) VALUES (?, 'Metropolis Lab', 'lab', 'Delhi', 'verified', ?, ?)",
+            (lab_id, now_iso(), now_iso()),
+        )
+        db.execute(
+            "INSERT INTO diagnostic_offers (lab_id, test_id, price_inr, home_collection_available, home_collection_fee_inr, verified, data_mode, created_at) VALUES (?, 1, 350.0, 1, 50.0, 1, 'LIVE', ?)",
+            (lab_id, now_iso()),
+        )
         db.commit()
 
         # Catalog has seeded tests
         catalog = list_diagnostic_catalog()
         assert len(catalog) >= 7  # CBC, FBS, LIPID, etc.
 
-        # Book CBC test (ID 1)
+        # Invariant: booking without user confirmation fails
+        with pytest.raises(ValueError) as exc:
+            book_diagnostic_test(
+                actor={"id": p_id, "role": "patient"},
+                patient_id=p_id,
+                test_id=1,
+                lab_id=lab_id,
+                scheduled_date="2026-09-10",
+                address="A-12 Mayur Vihar, Delhi",
+                collection_type="home_collection",
+                user_confirmed=False,
+            )
+        assert "user confirmation" in str(exc.value).lower()
+
+        # Invariant: booking without real lab_id fails
+        with pytest.raises(ValueError) as exc_lab:
+            book_diagnostic_test(
+                actor={"id": p_id, "role": "patient"},
+                patient_id=p_id,
+                test_id=1,
+                lab_id=None,
+                scheduled_date="2026-09-10",
+                address="A-12 Mayur Vihar, Delhi",
+                collection_type="home_collection",
+                user_confirmed=True,
+            )
+        assert "lab offer is required" in str(exc_lab.value).lower()
+
+        # Book CBC test (ID 1) with user_confirmed=True and verified lab offer
         booking = book_diagnostic_test(
             actor={"id": p_id, "role": "patient"},
             patient_id=p_id,
             test_id=1,
-            lab_id=None,
+            lab_id=lab_id,
             scheduled_date="2026-09-10",
             address="A-12 Mayur Vihar, Delhi",
             collection_type="home_collection",
+            user_confirmed=True,
         )
 
         assert booking["booking_id"] > 0
-        assert booking["status"] == "confirmed"
+        assert booking["status"].lower() == "requested"
         assert booking["booking_uid"].startswith("diag_")
 
 
@@ -456,6 +535,10 @@ def test_verified_reviews_require_actual_interaction(tmp_path):
             "INSERT INTO users (name, email, email_normalized, password_hash, role, active, created_at, updated_at) VALUES (?, ?, ?, ?, 'pharmacy', 1, ?, ?)",
             ("Apex Meds", "apex@example.com", "apex@example.com", "hash", now_iso(), now_iso()),
         ).lastrowid
+        db.execute(
+            "INSERT INTO provider_profiles (user_id, organization, provider_type, city, latitude, longitude, delivery_available, delivery_radius_km, delivery_fee_base_inr, created_at, updated_at) VALUES (?, ?, 'pharmacy', 'Delhi', 28.6300, 77.2100, 1, 10.0, 40.0, ?, ?)",
+            (pharm_id, "Apex Meds", now_iso(), now_iso()),
+        )
         db.commit()
 
         # Before any interaction, user is not eligible to review
@@ -463,14 +546,19 @@ def test_verified_reviews_require_actual_interaction(tmp_path):
 
         # Place and complete an order
         update_inventory_observation(pharm_id, 4, 30, 95.0, stock_status="CONFIRMED")
-        rx = create_prescription(p_id, "Dr. Rao", [{"medicine_name": "Telmisartan 40mg", "sku_id": 4}])
+        rx = create_prescription(p_id, "Dr. Rao", [{"medicine_name": "Telmisartan 40 mg", "sku_id": 4}])
         plan = optimize_prescription_fulfilment(rx["id"])
         order = submit_order_from_plan(
             plan_id=plan["plan_id"],
             actor={"id": p_id, "role": "patient"},
             user_confirmed=True,
+            delivery_address="45 Civil Lines, Delhi",
         )
-        update_order_tracking_status({"id": pharm_id, "role": "pharmacy"}, order["order_id"], "DELIVERED")
+        pharm_actor = {"id": pharm_id, "role": "pharmacy"}
+        acknowledge_order(pharm_actor, order["order_id"], action="accept")
+        update_order_tracking_status(pharm_actor, order["order_id"], "PREPARING")
+        update_order_tracking_status(pharm_actor, order["order_id"], "OUT_FOR_DELIVERY")
+        update_order_tracking_status(pharm_actor, order["order_id"], "DELIVERED")
 
         # Now eligible!
         assert is_interaction_eligible_for_review(p_id, "pharmacy_order", order["order_id"]) is True
@@ -512,11 +600,24 @@ def test_connected_care_pages_and_api_endpoints(tmp_path):
         sess["user_id"] = user_id
         sess["role"] = "patient"
 
-    # Pages render 200
+    # Pages render 200 in LIVE mode (default)
     home_page = client.get("/connected-care")
     assert home_page.status_code == 200
-    assert b"SYNTHETIC DEMO ENVIRONMENT" in home_page.data
+    # Invariant: LIVE mode must NOT show synthetic demo banner
+    assert b"SYNTHETIC DEMO ENVIRONMENT" not in home_page.data
     assert b"Privacy Minimization Active" in home_page.data
+
+    # DEMO mode explicitly shows synthetic demo banner
+    demo_app = make_m10_app(tmp_path / "demo_run", CONNECTED_CARE_DATA_MODE="DEMO")
+    demo_client = demo_app.test_client()
+    register_api(demo_client, "demopatient@example.com", role="patient", name="Demo Patient")
+    dlog = login_api(demo_client, "demopatient@example.com", role="patient")
+    with demo_client.session_transaction() as sess:
+        sess["user_id"] = dlog.json["user"]["id"]
+        sess["role"] = "patient"
+    demo_home = demo_client.get("/connected-care")
+    assert demo_home.status_code == 200
+    assert b"SYNTHETIC DEMO ENVIRONMENT" in demo_home.data
 
     inbox_page = client.get("/connected-care/inbox")
     assert inbox_page.status_code == 200
@@ -560,9 +661,21 @@ def test_order_confirmation_api_requires_user_confirmed_flag(tmp_path):
         db = get_db()
         p = db.execute("SELECT id FROM users WHERE email='guarduser@example.com'").fetchone()
         pid = p["id"]
-        rx = create_prescription(pid, "Dr. Test", [{"medicine_name": "Paracetamol 650mg", "sku_id": 5}])
+        pharm_id = db.execute(
+            "INSERT INTO users (name, email, email_normalized, password_hash, role, active, created_at, updated_at) VALUES (?, ?, ?, ?, 'pharmacy', 1, ?, ?)",
+            ("Guard Pharmacy", "gp@example.com", "gp@example.com", "hash", now_iso(), now_iso()),
+        ).lastrowid
+        db.execute(
+            "INSERT INTO provider_profiles (user_id, organization, provider_type, city, latitude, longitude, delivery_available, delivery_radius_km, delivery_fee_base_inr, created_at, updated_at) VALUES (?, ?, 'pharmacy', 'Delhi', 28.6300, 77.2100, 1, 10.0, 40.0, ?, ?)",
+            (pharm_id, "Guard Pharmacy", now_iso(), now_iso()),
+        )
+        db.commit()
+
+        update_inventory_observation(pharm_id, 5, 50, 30.0, stock_status="CONFIRMED")
+        rx = create_prescription(pid, "Dr. Test", [{"medicine_name": "Paracetamol 500 mg", "sku_id": 5}])
         plan = optimize_prescription_fulfilment(rx["id"])
         plan_id = plan["plan_id"]
+        assert plan_id is not None
 
     # Attempt order confirmation without user_confirmed=True -> 400
     res_unconfirmed = client.post(
@@ -571,7 +684,7 @@ def test_order_confirmation_api_requires_user_confirmed_flag(tmp_path):
         headers=headers,
     )
     assert res_unconfirmed.status_code == 400
-    assert "explicit user confirmation" in res_unconfirmed.get_json()["error"]["message"]
+    assert "explicit user confirmation" in res_unconfirmed.get_json()["error"]["message"].lower()
 
     # Confirm with user_confirmed=True -> 200
     res_confirmed = client.post(
@@ -581,4 +694,81 @@ def test_order_confirmation_api_requires_user_confirmed_flag(tmp_path):
     )
     assert res_confirmed.status_code == 200
     assert res_confirmed.get_json()["order"]["status"].lower() in ["confirmed", "submitted"]
+
+
+# ── 9. Permanent Truthfulness Invariant Regression Tests ─────────────────────────
+
+def test_zero_inventory_yields_no_confirmed_offers_and_no_fabricated_data(tmp_path):
+    app = make_m10_app(tmp_path)
+    with app.app_context():
+        # Searching for medicine with NO inventory records
+        offers = search_pharmacy_offers(medicine_ids=[1], city="Delhi")
+        # Invariant: No fake pharmacies, no fake stock, no fake offers
+        assert len(offers) == 0
+
+        # Optimizer with zero candidate inventory produces NO_CONFIRMED_INVENTORY
+        db = get_db()
+        p_id = db.execute(
+            "INSERT INTO users (name, email, email_normalized, password_hash, role, active, created_at, updated_at) VALUES (?, ?, ?, ?, 'patient', 1, ?, ?)",
+            ("ZeroTest", "zero@example.com", "zero@example.com", "hash", now_iso(), now_iso()),
+        ).lastrowid
+        db.commit()
+
+        rx = create_prescription(p_id, "Dr. Real", [{"medicine_name": "Amlodipine 5 mg", "sku_id": 1}])
+        plan = optimize_prescription_fulfilment(rx["id"])
+
+        # Invariant: Never fabricates a fallback partner pharmacy or price
+        assert plan["plan_id"] is None
+        assert plan["status"] == "NO_CONFIRMED_INVENTORY"
+        assert plan["options"] == {}
+        assert "no confirmed participating pharmacy inventory" in plan["message"].lower()
+
+
+def test_unknown_inventory_never_promoted_to_confirmed(tmp_path):
+    app = make_m10_app(tmp_path)
+    with app.app_context():
+        db = get_db()
+        pharm_id = db.execute(
+            "INSERT INTO users (name, email, email_normalized, password_hash, role, active, created_at, updated_at) VALUES (?, ?, ?, ?, 'pharmacy', 1, ?, ?)",
+            ("Unknown Pharm", "up@example.com", "up@example.com", "hash", now_iso(), now_iso()),
+        ).lastrowid
+        db.execute(
+            "INSERT INTO provider_profiles (user_id, organization, provider_type, city, latitude, longitude, delivery_fee_base_inr, created_at, updated_at) VALUES (?, ?, 'pharmacy', 'Delhi', 28.63, 77.21, 40.0, ?, ?)",
+            (pharm_id, "Unknown Pharm", now_iso(), now_iso()),
+        )
+        db.commit()
+
+        update_inventory_observation(pharm_id, 1, quantity=0, price_inr=None, stock_status="UNKNOWN")
+
+        offers = search_pharmacy_offers(medicine_ids=[1], include_unknown=True)
+        assert len(offers) == 1
+        # Invariant: UNKNOWN is NEVER promoted to CONFIRMED
+        assert offers[0]["inventory"][1]["effective_status"] == "UNKNOWN"
+        assert offers[0]["inventory"][1]["price_inr"] is None
+
+
+def test_missing_price_and_distance_never_generates_plausible_defaults(tmp_path):
+    app = make_m10_app(tmp_path)
+    with app.app_context():
+        db = get_db()
+        pharm_id = db.execute(
+            "INSERT INTO users (name, email, email_normalized, password_hash, role, active, created_at, updated_at) VALUES (?, ?, ?, ?, 'pharmacy', 1, ?, ?)",
+            ("NoPrice Pharm", "np@example.com", "np@example.com", "hash", now_iso(), now_iso()),
+        ).lastrowid
+        # No coordinates in profile
+        db.execute(
+            "INSERT INTO provider_profiles (user_id, organization, provider_type, city, latitude, longitude, delivery_fee_base_inr, created_at, updated_at) VALUES (?, ?, 'pharmacy', 'Delhi', NULL, NULL, NULL, ?, ?)",
+            (pharm_id, "NoPrice Pharm", now_iso(), now_iso()),
+        )
+        db.commit()
+
+        update_inventory_observation(pharm_id, 1, quantity=10, price_inr=None, stock_status="CONFIRMED")
+        offers = search_pharmacy_offers(medicine_ids=[1], patient_lat=28.63, patient_lon=77.21)
+
+        assert len(offers) == 1
+        # Invariant: Distance is None and text is "Distance unavailable", never a generated distance
+        assert offers[0]["distance_km"] is None
+        assert offers[0]["distance_text"] == "Distance unavailable"
+        # Invariant: Price is None, never ₹0 or estimated
+        assert offers[0]["inventory"][1]["price_inr"] is None
 

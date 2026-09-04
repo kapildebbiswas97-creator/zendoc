@@ -398,6 +398,7 @@ def api_confirm_order():
             actor=user,
             user_confirmed=True,
             delivery_address=body.get("delivery_address"),
+            expected_plan_hash=body.get("plan_hash"),
         )
         audit("connected_care.order.confirm", "medicine_order", result.get("order_id"), user)
         return jsonify({"order": result, "message": "Order placed successfully."})

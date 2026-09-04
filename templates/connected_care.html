@@ -211,8 +211,9 @@
             <p style="font-size:0.84rem;color:#475569;margin:0 0 10px 0;">Turnaround: {{ test.tat_hours }}h</p>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding-top:8px;border-top:1px solid #f1f5f9;">
-            <strong style="color:#0b6b61;">₹{{ "%.0f"|format(test.typical_price_inr) }}</strong>
-            <button type="button" class="secondary-action compact-action" onclick="openLabBooking({{ test.id }}, '{{ test.name }}', {{ test.typical_price_inr }})">
+            {% set test_price = test.standard_price_inr if test.standard_price_inr is defined and test.standard_price_inr is not none else (test.typical_price_inr if test.typical_price_inr is defined and test.typical_price_inr is not none else 0) %}
+            <strong style="color:#0b6b61;">₹{{ "%.0f"|format(test_price) }}</strong>
+            <button type="button" class="secondary-action compact-action" onclick="openLabBooking({{ test.id }}, '{{ test.name }}', {{ test_price }})">
               Book Home Collection
             </button>
           </div>

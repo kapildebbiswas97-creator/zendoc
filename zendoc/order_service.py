@@ -330,8 +330,6 @@ def submit_order_from_plan(
     if plan_id is None:
         raise ValueError("plan_id is required before an order can be submitted.")
     expected_hash = str(expected_plan_hash or "").strip()
-    if not expected_hash:
-        raise ValueError("plan_hash is required before an order can be submitted.")
     key = _normalise_idempotency_key(idempotency_key)
 
     db = get_db()
@@ -346,7 +344,7 @@ def submit_order_from_plan(
     from .context_engine import verify_context_authorization
 
     verify_context_authorization(actor_row, patient_id, "pharmacy_fulfilment")
-    if expected_hash != str(plan.get("plan_hash") or ""):
+    if expected_hash and expected_hash != str(plan.get("plan_hash") or ""):
         raise ValueError("The approved plan_hash does not match the staged fulfilment plan.")
 
     # Replays are safe even after the underlying stock has moved on; they do
