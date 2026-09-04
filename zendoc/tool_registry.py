@@ -282,6 +282,68 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
         allowed_roles=[],
         risk_class=CRITICAL_BLOCKED,
     ),
+
+    # ── Milestone 10: Connected Care tools ────────────────────────────────────
+    "search_nearby_pharmacy_inventory": ToolDefinition(
+        name="search_nearby_pharmacy_inventory",
+        description=(
+            "Search pharmacy inventory observations near a patient location for a medicine query. "
+            "Returns freshness-labelled offers (CONFIRMED / STALE / UNKNOWN). "
+            "UNKNOWN inventory is NEVER promoted to available."
+        ),
+        allowed_agents=["PharmacyAgent", "CareAgent", "SearchAgent"],
+        allowed_roles=["patient", "doctor", "admin"],
+        risk_class=READ_ONLY,
+    ),
+    "compare_prescription_fulfilment": ToolDefinition(
+        name="compare_prescription_fulfilment",
+        description=(
+            "Compare multi-pharmacy fulfilment options for an active prescription. "
+            "Returns ranked plans (single complete, split, stale) for user selection. "
+            "Does NOT place any order — read only."
+        ),
+        allowed_agents=["PharmacyAgent", "CareAgent"],
+        allowed_roles=["patient", "doctor", "admin"],
+        risk_class=READ_ONLY,
+    ),
+    "stage_fulfilment_plan": ToolDefinition(
+        name="stage_fulfilment_plan",
+        description=(
+            "Stage a pharmacy fulfilment plan from an active prescription for user review. "
+            "Persists the plan in DB but does NOT submit any order. Requires user confirmation to proceed."
+        ),
+        allowed_agents=["PharmacyAgent", "CareAgent"],
+        allowed_roles=["patient", "doctor", "admin"],
+        risk_class=LOW_RISK,
+        idempotent=False,
+    ),
+    "confirm_and_execute_order": ToolDefinition(
+        name="confirm_and_execute_order",
+        description=(
+            "Submit a staged fulfilment plan as a real medicine order. "
+            "REQUIRES explicit user_confirmed=True. "
+            "This is a consequential action — AI may NEVER call this without user's explicit approval."
+        ),
+        allowed_agents=["PharmacyAgent"],
+        allowed_roles=["patient", "admin"],
+        risk_class=CONSENT_REQUIRED,
+        requires_consent=True,
+        idempotent=False,
+    ),
+    "get_diagnostic_options": ToolDefinition(
+        name="get_diagnostic_options",
+        description="Search available diagnostic tests and lab offers near a patient location.",
+        allowed_agents=["CareAgent", "SearchAgent"],
+        allowed_roles=ALL_ROLES,
+        risk_class=READ_ONLY,
+    ),
+    "get_unified_healthcare_inbox": ToolDefinition(
+        name="get_unified_healthcare_inbox",
+        description="Retrieve the unified healthcare inbox: recent orders, diagnostic bookings, and health memory events.",
+        allowed_agents=["CareAgent"],
+        allowed_roles=["patient", "doctor", "admin"],
+        risk_class=READ_ONLY,
+    ),
 }
 
 

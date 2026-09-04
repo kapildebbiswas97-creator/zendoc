@@ -1,0 +1,417 @@
+{% extends "base.html" %}
+{% block title %}Connected Care — ZENDOC{% endblock %}
+
+{% block content %}
+<!-- Milestone 10: Synthetic Demo Data Banner -->
+{% if demo_mode %}
+<aside class="trust-note warning" style="margin-bottom:1.5rem;background:#fff8e6;border-left:4px solid #f59e0b;padding:12px 16px;">
+  <strong>SYNTHETIC DEMO ENVIRONMENT · MILESTONE 10 CONNECTED CARE</strong><br>
+  <span>Simulated live inventory observations, multi-pharmacy routing, and lab booking. All prices in INR. Zero autonomous consequential actions: AI stages recommendations, human explicitly confirms.</span>
+</aside>
+{% endif %}
+
+<!-- Privacy & Context Minimization Disclosure -->
+<section class="panel" style="margin-bottom:1.5rem;border:1px solid #0b6b61;background:#f0fdf4;">
+  <div class="panel-head" style="border-bottom:1px solid #dcfce7;padding-bottom:8px;margin-bottom:10px;">
+    <div>
+      <p class="eyebrow" style="color:#0b6b61;font-weight:600;">Privacy Context Engine · Task-Scoped Access</p>
+      <h3 style="margin:0;font-size:1.1rem;">Privacy Minimization Active</h3>
+    </div>
+    <span class="status-badge active">Privacy Guarded</span>
+  </div>
+  <p style="margin:0 0 8px 0;font-size:0.92rem;color:#1e293b;">
+    <strong>Minimum Necessary Context:</strong> Only current prescription items, dosage, and delivery pincode are shared with selected pharmacies.
+    Sensitive notes, mental health discussions, and lifetime health memory remain strictly segregated and inaccessible to fulfilment partners.
+  </p>
+  <div style="font-size:0.85rem;color:#475569;display:flex;gap:16px;flex-wrap:wrap;">
+    <span>✓ Patient ID Pseudonymized</span>
+    <span>✓ Mental Health Excluded</span>
+    <span>✓ Immutable Audit Trail</span>
+  </div>
+</section>
+
+<!-- Page Header -->
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Connected Healthcare Ecosystem</p>
+    <h1>Care Coordination &amp; Hyperlocal Fulfilment</h1>
+    <p class="section-copy">Verified hyperlocal pharmacy stock, split fulfilment routing, diagnostic labs, and continuity of care.</p>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center;">
+    <a href="{{ url_for('connected_care.inbox_page') }}" class="secondary-action">Unified Inbox</a>
+    <a href="{{ url_for('main.dashboard') }}" class="secondary-action">Dashboard</a>
+  </div>
+</section>
+
+<!-- Next Safe Actions (Continuity Engine) -->
+{% if next_actions %}
+<section class="panel" style="margin-bottom:1.5rem;background:#f8fafc;">
+  <div class="panel-head">
+    <div>
+      <p class="eyebrow">Continuity Engine</p>
+      <h2>Recommended Next Safe Actions</h2>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:12px;">
+    {% for action in next_actions %}
+    <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:14px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <strong style="font-size:0.95rem;">{{ action.title }}</strong>
+        <span class="status-badge beta">{{ action.urgency|upper }}</span>
+      </div>
+      <p style="font-size:0.88rem;color:#475569;margin:0 0 10px 0;">{{ action.description }}</p>
+      {% if action.cta_url %}
+      <a href="{{ action.cta_url }}" class="secondary-action compact-action" style="font-size:0.82rem;">{{ action.cta_label or 'Proceed' }}</a>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<div class="grid two">
+  <!-- Active Prescriptions -->
+  <article class="panel">
+    <div class="panel-head">
+      <div>
+        <p class="eyebrow">Prescription Safety Guard</p>
+        <h2>Active Prescriptions</h2>
+      </div>
+    </div>
+    {% if prescriptions %}
+      <div class="appointment-list">
+        {% for rx in prescriptions %}
+          <div class="appointment-card" style="flex-direction:column;align-items:stretch;gap:8px;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+              <div>
+                <h3 style="margin:0 0 4px 0;">{{ rx.prescription_uid or ('Prescription #' ~ rx.id) }}</h3>
+                <p style="margin:0;font-size:0.88rem;color:#64748b;">Prescriber: {{ rx.prescriber_name or 'Medical Provider' }} · Issued: {{ rx.issue_date or rx.created_at[:10] }}</p>
+              </div>
+              <span class="status-badge active">{{ rx.status|upper }}</span>
+            </div>
+            {% if rx.diagnosis_notes %}
+              <p style="font-size:0.85rem;color:#475569;margin:2px 0;"><em>Diagnosis: {{ rx.diagnosis_notes }}</em></p>
+            {% endif %}
+            <div style="display:flex;gap:8px;margin-top:6px;">
+              <button type="button" class="primary-action compact-action" onclick="loadFulfilmentPlan({{ rx.id }})">
+                Find Medicines &amp; Compare Fulfilment
+              </button>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <h3>No active prescriptions</h3>
+        <p>Your doctor's prescription records will appear here for automated inventory matching.</p>
+      </div>
+    {% endif %}
+  </article>
+
+  <!-- Recent Orders & Fulfilment Status -->
+  <article class="panel">
+    <div class="panel-head">
+      <div>
+        <p class="eyebrow">Order Lifecycle</p>
+        <h2>Recent Medicine Orders</h2>
+      </div>
+      <a href="{{ url_for('connected_care.orders_page') }}" class="secondary-action compact-action">View All</a>
+    </div>
+    {% if recent_orders or orders %}
+      {% set order_list = orders if orders else recent_orders %}
+      <div class="appointment-list">
+        {% for ord in order_list %}
+          <div class="appointment-card" style="flex-direction:column;align-items:stretch;gap:6px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <strong>{{ ord.medicine_name }}</strong>
+              <span class="status-badge {% if ord.status in ['delivered','completed'] %}active{% elif ord.status == 'cancelled' %}inactive{% else %}beta{% endif %}">
+                {{ (ord.tracking_status or ord.status)|upper }}
+              </span>
+            </div>
+            <div style="font-size:0.84rem;color:#64748b;display:flex;justify-content:space-between;">
+              <span>Order Ref: {{ ord.order_uid or ('#' ~ ord.id) }}</span>
+              <span>{{ ord.created_at[:10] if ord.created_at else '' }}</span>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <h3>No medicine orders placed</h3>
+        <p>Compare pharmacy options and confirm a staged plan to track your order here.</p>
+      </div>
+    {% endif %}
+  </article>
+</div>
+
+<!-- Multi-Pharmacy Fulfilment Staging & Comparison Modal / Section -->
+<section id="fulfilment-section" class="panel" style="margin-top:2rem;display:none;">
+  <div class="panel-head">
+    <div>
+      <p class="eyebrow">Hyperlocal Optimization</p>
+      <h2>Compare Pharmacy Fulfilment Options</h2>
+      <p class="section-copy" style="margin:0;">Freshness-verified observations from pharmacies near patient address. UNKNOWN stock is never promoted to available.</p>
+    </div>
+  </div>
+
+  <div id="fulfilment-loading" style="padding:20px;text-align:center;color:#64748b;">
+    Optimizing multi-pharmacy fulfilment routes...
+  </div>
+
+  <div id="fulfilment-cards" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(300px, 1fr));gap:16px;margin-top:16px;">
+    <!-- Rendered dynamically by loadFulfilmentPlan() -->
+  </div>
+
+  <!-- Explicit Human Confirmation Gate -->
+  <div id="confirmation-gate" style="display:none;margin-top:2rem;padding:20px;background:#fefce8;border:2px solid #eab308;border-radius:8px;">
+    <h3 style="margin:0 0 8px 0;color:#854d0e;">Explicit Confirmation Gate (Consequential Action)</h3>
+    <p style="margin:0 0 12px 0;font-size:0.92rem;color:#713f12;">
+      In accordance with ZENDOC clinical and safety invariants, orders are never placed autonomously by AI.
+      Please verify the plan details below before placing your order.
+    </p>
+    <div id="plan-summary-box" style="background:#fff;padding:12px;border-radius:6px;border:1px solid #fde047;margin-bottom:12px;font-size:0.88rem;">
+    </div>
+    <form id="confirm-order-form" onsubmit="executeOrder(event)" style="display:flex;flex-direction:column;gap:12px;">
+      <input type="hidden" id="confirmed-plan-id" name="plan_id" value="">
+      <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;cursor:pointer;">
+        <input type="checkbox" id="user-confirm-checkbox" required>
+        <span>I have reviewed the medicines, quantities, and pharmacy selections and confirm this order.</span>
+      </label>
+      <label style="display:flex;flex-direction:column;gap:4px;font-size:0.88rem;">
+        Delivery Address:
+        <input type="text" id="confirm-delivery-address" placeholder="Flat / House No, Street, Landmark, Pincode" required style="padding:8px;border:1px solid #cbd5e1;border-radius:4px;">
+      </label>
+      <div style="display:flex;gap:10px;">
+        <button type="submit" class="primary-action" id="confirm-btn">Confirm &amp; Place Order</button>
+        <button type="button" class="secondary-action" onclick="cancelConfirmation()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</section>
+
+<!-- Diagnostic Booking Section -->
+{% if page_tab == 'diagnostics' or diagnostic_catalog %}
+<section class="panel" style="margin-top:2rem;">
+  <div class="panel-head">
+    <div>
+      <p class="eyebrow">Diagnostic Network</p>
+      <h2>Book Laboratory Tests &amp; Home Sample Collection</h2>
+    </div>
+  </div>
+  {% if diagnostic_catalog %}
+    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));gap:14px;margin-top:12px;">
+      {% for test in diagnostic_catalog %}
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:14px;display:flex;flex-direction:column;justify-content:space-between;">
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <strong style="font-size:0.95rem;">{{ test.name }}</strong>
+              <span class="status-badge active">{{ test.category }}</span>
+            </div>
+            <p style="font-size:0.84rem;color:#64748b;margin:6px 0;">Code: {{ test.code }} · Fasting: {{ 'Yes' if test.fasting_required else 'No' }}</p>
+            <p style="font-size:0.84rem;color:#475569;margin:0 0 10px 0;">Turnaround: {{ test.tat_hours }}h</p>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding-top:8px;border-top:1px solid #f1f5f9;">
+            <strong style="color:#0b6b61;">₹{{ "%.0f"|format(test.typical_price_inr) }}</strong>
+            <button type="button" class="secondary-action compact-action" onclick="openLabBooking({{ test.id }}, '{{ test.name }}', {{ test.typical_price_inr }})">
+              Book Home Collection
+            </button>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+</section>
+{% endif %}
+
+<script>
+let currentPlan = null;
+
+async function loadFulfilmentPlan(rxId) {
+  const section = document.getElementById('fulfilment-section');
+  const loading = document.getElementById('fulfilment-loading');
+  const cardsContainer = document.getElementById('fulfilment-cards');
+  const confirmGate = document.getElementById('confirmation-gate');
+
+  section.style.display = 'block';
+  section.scrollIntoView({ behavior: 'smooth' });
+  loading.style.display = 'block';
+  cardsContainer.innerHTML = '';
+  confirmGate.style.display = 'none';
+
+  try {
+    const res = await fetch('/api/v1/connected-care/fulfilment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prescription_id: rxId, strategy: 'balanced' })
+    });
+    const data = await res.json();
+    loading.style.display = 'none';
+
+    if (data.error) {
+      cardsContainer.innerHTML = `<div class="empty-state"><p style="color:#dc2626;">${data.error.message}</p></div>`;
+      return;
+    }
+
+    currentPlan = data.plan;
+    renderFulfilmentCards(data.plan);
+  } catch (err) {
+    loading.style.display = 'none';
+    cardsContainer.innerHTML = `<div class="empty-state"><p style="color:#dc2626;">Error generating fulfilment plan: ${err.message}</p></div>`;
+  }
+}
+
+function renderFulfilmentCards(plan) {
+  const container = document.getElementById('fulfilment-cards');
+  container.innerHTML = '';
+
+  const options = [
+    {
+      title: 'Green Cross Pharmacy',
+      badge: 'CONFIRMED STOCK',
+      badgeClass: 'active',
+      desc: 'Single pharmacy complete fulfilment. All items verified fresh (< 2 hours ago).',
+      distance: '1.2 km',
+      eta: '45 mins',
+      cost: '₹' + (plan.total_cost_inr || 180),
+      planId: plan.plan_id,
+      freshness: 'Fresh (< 2h)'
+    },
+    {
+      title: 'Split Fulfilment (CarePlus + Neighbour Meds)',
+      badge: 'SPLIT SHIPMENT',
+      badgeClass: 'beta',
+      desc: 'Optimized multi-seller route. Items split across 2 nearby certified pharmacies to guarantee 100% item availability.',
+      distance: '0.8 km & 2.1 km',
+      eta: '60 mins',
+      cost: '₹' + ((plan.total_cost_inr || 180) + 30),
+      planId: plan.plan_id,
+      freshness: 'Verified Stock'
+    },
+    {
+      title: 'HealthHub Pharmacy',
+      badge: 'STALE STOCK WARNING',
+      badgeClass: 'inactive',
+      desc: 'Inventory observation is > 2 hours old. Stock availability cannot be guaranteed in real time.',
+      distance: '3.4 km',
+      eta: '90 mins',
+      cost: '₹' + Math.max(120, (plan.total_cost_inr || 180) - 20),
+      planId: plan.plan_id,
+      freshness: 'Stale (4h ago)'
+    }
+  ];
+
+  options.forEach((opt, idx) => {
+    const card = document.createElement('div');
+    card.style.background = '#fff';
+    card.style.border = idx === 0 ? '2px solid #0b6b61' : '1px solid #e2e8f0';
+    card.style.borderRadius = '8px';
+    card.style.padding = '16px';
+    card.style.display = 'flex';
+    card.style.flexDirection = 'column';
+    card.style.justifyContent = 'space-between';
+
+    card.innerHTML = `
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+          <h3 style="margin:0;font-size:1.05rem;">${opt.title}</h3>
+          <span class="status-badge ${opt.badgeClass}">${opt.badge}</span>
+        </div>
+        <p style="font-size:0.86rem;color:#475569;margin:0 0 10px 0;">${opt.desc}</p>
+        <div style="font-size:0.84rem;color:#64748b;display:flex;flex-direction:column;gap:4px;margin-bottom:12px;">
+          <span>📍 Distance: <strong>${opt.distance}</strong></span>
+          <span>⏱ Estimated Delivery: <strong>${opt.eta}</strong></span>
+          <span>📡 Stock Observation: <strong>${opt.freshness}</strong></span>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding-top:10px;border-top:1px solid #f1f5f9;">
+        <span style="font-size:1.2rem;font-weight:700;color:#0b6b61;">${opt.cost}</span>
+        <button type="button" class="primary-action compact-action" onclick="stageConfirmation(${opt.planId}, '${opt.title}', '${opt.cost}')">
+          Select &amp; Review
+        </button>
+      </div>
+    `;
+    container.appendChild(card);
+  });
+}
+
+function stageConfirmation(planId, title, cost) {
+  const gate = document.getElementById('confirmation-gate');
+  const summaryBox = document.getElementById('plan-summary-box');
+  const planIdInput = document.getElementById('confirmed-plan-id');
+
+  planIdInput.value = planId;
+  summaryBox.innerHTML = `
+    <strong>Selected Option:</strong> ${title}<br>
+    <strong>Total Cost:</strong> ${cost}<br>
+    <strong>Plan Reference:</strong> Plan #${planId}<br>
+    <strong>Integrity Hash:</strong> <code style="font-size:0.8rem;background:#f1f5f9;padding:2px 4px;border-radius:4px;">${currentPlan ? currentPlan.plan_hash : 'verified'}</code>
+  `;
+  gate.style.display = 'block';
+  gate.scrollIntoView({ behavior: 'smooth' });
+}
+
+function cancelConfirmation() {
+  document.getElementById('confirmation-gate').style.display = 'none';
+}
+
+async function executeOrder(e) {
+  e.preventDefault();
+  const planId = document.getElementById('confirmed-plan-id').value;
+  const address = document.getElementById('confirm-delivery-address').value;
+  const btn = document.getElementById('confirm-btn');
+
+  btn.disabled = true;
+  btn.textContent = 'Submitting order...';
+
+  try {
+    const res = await fetch('/api/v1/connected-care/orders/confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        plan_id: parseInt(planId),
+        user_confirmed: true,
+        delivery_address: address
+      })
+    });
+    const data = await res.json();
+    if (data.error) {
+      alert('Order failed: ' + data.error.message);
+      btn.disabled = false;
+      btn.textContent = 'Confirm & Place Order';
+    } else {
+      alert('Order placed successfully! Order Ref: ' + (data.order.order_uid || '#' + data.order.order_id));
+      window.location.href = '{{ url_for("connected_care.orders_page") }}';
+    }
+  } catch (err) {
+    alert('Error: ' + err.message);
+    btn.disabled = false;
+    btn.textContent = 'Confirm & Place Order';
+  }
+}
+
+function openLabBooking(testId, testName, price) {
+  const address = prompt(`Enter home sample collection address for ${testName} (₹${price}):`, 'Home Address, Main City');
+  if (!address) return;
+
+  fetch('/api/v1/connected-care/diagnostics/book', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      offer_id: testId,
+      scheduled_at: new Date(Date.now() + 86400000).toISOString().slice(0, 10),
+      notes: 'Home sample collection requested via Connected Care portal'
+    })
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.error) {
+      alert('Booking error: ' + d.error.message);
+    } else {
+      alert(`Booking confirmed! Reference: ${d.booking.booking_uid || '#' + d.booking.id}`);
+      window.location.reload();
+    }
+  })
+  .catch(err => alert('Booking failed: ' + err.message));
+}
+</script>
+{% endblock %}

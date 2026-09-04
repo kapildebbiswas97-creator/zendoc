@@ -11,6 +11,7 @@ ROLES = ("patient", "doctor", "hospital", "pharmacy", "government", "admin")
 LEGACY_ADMIN_FALLBACK_ROLE = "patient"
 LEGACY_ADMIN_RECONCILIATION_VERSION = "m8_legacy_admin_reconciliation_v1"
 MILESTONE83_MIGRATION_VERSION = "m8_3_auth_persistence_v1"
+MILESTONE_CONNECTED_CARE_VERSION = "m10_connected_care_v1"
 
 
 def now_iso():
@@ -1048,6 +1049,209 @@ def init_db():
         );
         CREATE INDEX IF NOT EXISTS idx_notif_deliveries_user ON notification_deliveries(user_id, status);
 
+        -- Milestone 10: Connected Care, Context Engine, Care Graph & Fulfilment
+        CREATE TABLE IF NOT EXISTS consent_grants (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            subject_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            grantee_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            purpose TEXT NOT NULL,
+            scopes_json TEXT NOT NULL DEFAULT '["prescriptions","delivery_address"]',
+            status TEXT NOT NULL DEFAULT 'active',
+            revoked_at TEXT,
+            expires_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_consent_grants_grantee ON consent_grants(grantee_id, status, revoked_at);
+        CREATE INDEX IF NOT EXISTS idx_consent_grants_subject ON consent_grants(subject_id, status, revoked_at);
+
+        CREATE TABLE IF NOT EXISTS medication_skus (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sku_code TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            generic_name TEXT,
+            form TEXT NOT NULL DEFAULT 'tablet',
+            strength TEXT,
+            pack_size INTEGER NOT NULL DEFAULT 1,
+            pack_unit TEXT NOT NULL DEFAULT 'tablets',
+            manufacturer TEXT,
+            mrp_inr REAL NOT NULL,
+            rx_required INTEGER NOT NULL DEFAULT 1,
+            category TEXT,
+            search_keywords TEXT,
+            data_mode TEXT NOT NULL DEFAULT 'LIVE',
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_medication_skus_name ON medication_skus(name);
+        CREATE INDEX IF NOT EXISTS idx_medication_skus_generic ON medication_skus(generic_name);
+
+        CREATE TABLE IF NOT EXISTS prescriptions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            prescription_uid TEXT NOT NULL UNIQUE,
+            patient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            prescriber_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            prescriber_name TEXT NOT NULL,
+            record_id INTEGER REFERENCES medical_records(id) ON DELETE SET NULL,
+            issue_date TEXT NOT NULL,
+            diagnosis_notes TEXT,
+            status TEXT NOT NULL DEFAULT 'active',
+            data_mode TEXT NOT NULL DEFAULT 'LIVE',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_prescriptions_patient ON prescriptions(patient_id, status);
+
+        CREATE TABLE IF NOT EXISTS prescription_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            prescription_id INTEGER NOT NULL REFERENCES prescriptions(id) ON DELETE CASCADE,
+            medicine_name TEXT NOT NULL,
+            salt_composition TEXT,
+            dosage TEXT,
+            form TEXT NOT NULL DEFAULT 'tablet',
+            frequency TEXT,
+            duration TEXT,
+            quantity_prescribed INTEGER NOT NULL DEFAULT 1,
+            quantity_unit TEXT NOT NULL DEFAULT 'tablets',
+            instructions TEXT,
+            rx_required INTEGER NOT NULL DEFAULT 1,
+            extraction_confidence REAL NOT NULL DEFAULT 1.0,
+            review_status TEXT NOT NULL DEFAULT 'verified',
+            sku_id INTEGER REFERENCES medication_skus(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_prescription_items_presc ON prescription_items(prescription_id);
+
+        CREATE TABLE IF NOT EXISTS inventory_observations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pharmacy_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            sku_id INTEGER NOT NULL REFERENCES medication_skus(id) ON DELETE CASCADE,
+            stock_status TEXT NOT NULL DEFAULT 'CONFIRMED',
+            quantity_available INTEGER NOT NULL DEFAULT 0,
+            price_inr REAL NOT NULL,
+            discount_percent REAL NOT NULL DEFAULT 0.0,
+            source TEXT NOT NULL DEFAULT 'pharmacy_manual',
+            observed_at TEXT NOT NULL,
+            expires_at TEXT,
+            freshness_label TEXT,
+            notes TEXT,
+            data_mode TEXT NOT NULL DEFAULT 'LIVE',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(pharmacy_id, sku_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_inventory_pharmacy ON inventory_observations(pharmacy_id);
+        CREATE INDEX IF NOT EXISTS idx_inventory_sku ON inventory_observations(sku_id, stock_status);
+
+        CREATE TABLE IF NOT EXISTS fulfilment_plans (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            plan_uid TEXT NOT NULL UNIQUE,
+            patient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            prescription_id INTEGER REFERENCES prescriptions(id) ON DELETE SET NULL,
+            strategy_type TEXT NOT NULL,
+            strategy_name TEXT NOT NULL,
+            coverage_ratio TEXT NOT NULL DEFAULT '4 of 4',
+            item_total_inr REAL NOT NULL,
+            delivery_fee_inr REAL NOT NULL DEFAULT 0.0,
+            total_inr REAL NOT NULL,
+            distance_km REAL,
+            distance_summary TEXT,
+            deliveries_count INTEGER NOT NULL DEFAULT 1,
+            freshness_summary TEXT,
+            overall_status TEXT NOT NULL DEFAULT 'CONFIRMED',
+            why_explanation TEXT NOT NULL,
+            plan_hash TEXT NOT NULL,
+            confirmed_by_user INTEGER NOT NULL DEFAULT 0,
+            confirmed_at TEXT,
+            status TEXT NOT NULL DEFAULT 'staged',
+            data_mode TEXT NOT NULL DEFAULT 'LIVE',
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_fulfilment_plans_patient ON fulfilment_plans(patient_id, status);
+
+        CREATE TABLE IF NOT EXISTS fulfilment_plan_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            plan_id INTEGER NOT NULL REFERENCES fulfilment_plans(id) ON DELETE CASCADE,
+            prescription_item_id INTEGER REFERENCES prescription_items(id) ON DELETE SET NULL,
+            sku_id INTEGER NOT NULL REFERENCES medication_skus(id) ON DELETE CASCADE,
+            pharmacy_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            quantity INTEGER NOT NULL DEFAULT 1,
+            unit_price_inr REAL NOT NULL,
+            total_price_inr REAL NOT NULL,
+            stock_status TEXT NOT NULL DEFAULT 'CONFIRMED',
+            stock_freshness TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_fulfilment_plan_items_plan ON fulfilment_plan_items(plan_id);
+
+        CREATE TABLE IF NOT EXISTS order_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_id INTEGER NOT NULL REFERENCES medicine_orders(id) ON DELETE CASCADE,
+            event_type TEXT NOT NULL,
+            event_status TEXT NOT NULL,
+            message TEXT NOT NULL,
+            source TEXT NOT NULL DEFAULT 'system',
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_order_events_order ON order_events(order_id);
+
+        CREATE TABLE IF NOT EXISTS diagnostic_catalog (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            category TEXT,
+            description TEXT,
+            fasting_required INTEGER NOT NULL DEFAULT 0,
+            sample_type TEXT NOT NULL DEFAULT 'blood',
+            tat_hours INTEGER NOT NULL DEFAULT 24,
+            standard_price_inr REAL NOT NULL,
+            created_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS diagnostic_offers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            lab_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            test_id INTEGER NOT NULL REFERENCES diagnostic_catalog(id) ON DELETE CASCADE,
+            price_inr REAL NOT NULL,
+            home_collection_available INTEGER NOT NULL DEFAULT 1,
+            home_collection_fee_inr REAL NOT NULL DEFAULT 0.0,
+            verified INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            UNIQUE(lab_id, test_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS diagnostic_bookings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            booking_uid TEXT NOT NULL UNIQUE,
+            patient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            booked_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            lab_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            test_id INTEGER NOT NULL REFERENCES diagnostic_catalog(id) ON DELETE CASCADE,
+            collection_type TEXT NOT NULL DEFAULT 'home_collection',
+            scheduled_date TEXT NOT NULL,
+            slot_time TEXT,
+            address TEXT,
+            status TEXT NOT NULL DEFAULT 'requested',
+            report_record_id INTEGER REFERENCES medical_records(id) ON DELETE SET NULL,
+            price_inr REAL NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_diagnostic_bookings_patient ON diagnostic_bookings(patient_id, status);
+
+        CREATE TABLE IF NOT EXISTS verified_reviews (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            provider_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            interaction_type TEXT NOT NULL,
+            interaction_id TEXT NOT NULL,
+            rating INTEGER NOT NULL CHECK(rating BETWEEN 1 AND 5),
+            comment TEXT,
+            is_verified INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            UNIQUE(interaction_type, interaction_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_verified_reviews_provider ON verified_reviews(provider_id);
+
         CREATE TABLE IF NOT EXISTS schema_migrations (
             version TEXT PRIMARY KEY,
             applied_at TEXT NOT NULL
@@ -1059,6 +1263,7 @@ def init_db():
     seed_admin()
     _seed_exercises_safe()
     _seed_model_evaluation_catalog_safe()
+    _seed_connected_care_demo_safe()
 
 
 def table_columns(db, table):
@@ -1510,9 +1715,248 @@ def migrate_schema(db):
         "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES ('m9_slm_scorecard_v1', ?)",
         (now_iso(),),
     )
+    # Milestone 10: Connected Care, Context Engine, Care Graph & Fulfilment
+    for table, additions in {
+        "provider_profiles": {
+            "digitalization_level": "INTEGER NOT NULL DEFAULT 1",
+            "delivery_available": "INTEGER NOT NULL DEFAULT 1",
+            "pickup_available": "INTEGER NOT NULL DEFAULT 1",
+            "operating_hours": "TEXT NOT NULL DEFAULT '08:00 - 22:00'",
+            "delivery_radius_km": "REAL NOT NULL DEFAULT 5.0",
+            "delivery_fee_base_inr": "REAL NOT NULL DEFAULT 30.0",
+            "data_mode": "TEXT NOT NULL DEFAULT 'LIVE'",
+        },
+        "medicine_orders": {
+            "plan_id": "INTEGER REFERENCES fulfilment_plans(id) ON DELETE SET NULL",
+            "prescription_id": "INTEGER REFERENCES prescriptions(id) ON DELETE SET NULL",
+            "order_uid": "TEXT",
+            "total_amount_inr": "REAL",
+            "payment_status": "TEXT NOT NULL DEFAULT 'cash_on_delivery'",
+            "acknowledgement_status": "TEXT NOT NULL DEFAULT 'pending'",
+            "acknowledged_at": "TEXT",
+            "idempotency_key": "TEXT",
+            "tracking_status": "TEXT NOT NULL DEFAULT 'SUBMITTED'",
+            "data_mode": "TEXT NOT NULL DEFAULT 'LIVE'",
+            "updated_at": "TEXT",
+        },
+    }.items():
+        existing_columns = table_columns(db, table)
+        for column, ddl in additions.items():
+            if column not in existing_columns:
+                db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+
+    db.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS consent_grants (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            subject_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            grantee_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            purpose TEXT NOT NULL,
+            scopes_json TEXT NOT NULL DEFAULT '["prescriptions","delivery_address"]',
+            status TEXT NOT NULL DEFAULT 'active',
+            revoked_at TEXT,
+            expires_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_consent_grants_grantee ON consent_grants(grantee_id, status, revoked_at);
+        CREATE INDEX IF NOT EXISTS idx_consent_grants_subject ON consent_grants(subject_id, status, revoked_at);
+
+        CREATE TABLE IF NOT EXISTS medication_skus (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sku_code TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            generic_name TEXT,
+            form TEXT NOT NULL DEFAULT 'tablet',
+            strength TEXT,
+            pack_size INTEGER NOT NULL DEFAULT 1,
+            pack_unit TEXT NOT NULL DEFAULT 'tablets',
+            manufacturer TEXT,
+            mrp_inr REAL NOT NULL,
+            rx_required INTEGER NOT NULL DEFAULT 1,
+            category TEXT,
+            search_keywords TEXT,
+            data_mode TEXT NOT NULL DEFAULT 'LIVE',
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_medication_skus_name ON medication_skus(name);
+        CREATE INDEX IF NOT EXISTS idx_medication_skus_generic ON medication_skus(generic_name);
+
+        CREATE TABLE IF NOT EXISTS prescriptions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            prescription_uid TEXT NOT NULL UNIQUE,
+            patient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            prescriber_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            prescriber_name TEXT NOT NULL,
+            record_id INTEGER REFERENCES medical_records(id) ON DELETE SET NULL,
+            issue_date TEXT NOT NULL,
+            diagnosis_notes TEXT,
+            status TEXT NOT NULL DEFAULT 'active',
+            data_mode TEXT NOT NULL DEFAULT 'LIVE',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_prescriptions_patient ON prescriptions(patient_id, status);
+
+        CREATE TABLE IF NOT EXISTS prescription_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            prescription_id INTEGER NOT NULL REFERENCES prescriptions(id) ON DELETE CASCADE,
+            medicine_name TEXT NOT NULL,
+            salt_composition TEXT,
+            dosage TEXT,
+            form TEXT NOT NULL DEFAULT 'tablet',
+            frequency TEXT,
+            duration TEXT,
+            quantity_prescribed INTEGER NOT NULL DEFAULT 1,
+            quantity_unit TEXT NOT NULL DEFAULT 'tablets',
+            instructions TEXT,
+            rx_required INTEGER NOT NULL DEFAULT 1,
+            extraction_confidence REAL NOT NULL DEFAULT 1.0,
+            review_status TEXT NOT NULL DEFAULT 'verified',
+            sku_id INTEGER REFERENCES medication_skus(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_prescription_items_presc ON prescription_items(prescription_id);
+
+        CREATE TABLE IF NOT EXISTS inventory_observations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pharmacy_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            sku_id INTEGER NOT NULL REFERENCES medication_skus(id) ON DELETE CASCADE,
+            stock_status TEXT NOT NULL DEFAULT 'CONFIRMED',
+            quantity_available INTEGER NOT NULL DEFAULT 0,
+            price_inr REAL NOT NULL,
+            discount_percent REAL NOT NULL DEFAULT 0.0,
+            source TEXT NOT NULL DEFAULT 'pharmacy_manual',
+            observed_at TEXT NOT NULL,
+            expires_at TEXT,
+            freshness_label TEXT,
+            notes TEXT,
+            data_mode TEXT NOT NULL DEFAULT 'LIVE',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(pharmacy_id, sku_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_inventory_pharmacy ON inventory_observations(pharmacy_id);
+        CREATE INDEX IF NOT EXISTS idx_inventory_sku ON inventory_observations(sku_id, stock_status);
+
+        CREATE TABLE IF NOT EXISTS fulfilment_plans (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            plan_uid TEXT NOT NULL UNIQUE,
+            patient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            prescription_id INTEGER REFERENCES prescriptions(id) ON DELETE SET NULL,
+            strategy_type TEXT NOT NULL,
+            strategy_name TEXT NOT NULL,
+            coverage_ratio TEXT NOT NULL DEFAULT '4 of 4',
+            item_total_inr REAL NOT NULL,
+            delivery_fee_inr REAL NOT NULL DEFAULT 0.0,
+            total_inr REAL NOT NULL,
+            distance_km REAL,
+            distance_summary TEXT,
+            deliveries_count INTEGER NOT NULL DEFAULT 1,
+            freshness_summary TEXT,
+            overall_status TEXT NOT NULL DEFAULT 'CONFIRMED',
+            why_explanation TEXT NOT NULL,
+            plan_hash TEXT NOT NULL,
+            confirmed_by_user INTEGER NOT NULL DEFAULT 0,
+            confirmed_at TEXT,
+            status TEXT NOT NULL DEFAULT 'staged',
+            data_mode TEXT NOT NULL DEFAULT 'LIVE',
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_fulfilment_plans_patient ON fulfilment_plans(patient_id, status);
+
+        CREATE TABLE IF NOT EXISTS fulfilment_plan_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            plan_id INTEGER NOT NULL REFERENCES fulfilment_plans(id) ON DELETE CASCADE,
+            prescription_item_id INTEGER REFERENCES prescription_items(id) ON DELETE SET NULL,
+            sku_id INTEGER NOT NULL REFERENCES medication_skus(id) ON DELETE CASCADE,
+            pharmacy_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            quantity INTEGER NOT NULL DEFAULT 1,
+            unit_price_inr REAL NOT NULL,
+            total_price_inr REAL NOT NULL,
+            stock_status TEXT NOT NULL DEFAULT 'CONFIRMED',
+            stock_freshness TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_fulfilment_plan_items_plan ON fulfilment_plan_items(plan_id);
+
+        CREATE TABLE IF NOT EXISTS order_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_id INTEGER NOT NULL REFERENCES medicine_orders(id) ON DELETE CASCADE,
+            event_type TEXT NOT NULL,
+            event_status TEXT NOT NULL,
+            message TEXT NOT NULL,
+            source TEXT NOT NULL DEFAULT 'system',
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_order_events_order ON order_events(order_id);
+
+        CREATE TABLE IF NOT EXISTS diagnostic_catalog (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            category TEXT,
+            description TEXT,
+            fasting_required INTEGER NOT NULL DEFAULT 0,
+            sample_type TEXT NOT NULL DEFAULT 'blood',
+            tat_hours INTEGER NOT NULL DEFAULT 24,
+            standard_price_inr REAL NOT NULL,
+            created_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS diagnostic_offers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            lab_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            test_id INTEGER NOT NULL REFERENCES diagnostic_catalog(id) ON DELETE CASCADE,
+            price_inr REAL NOT NULL,
+            home_collection_available INTEGER NOT NULL DEFAULT 1,
+            home_collection_fee_inr REAL NOT NULL DEFAULT 0.0,
+            verified INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            UNIQUE(lab_id, test_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS diagnostic_bookings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            booking_uid TEXT NOT NULL UNIQUE,
+            patient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            booked_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            lab_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            test_id INTEGER NOT NULL REFERENCES diagnostic_catalog(id) ON DELETE CASCADE,
+            collection_type TEXT NOT NULL DEFAULT 'home_collection',
+            scheduled_date TEXT NOT NULL,
+            slot_time TEXT,
+            address TEXT,
+            status TEXT NOT NULL DEFAULT 'requested',
+            report_record_id INTEGER REFERENCES medical_records(id) ON DELETE SET NULL,
+            price_inr REAL NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_diagnostic_bookings_patient ON diagnostic_bookings(patient_id, status);
+
+        CREATE TABLE IF NOT EXISTS verified_reviews (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            provider_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            interaction_type TEXT NOT NULL,
+            interaction_id TEXT NOT NULL,
+            rating INTEGER NOT NULL CHECK(rating BETWEEN 1 AND 5),
+            comment TEXT,
+            is_verified INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            UNIQUE(interaction_type, interaction_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_verified_reviews_provider ON verified_reviews(provider_id);
+        """
+    )
     db.execute(
         "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)",
         (MILESTONE83_MIGRATION_VERSION, now_iso()),
+    )
+    db.execute(
+        "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+        (MILESTONE_CONNECTED_CARE_VERSION, now_iso()),
     )
     db.commit()
 
@@ -1747,3 +2191,52 @@ def _seed_model_evaluation_catalog_safe():
         sync_evaluation_catalog(get_db())
     except Exception:
         pass
+
+
+def _seed_connected_care_demo_safe(db=None):
+    """Seed baseline medication SKUs and diagnostic catalog."""
+    try:
+        db = db or get_db()
+        now = now_iso()
+        skus = [
+            ("AML5", "Amlodipine 5 mg", "Amlodipine Besylate", "tablet", "5 mg", 30, "tablets", "Cipla Ltd", 75.0, 1, "Antihypertensive", "amlodipine bp blood pressure hypertension"),
+            ("MET500", "Metformin 500 mg", "Metformin Hydrochloride", "tablet", "500 mg", 60, "tablets", "Sun Pharma", 95.0, 1, "Antidiabetic", "metformin sugar diabetes glucose"),
+            ("ATO10", "Atorvastatin 10 mg", "Atorvastatin Calcium", "tablet", "10 mg", 30, "tablets", "Torrent Pharma", 185.0, 1, "Lipid-lowering", "atorvastatin cholesterol lipid heart"),
+            ("TEL40", "Telmisartan 40 mg", "Telmisartan", "tablet", "40 mg", 30, "tablets", "Lupin Ltd", 220.0, 1, "Antihypertensive", "telmisartan bp hypertension"),
+            ("PCM500", "Paracetamol 500 mg", "Paracetamol", "tablet", "500 mg", 10, "tablets", "GSK", 20.0, 0, "Analgesic / Antipyretic", "paracetamol fever headache pain otc"),
+            ("AMX500", "Amoxicillin 500 mg", "Amoxicillin Trihydrate", "capsule", "500 mg", 15, "capsules", "Alkem", 120.0, 1, "Antibiotic", "amoxicillin antibiotic infection"),
+            ("CTZ10", "Cetirizine 10 mg", "Cetirizine Dihydrochloride", "tablet", "10 mg", 10, "tablets", "Dr Reddy", 35.0, 0, "Antihistamine", "cetirizine allergy cold sneeze otc"),
+            ("PAN40", "Pantoprazole 40 mg", "Pantoprazole Sodium", "tablet", "40 mg", 15, "tablets", "Aristo", 110.0, 0, "Antacid / PPI", "pantoprazole acidity gerd reflux otc"),
+        ]
+        for item in skus:
+            db.execute(
+                """
+                INSERT OR IGNORE INTO medication_skus
+                (sku_code, name, generic_name, form, strength, pack_size, pack_unit, manufacturer, mrp_inr, rx_required, category, search_keywords, data_mode, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'LIVE', ?)
+                """,
+                item + (now,),
+            )
+
+        diagnostics = [
+            ("CBC", "Complete Blood Count (CBC)", "Hematology", "Checks overall health and screens for anemia, infection, and leukemia.", 0, "blood", 24, 350.0),
+            ("FBS", "Fasting Blood Sugar (Glucose)", "Biochemistry", "Measures blood glucose levels after an overnight fast.", 1, "blood", 12, 120.0),
+            ("LIPID", "Lipid Profile Comprehensive", "Biochemistry", "Measures total cholesterol, HDL, LDL, VLDL, and triglycerides.", 1, "blood", 24, 650.0),
+            ("THYROID", "Thyroid Profile (T3, T4, TSH)", "Endocrinology", "Assesses thyroid gland function and metabolic health.", 0, "blood", 24, 500.0),
+            ("HBA1C", "HbA1c (Glycated Hemoglobin)", "Biochemistry", "Average blood sugar levels over the past 2 to 3 months.", 0, "blood", 24, 450.0),
+            ("LFT", "Liver Function Test (LFT)", "Biochemistry", "Evaluates hepatic inflammation, jaundice, and protein synthesis.", 1, "blood", 24, 750.0),
+            ("KFT", "Kidney Function Test (KFT)", "Biochemistry", "Measures creatinine, urea, BUN, and electrolytes.", 0, "blood", 24, 600.0),
+        ]
+        for item in diagnostics:
+            db.execute(
+                """
+                INSERT OR IGNORE INTO diagnostic_catalog
+                (code, name, category, description, fasting_required, sample_type, tat_hours, standard_price_inr, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                item + (now,),
+            )
+        db.commit()
+    except Exception:
+        pass
+

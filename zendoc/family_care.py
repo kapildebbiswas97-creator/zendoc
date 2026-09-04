@@ -362,3 +362,19 @@ def update_care_task_status(user, task_id, status):
     get_db().execute("UPDATE family_care_tasks SET status=? WHERE id=?", (new_status, task_id))
     get_db().commit()
     return dict(get_db().execute("SELECT * FROM family_care_tasks WHERE id=?", (task_id,)).fetchone())
+
+
+def get_family_grant(patient_id: int, grantee_id: int):
+    """Return an active family_access_grant where grantor=patient and grantee=grantee_id, or None.
+
+    Used by context_engine.verify_context_authorization to check caregiver delegation.
+    """
+    row = get_db().execute(
+        """
+        SELECT * FROM family_access_grants
+        WHERE grantor_id=? AND grantee_id=? AND revoked_at IS NULL
+        ORDER BY created_at DESC LIMIT 1
+        """,
+        (int(patient_id), int(grantee_id)),
+    ).fetchone()
+    return dict(row) if row else None
