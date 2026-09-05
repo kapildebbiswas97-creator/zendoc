@@ -81,7 +81,7 @@ def run_agentic_care(actor, command_text: str) -> dict:
         **result,
         "agentic_lifecycle": lifecycle,
         "autonomy_level": _autonomy_level(plan, requires_confirmation),
-        "execution_truth": verification["truth_state"],
+        "execution_truth": _compat_execution_truth(verification["truth_state"]),
         "verification": verification,
     }
 
@@ -283,6 +283,20 @@ def verify_agentic_result(actor, result: dict) -> dict:
         "task_id": task_id,
     }
 
+
+
+def _compat_execution_truth(truth_state: str) -> str:
+    """Preserve the existing M12.5 response contract while exposing richer verification separately."""
+    mapping = {
+        "BOUNDED_EXECUTION_VERIFIED": "bounded_permissioned_execution",
+        "WAITING_HUMAN": "waiting_human_confirmation",
+        "WAITING_PROVIDER": "waiting_provider",
+        "REQUEST_CREATED": "request_created",
+        "FAILED": "failed",
+        "CANCELLED": "cancelled",
+        "UNKNOWN": "unknown",
+    }
+    return mapping.get(str(truth_state or "").upper(), str(truth_state or "").lower())
 
 def _autonomy_level(plan: dict, requires_confirmation: bool) -> str:
     """Human-readable autonomy level for the current run, not a marketing claim."""
