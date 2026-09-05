@@ -123,8 +123,8 @@ def run_synthetic_agentic_demo(actor) -> dict:
         "urgency": "routine",
         "message": (
             "Synthetic Agentic Care demo: ZENDOC observed the family-prescription goal, selected the Care Agent, "
-            "prepared a bounded plan, verified the stored task state as WAITING_HUMAN, and stopped before any "
-            "real-world order, booking, payment, dispatch, or provider acceptance. This demonstrates the startup vision "
+            "prepared a bounded plan, verified the stored task state as WAITING_HUMAN, and made no real-world order, "
+            "booking, payment, dispatch, or provider acceptance. This demonstrates the startup vision "
             "without fabricating integrations."
         ),
         "actions": [
