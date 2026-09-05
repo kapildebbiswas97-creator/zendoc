@@ -30,6 +30,7 @@ from .db import ROLES, get_db, is_integrity_error, now_iso
 from .health_analytics import METRIC_TYPES, create_measurement, get_health_trend
 from .healthcare_finder import HealthcareFinder, normalize_query
 from .intelligence import ZendocIntelligence
+from .model_router import get_model_router
 from .provider_service import (
     PROVIDER_ROLES,
     SPECIALTIES,
@@ -173,6 +174,26 @@ def get_or_create_conversation(user_id, conversation_id=None, title=None):
     )
     db.commit()
     return db.execute("SELECT * FROM ai_conversations WHERE id=?", (cursor.lastrowid,)).fetchone()
+
+
+def recent_ai_user_messages(user_id, conversation_id, feature, limit=4):
+    if not conversation_id:
+        return []
+    safe_limit = max(1, min(int(limit or 4), 4))
+    rows = get_db().execute(
+        """
+        SELECT input_text
+        FROM ai_interactions
+        WHERE user_id=? AND conversation_id=? AND feature=?
+        ORDER BY id DESC LIMIT ?
+        """,
+        (user_id, conversation_id, feature, safe_limit),
+    ).fetchall()
+    return [
+        str(row["input_text"] or "").strip()[:500]
+        for row in reversed(rows)
+        if str(row["input_text"] or "").strip()
+    ]
 
 
 def log_ai_interaction(user_id, feature, input_text, result, latency_ms=None, conversation_id=None):
@@ -714,10 +735,23 @@ def ai_center():
             flash(f"Please enter a message for {mode_profile['label']}.", "error")
             return redirect(url_for("main.ai_center", mode=ai_mode))
 
+        requested_conversation_id = request.form.get("conversation_id") or None
+        if requested_conversation_id:
+            requested_row = get_db().execute(
+                "SELECT * FROM ai_conversations WHERE id=? AND user_id=?",
+                (requested_conversation_id, g.user["id"]),
+            ).fetchone()
+            expected_prefix = f"[{mode_profile['label']}]"
+            if not requested_row or not str(requested_row["title"] or "").startswith(expected_prefix):
+                requested_conversation_id = None
+
         active_conversation = get_or_create_conversation(
             g.user["id"],
-            request.form.get("conversation_id") or None,
+            requested_conversation_id,
             title=f"[{mode_profile['label']}] {input_text[:48]}",
+        )
+        recent_messages = recent_ai_user_messages(
+            g.user["id"], active_conversation["id"], feature, limit=4
         )
 
         started = time.perf_counter()
@@ -726,13 +760,19 @@ def ai_center():
                 input_text, user=g.user, conversation=active_conversation
             )
         elif ai_mode == "doctor":
-            intelligence_result = doctor_ai_response(input_text)
+            intelligence_result = doctor_ai_response(
+                input_text, recent_user_messages=recent_messages
+            )
             latency_ms = int((time.perf_counter() - started) * 1000)
         elif ai_mode == "mental":
-            intelligence_result = mental_wellness_ai_response(input_text)
+            intelligence_result = mental_wellness_ai_response(
+                input_text, recent_user_messages=recent_messages
+            )
             latency_ms = int((time.perf_counter() - started) * 1000)
         else:
-            intelligence_result = general_assistant_response(input_text)
+            intelligence_result = general_assistant_response(
+                input_text, recent_user_messages=recent_messages
+            )
             latency_ms = int((time.perf_counter() - started) * 1000)
 
         get_db().execute(
@@ -745,14 +785,6 @@ def ai_center():
         audit("use", "ai", feature)
         get_db().commit()
 
-    history = get_db().execute(
-        """
-        SELECT * FROM ai_interactions
-        WHERE user_id=? AND feature=?
-        ORDER BY created_at DESC LIMIT 20
-        """,
-        (g.user["id"], feature),
-    ).fetchall()
     conversations = get_db().execute(
         """
         SELECT * FROM ai_conversations
@@ -764,6 +796,19 @@ def ai_center():
     if active_conversation is None and conversations:
         active_conversation = conversations[0]
 
+    history = []
+    if active_conversation is not None:
+        history = get_db().execute(
+            """
+            SELECT * FROM ai_interactions
+            WHERE user_id=? AND conversation_id=? AND feature=?
+            ORDER BY id DESC LIMIT 20
+            """,
+            (g.user["id"], active_conversation["id"], feature),
+        ).fetchall()
+
+    model_status = get_model_router().status(check_health=False)
+
     return render_template(
         "ai.html",
         result=None,
@@ -774,6 +819,7 @@ def ai_center():
         ai_mode=ai_mode,
         ai_mode_profile=mode_profile,
         ai_modes=AI_MODES,
+        model_status=model_status,
     )
 
 
