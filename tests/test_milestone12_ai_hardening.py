@@ -548,3 +548,39 @@ def test_m125_model_candidate_plan_rejects_unapproved_arguments(tmp_path):
         )
         assert result.accepted is False
         assert result.reason == "argument_not_allowed:find_contact"
+
+
+def test_m125_voice_access_can_submit_low_risk_agentic_goal_but_keeps_consequential_confirmation():
+    app_js = open("static/app.js", encoding="utf-8").read()
+    assert 'text.startsWith("ask zendoc ")' in app_js
+    assert "submitAIRequest" in app_js
+    assert "Any consequential healthcare action will still require explicit confirmation." in app_js
+    assert 'pendingAction = { kind: "login_submit"' in app_js
+    assert 'pendingAction = { kind: "send_ai"' in app_js
+    assert 'if (["confirm", "yes confirm", "proceed", "continue"].includes(text))' in app_js
+
+
+def test_m125_voice_access_reads_visible_agent_activity_without_hidden_reasoning():
+    app_js = open("static/app.js", encoding="utf-8").read()
+    template = open("templates/ai.html", encoding="utf-8").read()
+    assert 'readAgentActivity' in app_js
+    assert 'read agent activity' in app_js
+    assert 'data-agentic-result="true"' in template
+    assert "not hidden model reasoning" in template
+
+
+def test_m125_agentic_care_exposes_planning_assistance_metadata(tmp_path):
+    from zendoc.agentic_care import run_agentic_care
+
+    app, client = make_client(tmp_path)
+    register_web(client, "patient", "planning-meta@example.com", "Planning Meta")
+    login_web(client, "patient", "planning-meta@example.com")
+
+    with app.app_context():
+        user = get_db().execute(
+            "SELECT * FROM users WHERE email=?", ("planning-meta@example.com",)
+        ).fetchone()
+        result = run_agentic_care(user, "check my unread messages")
+        assert "planning_assistance" in result
+        assert result["planning_assistance"]["accepted"] is False
+        assert result["planning_assistance"]["reason"] == "not_needed"
