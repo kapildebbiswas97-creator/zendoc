@@ -90,6 +90,16 @@ def get_capability_registry() -> dict:
                            if local_ai_configured else
                            "Local SLM integration ready — model not configured.",
         },
+        "specialized_ai_workspaces": {
+            "status": STATUS_BETA,
+            "label": "Specialized AI Workspaces",
+            "description": "Separate ZENDOC AI, Doctor AI, Mental Wellness AI, and General Assistant modes with shared deterministic safety and distinct responsibility boundaries.",
+        },
+        "voice_access_beta": {
+            "status": STATUS_BETA,
+            "label": "Voice Access Beta",
+            "description": "Browser speech navigation, AI dictation, read-aloud, and confirmation before navigation or AI sending. Browser microphone/speech support is required; consequential healthcare actions remain outside voice auto-execution.",
+        },
         "slm_product_layer": {
             "status": STATUS_WORKING,
             "label": "ZENDOC-SLM v1 Product Layer",
