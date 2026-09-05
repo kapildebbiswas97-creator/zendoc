@@ -90,7 +90,7 @@ def validate_candidate_plan(candidate, actor, assigned_agent: str) -> CandidateP
         if not decision["allowed"]:
             return CandidatePlanValidation(False, reason=f"tool_access_denied:{tool_name}")
 
-        arguments = raw.get("arguments") or {}
+        arguments = raw.get("inputs") or {}
         if not isinstance(arguments, dict):
             return CandidatePlanValidation(False, reason=f"arguments_not_object:{tool_name}")
         unknown_args = set(arguments) - TOOL_ARGUMENT_ALLOWLIST[tool_name]
@@ -131,7 +131,7 @@ def propose_candidate_plan(actor, command_text: str, assigned_agent: str) -> Can
 
     system_prompt = (
         "You are a planning assistant only. Do not execute tools. "
-        "Return structured JSON in data with a 'steps' array. "
+        "Return structured JSON in data with a steps array. Each step uses tool_name, inputs, and purpose. "
         "Use only the exact allowed tool names supplied by the server. "
         "Never propose prescription, diagnosis, payment, permission changes, "
         "emergency dispatch, record sharing, or any action requiring consent."
