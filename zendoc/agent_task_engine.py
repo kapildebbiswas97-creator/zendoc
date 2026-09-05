@@ -2,7 +2,7 @@
 ZENDOC Agent Task Engine — Milestone 8
 Persistent agent tasks with status tracking, idempotency, retry logic.
 
-Task statuses: queued → running → waiting_approval / waiting_human → completed / failed / cancelled
+Task statuses: queued → running → waiting_approval / waiting_human / waiting_provider → completed / failed / cancelled
 Retry only temporary failures. Permanent failures do not retry.
 Never runs uncontrolled loops in Flask requests.
 """
@@ -36,7 +36,7 @@ RETRIABLE_FAILURES = {
 MAX_STEPS = 20
 MAX_RETRIES_DEFAULT = 3
 EXECUTION_TIMEOUT_SECONDS = 30
-TASK_STATUSES = {"queued", "running", "waiting_approval", "waiting_human", "completed", "failed", "cancelled"}
+TASK_STATUSES = {"queued", "running", "waiting_approval", "waiting_human", "waiting_provider", "completed", "failed", "cancelled"}
 TASK_PRIORITIES = {"low", "normal", "high", "critical"}
 
 
@@ -233,10 +233,43 @@ def request_approval_for_task(task_id: int, requested_by_user_id: int, action_ty
 
 
 def set_task_waiting(task_id: int, status: str, summary: str = "") -> dict:
-    if status not in {"waiting_approval", "waiting_human"}:
-        raise ValueError("Task may wait only for approval or human action.")
+    if status not in {"waiting_approval", "waiting_human", "waiting_provider"}:
+        raise ValueError("Task may wait only for approval, human action, or an authoritative provider response.")
     _update_task(task_id, status, result_summary=str(summary or "")[:500])
     return get_agent_task(task_id)
+
+
+def resume_waiting_task(task_id: int, actor: dict, *, authoritative_state: str, summary: str = "") -> dict:
+    """Resume a waiting task only from an explicit authoritative transition.
+
+    This function never infers provider acceptance from elapsed time, UI state,
+    or model output. Callers must supply the authoritative transition observed
+    by the relevant workflow/integration.
+    """
+    task = get_agent_task(task_id, actor=actor)
+    if task["status"] not in {"waiting_human", "waiting_provider", "waiting_approval"}:
+        raise ValueError(f"Task #{task_id} is not waiting and cannot be resumed.")
+
+    allowed = {
+        "human_confirmed": "queued",
+        "provider_acknowledged": "queued",
+        "provider_rejected": "cancelled",
+        "human_cancelled": "cancelled",
+        "approval_resolved": "queued",
+    }
+    next_status = allowed.get(str(authoritative_state or "").strip().lower())
+    if not next_status:
+        raise ValueError("Unsupported authoritative task transition.")
+
+    if task["status"] == "waiting_provider" and authoritative_state not in {"provider_acknowledged", "provider_rejected"}:
+        raise PermissionError("A provider-waiting task requires an authoritative provider transition.")
+    if task["status"] == "waiting_human" and authoritative_state not in {"human_confirmed", "human_cancelled"}:
+        raise PermissionError("A human-waiting task requires an explicit human transition.")
+
+    _update_task(task_id, next_status, result_summary=str(summary or "")[:500])
+    updated = get_agent_task(task_id, actor=actor)
+    _publish_task_event(updated, actor, f"resumed_{authoritative_state}")
+    return updated
 
 
 # ── Internal helpers ───────────────────────────────────────────────────────────
