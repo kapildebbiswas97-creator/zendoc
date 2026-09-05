@@ -76,7 +76,7 @@ def doctor_ai_response(message: str, *, recent_user_messages=None) -> Intelligen
     text = str(message or "").strip()
     context_messages = _bounded_context(recent_user_messages)
     combined_text = " ".join([*context_messages, text]).strip()
-    safety = SafetyEngine().assess(combined_text)
+    safety = SafetyEngine().assess(text)
     if safety["emergency"]:
         return IntelligenceResult(
             intent="emergency",
@@ -206,7 +206,7 @@ def mental_wellness_ai_response(message: str, *, recent_user_messages=None) -> I
     text = str(message or "").strip()
     context_messages = _bounded_context(recent_user_messages)
     combined_text = " ".join([*context_messages, text]).strip()
-    safety = SafetyEngine().assess(combined_text)
+    safety = SafetyEngine().assess(text)
     if safety["emergency"]:
         return IntelligenceResult(
             intent="emergency",
