@@ -219,13 +219,34 @@ class ZendocIntelligence:
                 provider="video_intelligence_agent",
             )
         elif intent == "core_agent":
+            from .agentic_care import run_agentic_care
+            agentic = run_agentic_care(user, clean_message)
+            lifecycle = agentic.get("agentic_lifecycle") or []
             result = IntelligenceResult(
-                intent="core_agent",
-                urgency="routine",
-                message="ZENDOC Core Agent coordinates care, telehealth, video, IoT, family, pharmacy, transport, and operations through permissioned tools with audit logs.",
-                follow_up_questions=["Which ZENDOC workflow should I coordinate?"],
-                possible_actions=[{"type": "core_agent", "label": "Run Core Agent"}],
-                provider="core_agent",
+                intent=agentic.get("intent") or "core_agent",
+                urgency=agentic.get("urgency") or "routine",
+                message=agentic.get("message") or "ZENDOC Agentic Care completed a bounded care cycle.",
+                follow_up_questions=(
+                    ["Review the staged action and confirm only if you want ZENDOC to continue."]
+                    if agentic.get("requires_confirmation")
+                    else ["What should ZENDOC coordinate next?"]
+                ),
+                possible_actions=agentic.get("actions") or [],
+                provider="zendoc_agentic_care_os",
+                next_step=(
+                    "Human confirmation is required before the staged consequential action can continue."
+                    if agentic.get("requires_confirmation")
+                    else "The bounded run completed. Review the verified result or continue with another care goal."
+                ),
+                model_metadata={
+                    "agentic_care": True,
+                    "autonomy_level": agentic.get("autonomy_level"),
+                    "execution_truth": agentic.get("execution_truth"),
+                    "run_id": agentic.get("run_id"),
+                    "task_id": agentic.get("task_id"),
+                    "plan": agentic.get("plan"),
+                    "lifecycle": lifecycle,
+                },
             )
         elif intent in FUTURE_ACTIONS:
             result = self._future_action(intent, clean_message)
