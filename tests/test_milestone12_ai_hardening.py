@@ -584,3 +584,52 @@ def test_m125_agentic_care_exposes_planning_assistance_metadata(tmp_path):
         assert "planning_assistance" in result
         assert result["planning_assistance"]["accepted"] is False
         assert result["planning_assistance"]["reason"] == "not_needed"
+
+
+def test_m125_synthetic_demo_routes_explicitly():
+    assert IntentRouter().detect("Run ZENDOC synthetic agentic demo") == "synthetic_agentic_demo"
+
+
+def test_m125_synthetic_demo_is_labelled_bounded_and_waiting_human(tmp_path):
+    app, client = make_client(tmp_path)
+    register_web(client, "patient", "demo-agentic@example.com", "Demo Agentic")
+    login_web(client, "patient", "demo-agentic@example.com")
+
+    with app.app_context():
+        user = get_db().execute(
+            "SELECT * FROM users WHERE email=?", ("demo-agentic@example.com",)
+        ).fetchone()
+        result, _ = ZendocIntelligence().respond(
+            "Run ZENDOC synthetic agentic demo",
+            user=user,
+            conversation=None,
+        )
+        assert result.intent == "synthetic_agentic_demo"
+        assert result.model_metadata["synthetic_demo"] is True
+        assert result.model_metadata["agentic_care"] is True
+        assert result.model_metadata["verification"]["truth_state"] == "WAITING_HUMAN"
+        assert result.model_metadata["verification"]["synthetic_demo"] is True
+        assert "Synthetic Agentic Care demo" in result.message
+        assert "no real-world order" in result.message
+        assert result.model_metadata["plan"]["requires_confirmation"] is True
+
+
+def test_m125_synthetic_demo_renders_agent_activity(tmp_path):
+    app, client = make_client(tmp_path)
+    register_web(client, "patient", "demo-ui@example.com", "Demo UI")
+    login_web(client, "patient", "demo-ui@example.com")
+    page = client.get("/ai?mode=zendoc")
+    token = csrf(page.data.decode())
+    response = client.post(
+        "/ai",
+        data={
+            "csrf_token": token,
+            "ai_mode": "zendoc",
+            "message": "Run ZENDOC synthetic agentic demo",
+        },
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+    assert b"Synthetic Agentic Care demo" in response.data
+    assert b"Agent Activity" in response.data
+    assert b"WAITING HUMAN" in response.data or b"waiting human" in response.data.lower()
