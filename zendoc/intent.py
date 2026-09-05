@@ -154,6 +154,21 @@ def _normalize(message: str) -> str:
 class IntentRouter:
     def detect(self, message):
         text = _normalize(message)
+        # Explicit user invocation of the Agentic Care OS wins over ordinary
+        # workflow keywords. The Core Agent still re-plans the underlying goal
+        # through deterministic safety, permissions, tools, and approvals.
+        if any(
+            phrase in text
+            for phrase in (
+                "use agentic care",
+                "agentic care to",
+                "run agent",
+                "agentic workflow",
+                "coordinate this workflow",
+                "handle this workflow",
+            )
+        ):
+            return "core_agent"
         candidates = []
         for intent, keywords in INTENT_KEYWORDS.items():
             matched = [keyword for keyword in keywords if keyword in text]
