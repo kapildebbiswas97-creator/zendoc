@@ -61,7 +61,12 @@ def ai_mode_profile(mode: str | None) -> dict:
     return {"key": key, **AI_MODES[key]}
 
 
-def doctor_ai_response(message: str) -> IntelligenceResult:
+def _bounded_context(messages, limit: int = 3) -> list[str]:
+    cleaned = [str(item or "").strip()[:500] for item in (messages or []) if str(item or "").strip()]
+    return cleaned[-max(1, min(int(limit or 3), 4)):]
+
+
+def doctor_ai_response(message: str, *, recent_user_messages=None) -> IntelligenceResult:
     """Return bounded, non-diagnostic clinical guidance.
 
     This is intentionally deterministic.  ZENDOC may provide common
@@ -69,7 +74,9 @@ def doctor_ai_response(message: str) -> IntelligenceResult:
     dose, antibiotic, or treatment plan for a patient.
     """
     text = str(message or "").strip()
-    safety = SafetyEngine().assess(text)
+    context_messages = _bounded_context(recent_user_messages)
+    combined_text = " ".join([*context_messages, text]).strip()
+    safety = SafetyEngine().assess(combined_text)
     if safety["emergency"]:
         return IntelligenceResult(
             intent="emergency",
@@ -87,7 +94,7 @@ def doctor_ai_response(message: str) -> IntelligenceResult:
             model_metadata={"assistant_mode": "doctor", "model_called": False},
         )
 
-    lower = text.lower()
+    lower = combined_text.lower()
     prescription_request = any(
         phrase in lower
         for phrase in (
@@ -174,7 +181,7 @@ def doctor_ai_response(message: str) -> IntelligenceResult:
             "Are you taking any regular medicines or do you have important allergies or long-term conditions?",
         ],
         possible_actions=[
-            {"type": "telehealth", "label": "Talk to a real doctor"},
+            {"type": "telehealth", "label": "Request real clinician consultation"},
             {"type": "appointment", "label": "Find a clinician"},
             {"type": "medical_records", "label": "Review related reports"},
         ],
@@ -189,13 +196,17 @@ def doctor_ai_response(message: str) -> IntelligenceResult:
             "assistant_mode": "doctor",
             "clinical_boundary": "educational_only",
             "model_called": False,
+            "conversation_context_used": bool(context_messages),
+            "context_messages_used": len(context_messages),
         },
     )
 
 
-def mental_wellness_ai_response(message: str) -> IntelligenceResult:
+def mental_wellness_ai_response(message: str, *, recent_user_messages=None) -> IntelligenceResult:
     text = str(message or "").strip()
-    safety = SafetyEngine().assess(text)
+    context_messages = _bounded_context(recent_user_messages)
+    combined_text = " ".join([*context_messages, text]).strip()
+    safety = SafetyEngine().assess(combined_text)
     if safety["emergency"]:
         return IntelligenceResult(
             intent="emergency",
@@ -208,7 +219,7 @@ def mental_wellness_ai_response(message: str) -> IntelligenceResult:
             model_metadata={"assistant_mode": "mental", "model_called": False},
         )
 
-    lower = text.lower()
+    lower = combined_text.lower()
     suggestions = []
     if any(word in lower for word in ("stress", "overwhelmed", "exam", "work", "burnout")):
         suggestions.extend([
@@ -252,7 +263,12 @@ def mental_wellness_ai_response(message: str) -> IntelligenceResult:
         provider="mental_wellness_ai_deterministic",
         next_step="Choose one small next step or tell me what kind of support would help.",
         safety_notice="Mental Wellness AI is supportive guidance, not therapy or a diagnosis.",
-        model_metadata={"assistant_mode": "mental", "model_called": False},
+        model_metadata={
+            "assistant_mode": "mental",
+            "model_called": False,
+            "conversation_context_used": bool(context_messages),
+            "context_messages_used": len(context_messages),
+        },
     )
 
 
@@ -276,7 +292,7 @@ def _contains_forbidden_action_key(value, depth: int = 0) -> bool:
     return False
 
 
-def general_assistant_response(message: str, *, router=None) -> IntelligenceResult:
+def general_assistant_response(message: str, *, router=None, recent_user_messages=None) -> IntelligenceResult:
     """Use the configured model router for non-clinical general assistance.
 
     PUBLIC/INTERNAL tasks may use a configured cloud provider. PERSONAL data is
@@ -284,6 +300,7 @@ def general_assistant_response(message: str, *, router=None) -> IntelligenceResu
     healthcare-specific modes instead of being sent to a general model.
     """
     text = str(message or "").strip()[:4000]
+    context_messages = _bounded_context(recent_user_messages)
     safety = SafetyEngine().assess(text)
     if safety["emergency"]:
         return IntelligenceResult(
@@ -319,8 +336,19 @@ def general_assistant_response(message: str, *, router=None) -> IntelligenceResu
         )
 
     allow_cloud = privacy in {PrivacyClass.PUBLIC, PrivacyClass.INTERNAL}
+    prompt = text
+    if context_messages:
+        context_block = "\n".join(
+            f"Earlier user message {index + 1}: {item}"
+            for index, item in enumerate(context_messages)
+        )
+        prompt = (
+            "Use the recent same-thread user context only when it is relevant. "
+            "Do not infer facts that were not stated.\n"
+            f"{context_block}\nCurrent user message: {text}"
+        )[:6000]
     response = (router or get_model_router()).route(
-        text,
+        prompt,
         intent="general_assistant",
         task_type="general_assistant",
         privacy_class=privacy,
@@ -369,5 +397,7 @@ def general_assistant_response(message: str, *, router=None) -> IntelligenceResu
             "model_called": response.provider not in {"local_fallback", "deterministic_safety"},
             "structured_output_validated": safe,
             "cloud_allowed_for_this_request": allow_cloud,
+            "conversation_context_used": bool(context_messages),
+            "context_messages_used": len(context_messages),
         },
     )
