@@ -360,3 +360,106 @@ def test_m125_zendoc_ai_renders_agent_activity_trace(tmp_path):
     assert b"Permissioned tool plan" in response.data
     assert b"get unread summary" in response.data
     assert b"not hidden model reasoning" in response.data
+
+
+def test_m125_natural_multistep_family_goal_uses_agentic_orchestration(tmp_path):
+    app, client = make_client(tmp_path)
+    register_web(client, "patient", "natural-agentic@example.com", "Natural Agentic")
+    login_web(client, "patient", "natural-agentic@example.com")
+
+    with app.app_context():
+        user = get_db().execute(
+            "SELECT * FROM users WHERE email=?", ("natural-agentic@example.com",)
+        ).fetchone()
+        result, _ = ZendocIntelligence().respond(
+            "My mother has prescribed medicines. Help me organize the safest next step near her home.",
+            user=user,
+            conversation=None,
+        )
+        assert result.provider == "zendoc_agentic_care_os"
+        assert result.model_metadata["agentic_care"] is True
+        assert result.model_metadata["lifecycle"]
+        assert result.model_metadata["verification"]["truth_state"] in {
+            "WAITING_HUMAN", "BLOCKED_DATA", "BLOCKED_PERMISSION", "BOUNDED_EXECUTION_VERIFIED"
+        }
+
+
+def test_m125_simple_symptom_question_does_not_overroute_to_agentic_care(tmp_path):
+    app, client = make_client(tmp_path)
+    register_web(client, "patient", "simple-health@example.com", "Simple Health")
+    login_web(client, "patient", "simple-health@example.com")
+
+    with app.app_context():
+        user = get_db().execute(
+            "SELECT * FROM users WHERE email=?", ("simple-health@example.com",)
+        ).fetchone()
+        result, _ = ZendocIntelligence().respond(
+            "I have a mild headache since this morning.",
+            user=user,
+            conversation=None,
+        )
+        assert result.intent == "symptoms"
+        assert result.provider != "zendoc_agentic_care_os"
+        assert result.model_metadata.get("agentic_care") is not True
+
+
+def test_m125_waiting_provider_requires_authoritative_provider_transition(tmp_path):
+    from zendoc.agent_task_engine import create_agent_task, resume_waiting_task, set_task_waiting
+
+    app, client = make_client(tmp_path)
+    register_web(client, "patient", "provider-wait@example.com", "Provider Wait")
+    login_web(client, "patient", "provider-wait@example.com")
+
+    with app.app_context():
+        user = get_db().execute(
+            "SELECT * FROM users WHERE email=?", ("provider-wait@example.com",)
+        ).fetchone()
+        task = create_agent_task(
+            task_type="provider_wait_test",
+            requested_by=user["id"],
+            assigned_agent="CareAgent",
+            risk_level="low_risk",
+            actor=user,
+        )
+        task = set_task_waiting(task["id"], "waiting_provider", "Waiting for provider acknowledgement.")
+        assert task["status"] == "waiting_provider"
+
+        with pytest.raises(PermissionError):
+            resume_waiting_task(
+                task["id"],
+                user,
+                authoritative_state="human_confirmed",
+            )
+
+        resumed = resume_waiting_task(
+            task["id"],
+            user,
+            authoritative_state="provider_acknowledged",
+            summary="Provider acknowledgement recorded.",
+        )
+        assert resumed["status"] == "queued"
+
+
+def test_m125_verifier_never_overclaims_waiting_provider(tmp_path):
+    from zendoc.agentic_care import verify_agentic_result
+    from zendoc.agent_task_engine import create_agent_task, set_task_waiting
+
+    app, client = make_client(tmp_path)
+    register_web(client, "patient", "verify-provider@example.com", "Verify Provider")
+    login_web(client, "patient", "verify-provider@example.com")
+
+    with app.app_context():
+        user = get_db().execute(
+            "SELECT * FROM users WHERE email=?", ("verify-provider@example.com",)
+        ).fetchone()
+        task = create_agent_task(
+            task_type="provider_verify_test",
+            requested_by=user["id"],
+            assigned_agent="CareAgent",
+            risk_level="low_risk",
+            actor=user,
+        )
+        set_task_waiting(task["id"], "waiting_provider", "Awaiting authoritative provider response.")
+        verification = verify_agentic_result(user, {"task_id": task["id"]})
+        assert verification["truth_state"] == "WAITING_PROVIDER"
+        assert "waiting for an authoritative provider response" in verification["summary"].lower()
