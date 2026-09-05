@@ -300,7 +300,7 @@ class HealthcareOrchestrator:
                     OrchestrationStep(
                         step_id="escalation",
                         name="Emergency Medical Escalation",
-                        purpose="Provide immediate 108 ambulance and hospital emergency instructions",
+                        purpose="Provide instructions to call local emergency services or go to the nearest emergency department; no dispatch is claimed",
                         status="READY",
                         result={"action": "CALL_108", "guidance": safety_assessment.get("guidance")},
                         provenance_source="PROVIDER_RECORDED",
@@ -425,7 +425,7 @@ class HealthcareOrchestrator:
                 OrchestrationStep(
                     step_id="retrieve_prescription",
                     name="Retrieve Active Prescription",
-                    purpose="Fetch verified medications from patient health memory",
+                    purpose="Fetch stored prescription items from authorized patient health memory",
                     status="BLOCKED_DATA",
                     error=f"No active prescription found for {subject.subject_name or 'patient'}.",
                     provenance_source="DOCUMENT_EXTRACTED",
@@ -500,7 +500,7 @@ class HealthcareOrchestrator:
                 next_safe_actions=["review_prescription_items"],
             )
 
-        # 3. Search verified hyperlocal pharmacy inventory & optimize fulfilment
+        # 3. Search participating pharmacy inventory records & optimize fulfilment
         lat = loc.get("latitude") if loc else None
         lon = loc.get("longitude") if loc else None
         city = loc.get("city") if loc else None
@@ -525,7 +525,7 @@ class HealthcareOrchestrator:
                 OrchestrationStep(
                     step_id="inventory_search",
                     name="Search Hyperlocal Pharmacy Inventory",
-                    purpose="Match exact prescribed SKUs against confirmed participating pharmacy stock",
+                    purpose="Match exact prescribed SKUs against fresh provider-recorded stock marked CONFIRMED",
                     status="COMPLETED",
                     result=fulfilment,
                     provenance_source="PROVIDER_RECORDED",
@@ -552,7 +552,7 @@ class HealthcareOrchestrator:
         plan_hash = fulfilment.get("plan_hash")
         total_cost = best_option.get("total_inr") or fulfilment.get("total_cost_inr")
         delivery_fee = best_option.get("delivery_fee_inr", 0.0)
-        pharmacy_names = best_option.get("pharmacy_names", ["Verified Pharmacy Network"])
+        pharmacy_names = best_option.get("pharmacy_names", ["Participating Pharmacy"])
 
         action_preview = ActionPreview(
             action_type="ORDER_MEDICINES",
@@ -580,7 +580,7 @@ class HealthcareOrchestrator:
             OrchestrationStep(
                 step_id="stage_fulfilment_plan",
                 name="Stage Fulfilment Options",
-                purpose="Calculate optimal single-store or split fulfilment from verified inventory",
+                purpose="Calculate single-store or split fulfilment from fresh provider-recorded inventory",
                 status="COMPLETED",
                 result={
                     "plan_id": plan_db_id,
@@ -608,11 +608,11 @@ class HealthcareOrchestrator:
         )
 
         explanation = (
-            f"Found verified stock for all {len(items)} medications for {subject.subject_name or 'patient'} "
+            f"Found fresh provider-recorded inventory marked CONFIRMED for all {len(items)} medications for {subject.subject_name or 'patient'} "
             f"at {', '.join(pharmacy_names)}. "
             f"Total estimated landed cost: INR {total_cost:.2f}. "
             f"Delivery location: {delivery_addr}. "
-            f"Review the staged order and confirm to dispatch."
+            f"Review the staged order and confirm to submit the order request. Provider acceptance and real-world fulfilment are still pending."
         )
 
         return OrchestrationPlan(
@@ -669,7 +669,7 @@ class HealthcareOrchestrator:
                 OrchestrationStep(
                     step_id="search_lab_offers",
                     name="Search Diagnostic Providers",
-                    purpose="Discover NABL-accredited diagnostic labs with home sample collection",
+                    purpose="Search diagnostic offers recorded by participating providers; accreditation or home collection is shown only when evidence is stored",
                     status="COMPLETED",
                     result={"offers": []},
                     provenance_source="PROVIDER_RECORDED",
@@ -710,7 +710,7 @@ class HealthcareOrchestrator:
             OrchestrationStep(
                 step_id="stage_diagnostic_offer",
                 name="Stage Diagnostic Option",
-                purpose="Select verified NABL lab with confirmed pricing and sample collection",
+                purpose="Stage a provider-recorded diagnostic offer; pricing and collection details are only as current as the stored provider evidence",
                 status="COMPLETED",
                 result=best_offer,
                 provenance_source="PROVIDER_RECORDED",
@@ -741,9 +741,9 @@ class HealthcareOrchestrator:
             steps=steps,
             action_preview=action_preview,
             explanation=(
-                f"Found verified test '{best_offer.get('test_name')}' at {best_offer.get('lab_name')} "
+                f"Found a provider-recorded test offer for '{best_offer.get('test_name')}' at {best_offer.get('lab_name')} "
                 f"for {subject.subject_name or 'patient'}. Standard cost: INR {best_offer.get('price_inr', 0):.2f}. "
-                f"Confirm to book home collection."
+                f"Confirm to submit a booking request. Provider confirmation is still required."
             ),
             provenance_sources=provenance_sources,
             next_safe_actions=["confirm_booking", "choose_collection_slot"],
@@ -785,8 +785,8 @@ class HealthcareOrchestrator:
         record_care_continuity_event(
             patient_id=patient_id,
             event_type="ORDER_SUBMITTED",
-            title=f"Order #{primary_order_id} placed with {details.get('pharmacy_name', 'Pharmacy')}",
-            summary=f"Dispatched {len(details.get('items', []))} prescribed items for total INR {float(details.get('total_amount_inr') or 0.0):.2f}.",
+            title=f"Order request #{primary_order_id} submitted to {details.get('pharmacy_name', 'Pharmacy')}",
+            summary=f"Submitted a ZENDOC order request for {len(details.get('items', []))} prescribed items for total INR {float(details.get('total_amount_inr') or 0.0):.2f}; provider acknowledgement is pending until recorded.",
             source="PROVIDER_RECORDED",
             source_ref=f"order:{primary_order_id}",
             metadata={
@@ -800,6 +800,9 @@ class HealthcareOrchestrator:
 
         return {
             "status": "EXECUTED",
+            "execution_scope": "internal_submission_only",
+            "external_execution_confirmed": False,
+            "provider_acknowledgement_required": True,
             "receipt": {
                 "order_id": primary_order_id,
                 "order_number": details.get("order_number") or f"ORD-{primary_order_id}",
