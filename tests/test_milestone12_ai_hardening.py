@@ -230,8 +230,8 @@ def test_m12_zendoc_ai_context_is_bounded_to_recent_messages(tmp_path):
         db = get_db()
         now = now_iso()
         user_id = db.execute(
-            "INSERT INTO users (name,email,password_hash,role,active,created_at) VALUES (?,?,?,?,?,?)",
-            ("Bounded", "bounded@example.com", "x", "patient", 1, now),
+            "INSERT INTO users (name,email,password_hash,role,active,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
+            ("Bounded", "bounded@example.com", "x", "patient", 1, now, now),
         ).lastrowid
         conv_id = db.execute(
             "INSERT INTO ai_conversations (user_id,title,last_intent,created_at,updated_at) VALUES (?,?,?,?,?)",
