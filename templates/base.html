@@ -177,6 +177,24 @@
     </div>
   </footer>
 
+  <div id="voice-route-map" hidden
+       data-dashboard="{{ url_for('main.dashboard') }}"
+       data-zendoc-ai="{{ url_for('main.ai_center', mode='zendoc') }}"
+       data-doctor-ai="{{ url_for('main.ai_center', mode='doctor') }}"
+       data-mental-ai="{{ url_for('main.ai_center', mode='mental') }}"
+       data-general-ai="{{ url_for('main.ai_center', mode='assistant') }}"
+       data-appointments="{{ url_for('main.appointments') }}"
+       data-find-care="{{ url_for('main.finder') }}"
+       data-health-memory="{{ url_for('health_memory.health_summary_page') }}"
+       data-records="{{ url_for('main.records') }}"
+       data-messages="{{ url_for('milestone7.messages_page') }}"
+       data-family="{{ url_for('family.family_page') }}"
+       data-fitness="{{ url_for('fitness.overview') }}"
+       data-pharmacy="{{ url_for('ecosystem.pharmacy_page') }}"
+       data-telehealth="{{ url_for('milestone7.telehealth_page') }}"
+       data-home-health="{{ url_for('ecosystem.home_health_page') }}"
+       data-transport="{{ url_for('ecosystem.ambulance_page') }}"></div>
+
   <section class="voice-access-panel" id="voice-access-panel" aria-label="ZENDOC Voice Access Beta" data-help-open="false" data-listening="false">
     <div class="voice-access-row">
       <button type="button" id="voice-access-toggle" class="voice-access-toggle" aria-pressed="false">🎙 Voice Access Beta</button>
