@@ -247,6 +247,10 @@ class ZendocIntelligence:
                 specialist="Primary care clinician",
                 provider="conversation_context",
                 next_step="Share associated symptoms or book a consultation if it persists or worsens.",
+                model_metadata={
+                    "conversation_context_used": bool(recent_messages),
+                    "context_messages_used": min(len(recent_messages), 3),
+                },
             )
         prediction = doctor_prediction(combined_message)
         questions = []
