@@ -466,3 +466,85 @@ def test_m125_verifier_never_overclaims_waiting_provider(tmp_path):
         verification = verify_agentic_result(user, {"task_id": task["id"]})
         assert verification["truth_state"] == "WAITING_PROVIDER"
         assert "waiting for an authoritative provider response" in verification["summary"].lower()
+
+
+def test_m125_model_candidate_plan_rejects_unknown_tool(tmp_path):
+    from zendoc.agent_candidate_planner import validate_candidate_plan
+
+    app, client = make_client(tmp_path)
+    register_web(client, "patient", "candidate-unknown@example.com", "Candidate Unknown")
+    login_web(client, "patient", "candidate-unknown@example.com")
+
+    with app.app_context():
+        user = get_db().execute(
+            "SELECT * FROM users WHERE email=?", ("candidate-unknown@example.com",)
+        ).fetchone()
+        result = validate_candidate_plan(
+            {
+                "steps": [
+                    {
+                        "tool_name": "execute_shell",
+                        "inputs": {},
+                        "purpose": "Try an unsafe tool",
+                    }
+                ]
+            },
+            user,
+            "SearchAgent",
+        )
+        assert result.accepted is False
+        assert result.reason.startswith("tool_not_model_plannable")
+
+
+def test_m125_model_candidate_plan_enforces_max_step_limit(tmp_path):
+    from zendoc.agent_candidate_planner import MODEL_PLAN_MAX_STEPS, validate_candidate_plan
+
+    app, client = make_client(tmp_path)
+    register_web(client, "patient", "candidate-limit@example.com", "Candidate Limit")
+    login_web(client, "patient", "candidate-limit@example.com")
+
+    with app.app_context():
+        user = get_db().execute(
+            "SELECT * FROM users WHERE email=?", ("candidate-limit@example.com",)
+        ).fetchone()
+        candidate = {
+            "steps": [
+                {
+                    "tool_name": "find_contact",
+                    "inputs": {"query": "doctor"},
+                    "purpose": "Find permitted contacts",
+                }
+                for _ in range(MODEL_PLAN_MAX_STEPS + 1)
+            ]
+        }
+        result = validate_candidate_plan(candidate, user, "SearchAgent")
+        assert result.accepted is False
+        assert result.reason == "step_limit_exceeded"
+
+
+def test_m125_model_candidate_plan_rejects_unapproved_arguments(tmp_path):
+    from zendoc.agent_candidate_planner import validate_candidate_plan
+
+    app, client = make_client(tmp_path)
+    register_web(client, "patient", "candidate-args@example.com", "Candidate Args")
+    login_web(client, "patient", "candidate-args@example.com")
+
+    with app.app_context():
+        user = get_db().execute(
+            "SELECT * FROM users WHERE email=?", ("candidate-args@example.com",)
+        ).fetchone()
+        result = validate_candidate_plan(
+            {
+                "steps": [
+                    {
+                        "tool_name": "find_contact",
+                        "inputs": {"query": "doctor", "sql": "DROP TABLE users"},
+                        "purpose": "Unsafe extra argument",
+                    }
+                ]
+            },
+            user,
+            "SearchAgent",
+        )
+        assert result.accepted is False
+        assert result.reason == "argument_not_allowed:find_contact"
