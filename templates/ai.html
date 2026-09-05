@@ -1,123 +1,206 @@
 {% extends "base.html" %}
-{% block title %}ZENDOC AI Assistant{% endblock %}
+{% block title %}{{ ai_mode_profile.label }} — ZENDOC{% endblock %}
 {% block content %}
-<section class="section-head">
+<section class="section-head ai-mode-head">
   <div>
-    <p class="eyebrow">Safety-aware healthcare guidance</p>
-    <h1>ZENDOC AI Assistant</h1>
-    <p class="section-copy">Describe what you need in everyday language. ZENDOC can help organize a next step and connect you to the right area of the platform.</p>
+    <p class="eyebrow">Specialized AI workspace</p>
+    <h1>{{ ai_mode_profile.label }}</h1>
+    <p class="section-copy">{{ ai_mode_profile.description }}</p>
   </div>
-  <span class="status-badge working">Safety checks active</span>
+  <div class="ai-mode-head-actions">
+    {% if ai_mode == 'doctor' %}
+      <a class="primary-action" href="{{ url_for('milestone7.telehealth_page') }}">Talk to a real doctor</a>
+    {% elif ai_mode == 'zendoc' %}
+      <span class="status-badge working">Safety + orchestration active</span>
+    {% elif ai_mode == 'mental' %}
+      <span class="status-badge beta">Supportive guidance</span>
+    {% else %}
+      <span class="status-badge beta">LLM / SLM routed</span>
+    {% endif %}
+  </div>
 </section>
+
+<nav class="ai-mode-tabs" aria-label="Choose a ZENDOC AI mode">
+  {% for key, mode in ai_modes.items() %}
+    <a href="{{ url_for('main.ai_center', mode=key) }}"
+       class="ai-mode-tab {% if ai_mode == key %}active{% endif %}"
+       {% if ai_mode == key %}aria-current="page"{% endif %}>
+      <strong>{{ mode.label }}</strong>
+      <small>{{ mode.short_label }}</small>
+    </a>
+  {% endfor %}
+</nav>
 
 <section class="ai-architecture" aria-label="ZENDOC AI architecture">
-  <div class="ai-identity"><span class="brand-spark" aria-hidden="true">✦</span><div><strong>ZENDOC-SLM v1</strong><small>Healthcare-focused local model layer</small></div></div>
-  <div class="ai-pipeline" aria-label="User to care workflow"><span>User</span><b>→</b><span>Safety Gate</span><b>→</b><span>Approved Knowledge</span><b>→</b><span>Language Layer</span><b>→</b><span>Care actions</span></div>
-  <div class="ai-identity-note">Core Agent handles permissions and workflows. The language layer can suggest; it cannot execute tools or change records.</div>
-</section>
-
-{% if intelligence_result %}
-<section class="result ai-response {% if intelligence_result.emergency %}emergency{% endif %}" aria-live="polite">
-  <div class="panel-head">
-    <div>
-      <p class="eyebrow">{{ 'Emergency guidance' if intelligence_result.emergency else 'Your guidance' }}</p>
-      <h2>{{ 'Stop and seek urgent care' if intelligence_result.emergency else 'A clearer next step' }}</h2>
-    </div>
-    <span class="status-badge {{ 'inactive' if intelligence_result.emergency else 'active' }}">{{ intelligence_result.urgency }}</span>
-  </div>
-  <div class="response-grid">
-    <div class="response-section"><h3>What I understood</h3><p>{{ intelligence_result.intent.replace('_', ' ').title() }}</p></div>
-    <div class="response-section"><h3>Urgency &amp; safety</h3><p class="urgency-{{ intelligence_result.urgency }}"><strong>{{ intelligence_result.urgency.title() }}</strong>{% if intelligence_result.emergency %} — contact local emergency services now.{% else %} — this is educational guidance, not a diagnosis.{% endif %}</p></div>
-    <div class="response-section response-main"><h3>What you can do now</h3><p>{{ intelligence_result.message }}</p></div>
-    <div class="response-section"><h3>When to seek professional care</h3><p>{% if intelligence_result.emergency %}Do not wait for an online response. Contact emergency services or go to the nearest emergency department.{% else %}Seek prompt professional care if symptoms are severe, rapidly worsening, or you feel unsafe.{% endif %}</p></div>
-    <div class="response-section"><h3>Next actions</h3>
-      {% if intelligence_result.possible_actions %}
-        <div class="form-actions">
-          {% for action in intelligence_result.possible_actions %}
-            {% set action_url = action.url if action.url else none %}
-            {% if action.type in ['appointment', 'find_healthcare'] %}{% set action_url = url_for('main.finder', category='doctor', specialty=action.specialty or intelligence_result.specialist or '') %}
-            {% elif action.type in ['medical_records', 'report_history', 'report_intelligence'] %}{% set action_url = url_for('main.records') %}
-            {% elif action.type == 'health_timeline' %}{% set action_url = url_for('health_memory.timeline_page') %}
-            {% elif action.type in ['health_monitor', 'health_analytics', 'health_profile'] %}{% set action_url = url_for('main.health') %}
-            {% elif action.type == 'family_care' %}{% set action_url = url_for('family.family_page') %}
-            {% elif action.type == 'parent_care' %}{% set action_url = url_for('family.parent_care_page') %}
-            {% elif action.type == 'home_health' %}{% set action_url = url_for('ecosystem.home_health_page') %}
-            {% elif action.type in ['ambulance', 'future_nearby_emergency'] %}{% set action_url = url_for('ecosystem.ambulance_page') %}
-            {% elif action.type in ['pharmacy', 'medicine_intelligence'] %}{% set action_url = url_for('ecosystem.pharmacy_page') %}
-            {% elif action.type == 'iot_hub' %}{% set action_url = url_for('ecosystem.iot_hub_page') %}
-            {% elif action.type == 'telehealth' %}{% set action_url = url_for('milestone7.telehealth_page') %}
-            {% elif action.type in ['video_intelligence', 'fitness_video_search'] %}{% set action_url = url_for('milestone7.videos_page') %}{% endif %}
-            {% if action_url %}<a href="{{ action_url }}" class="secondary-action">{{ action.label }}</a>{% else %}<span>{{ action.label }}</span>{% endif %}
-          {% endfor %}
-        </div>
-      {% else %}<p>Continue the conversation with any missing detail.</p>{% endif %}
-    </div>
-  </div>
-  <div class="ai-response-meta" aria-label="AI response provenance">
-    <span><strong>Layer</strong> {{ intelligence_result.model_metadata.product_layer or 'deterministic ZENDOC guidance' }}</span>
-    <span><strong>Route</strong> {{ intelligence_result.provider_route.provider or intelligence_result.provider }}</span>
-    {% if intelligence_result.provider_route.knowledge_refs %}<span><strong>Approved context</strong> {{ intelligence_result.provider_route.knowledge_refs|length }} sourced item(s)</span>{% endif %}
-    <span><strong>Safety</strong> {{ intelligence_result.safety_notice or 'Educational guidance only.' }}</span>
-  </div>
-  {% if intelligence_result.follow_up_questions %}
-    <div style="margin-top:16px;"><strong>Helpful follow-up</strong><div class="chips">{% for question in intelligence_result.follow_up_questions %}<button type="button" data-prompt="{{ question }}">{{ question }}</button>{% endfor %}</div></div>
+  {% if ai_mode == 'zendoc' %}
+    <div class="ai-identity"><span class="brand-spark" aria-hidden="true">✦</span><div><strong>ZENDOC AI</strong><small>Top-level care orchestrator</small></div></div>
+    <div class="ai-pipeline"><span>User</span><b>→</b><span>Safety</span><b>→</b><span>Intent + Context</span><b>→</b><span>ZENDOC-SLM</span><b>→</b><span>Permissioned care actions</span></div>
+    <div class="ai-identity-note">ZENDOC AI coordinates the other services. It can organize and stage actions, but consequential actions still require the correct consent and confirmation.</div>
+  {% elif ai_mode == 'doctor' %}
+    <div class="ai-identity"><span class="brand-spark" aria-hidden="true">✚</span><div><strong>Doctor AI</strong><small>Clinical guidance mode</small></div></div>
+    <div class="ai-pipeline"><span>Symptoms</span><b>→</b><span>Emergency gate</span><b>→</b><span>Medicine education</span><b>→</b><span>Care guidance</span><b>→</b><span>Real clinician when needed</span></div>
+    <div class="ai-identity-note"><strong>Important:</strong> Doctor AI is not a licensed doctor. It may explain common non-prescription options and safety considerations, but it does not diagnose, prescribe antibiotics, change doses, or replace a clinician.</div>
+  {% elif ai_mode == 'mental' %}
+    <div class="ai-identity"><span class="brand-spark" aria-hidden="true">♡</span><div><strong>Mental Wellness AI</strong><small>Wellbeing support mode</small></div></div>
+    <div class="ai-pipeline"><span>How you feel</span><b>→</b><span>Safety</span><b>→</b><span>Structured support</span><b>→</b><span>Small next step</span><b>→</b><span>Professional support if needed</span></div>
+    <div class="ai-identity-note">Support for stress, sleep, overwhelm and everyday wellbeing. It does not diagnose mental-health conditions or replace therapy.</div>
+  {% else %}
+    <div class="ai-identity"><span class="brand-spark" aria-hidden="true">⌘</span><div><strong>General Assistant</strong><small>Everyday LLM / SLM mode</small></div></div>
+    <div class="ai-pipeline"><span>Question</span><b>→</b><span>Privacy class</span><b>→</b><span>Local model first</span><b>→</b><span>Approved cloud if allowed</span><b>→</b><span>Validated answer</span></div>
+    <div class="ai-identity-note">Use this for learning, writing, planning, coding and general questions. Health-sensitive requests are redirected to the healthcare-specific AI path.</div>
   {% endif %}
 </section>
-{% endif %}
 
-{% if result %}
-<section class="result ai-response {% if result.risk_level == 'high' %}emergency{% endif %}" aria-live="polite">
-  {% if result.risk_level == 'high' %}<p class="eyebrow">Emergency guidance</p><h2>Seek urgent care now</h2>{% else %}<p class="eyebrow">Guided tool response</p><h2>Your next step</h2>{% endif %}
-  <div class="response-grid">
-    <div class="response-section"><h3>Urgency &amp; safety</h3><p><strong>{{ result.risk_level.title() }}</strong></p></div>
-    <div class="response-section"><h3>What I understood</h3><p>{{ result.summary }}</p></div>
-    <div class="response-section response-main"><h3>What you can do now</h3><p>{{ result.next_steps }}</p></div>
-  </div>
-</section>
-{% endif %}
-
-<section class="assistant-layout">
+<section class="assistant-layout ai-specialized-layout">
   <div class="panel assistant-workspace">
-    <div class="assistant-thread" aria-label="Recent AI conversation">
+    <div class="assistant-thread" id="assistant-thread" aria-label="{{ ai_mode_profile.label }} conversation">
       {% if history %}
         {% for item in history|reverse %}
-          <div class="assistant-turn user"><span class="assistant-meta">You</span><div class="assistant-bubble"><p>{{ item.input_text }}</p></div></div>
-          <div class="assistant-turn"><span class="assistant-meta">ZENDOC AI · {{ item.risk_level.replace('_',' ') }}</span><div class="assistant-bubble"><p>{{ item.output_text }}</p></div></div>
+          <div class="assistant-turn user">
+            <span class="assistant-meta">You</span>
+            <div class="assistant-bubble"><p>{{ item.input_text }}</p></div>
+          </div>
+          <div class="assistant-turn" {% if loop.last %}id="latest-ai-answer" data-latest-ai-answer="true"{% endif %}>
+            <span class="assistant-meta">{{ ai_mode_profile.label }} · {{ item.risk_level.replace('_',' ') }}</span>
+            <div class="assistant-bubble"><p>{{ item.output_text }}</p></div>
+          </div>
         {% endfor %}
       {% else %}
-        <div class="assistant-welcome"><p class="eyebrow">Start here</p><h2>How can ZENDOC help today?</h2><p>Ask about symptoms, finding care, an appointment, a report, stress, fitness, medicine, or your health records.</p></div>
+        <div class="assistant-welcome">
+          <p class="eyebrow">Start here</p>
+          {% if ai_mode == 'doctor' %}
+            <h2>Tell me what is happening.</h2>
+            <p>Include the main symptom, duration, severity, age group, regular medicines, allergies, pregnancy, or long-term conditions when relevant.</p>
+          {% elif ai_mode == 'mental' %}
+            <h2>What feels difficult right now?</h2>
+            <p>You can talk about stress, sleep, studies, work, loneliness, overwhelm, or simply say how you are feeling.</p>
+          {% elif ai_mode == 'assistant' %}
+            <h2>What do you want to work on?</h2>
+            <p>Ask about writing, learning, coding, planning or everyday questions. Health-sensitive questions will be kept in the healthcare AI path.</p>
+          {% else %}
+            <h2>What should ZENDOC coordinate for you?</h2>
+            <p>Ask about symptoms, finding care, reports, appointments, family care, medicine fulfilment, health memory, or another ZENDOC workflow.</p>
+          {% endif %}
+        </div>
       {% endif %}
     </div>
-    <form class="assistant-composer" method="post">
+
+    {% if intelligence_result %}
+      <section class="result ai-response-inline {% if intelligence_result.emergency %}emergency{% endif %}" aria-live="polite">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">{{ 'Emergency guidance' if intelligence_result.emergency else 'Latest answer' }}</p>
+            <h2>{{ 'Seek urgent help now' if intelligence_result.emergency else ai_mode_profile.label }}</h2>
+          </div>
+          <span class="status-badge {{ 'inactive' if intelligence_result.emergency else 'active' }}">{{ intelligence_result.urgency }}</span>
+        </div>
+        <p class="ai-inline-answer">{{ intelligence_result.message }}</p>
+
+        {% if intelligence_result.possible_actions %}
+          <div class="form-actions ai-action-row">
+            {% for action in intelligence_result.possible_actions %}
+              {% set action_url = action.url if action.url else none %}
+              {% if action.type in ['appointment', 'find_healthcare'] %}{% set action_url = url_for('main.finder', category='doctor', specialty=action.specialty or intelligence_result.specialist or '') %}
+              {% elif action.type in ['medical_records', 'report_history', 'report_intelligence'] %}{% set action_url = url_for('main.records') %}
+              {% elif action.type == 'health_timeline' %}{% set action_url = url_for('health_memory.timeline_page') %}
+              {% elif action.type in ['health_monitor', 'health_analytics', 'health_profile'] %}{% set action_url = url_for('main.health') %}
+              {% elif action.type == 'family_care' %}{% set action_url = url_for('family.family_page') %}
+              {% elif action.type == 'parent_care' %}{% set action_url = url_for('family.parent_care_page') %}
+              {% elif action.type == 'home_health' %}{% set action_url = url_for('ecosystem.home_health_page') %}
+              {% elif action.type in ['ambulance', 'future_nearby_emergency'] %}{% set action_url = url_for('ecosystem.ambulance_page') %}
+              {% elif action.type in ['pharmacy', 'medicine_intelligence'] %}{% set action_url = url_for('ecosystem.pharmacy_page') %}
+              {% elif action.type == 'iot_hub' %}{% set action_url = url_for('ecosystem.iot_hub_page') %}
+              {% elif action.type == 'telehealth' %}{% set action_url = url_for('milestone7.telehealth_page') %}
+              {% elif action.type in ['video_intelligence', 'fitness_video_search'] %}{% set action_url = url_for('milestone7.videos_page') %}
+              {% elif action.type == 'switch_ai_mode' %}{% set action_url = url_for('main.ai_center', mode=action.mode) %}{% endif %}
+              {% if action_url %}
+                <a href="{{ action_url }}" class="secondary-action">{{ action.label }}</a>
+              {% else %}
+                <span class="status-badge beta">{{ action.label }}</span>
+              {% endif %}
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        {% if intelligence_result.follow_up_questions %}
+          <div class="ai-follow-ups">
+            <strong>Continue with</strong>
+            <div class="chips">
+              {% for question in intelligence_result.follow_up_questions %}
+                <button type="button" data-prompt="{{ question }}">{{ question }}</button>
+              {% endfor %}
+            </div>
+          </div>
+        {% endif %}
+
+        <div class="ai-response-meta">
+          <span><strong>Mode</strong> {{ ai_mode_profile.label }}</span>
+          <span><strong>Route</strong> {{ intelligence_result.provider_route.provider or intelligence_result.provider }}</span>
+          <span><strong>Safety</strong> {{ intelligence_result.safety_notice or 'Safety checks active.' }}</span>
+        </div>
+      </section>
+    {% endif %}
+
+    <form class="assistant-composer" id="ai-composer" method="post">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <input type="hidden" name="feature" value="zendoc_ai">
-      {% if conversations %}<input type="hidden" name="conversation_id" value="{{ conversations[0].id }}">{% endif %}
-      <label for="assistant-message">Your message</label>
-      <textarea id="assistant-message" name="message" rows="4" maxlength="1500" data-character-count="assistant-count" placeholder="For example: I have had a fever and cough for two days. What should I do next?" required></textarea>
-      <div class="composer-footer"><small id="assistant-count">0 characters</small><button type="submit" data-submitting-label="Reviewing safely…">Send message</button></div>
+      <input type="hidden" name="ai_mode" value="{{ ai_mode }}">
+      {% if active_conversation %}<input type="hidden" name="conversation_id" value="{{ active_conversation.id }}">{% endif %}
+      <label for="assistant-message">Message {{ ai_mode_profile.label }}</label>
+      <textarea id="assistant-message" name="message" rows="4" maxlength="4000" data-character-count="assistant-count"
+        placeholder="{% if ai_mode == 'doctor' %}Example: I have fever and cough for three days. What should I do?{% elif ai_mode == 'mental' %}Example: I feel overwhelmed and cannot sleep before exams.{% elif ai_mode == 'assistant' %}Example: Explain Python lists simply or help me draft an email.{% else %}Example: My mother has a prescription. Help me organize the safest next step.{% endif %}" required></textarea>
+      <div class="composer-footer">
+        <small id="assistant-count">0 characters</small>
+        <div class="composer-actions">
+          <button type="button" class="secondary-action voice-dictate-btn" data-voice-dictate-target="assistant-message">🎙 Dictate</button>
+          <button type="submit" data-submitting-label="Reviewing safely…">Send message</button>
+        </div>
+      </div>
     </form>
   </div>
 
   <aside class="assistant-sidebar">
     <section class="panel">
-      <p class="eyebrow">Try an example</p><h2>Not sure what to ask?</h2>
+      <p class="eyebrow">Specialized mode</p>
+      <h2>{{ ai_mode_profile.short_label }}</h2>
+      {% if ai_mode == 'doctor' %}
+        <p>Doctor AI focuses on symptoms, medicine education, red flags and the right type of professional care.</p>
+        <a class="primary-action" href="{{ url_for('milestone7.telehealth_page') }}">Open real doctor / video consultation</a>
+      {% elif ai_mode == 'mental' %}
+        <p>Mental Wellness AI focuses on supportive conversation and small practical next steps.</p>
+      {% elif ai_mode == 'assistant' %}
+        <p>The model router can use a configured local SLM/LLM first, with policy-approved cloud routing only for suitable non-sensitive requests.</p>
+      {% else %}
+        <p>ZENDOC AI is the coordinator. It connects authorized health context, services and permissioned workflows instead of behaving like a generic chatbot.</p>
+      {% endif %}
+    </section>
+
+    <section class="panel">
+      <p class="eyebrow">Try an example</p>
       <div class="prompt-list">
-        <button type="button" class="prompt-button" data-prompt="I have a fever and cough. What should I do next?">“I have a fever and cough…”</button>
-        <button type="button" class="prompt-button" data-prompt="Help me find the right kind of doctor for back pain.">“Which doctor should I see?”</button>
-        <button type="button" class="prompt-button" data-prompt="How can I organize my latest blood test report in ZENDOC?">“Help with my report”</button>
-        <button type="button" class="prompt-button" data-prompt="I feel stressed and overwhelmed. What are some safe next steps?">“I feel stressed”</button>
+        {% if ai_mode == 'doctor' %}
+          <button type="button" class="prompt-button" data-prompt="I have fever and cough for three days. What should I do next?">Fever + cough</button>
+          <button type="button" class="prompt-button" data-prompt="Can you explain paracetamol and when I should ask a doctor before taking it?">Medicine explanation</button>
+          <button type="button" class="prompt-button" data-prompt="I have a rash that is getting worse. Which type of doctor should I see?">Which doctor?</button>
+        {% elif ai_mode == 'mental' %}
+          <button type="button" class="prompt-button" data-prompt="I feel stressed and overwhelmed before my exams.">Exam stress</button>
+          <button type="button" class="prompt-button" data-prompt="I cannot sleep properly and feel tired during the day.">Sleep support</button>
+          <button type="button" class="prompt-button" data-prompt="I feel lonely and I do not know who to talk to.">Feeling lonely</button>
+        {% elif ai_mode == 'assistant' %}
+          <button type="button" class="prompt-button" data-prompt="Explain Python dictionaries to me with a simple example.">Learn something</button>
+          <button type="button" class="prompt-button" data-prompt="Help me write a professional email asking for an internship update.">Write an email</button>
+          <button type="button" class="prompt-button" data-prompt="Help me debug a simple C program conceptually.">Coding help</button>
+        {% else %}
+          <button type="button" class="prompt-button" data-prompt="Show my latest report and help me understand the next safe action.">Health Memory</button>
+          <button type="button" class="prompt-button" data-prompt="Help me find the right type of doctor for back pain.">Find Care</button>
+          <button type="button" class="prompt-button" data-prompt="My mother has prescribed medicines. Help me organize the next step near her home.">Family medicine workflow</button>
+        {% endif %}
       </div>
     </section>
-    <section class="trust-note"><strong>Private by design</strong><br>Use only the detail needed for guidance. ZENDOC does not show internal reasoning and does not let AI bypass permissions or safety rules.</section>
+
+    <section class="trust-note">
+      <strong>Private by design</strong><br>
+      ZENDOC does not show hidden reasoning. AI cannot bypass permissions, consent, confirmation gates, or deterministic emergency safety.
+    </section>
   </aside>
 </section>
-
-<details class="guided-tools">
-  <summary>More guided tools</summary>
-  <div class="guided-tools-content grid three">
-    <form class="panel subtle-panel" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="feature" value="doctor"><h2>Symptom guidance</h2><p class="form-note">Rule-based educational guidance with an emergency-first safety check. Not a diagnosis.</p><label>Symptoms <textarea name="symptoms" rows="4" required></textarea></label><button type="submit">Review symptoms safely</button></form>
-    <form class="panel subtle-panel" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="feature" value="assistant"><h2>General assistant</h2><label>Question <textarea name="message" rows="4" required></textarea></label><button type="submit">Ask question</button></form>
-    <form class="panel subtle-panel" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="feature" value="mental_health"><h2>Mental wellness check-in</h2><label>Age group <select name="age_group"><option>student</option><option>working professional</option><option>elderly</option><option>adult</option></select></label><label>Stress level from 0 to 10 <input name="stress_level" type="number" min="0" max="10" value="5"></label><label>What is happening? <textarea name="context" rows="3"></textarea></label><button type="submit">Review next steps</button></form>
-  </div>
-</details>
 {% endblock %}
