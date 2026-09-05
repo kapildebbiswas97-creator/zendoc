@@ -51,6 +51,7 @@ class RoutingReason:
 SAFE_LOCAL_TASKS = {
     "core_agent_guidance",
     "general",
+    "general_assistant",
     "general_platform_question",
     "intent_classification",
     "navigation_help",
