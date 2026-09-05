@@ -147,6 +147,16 @@ def test_m12_specialized_ai_pages_render_and_keep_histories_separate(tmp_path):
     assert b"Doctor AI" in doctor_response.data
     assert b"fever and cough" in doctor_response.data
 
+    mental_page = client.get("/ai?mode=mental")
+    assert mental_page.status_code == 200
+    assert b"Mental Wellness AI" in mental_page.data
+    assert b"Students" in mental_page.data
+    assert b"Professionals" in mental_page.data
+    assert b"Adults &amp; Parents" in mental_page.data
+    assert b"Older Adults" in mental_page.data
+    assert b"Work stress &amp; burnout" in mental_page.data
+    assert b"Loneliness &amp; connection" in mental_page.data
+
     assistant_page = client.get("/ai?mode=assistant")
     assert assistant_page.status_code == 200
     assert b"General Assistant" in assistant_page.data
