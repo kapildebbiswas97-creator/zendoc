@@ -24,7 +24,7 @@ def row_get(row, key, default=None):
 
 
 FUTURE_ACTIONS = {
-    "doctor": ("find_healthcare", "Search verified ZENDOC providers or configured external places."),
+    "doctor": ("find_healthcare", "Search the stored ZENDOC provider directory or a configured external source; verification is shown only when evidence is stored."),
     "hospital": ("find_healthcare", "Search hospitals through the healthcare finder."),
     "clinic": ("find_healthcare", "Search clinics through the healthcare finder."),
     "pharmacy": ("find_healthcare", "Search pharmacies through the healthcare finder."),
@@ -159,7 +159,7 @@ class ZendocIntelligence:
                 result = IntelligenceResult(
                     intent="family_care",
                     urgency="routine",
-                    message="ZENDOC Family Care helps you manage appointments, reports, home care, and emergency alerts for your parents and family members.",
+                    message="ZENDOC Family Care helps organize authorized appointments, reports, care tasks, and family workflows. Notifications or external fulfilment depend on the configured capability.",
                     follow_up_questions=["Would you like to open Family Care or Remote Parent Care?"],
                     possible_actions=[{"type": "family_care", "label": "Open Family Care"}, {"type": "parent_care", "label": "Open Remote Parent Care"}],
                     provider="family_service",
@@ -168,9 +168,9 @@ class ZendocIntelligence:
             result = IntelligenceResult(
                 intent="home_health",
                 urgency="routine",
-                message="ZENDOC Home Healthcare offers home doctor visits, nursing care, physiotherapy, elder attendants, sample collection, and equipment rental.",
+                message="ZENDOC Home Healthcare can stage requests for listed services such as home visits, nursing, physiotherapy, elder care, sample collection, or equipment support. Real provider availability and fulfilment require participating-provider data or integration.",
                 follow_up_questions=["Which home healthcare service do you need today?"],
-                possible_actions=[{"type": "home_health", "label": "Book Home Healthcare"}],
+                possible_actions=[{"type": "home_health", "label": "Request Home Healthcare"}],
                 provider="home_health_service",
             )
         elif intent == "ambulance":
@@ -186,7 +186,7 @@ class ZendocIntelligence:
             result = IntelligenceResult(
                 intent="pharmacy",
                 urgency="routine",
-                message="ZENDOC Pharmacy lets you search essential medicines, locate nearby pharmacies, request delivery, and set refill reminders.",
+                message="ZENDOC Pharmacy can search stored participating-pharmacy records, help organize prescription fulfilment requests, and set refill reminders. Stock, price, delivery, and provider acceptance are shown only when supported by current data.",
                 follow_up_questions=["Would you like to search medicines or find a nearby pharmacy?"],
                 possible_actions=[{"type": "pharmacy", "label": "Open Pharmacy Services"}],
                 provider="pharmacy_service",
@@ -195,8 +195,8 @@ class ZendocIntelligence:
             result = IntelligenceResult(
                 intent="iot_hub",
                 urgency="routine",
-                message="ZENDOC IoT Hub connects your smartwatch, BP monitor, glucometer, smart scale, and pulse oximeter directly to your Health Memory.",
-                follow_up_questions=["Would you like to connect a new health device or view synced measurements?"],
+                message="ZENDOC IoT Hub can register supported health devices and record trusted device-sourced measurements. Live vendor synchronization requires the corresponding device integration and must not be assumed from registration alone.",
+                follow_up_questions=["Would you like to register a health device or review measurements already recorded in ZENDOC?"],
                 possible_actions=[{"type": "iot_hub", "label": "Open Connected Devices Hub"}],
                 provider="iot_hub",
             )
@@ -277,7 +277,7 @@ class ZendocIntelligence:
         return IntelligenceResult(
             intent="appointment",
             urgency="routine",
-            message="You can request an appointment in ZENDOC. Tell me the specialty or provider you prefer, or open Appointments to book directly.",
+            message="You can request an appointment in ZENDOC. Tell me the specialty or provider you prefer, or open Appointments to review available request options. A request is not confirmed until the provider accepts it.",
             follow_up_questions=["What type of doctor or provider do you want to see?"],
             possible_actions=[{"type": "appointment", "label": "Open appointments"}],
             provider="local_orchestrator",
