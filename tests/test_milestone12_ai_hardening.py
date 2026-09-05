@@ -282,3 +282,47 @@ def test_m12_general_assistant_preserves_bounded_context_metadata():
 def test_m12_general_assistant_is_local_model_eligible():
     from zendoc.model_router import SAFE_LOCAL_TASKS
     assert "general_assistant" in SAFE_LOCAL_TASKS
+
+
+def test_m125_agentic_intent_routes_explicit_workflow_language():
+    from zendoc.intent import IntentRouter
+    assert IntentRouter().detect("use agentic care to handle this workflow") == "core_agent"
+
+
+def test_m125_agentic_care_lifecycle_is_observable_and_bounded(tmp_path):
+    from zendoc.agentic_care import run_agentic_care
+
+    app, client = make_client(tmp_path)
+    register_web(client, "patient", "agentic@example.com", "Agentic User")
+    login_web(client, "patient", "agentic@example.com")
+
+    with app.app_context():
+        user = get_db().execute(
+            "SELECT * FROM users WHERE email=?", ("agentic@example.com",)
+        ).fetchone()
+        result = run_agentic_care(user, "check my unread messages")
+        stages = [item["stage"] for item in result["agentic_lifecycle"]]
+        assert stages == ["OBSERVE", "UNDERSTAND", "PLAN", "ACT", "VERIFY", "REMEMBER"]
+        assert result["autonomy_level"] in {"L3_SAFE_AUTONOMY", "L2_PLAN_OR_GUIDE"}
+        assert result["execution_truth"] == "bounded_permissioned_execution"
+        assert result["run_id"]
+        assert result["task_id"]
+
+
+def test_m125_agentic_care_does_not_bypass_confirmation(tmp_path):
+    from zendoc.agentic_care import run_agentic_care
+
+    app, client = make_client(tmp_path)
+    register_web(client, "patient", "agentic-confirm@example.com", "Agentic Confirm")
+    login_web(client, "patient", "agentic-confirm@example.com")
+
+    with app.app_context():
+        user = get_db().execute(
+            "SELECT * FROM users WHERE email=?", ("agentic-confirm@example.com",)
+        ).fetchone()
+        result = run_agentic_care(user, "share my medical record")
+        assert result["requires_confirmation"] is True
+        assert result["autonomy_level"] == "L4_CONFIRM_AND_ACT"
+        assert result["execution_truth"] == "waiting_human_confirmation"
+        act = next(item for item in result["agentic_lifecycle"] if item["stage"] == "ACT")
+        assert act["status"] == "waiting_confirmation"
