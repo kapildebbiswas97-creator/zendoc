@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from .agent_core import respond_with_core_agent
 from .agent_planner import build_plan
-from .agent_task_engine import get_agent_task
+from .agent_task_engine import create_agent_task, execute_safe_task, get_agent_task, set_task_waiting
 
 
 def run_agentic_care(actor, command_text: str) -> dict:
@@ -85,6 +85,128 @@ def run_agentic_care(actor, command_text: str) -> dict:
         "verification": verification,
     }
 
+
+
+def run_orchestrated_care(actor, command_text: str) -> dict:
+    """Wrap the existing healthcare orchestrator in the Agentic Care lifecycle.
+
+    This path is for naturally phrased multi-step care goals such as family
+    prescription fulfilment or diagnostics. It preserves the M11
+    HealthcareOrchestrator as the domain authority and adds persistent task,
+    verification, and visible agent lifecycle metadata.
+    """
+    from .orchestrator import HealthcareOrchestrator
+
+    command = str(command_text or "").strip()
+    if not command:
+        raise ValueError("Care goal is required.")
+
+    lifecycle = [
+        {"stage": "OBSERVE", "status": "completed", "summary": "Received a multi-step healthcare goal."},
+        {"stage": "UNDERSTAND", "status": "completed", "summary": "Selected the Care Agent and trust-first healthcare orchestrator."},
+    ]
+
+    plan = HealthcareOrchestrator().orchestrate(actor, command)
+    plan_data = plan.to_dict()
+    lifecycle.append(
+        {
+            "stage": "PLAN",
+            "status": "completed",
+            "summary": f"Prepared {len(plan.steps)} healthcare step(s); orchestration state={plan.status}.",
+        }
+    )
+
+    task = create_agent_task(
+        task_type="healthcare_orchestration",
+        requested_by=int(actor["id"]),
+        assigned_agent="CareAgent",
+        priority="critical" if plan.urgency == "emergency" else "normal",
+        risk_level="consent_required" if plan.status == "AWAITING_CONFIRMATION" else "read_only",
+        metadata={"orchestration_plan_id": plan.plan_id, "intent": plan.intent, "status": plan.status},
+        actor=actor,
+    )
+
+    if plan.status == "AWAITING_CONFIRMATION":
+        task = set_task_waiting(
+            task["id"],
+            "waiting_human",
+            "Healthcare plan is staged and waiting for explicit user confirmation.",
+        )
+        act_status = "waiting_confirmation"
+        truth_state = "WAITING_HUMAN"
+        act_summary = "The healthcare plan is staged; no consequential action has been executed."
+    else:
+        task = execute_safe_task(
+            task["id"],
+            actor,
+            handler_fn=lambda _task: f"Healthcare orchestration evaluated with state {plan.status}.",
+        )
+        act_status = "completed" if plan.status == "COMPLETED" else "blocked"
+        truth_state = {
+            "COMPLETED": "BOUNDED_EXECUTION_VERIFIED",
+            "BLOCKED_PERMISSION": "BLOCKED_PERMISSION",
+            "BLOCKED_DATA": "BLOCKED_DATA",
+            "EMERGENCY": "L0_SAFETY_OVERRIDE",
+            "FAILED": "FAILED",
+        }.get(plan.status, "UNKNOWN")
+        act_summary = (
+            "The bounded healthcare orchestration completed internally."
+            if plan.status == "COMPLETED"
+            else f"The healthcare orchestration stopped truthfully at {plan.status}."
+        )
+
+    lifecycle.append({"stage": "ACT", "status": act_status, "summary": act_summary})
+    lifecycle.append(
+        {
+            "stage": "VERIFY",
+            "status": "completed" if truth_state != "UNKNOWN" else "unknown",
+            "summary": f"Verified orchestration state {plan.status}; truth state={truth_state}.",
+        }
+    )
+    lifecycle.append(
+        {
+            "stage": "REMEMBER",
+            "status": "completed",
+            "summary": f"Recorded Agent task #{task['id']} and orchestration plan {plan.plan_id}.",
+        }
+    )
+
+    return {
+        "intent": plan.intent,
+        "urgency": plan.urgency,
+        "message": plan.explanation,
+        "actions": [{"type": action, "label": action.replace("_", " ").title()} for action in plan.next_safe_actions],
+        "requires_confirmation": plan.status == "AWAITING_CONFIRMATION",
+        "task_id": task["id"],
+        "run_id": None,
+        "plan": {
+            "plan_id": plan.plan_id,
+            "intent": plan.intent,
+            "urgency": plan.urgency,
+            "assigned_agent": "CareAgent",
+            "risk_level": "consent_required" if plan.status == "AWAITING_CONFIRMATION" else "read_only",
+            "requires_confirmation": plan.status == "AWAITING_CONFIRMATION",
+            "steps": [
+                {
+                    "sequence": index + 1,
+                    "tool_name": step.tool_name or step.step_id,
+                    "purpose": step.purpose,
+                    "status": step.status,
+                }
+                for index, step in enumerate(plan.steps)
+            ],
+        },
+        "orchestration_plan": plan_data,
+        "agentic_lifecycle": lifecycle,
+        "autonomy_level": "L4_CONFIRM_AND_ACT" if plan.status == "AWAITING_CONFIRMATION" else "L3_SAFE_AUTONOMY",
+        "execution_truth": truth_state,
+        "verification": {
+            "status": plan.status,
+            "truth_state": truth_state,
+            "task_status": task["status"],
+            "task_id": task["id"],
+        },
+    }
 
 def verify_agentic_result(actor, result: dict) -> dict:
     """Verify a run from authoritative persisted task state.
