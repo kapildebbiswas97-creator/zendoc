@@ -631,3 +631,28 @@ body{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",san
 @media(max-width:900px){.ai-mode-tabs{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.ai-mode-tabs{grid-template-columns:1fr}.voice-access-panel{right:12px;bottom:12px}.voice-access-toggle{width:44px;height:44px;min-height:44px}}
 @media(prefers-reduced-motion:reduce){.ai-mode-tab:hover{transform:none}.voice-dot{animation:none}}
+
+
+/* M12.5 Agentic Care OS activity trace */
+.agent-activity{margin:18px 0;padding:18px;border:1px solid var(--line);border-radius:var(--radius-lg);background:linear-gradient(180deg,var(--surface),var(--surface-soft));box-shadow:var(--shadow-sm)}
+.agent-activity-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:14px}
+.agent-activity-head h3{margin:2px 0 0;font-size:17px}
+.agent-activity-badges{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.agent-lifecycle{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
+.agent-stage{position:relative;display:flex;gap:9px;align-items:flex-start;min-height:88px;padding:11px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.agent-stage.completed{border-color:rgba(11,107,97,.28)}
+.agent-stage.waiting_confirmation{border-color:rgba(180,105,24,.38)}
+.agent-stage-index{display:grid;place-items:center;flex:0 0 24px;width:24px;height:24px;border-radius:50%;background:var(--primary-soft);color:var(--primary);font-size:12px;font-weight:800}
+.agent-stage strong{display:block;font-size:12px;letter-spacing:.04em}
+.agent-stage small{display:block;margin-top:5px;color:var(--muted);font-size:11px;line-height:1.4}
+.agent-plan-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:12px}
+.agent-plan-summary>div{padding:10px;border-radius:10px;background:var(--surface);border:1px solid var(--line)}
+.agent-plan-summary span{display:block;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.05em}
+.agent-plan-summary strong{display:block;margin-top:3px;font-size:12px}
+.agent-tools{display:grid;gap:7px;margin-top:12px}
+.agent-tool-row{display:grid;grid-template-columns:minmax(150px,.8fr) 1.2fr;gap:12px;padding:9px 10px;border-radius:10px;background:var(--surface);border:1px solid var(--line)}
+.agent-tool-row span{font-size:12px;font-weight:700}
+.agent-tool-row small{color:var(--muted);font-size:11px}
+.agent-truth-note{margin:12px 0 0;color:var(--muted);font-size:11px;line-height:1.45}
+@media(max-width:1050px){.agent-lifecycle{grid-template-columns:repeat(3,minmax(0,1fr))}.agent-plan-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:620px){.agent-activity-head{display:grid}.agent-activity-badges{justify-content:flex-start}.agent-lifecycle{grid-template-columns:1fr 1fr}.agent-plan-summary{grid-template-columns:1fr}.agent-tool-row{grid-template-columns:1fr}}
