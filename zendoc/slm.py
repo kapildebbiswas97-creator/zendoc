@@ -17,7 +17,7 @@ from .safety import SafetyEngine
 
 SLM_VERSION = "zendoc-slm-v1"
 SLM_DISPLAY_NAME = "ZENDOC-SLM v1 — healthcare-focused local model layer"
-KNOWLEDGE_LAYER_VERSION = "zendoc-approved-knowledge-v1"
+KNOWLEDGE_LAYER_VERSION = "zendoc-approved-knowledge-v2"
 
 
 # Repository-owned, human-authored product facts only.  These records are
@@ -65,6 +65,69 @@ APPROVED_KNOWLEDGE = (
         "text": "Telehealth, live device sync, medical transport dispatch, external video search, and external notification delivery require the integrations shown in the capability matrix.",
         "provenance": "zendoc_capability_registry:m9",
         "approved_use": "capability_status",
+    },
+    {
+        "knowledge_id": "product.ai_modes",
+        "topic": "ai_modes",
+        "text": "ZENDOC exposes separate ZENDOC AI, Doctor AI, Mental Wellness AI, and General Assistant workspaces. ZENDOC AI coordinates care workflows; the others keep narrower responsibilities.",
+        "provenance": "zendoc_product_spec:m12",
+        "approved_use": "platform_navigation",
+    },
+    {
+        "knowledge_id": "product.family_care",
+        "topic": "family_parent_care",
+        "text": "Family Care and Parent Care use explicit relationship and consent controls. A family relationship alone does not grant access to another person's health data.",
+        "provenance": "zendoc_product_spec:m12",
+        "approved_use": "care_navigation",
+    },
+    {
+        "knowledge_id": "product.pharmacy",
+        "topic": "pharmacy_connected_care",
+        "text": "Pharmacy workflows can search stored participating-provider inventory observations and stage prescription fulfilment. Provider acknowledgement and real-world delivery remain separate truth states.",
+        "provenance": "zendoc_product_spec:m12",
+        "approved_use": "care_navigation",
+    },
+    {
+        "knowledge_id": "product.diagnostics",
+        "topic": "diagnostics",
+        "text": "Diagnostic offers are shown only from stored participating-provider records. Accreditation, pricing, slots, and home collection are not invented when evidence is missing.",
+        "provenance": "zendoc_product_spec:m12",
+        "approved_use": "care_navigation",
+    },
+    {
+        "knowledge_id": "product.telehealth",
+        "topic": "telehealth",
+        "text": "Telehealth is a beta request workflow. A patient requests chat, voice, or video; provider acceptance is required before consultation controls represent an accepted consultation.",
+        "provenance": "zendoc_product_spec:m12",
+        "approved_use": "care_navigation",
+    },
+    {
+        "knowledge_id": "product.trust_center",
+        "topic": "trust_consent_privacy",
+        "text": "The Trust Center shows provenance and active consent grants and allows revocation. AI cannot bypass those authorization checks.",
+        "provenance": "zendoc_product_spec:m12",
+        "approved_use": "privacy_navigation",
+    },
+    {
+        "knowledge_id": "product.fitness",
+        "topic": "fitness_wellness",
+        "text": "Fitness includes workout planning, exercise guidance, activity tracking, nutrition and hydration logs. Camera pose features remain a beta/prototype boundary unless a real model is configured.",
+        "provenance": "zendoc_product_spec:m12",
+        "approved_use": "wellness_navigation",
+    },
+    {
+        "knowledge_id": "product.iot",
+        "topic": "connected_devices",
+        "text": "The IoT Hub can register devices and record device-sourced measurements through ZENDOC's trusted sync path; live vendor synchronization requires the relevant device integration.",
+        "provenance": "zendoc_product_spec:m12",
+        "approved_use": "care_navigation",
+    },
+    {
+        "knowledge_id": "product.voice_access",
+        "topic": "accessibility_voice",
+        "text": "Voice Access Beta adds browser speech navigation, AI dictation, page reading, and confirmation before navigation or AI sending. It does not bypass consent, booking, ordering, payment, or record-sharing confirmation.",
+        "provenance": "zendoc_product_spec:m12",
+        "approved_use": "accessibility_navigation",
     },
     {
         "knowledge_id": "safety.educational",
