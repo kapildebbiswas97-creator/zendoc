@@ -109,7 +109,13 @@ class ZendocIntelligence:
             return result, self._latency(started)
 
         context = self._context(user, conversation, intent)
-        if intent == "orchestration_request":
+        if intent == "synthetic_agentic_demo":
+            from .agentic_demo import run_synthetic_agentic_demo
+            agentic = run_synthetic_agentic_demo(user)
+            result = self._agentic_intelligence_result(agentic)
+            result.intent = "synthetic_agentic_demo"
+            result.model_metadata["synthetic_demo"] = True
+        elif intent == "orchestration_request":
             from .agentic_care import run_orchestrated_care
             agentic = run_orchestrated_care(user, clean_message)
             result = self._agentic_intelligence_result(
