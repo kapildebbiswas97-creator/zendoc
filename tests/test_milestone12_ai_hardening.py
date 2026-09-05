@@ -86,6 +86,7 @@ def test_m12_plain_chest_pain_keyword_does_not_need_intent_router_for_safety():
 
 from zendoc.assistant_modes import (
     doctor_ai_response,
+    general_assistant_response,
     mental_wellness_ai_response,
     normalize_ai_mode,
 )
@@ -253,3 +254,31 @@ def test_m12_zendoc_ai_context_is_bounded_to_recent_messages(tmp_path):
         assert len(context["recent_user_messages"]) == 4
         assert context["recent_user_messages"][0] == "message 6"
         assert context["recent_user_messages"][-1] == "message 9"
+
+
+def test_m12_specialized_ai_context_does_not_retrigger_old_emergency_phrase():
+    # Previous conversational context may inform guidance, but the deterministic
+    # emergency gate evaluates the current turn so stale emergency wording does
+    # not trap the user in an emergency state forever.
+    result = doctor_ai_response(
+        "I am feeling better now.",
+        recent_user_messages=["Yesterday I had chest pain."],
+    )
+    assert result.emergency is False
+
+
+def test_m12_general_assistant_preserves_bounded_context_metadata():
+    result = general_assistant_response(
+        "continue that explanation",
+        recent_user_messages=[
+            "Explain Python dictionaries simply.",
+            "Show me one short example.",
+        ],
+    )
+    assert result.model_metadata["conversation_context_used"] is True
+    assert result.model_metadata["context_messages_used"] == 2
+
+
+def test_m12_general_assistant_is_local_model_eligible():
+    from zendoc.model_router import SAFE_LOCAL_TASKS
+    assert "general_assistant" in SAFE_LOCAL_TASKS
