@@ -672,7 +672,19 @@ def health():
 @bp.route("/ai", methods=("GET", "POST"))
 @login_required
 def ai_center():
-    requested_mode = request.form.get("ai_mode") if request.method == "POST" else request.args.get("mode")
+    if request.method == "POST":
+        requested_mode = request.form.get("ai_mode")
+        if not requested_mode:
+            # Backward compatibility for existing web clients/tests that used
+            # the original guided-tool feature field.
+            requested_mode = {
+                "zendoc_ai": "zendoc",
+                "doctor": "doctor",
+                "assistant": "assistant",
+                "mental_health": "mental",
+            }.get(request.form.get("feature"), "zendoc")
+    else:
+        requested_mode = request.args.get("mode")
     ai_mode = normalize_ai_mode(requested_mode)
     mode_profile = ai_mode_profile(ai_mode)
     feature_by_mode = {
@@ -687,6 +699,17 @@ def ai_center():
 
     if request.method == "POST":
         input_text = request.form.get("message", "")
+        if not input_text.strip() and request.form.get("feature") == "doctor":
+            input_text = request.form.get("symptoms", "")
+        if not input_text.strip() and request.form.get("feature") == "mental_health":
+            input_text = " ".join(
+                part for part in (
+                    request.form.get("age_group", ""),
+                    f"stress {request.form.get('stress_level', '')}".strip(),
+                    request.form.get("context", ""),
+                )
+                if part
+            )
         if not input_text.strip():
             flash(f"Please enter a message for {mode_profile['label']}.", "error")
             return redirect(url_for("main.ai_center", mode=ai_mode))
