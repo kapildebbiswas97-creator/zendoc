@@ -457,8 +457,12 @@ if (latestAIResponse) {
 
     const target = findNavigationTarget(text);
     if (target) {
-      pendingAction = { kind: "navigate", url: target.url, label: target.label };
-      speak(`You asked for ${target.label}. Say confirm to continue, or cancel.`);
+      // Page navigation is reversible and low-risk, so Voice Access performs it
+      // directly after announcing the destination. Consequential actions still
+      // keep explicit confirmation gates.
+      sessionStorage.setItem(SESSION_KEY, "1");
+      speak(`Opening ${target.label}.`, false);
+      window.setTimeout(() => { window.location.href = target.url; }, 200);
       return;
     }
 
