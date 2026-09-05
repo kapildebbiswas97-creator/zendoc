@@ -154,6 +154,16 @@ def _normalize(message: str) -> str:
 class IntentRouter:
     def detect(self, message):
         text = _normalize(message)
+        if any(
+            phrase in text
+            for phrase in (
+                "run zendoc synthetic agentic demo",
+                "run synthetic agentic demo",
+                "synthetic agentic care demo",
+                "zendoc demo scenario",
+            )
+        ):
+            return "synthetic_agentic_demo"
         # Explicit user invocation of the Agentic Care OS wins over ordinary
         # workflow keywords. The Core Agent still re-plans the underlying goal
         # through deterministic safety, permissions, tools, and approvals.
