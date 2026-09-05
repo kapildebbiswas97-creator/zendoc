@@ -91,3 +91,21 @@ The product must not describe this as unrestricted autonomy. ZENDOC is agentic
 because it can plan, execute permitted steps, verify state, and persist audit
 memory — while refusing actions outside its evidence, integration, consent, or
 clinical authority boundaries.
+
+
+## Final synthetic demo scenario
+
+For submission/video recording, ZENDOC includes one deliberately synthetic, deterministic Agentic Care scenario.
+
+**Trigger:** `Run ZENDOC synthetic agentic demo`
+
+The demo is clearly labelled synthetic and uses no external live provider service. It demonstrates:
+
+1. **OBSERVE** — receive the care goal.
+2. **UNDERSTAND** — select Care Agent and family/prescription context.
+3. **PLAN** — show bounded safety, consent, Health Memory, pharmacy/diagnostic lookup, and confirmation steps.
+4. **ACT** — stop before any consequential real-world action.
+5. **VERIFY** — persist and verify `WAITING_HUMAN`.
+6. **REMEMBER** — store audit-safe task metadata.
+
+The demo must never be described as a real doctor booking, medicine order, provider acceptance, ambulance dispatch, payment, or clinically validated diagnosis.
