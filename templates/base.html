@@ -37,7 +37,7 @@
           <a href="{{ url_for('main.dashboard') }}" {% if endpoint == 'main.dashboard' %}aria-current="page"{% endif %}>Home</a>
 
           {% if current_user.role == 'patient' %}
-            <a href="{{ url_for('main.ai_center') }}" {% if endpoint == 'main.ai_center' %}aria-current="page"{% endif %}>AI Assistant</a>
+            <a href="{{ url_for('main.ai_center') }}" {% if endpoint == 'main.ai_center' %}aria-current="page"{% endif %}>ZENDOC AI</a>
             <a href="{{ url_for('main.finder') }}" {% if endpoint in ['main.finder','main.provider_detail'] %}aria-current="page"{% endif %}>Find Care</a>
             <a href="{{ url_for('main.appointments') }}" {% if endpoint == 'main.appointments' %}aria-current="page"{% endif %}>Appointments</a>
             <details class="nav-menu" {% if endpoint in ['health_memory.health_summary_page','health_memory.timeline_page','main.records','main.health','health_memory.health_profile_page','health_memory.health_access_page','health_memory.report_detail_page'] %}data-active="true"{% endif %}>
