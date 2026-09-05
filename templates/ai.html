@@ -99,7 +99,11 @@
         {% if intelligence_result.model_metadata.agentic_care %}
           {% set agent_meta = intelligence_result.model_metadata %}
           {% set agent_plan = agent_meta.plan or {} %}
-          <section class="agent-activity" aria-label="Agentic Care activity">
+          <section class="agent-activity" aria-label="Agentic Care activity"
+                   data-agentic-result="true"
+                   data-agent-truth="{{ agent_meta.execution_truth or '' }}"
+                   data-agent-name="{{ agent_plan.assigned_agent or 'ZENDOC Core Agent' }}"
+                   data-agent-intent="{{ agent_plan.intent or intelligence_result.intent }}">
             <div class="agent-activity-head">
               <div>
                 <p class="eyebrow">Agent Activity</p>
