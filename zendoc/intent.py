@@ -94,7 +94,11 @@ INTENT_KEYWORDS = {
     "nutrition": ("food", "diet", "calorie", "protein", "nutrition", "meal"),
     "iot_hub": ("connect device", "smartwatch", "fitness band", "bp monitor", "glucometer", "oximeter", "smart scale"),
     "video_intelligence": ("educational video", "health video", "device setup video", "training video"),
-    "core_agent": ("core agent", "operations summary", "failed operations", "human attention", "platform activity"),
+    "core_agent": (
+        "core agent", "agentic care", "agentic workflow", "run agent",
+        "coordinate this workflow", "handle this workflow",
+        "operations summary", "failed operations", "human attention", "platform activity",
+    ),
     "mental_wellness": ("stress", "anxiety", "exam", "burnout", "lonely", "mental"),
     "sleep": ("sleep", "insomnia", "tired"),
     "health_monitoring": ("weight", "blood pressure", "glucose", "bp", "monitor"),
