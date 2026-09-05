@@ -235,6 +235,8 @@ class ZendocIntelligence:
         return result, self._latency(started)
 
     def _symptom_guidance(self, message, context):
+        recent_messages = [str(item).strip() for item in context.get("recent_user_messages", []) if str(item).strip()]
+        combined_message = " ".join([*recent_messages[-3:], message]).strip()
         if context.get("recent_topic") == "symptoms" and not any(keyword in message.lower() for keyword in ("fever", "cough", "pain", "rash", "headache", "nausea", "fatigue")):
             return IntelligenceResult(
                 intent="symptoms",
@@ -246,9 +248,9 @@ class ZendocIntelligence:
                 provider="conversation_context",
                 next_step="Share associated symptoms or book a consultation if it persists or worsens.",
             )
-        prediction = doctor_prediction(message)
+        prediction = doctor_prediction(combined_message)
         questions = []
-        lower = message.lower()
+        lower = combined_message.lower()
         if not any(word in lower for word in ("day", "days", "hour", "hours", "week")):
             questions.append("How long have you had this?")
         if "fever" in lower and "temperature" not in lower:
@@ -261,8 +263,9 @@ class ZendocIntelligence:
             message=f"{prediction['summary']}. This is not a confirmed diagnosis. {prediction['next_steps']}",
             follow_up_questions=questions,
             possible_actions=[{"type": "appointment", "label": "Book a consultation"}, {"type": "medical_records", "label": "Upload related reports"}],
-            specialist=self._specialist_for(message),
+            specialist=self._specialist_for(combined_message),
             provider="deterministic_health_guidance",
+            model_metadata={"conversation_context_used": bool(recent_messages), "context_messages_used": min(len(recent_messages), 3)},
             next_step="Share the follow-up details or book an appointment if symptoms persist.",
         )
 
@@ -453,11 +456,35 @@ class ZendocIntelligence:
             )
 
     def _context(self, user, conversation, intent):
+        recent_user_messages = []
+        conversation_id = row_get(conversation, "id")
+        user_id = row_get(user, "id")
+        if conversation_id and user_id:
+            try:
+                from .db import get_db
+                rows = get_db().execute(
+                    """
+                    SELECT input_text
+                    FROM ai_interactions
+                    WHERE conversation_id=? AND user_id=?
+                    ORDER BY id DESC LIMIT 4
+                    """,
+                    (conversation_id, user_id),
+                ).fetchall()
+                recent_user_messages = [
+                    str(row["input_text"] or "").strip()[:500]
+                    for row in reversed(rows)
+                    if str(row["input_text"] or "").strip()
+                ]
+            except Exception:
+                # Conversation continuity is helpful, never required for a safe answer.
+                recent_user_messages = []
         return {
             "intent": intent,
-            "user_age": user["age"] if user and "age" in user.keys() else None,
-            "user_role": user["role"] if user and "role" in user.keys() else None,
+            "user_age": row_get(user, "age"),
+            "user_role": row_get(user, "role"),
             "recent_topic": row_get(conversation, "last_intent"),
+            "recent_user_messages": recent_user_messages,
         }
 
     def _specialist_for(self, message):
