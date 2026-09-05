@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from .agent_core import respond_with_core_agent
 from .agent_planner import build_plan
+from .agent_task_engine import get_agent_task
 
 
 def run_agentic_care(actor, command_text: str) -> dict:
@@ -45,15 +46,16 @@ def run_agentic_care(actor, command_text: str) -> dict:
     result = respond_with_core_agent(actor, command)
     plan = result.get("plan") or preview.to_dict()
     requires_confirmation = bool(result.get("requires_confirmation"))
+    verification = verify_agentic_result(actor, result)
 
     lifecycle.append(
         {
             "stage": "ACT",
-            "status": "waiting_confirmation" if requires_confirmation else "completed",
+            "status": "waiting_confirmation" if requires_confirmation else verification["act_status"],
             "summary": (
                 "Consequential action is staged and waiting for explicit human confirmation."
                 if requires_confirmation
-                else "Executed only the bounded permissioned steps allowed for this actor."
+                else verification["act_summary"]
             ),
         }
     )
@@ -61,10 +63,8 @@ def run_agentic_care(actor, command_text: str) -> dict:
     lifecycle.append(
         {
             "stage": "VERIFY",
-            "status": "completed",
-            "summary": (
-                "Verified the returned task/run state and preserved provider or integration truth boundaries."
-            ),
+            "status": verification["status"],
+            "summary": verification["summary"],
         }
     )
     lifecycle.append(
@@ -81,11 +81,84 @@ def run_agentic_care(actor, command_text: str) -> dict:
         **result,
         "agentic_lifecycle": lifecycle,
         "autonomy_level": _autonomy_level(plan, requires_confirmation),
-        "execution_truth": (
-            "waiting_human_confirmation"
-            if requires_confirmation
-            else "bounded_permissioned_execution"
+        "execution_truth": verification["truth_state"],
+        "verification": verification,
+    }
+
+
+def verify_agentic_result(actor, result: dict) -> dict:
+    """Verify a run from authoritative persisted task state.
+
+    The verifier never upgrades an internal task into a real-world success.
+    Provider acceptance/delivery/dispatch must be represented by an explicit
+    provider workflow state before it can be reported as such.
+    """
+    task_id = int(result.get("task_id") or 0)
+    if not task_id:
+        return {
+            "status": "unknown",
+            "truth_state": "UNKNOWN",
+            "act_status": "unknown",
+            "act_summary": "No persistent task identifier was returned.",
+            "summary": "Verification could not prove an authoritative task state.",
+        }
+
+    task = get_agent_task(task_id, actor=actor)
+    state = str(task.get("status") or "").lower()
+    mapping = {
+        "waiting_human": (
+            "waiting_confirmation",
+            "WAITING_HUMAN",
+            "The task is persistently waiting for explicit human confirmation.",
         ),
+        "waiting_approval": (
+            "waiting_confirmation",
+            "WAITING_HUMAN",
+            "The task is persistently waiting for an authorized approval.",
+        ),
+        "waiting_provider": (
+            "waiting_provider",
+            "WAITING_PROVIDER",
+            "The request exists internally and is waiting for an authoritative provider response.",
+        ),
+        "queued": (
+            "queued",
+            "REQUEST_CREATED",
+            "The task is queued in ZENDOC; no external completion is claimed.",
+        ),
+        "running": (
+            "running",
+            "REQUEST_CREATED",
+            "The bounded ZENDOC task is running; no external completion is claimed.",
+        ),
+        "completed": (
+            "completed",
+            "BOUNDED_EXECUTION_VERIFIED",
+            "ZENDOC verified completion of the bounded internal tool/task execution only.",
+        ),
+        "failed": (
+            "failed",
+            "FAILED",
+            "The authoritative ZENDOC task state is failed.",
+        ),
+        "cancelled": (
+            "cancelled",
+            "CANCELLED",
+            "The authoritative ZENDOC task state is cancelled.",
+        ),
+    }
+    stage_status, truth_state, summary = mapping.get(
+        state,
+        ("unknown", "UNKNOWN", "The task state is not recognized, so success is not claimed."),
+    )
+    return {
+        "status": stage_status,
+        "truth_state": truth_state,
+        "act_status": stage_status,
+        "act_summary": summary,
+        "summary": summary,
+        "task_status": state or "unknown",
+        "task_id": task_id,
     }
 
 
