@@ -17,6 +17,14 @@ from flask import (
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from .ai import MODEL_VERSION, assistant_answer, doctor_prediction, mental_health_support
+from .assistant_modes import (
+    AI_MODES,
+    ai_mode_profile,
+    doctor_ai_response,
+    general_assistant_response,
+    mental_wellness_ai_response,
+    normalize_ai_mode,
+)
 from .auth import ACCOUNT_EXISTS_MESSAGE, INVALID_CREDENTIALS_MESSAGE, email_exists, user_by_normalized_email, validate_email
 from .db import ROLES, get_db, is_integrity_error, now_iso
 from .health_analytics import METRIC_TYPES, create_measurement, get_health_trend
@@ -664,56 +672,86 @@ def health():
 @bp.route("/ai", methods=("GET", "POST"))
 @login_required
 def ai_center():
-    result = None
+    requested_mode = request.form.get("ai_mode") if request.method == "POST" else request.args.get("mode")
+    ai_mode = normalize_ai_mode(requested_mode)
+    mode_profile = ai_mode_profile(ai_mode)
+    feature_by_mode = {
+        "zendoc": "zendoc_ai",
+        "doctor": "doctor_ai",
+        "mental": "mental_wellness_ai",
+        "assistant": "general_assistant_ai",
+    }
+    feature = feature_by_mode[ai_mode]
     intelligence_result = None
+    active_conversation = None
+
     if request.method == "POST":
-        feature = request.form.get("feature")
-        if feature == "zendoc_ai":
-            input_text = request.form.get("message", "")
-            if not input_text.strip():
-                flash("Please enter a message for ZENDOC AI.", "error")
-                return redirect(url_for("main.ai_center"))
-            conversation = get_or_create_conversation(
-                g.user["id"],
-                request.form.get("conversation_id") or None,
-                title=input_text[:60],
+        input_text = request.form.get("message", "")
+        if not input_text.strip():
+            flash(f"Please enter a message for {mode_profile['label']}.", "error")
+            return redirect(url_for("main.ai_center", mode=ai_mode))
+
+        active_conversation = get_or_create_conversation(
+            g.user["id"],
+            request.form.get("conversation_id") or None,
+            title=f"[{mode_profile['label']}] {input_text[:48]}",
+        )
+
+        started = time.perf_counter()
+        if ai_mode == "zendoc":
+            intelligence_result, latency_ms = ZendocIntelligence().respond(
+                input_text, user=g.user, conversation=active_conversation
             )
-            intelligence_result, latency_ms = ZendocIntelligence().respond(input_text, user=g.user, conversation=conversation)
-            get_db().execute(
-                "UPDATE ai_conversations SET last_intent=?, updated_at=? WHERE id=? AND user_id=?",
-                (intelligence_result.intent, now_iso(), conversation["id"], g.user["id"]),
-            )
-            log_ai_interaction(g.user["id"], "zendoc_ai", input_text, intelligence_result, latency_ms, conversation["id"])
-            audit("use", "ai", "zendoc_ai")
-            get_db().commit()
-        elif feature == "doctor":
-            input_text = request.form.get("symptoms", "")
-            result = doctor_prediction(input_text)
-        elif feature == "assistant":
-            input_text = request.form.get("message", "")
-            result = {"summary": assistant_answer(input_text), "risk_level": "low", "next_steps": "Continue in ZENDOC."}
-        elif feature == "mental_health":
-            input_text = f"{request.form.get('age_group')} stress={request.form.get('stress_level')} {request.form.get('context')}"
-            result = mental_health_support(
-                request.form.get("age_group", "adult"),
-                request.form.get("context", ""),
-                request.form.get("stress_level", 0),
-            )
+        elif ai_mode == "doctor":
+            intelligence_result = doctor_ai_response(input_text)
+            latency_ms = int((time.perf_counter() - started) * 1000)
+        elif ai_mode == "mental":
+            intelligence_result = mental_wellness_ai_response(input_text)
+            latency_ms = int((time.perf_counter() - started) * 1000)
         else:
-            abort(400)
-        if result is not None:
-            log_ai_interaction(g.user["id"], feature, input_text, result)
-            audit("use", "ai", feature)
-            get_db().commit()
+            intelligence_result = general_assistant_response(input_text)
+            latency_ms = int((time.perf_counter() - started) * 1000)
+
+        get_db().execute(
+            "UPDATE ai_conversations SET last_intent=?, updated_at=? WHERE id=? AND user_id=?",
+            (intelligence_result.intent, now_iso(), active_conversation["id"], g.user["id"]),
+        )
+        log_ai_interaction(
+            g.user["id"], feature, input_text, intelligence_result, latency_ms, active_conversation["id"]
+        )
+        audit("use", "ai", feature)
+        get_db().commit()
+
     history = get_db().execute(
-        "SELECT * FROM ai_interactions WHERE user_id=? ORDER BY created_at DESC LIMIT 12",
-        (g.user["id"],),
+        """
+        SELECT * FROM ai_interactions
+        WHERE user_id=? AND feature=?
+        ORDER BY created_at DESC LIMIT 20
+        """,
+        (g.user["id"], feature),
     ).fetchall()
     conversations = get_db().execute(
-        "SELECT * FROM ai_conversations WHERE user_id=? ORDER BY updated_at DESC LIMIT 10",
-        (g.user["id"],),
+        """
+        SELECT * FROM ai_conversations
+        WHERE user_id=? AND title LIKE ?
+        ORDER BY updated_at DESC LIMIT 10
+        """,
+        (g.user["id"], f"[{mode_profile['label']}]%"),
     ).fetchall()
-    return render_template("ai.html", result=result, intelligence_result=intelligence_result, history=history, conversations=conversations)
+    if active_conversation is None and conversations:
+        active_conversation = conversations[0]
+
+    return render_template(
+        "ai.html",
+        result=None,
+        intelligence_result=intelligence_result,
+        history=history,
+        conversations=conversations,
+        active_conversation=active_conversation,
+        ai_mode=ai_mode,
+        ai_mode_profile=mode_profile,
+        ai_modes=AI_MODES,
+    )
 
 
 @bp.get("/notifications")
