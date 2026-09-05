@@ -216,6 +216,7 @@ if (latestAIResponse) {
   if (!panel || !toggle || !status) return;
 
   const SESSION_KEY = "zendoc_voice_access_active";
+  const PENDING_AI_GOAL_KEY = "zendoc_voice_pending_ai_goal";
   let active = sessionStorage.getItem(SESSION_KEY) === "1";
   let recognition = null;
   let pendingAction = null;
@@ -298,7 +299,31 @@ if (latestAIResponse) {
     );
   };
 
+  const readAgentActivity = () => {
+    const activity = document.querySelector(".agent-activity[data-agentic-result='true']");
+    if (!activity) return false;
+    const stages = Array.from(activity.querySelectorAll(".agent-stage")).map((stage) => {
+      const name = stage.querySelector("strong")?.textContent?.trim() || "";
+      const state = Array.from(stage.classList).find((item) =>
+        ["completed", "waiting_confirmation", "waiting_provider", "failed", "blocked", "unknown", "queued", "running"].includes(item)
+      ) || "";
+      return [name, state.replaceAll("_", " ")].filter(Boolean).join(" ");
+    }).filter(Boolean);
+    const answer = document.querySelector(".ai-response-inline .ai-inline-answer")?.textContent?.trim() || "";
+    const truth = String(activity.dataset.agentTruth || "").replaceAll("_", " ");
+    const agent = activity.dataset.agentName || "ZENDOC Agent";
+    const message = [
+      `Agentic Care result. ${agent}.`,
+      stages.length ? `Stages: ${stages.join(", ")}.` : "",
+      truth ? `Verified state: ${truth}.` : "",
+      answer ? `Result: ${answer.slice(0, 900)}` : "",
+    ].filter(Boolean).join(" ");
+    speak(message.slice(0, 1400));
+    return true;
+  };
+
   const readPage = () => {
+    if (readAgentActivity()) return;
     const answer = document.querySelector(".ai-response-inline .ai-inline-answer");
     if (answer?.textContent.trim()) {
       speak(`Latest answer. ${answer.textContent.trim().slice(0, 1400)}`);
@@ -309,6 +334,28 @@ if (latestAIResponse) {
     const message = [heading?.textContent.trim() || document.title, summary?.textContent.trim() || ""]
       .filter(Boolean).join(". ");
     speak(message.slice(0, 1400) || "There is no readable page summary available.");
+  };
+
+  const submitAIRequest = (message) => {
+    const form = currentAIForm();
+    const input = currentAIInput();
+    const clean = String(message || "").trim();
+    if (!clean) {
+      speak("Tell me the ZENDOC AI goal you want to send.");
+      return false;
+    }
+    if (!form || !input) {
+      sessionStorage.setItem(PENDING_AI_GOAL_KEY, clean.slice(0, 4000));
+      sessionStorage.setItem(SESSION_KEY, "1");
+      speak("Opening ZENDOC AI for that goal.", false);
+      window.setTimeout(() => { window.location.href = route("zendocAi", "/ai?mode=zendoc"); }, 200);
+      return true;
+    }
+    input.value = clean.slice(0, Number(input.maxLength || 4000));
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    speak("Sending this low-risk AI request. Any consequential healthcare action will still require explicit confirmation.", false);
+    window.setTimeout(() => form.requestSubmit(), 180);
+    return true;
   };
 
   const stageAIDictation = (text) => {
@@ -435,7 +482,11 @@ if (latestAIResponse) {
       return;
     }
     if (text === "help" || text === "voice help" || text === "what can i say") {
-      speak("You can say patient login, doctor login, open Doctor AI, open appointments, open Health Memory, read page, dictate, or stop voice.");
+      speak("You can say patient login, doctor login, open Doctor AI, ask ZENDOC followed by a care goal, read agent activity, open appointments, open Health Memory, read page, dictate, or stop voice.");
+      return;
+    }
+    if (text === "read agent activity" || text === "read agent progress" || text === "read agent result") {
+      if (!readAgentActivity()) speak("There is no Agentic Care result on this page.");
       return;
     }
     if (text === "read page" || text === "read answer" || text === "read this page") {
@@ -448,6 +499,18 @@ if (latestAIResponse) {
     }
     if (text.startsWith("dictate ")) {
       stageAIDictation(rawText.replace(/^dictate\s+/i, ""));
+      return;
+    }
+    if (text.startsWith("ask zendoc ")) {
+      submitAIRequest(rawText.replace(/^ask\s+zendoc\s+/i, ""));
+      return;
+    }
+    if (text.startsWith("agentic care ")) {
+      submitAIRequest(rawText.replace(/^agentic\s+care\s+/i, ""));
+      return;
+    }
+    if (text.startsWith("zendoc handle ")) {
+      submitAIRequest(rawText.replace(/^zendoc\s+handle\s+/i, ""));
       return;
     }
     if (text.startsWith("ask ")) {
@@ -568,9 +631,19 @@ if (latestAIResponse) {
     window.setTimeout(() => {
       if (loginContext && loginForm && emailInput && passwordInput) {
         startLoginFlow();
-      } else {
-        speak("Voice Access resumed. Say voice help for commands.");
+        return;
       }
+      const pendingGoal = sessionStorage.getItem(PENDING_AI_GOAL_KEY);
+      if (pendingGoal && currentAIForm() && currentAIInput()) {
+        sessionStorage.removeItem(PENDING_AI_GOAL_KEY);
+        submitAIRequest(pendingGoal);
+        return;
+      }
+      if (document.querySelector(".agent-activity[data-agentic-result='true']")) {
+        readAgentActivity();
+        return;
+      }
+      speak("Voice Access resumed. Say voice help for commands.");
     }, 350);
   }
 })();
