@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from .agent_core import respond_with_core_agent
 from .agent_planner import build_plan
+from .agent_candidate_planner import propose_candidate_plan
 from .agent_task_engine import create_agent_task, execute_safe_task, get_agent_task, set_task_waiting
 
 
@@ -22,6 +23,10 @@ def run_agentic_care(actor, command_text: str) -> dict:
         raise ValueError("Agentic care command is required.")
 
     preview = build_plan(actor, command)
+    candidate = None
+    if preview.intent != "emergency" and (not preview.steps or preview.intent == "general_agent"):
+        candidate = propose_candidate_plan(actor, command, preview.assigned_agent)
+
     lifecycle = [
         {
             "stage": "OBSERVE",
@@ -37,8 +42,13 @@ def run_agentic_care(actor, command_text: str) -> dict:
             "stage": "PLAN",
             "status": "completed",
             "summary": (
-                f"Prepared {len(preview.steps)} bounded tool step(s); "
-                f"risk={preview.risk_level}; confirmation={'required' if preview.requires_confirmation else 'not required'}."
+                f"Prepared {len(preview.steps)} authoritative bounded tool step(s); "
+                f"risk={preview.risk_level}; confirmation={'required' if preview.requires_confirmation else 'not required'}. "
+                + (
+                    f"Model candidate was validated with {len(candidate.steps)} advisory step(s); deterministic policy remains authoritative."
+                    if candidate and candidate.accepted
+                    else f"Model-assisted planning did not replace deterministic planning ({candidate.reason if candidate else 'not_needed'})."
+                )
             ),
         },
     ]
@@ -83,6 +93,11 @@ def run_agentic_care(actor, command_text: str) -> dict:
         "autonomy_level": _autonomy_level(plan, requires_confirmation),
         "execution_truth": _compat_execution_truth(verification["truth_state"]),
         "verification": verification,
+        "planning_assistance": candidate.to_dict() if candidate else {
+            "accepted": False,
+            "reason": "not_needed",
+            "steps": [],
+        },
     }
 
 
