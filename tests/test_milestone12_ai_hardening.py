@@ -130,7 +130,7 @@ def test_m12_specialized_ai_pages_render_and_keep_histories_separate(tmp_path):
     doctor_page = client.get("/ai?mode=doctor")
     assert doctor_page.status_code == 200
     assert b"Doctor AI" in doctor_page.data
-    assert b"Talk to a real doctor" in doctor_page.data
+    assert b"Request a real doctor" in doctor_page.data
 
     token = csrf(doctor_page.data.decode())
     doctor_response = client.post(
