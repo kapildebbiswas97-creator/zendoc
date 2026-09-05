@@ -326,3 +326,37 @@ def test_m125_agentic_care_does_not_bypass_confirmation(tmp_path):
         assert result["execution_truth"] == "waiting_human_confirmation"
         act = next(item for item in result["agentic_lifecycle"] if item["stage"] == "ACT")
         assert act["status"] == "waiting_confirmation"
+
+
+def test_m125_explicit_agentic_invocation_wins_over_nested_workflow_keyword():
+    from zendoc.intent import IntentRouter
+    assert IntentRouter().detect("Use agentic care to check my unread messages") == "core_agent"
+
+
+def test_m125_zendoc_ai_renders_agent_activity_trace(tmp_path):
+    app, client = make_client(tmp_path)
+    register_web(client, "patient", "agent-ui@example.com", "Agent UI")
+    login_web(client, "patient", "agent-ui@example.com")
+
+    page = client.get("/ai?mode=zendoc")
+    token = csrf(page.data.decode())
+    response = client.post(
+        "/ai",
+        data={
+            "csrf_token": token,
+            "ai_mode": "zendoc",
+            "message": "Use agentic care to check my unread messages",
+        },
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+    assert b"Agent Activity" in response.data
+    assert b"OBSERVE" in response.data
+    assert b"UNDERSTAND" in response.data
+    assert b"PLAN" in response.data
+    assert b"ACT" in response.data
+    assert b"VERIFY" in response.data
+    assert b"REMEMBER" in response.data
+    assert b"Permissioned tool plan" in response.data
+    assert b"get unread summary" in response.data
+    assert b"not hidden model reasoning" in response.data
