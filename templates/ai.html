@@ -169,6 +169,15 @@
         <p>Mental Wellness AI focuses on supportive conversation and small practical next steps.</p>
       {% elif ai_mode == 'assistant' %}
         <p>The model router can use a configured local SLM/LLM first, with policy-approved cloud routing only for suitable non-sensitive requests.</p>
+        <div class="ai-model-status" aria-label="General Assistant model status">
+          <span class="status-badge {{ 'working' if model_status.local_ai.status in ['ready','configured'] else 'beta' }}">
+            Local: {{ model_status.local_ai.status.replace('_',' ') }}
+          </span>
+          <span class="status-badge {{ 'working' if model_status.cloud_llm.status == 'configured' else 'beta' }}">
+            Cloud: {{ model_status.cloud_llm.status.replace('_',' ') }}
+          </span>
+          <small>Routing: {{ model_status.routing_mode.replace('_',' ') }}</small>
+        </div>
       {% else %}
         <p>ZENDOC AI is the coordinator. It connects authorized health context, services and permissioned workflows instead of behaving like a generic chatbot.</p>
       {% endif %}
