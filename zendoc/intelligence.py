@@ -211,7 +211,7 @@ class ZendocIntelligence:
                     else ["What should ZENDOC coordinate next?"]
                 ),
                 possible_actions=agentic.get("actions") or [],
-                provider=provider,
+                provider="zendoc_agentic_care_os",
                 next_step=(
                     "Human confirmation is required before the staged consequential action can continue."
                     if agentic.get("requires_confirmation")
@@ -256,7 +256,7 @@ class ZendocIntelligence:
             summary=agentic.get("message") or "ZENDOC evaluated the care goal.",
             possible_actions=actions,
             recommended_actions=actions,
-            provider="zendoc_agentic_care_os",
+            provider=provider,
             next_step=(
                 "Review the staged action and confirm only if you want ZENDOC to continue."
                 if agentic.get("requires_confirmation")
