@@ -90,7 +90,7 @@
         <div class="panel-head">
           <div>
             <p class="eyebrow">{{ 'Emergency guidance' if intelligence_result.emergency else 'Latest answer' }}</p>
-            <h2>{{ 'Seek urgent help now' if intelligence_result.emergency else ai_mode_profile.label }}</h2>
+            <h2>{{ 'Seek urgent care now' if intelligence_result.emergency else ai_mode_profile.label }}</h2>
           </div>
           <span class="status-badge {{ 'inactive' if intelligence_result.emergency else 'active' }}">{{ intelligence_result.urgency }}</span>
         </div>
