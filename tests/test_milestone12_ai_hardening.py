@@ -376,8 +376,11 @@ def test_m125_natural_multistep_family_goal_uses_agentic_orchestration(tmp_path)
             user=user,
             conversation=None,
         )
-        assert result.provider == "zendoc_agentic_care_os"
+        # Preserve the M11 public provider contract while proving that the
+        # request is executed through the new Agentic Care runtime.
+        assert result.provider == "healthcare_orchestrator"
         assert result.model_metadata["agentic_care"] is True
+        assert result.model_metadata["agentic_runtime"] == "zendoc_agentic_care_os"
         assert result.model_metadata["lifecycle"]
         assert result.model_metadata["verification"]["truth_state"] in {
             "WAITING_HUMAN", "BLOCKED_DATA", "BLOCKED_PERMISSION", "BOUNDED_EXECUTION_VERIFIED"
