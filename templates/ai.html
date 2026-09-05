@@ -96,6 +96,70 @@
         </div>
         <p class="ai-inline-answer">{{ intelligence_result.message }}</p>
 
+        {% if intelligence_result.model_metadata.agentic_care %}
+          {% set agent_meta = intelligence_result.model_metadata %}
+          {% set agent_plan = agent_meta.plan or {} %}
+          <section class="agent-activity" aria-label="Agentic Care activity">
+            <div class="agent-activity-head">
+              <div>
+                <p class="eyebrow">Agent Activity</p>
+                <h3>Observe → Understand → Plan → Act → Verify → Remember</h3>
+              </div>
+              <div class="agent-activity-badges">
+                <span class="status-badge working">{{ (agent_meta.autonomy_level or 'bounded autonomy').replace('_',' ') }}</span>
+                <span class="status-badge active">{{ (agent_meta.execution_truth or 'verified').replace('_',' ') }}</span>
+              </div>
+            </div>
+
+            <div class="agent-lifecycle" role="list" aria-label="Agentic lifecycle">
+              {% for stage in agent_meta.lifecycle or [] %}
+                <article class="agent-stage {{ stage.status }}" role="listitem">
+                  <span class="agent-stage-index">{{ loop.index }}</span>
+                  <div>
+                    <strong>{{ stage.stage }}</strong>
+                    <small>{{ stage.summary }}</small>
+                  </div>
+                </article>
+              {% endfor %}
+            </div>
+
+            <div class="agent-plan-summary">
+              <div>
+                <span>Assigned agent</span>
+                <strong>{{ agent_plan.assigned_agent or 'ZENDOC Core Agent' }}</strong>
+              </div>
+              <div>
+                <span>Intent</span>
+                <strong>{{ (agent_plan.intent or intelligence_result.intent).replace('_',' ') }}</strong>
+              </div>
+              <div>
+                <span>Risk</span>
+                <strong>{{ (agent_plan.risk_level or 'bounded').replace('_',' ') }}</strong>
+              </div>
+              <div>
+                <span>Run / task</span>
+                <strong>#{{ agent_meta.run_id or '—' }} / #{{ agent_meta.task_id or '—' }}</strong>
+              </div>
+            </div>
+
+            {% if agent_plan.steps %}
+              <div class="agent-tools">
+                <strong>Permissioned tool plan</strong>
+                {% for step in agent_plan.steps %}
+                  <div class="agent-tool-row">
+                    <span>{{ loop.index }}. {{ step.tool_name.replace('_',' ') }}</span>
+                    <small>{{ step.purpose }}</small>
+                  </div>
+                {% endfor %}
+              </div>
+            {% endif %}
+
+            <p class="agent-truth-note">
+              This is an operational execution trace, not hidden model reasoning. ZENDOC only shows validated stages, tools, approvals and verified state.
+            </p>
+          </section>
+        {% endif %}
+
         {% if intelligence_result.possible_actions %}
           <div class="form-actions ai-action-row">
             {% for action in intelligence_result.possible_actions %}
@@ -202,6 +266,7 @@
           <button type="button" class="prompt-button" data-prompt="Show my latest report and help me understand the next safe action.">Health Memory</button>
           <button type="button" class="prompt-button" data-prompt="Help me find the right type of doctor for back pain.">Find Care</button>
           <button type="button" class="prompt-button" data-prompt="My mother has prescribed medicines. Help me organize the next step near her home.">Family medicine workflow</button>
+          <button type="button" class="prompt-button" data-prompt="Use agentic care to check my unread messages.">Run Agentic Care</button>
         {% endif %}
       </div>
     </section>
