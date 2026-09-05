@@ -112,7 +112,9 @@ class ZendocIntelligence:
         if intent == "orchestration_request":
             from .agentic_care import run_orchestrated_care
             agentic = run_orchestrated_care(user, clean_message)
-            result = self._agentic_intelligence_result(agentic)
+            result = self._agentic_intelligence_result(
+                agentic, provider="healthcare_orchestrator"
+            )
         elif intent == "symptoms":
             result = self._symptom_guidance(clean_message, context)
         elif intent == "appointment":
@@ -128,7 +130,9 @@ class ZendocIntelligence:
             if any(k in lower_msg for k in ("prescribe", "medicine", "medication", "drug", "test", "lab", "fulfil")):
                 from .agentic_care import run_orchestrated_care
                 agentic = run_orchestrated_care(user, clean_message)
-                result = self._agentic_intelligence_result(agentic)
+                result = self._agentic_intelligence_result(
+                    agentic, provider="healthcare_orchestrator"
+                )
                 result.intent = "family_care_orchestration"
             else:
                 result = IntelligenceResult(
@@ -207,7 +211,7 @@ class ZendocIntelligence:
                     else ["What should ZENDOC coordinate next?"]
                 ),
                 possible_actions=agentic.get("actions") or [],
-                provider="zendoc_agentic_care_os",
+                provider=provider,
                 next_step=(
                     "Human confirmation is required before the staged consequential action can continue."
                     if agentic.get("requires_confirmation")
@@ -230,7 +234,7 @@ class ZendocIntelligence:
         result.conversation_id = row_get(conversation, "id")
         return result, self._latency(started)
 
-    def _agentic_intelligence_result(self, agentic):
+    def _agentic_intelligence_result(self, agentic, provider="zendoc_agentic_care_os"):
         actions = agentic.get("actions") or []
         metadata = {
             "agentic_care": True,
@@ -242,6 +246,7 @@ class ZendocIntelligence:
             "plan": agentic.get("plan"),
             "lifecycle": agentic.get("agentic_lifecycle") or [],
             "orchestration_plan": agentic.get("orchestration_plan"),
+            "agentic_runtime": "zendoc_agentic_care_os",
         }
         return IntelligenceResult(
             intent=agentic.get("intent") or "orchestration_request",
