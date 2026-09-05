@@ -9,7 +9,7 @@
   </div>
   <div class="ai-mode-head-actions">
     {% if ai_mode == 'doctor' %}
-      <a class="primary-action" href="{{ url_for('milestone7.telehealth_page') }}">Talk to a real doctor</a>
+      <a class="primary-action" href="{{ url_for('milestone7.telehealth_page') }}">Request a real doctor</a>
     {% elif ai_mode == 'zendoc' %}
       <span class="status-badge working">Safety + orchestration active</span>
     {% elif ai_mode == 'mental' %}
@@ -164,7 +164,7 @@
       <h2>{{ ai_mode_profile.short_label }}</h2>
       {% if ai_mode == 'doctor' %}
         <p>Doctor AI focuses on symptoms, medicine education, red flags and the right type of professional care.</p>
-        <a class="primary-action" href="{{ url_for('milestone7.telehealth_page') }}">Open real doctor / video consultation</a>
+        <a class="primary-action" href="{{ url_for('milestone7.telehealth_page') }}">Request doctor / video consultation</a>
       {% elif ai_mode == 'mental' %}
         <p>Mental Wellness AI focuses on supportive conversation and small practical next steps.</p>
       {% elif ai_mode == 'assistant' %}
