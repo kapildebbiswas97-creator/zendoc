@@ -234,7 +234,10 @@
         <p>Doctor AI focuses on symptoms, medicine education, red flags and the right type of professional care.</p>
         <a class="primary-action" href="{{ url_for('milestone7.telehealth_page') }}">Request doctor / video consultation</a>
       {% elif ai_mode == 'mental' %}
-        <p>Mental Wellness AI focuses on supportive conversation and small practical next steps.</p>
+        <p>Mental Wellness AI offers supportive, non-diagnostic check-ins shaped around different life contexts. Choose the section that fits you best.</p>
+        <div class="mental-audience-summary" aria-label="Mental wellness support audiences">
+          <span>Students</span><span>Professionals</span><span>Adults &amp; Parents</span><span>Older Adults</span>
+        </div>
       {% elif ai_mode == 'assistant' %}
         <p>The model router can use a configured local SLM/LLM first, with policy-approved cloud routing only for suitable non-sensitive requests.</p>
         <div class="ai-model-status" aria-label="General Assistant model status">
@@ -259,9 +262,35 @@
           <button type="button" class="prompt-button" data-prompt="Can you explain paracetamol and when I should ask a doctor before taking it?">Medicine explanation</button>
           <button type="button" class="prompt-button" data-prompt="I have a rash that is getting worse. Which type of doctor should I see?">Which doctor?</button>
         {% elif ai_mode == 'mental' %}
-          <button type="button" class="prompt-button" data-prompt="I feel stressed and overwhelmed before my exams.">Exam stress</button>
-          <button type="button" class="prompt-button" data-prompt="I cannot sleep properly and feel tired during the day.">Sleep support</button>
-          <button type="button" class="prompt-button" data-prompt="I feel lonely and I do not know who to talk to.">Feeling lonely</button>
+          <div class="mental-support-groups">
+            <section class="mental-support-card">
+              <div class="mental-support-heading"><strong>Students</strong><small>Exam pressure • career anxiety • peer stress • sleep</small></div>
+              <button type="button" class="prompt-button" data-prompt="I am a student and I feel stressed and overwhelmed before my exams. Help me calm down and make a small plan.">Exam pressure</button>
+              <button type="button" class="prompt-button" data-prompt="I am a student and I feel anxious about my career, studies and expectations. Help me organize what I can control today.">Career &amp; study anxiety</button>
+              <button type="button" class="prompt-button" data-prompt="I am a student and I feel lonely or left out. Help me think about a safe next step and someone I can talk to.">Loneliness &amp; peer stress</button>
+            </section>
+
+            <section class="mental-support-card">
+              <div class="mental-support-heading"><strong>Professionals</strong><small>Workload • burnout • deadlines • work-life balance</small></div>
+              <button type="button" class="prompt-button" data-prompt="I am a working professional and I feel burned out by workload and deadlines. Help me identify one practical next step.">Work stress &amp; burnout</button>
+              <button type="button" class="prompt-button" data-prompt="I am worried about my job and keep thinking about work after office hours. Help me create a healthier boundary tonight.">Job anxiety &amp; boundaries</button>
+              <button type="button" class="prompt-button" data-prompt="I am struggling to balance work, rest and personal responsibilities. Help me make a small realistic plan.">Work-life balance</button>
+            </section>
+
+            <section class="mental-support-card">
+              <div class="mental-support-heading"><strong>Adults &amp; Parents</strong><small>Family pressure • finances • relationships • caregiving</small></div>
+              <button type="button" class="prompt-button" data-prompt="I feel overwhelmed by family responsibilities and financial pressure. Help me slow down and prioritize what I can handle first.">Family &amp; financial pressure</button>
+              <button type="button" class="prompt-button" data-prompt="I feel emotionally exhausted from caring for other people. Help me think about rest, support and healthy boundaries.">Caregiver stress</button>
+              <button type="button" class="prompt-button" data-prompt="A relationship problem is making me anxious and distracted. Help me think through a calm and respectful next step.">Relationship stress</button>
+            </section>
+
+            <section class="mental-support-card">
+              <div class="mental-support-heading"><strong>Older Adults</strong><small>Loneliness • retirement changes • worry • staying connected</small></div>
+              <button type="button" class="prompt-button" data-prompt="I am an older adult and I have been feeling lonely. Help me think of a gentle way to feel more connected today.">Loneliness &amp; connection</button>
+              <button type="button" class="prompt-button" data-prompt="Changes in retirement or daily routine are making me feel unsettled. Help me build a simple supportive routine.">Life changes &amp; routine</button>
+              <button type="button" class="prompt-button" data-prompt="I keep worrying and it is affecting my sleep. Help me with a calming routine and tell me when professional support may be useful.">Worry &amp; sleep</button>
+            </section>
+          </div>
         {% elif ai_mode == 'assistant' %}
           <button type="button" class="prompt-button" data-prompt="Explain Python dictionaries to me with a simple example.">Learn something</button>
           <button type="button" class="prompt-button" data-prompt="Help me write a professional email asking for an internship update.">Write an email</button>
