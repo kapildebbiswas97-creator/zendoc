@@ -167,3 +167,89 @@ def test_m12_legacy_doctor_form_still_routes_to_doctor_mode(tmp_path):
     assert response.status_code == 200
     assert b"Emergency guidance" in response.data
     assert b"Seek urgent care now" in response.data
+
+
+from zendoc.intelligence import ZendocIntelligence
+from zendoc.db import get_db, now_iso
+
+
+def test_m12_zendoc_ai_uses_only_same_conversation_context(tmp_path):
+    app, client = make_client(tmp_path)
+    register_web(client, "patient", "context@example.com", "Context User")
+    login_web(client, "patient", "context@example.com")
+
+    with app.app_context():
+        user = get_db().execute("SELECT * FROM users WHERE email=?", ("context@example.com",)).fetchone()
+        db = get_db()
+        now = now_iso()
+        conv_a = db.execute(
+            "INSERT INTO ai_conversations (user_id,title,last_intent,created_at,updated_at) VALUES (?,?,?,?,?)",
+            (user["id"], "A", "symptoms", now, now),
+        ).lastrowid
+        conv_b = db.execute(
+            "INSERT INTO ai_conversations (user_id,title,last_intent,created_at,updated_at) VALUES (?,?,?,?,?)",
+            (user["id"], "B", "symptoms", now, now),
+        ).lastrowid
+        db.execute(
+            """
+            INSERT INTO ai_interactions
+            (user_id,conversation_id,feature,intent,input_text,output_text,risk_level,model_version,provider,emergency,success,latency_ms,created_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """,
+            (user["id"], conv_a, "zendoc_ai", "symptoms", "I have fever", "ok", "routine", "test", "test", 0, 1, 1, now),
+        )
+        db.execute(
+            """
+            INSERT INTO ai_interactions
+            (user_id,conversation_id,feature,intent,input_text,output_text,risk_level,model_version,provider,emergency,success,latency_ms,created_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """,
+            (user["id"], conv_b, "zendoc_ai", "symptoms", "I have a rash", "ok", "routine", "test", "test", 0, 1, 1, now),
+        )
+        db.commit()
+
+        conversation = db.execute(
+            "SELECT * FROM ai_conversations WHERE id=? AND user_id=?",
+            (conv_a, user["id"]),
+        ).fetchone()
+        result, _latency = ZendocIntelligence().respond(
+            "for three days",
+            user=user,
+            conversation=conversation,
+        )
+        assert result.intent == "symptoms"
+        assert result.model_metadata["conversation_context_used"] is True
+        assert result.model_metadata["context_messages_used"] == 1
+        # The other conversation must not contaminate this response.
+        assert "rash" not in result.message.lower()
+
+
+def test_m12_zendoc_ai_context_is_bounded_to_recent_messages(tmp_path):
+    app, _client = make_client(tmp_path)
+    with app.app_context():
+        db = get_db()
+        now = now_iso()
+        user_id = db.execute(
+            "INSERT INTO users (name,email,password_hash,role,active,created_at) VALUES (?,?,?,?,?,?)",
+            ("Bounded", "bounded@example.com", "x", "patient", 1, now),
+        ).lastrowid
+        conv_id = db.execute(
+            "INSERT INTO ai_conversations (user_id,title,last_intent,created_at,updated_at) VALUES (?,?,?,?,?)",
+            (user_id, "Bounded", "symptoms", now, now),
+        ).lastrowid
+        for idx in range(10):
+            db.execute(
+                """
+                INSERT INTO ai_interactions
+                (user_id,conversation_id,feature,intent,input_text,output_text,risk_level,model_version,provider,emergency,success,latency_ms,created_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """,
+                (user_id, conv_id, "zendoc_ai", "symptoms", f"message {idx}", "ok", "routine", "test", "test", 0, 1, 1, now),
+            )
+        db.commit()
+        user = db.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+        conversation = db.execute("SELECT * FROM ai_conversations WHERE id=?", (conv_id,)).fetchone()
+        context = ZendocIntelligence()._context(user, conversation, "symptoms")
+        assert len(context["recent_user_messages"]) == 4
+        assert context["recent_user_messages"][0] == "message 6"
+        assert context["recent_user_messages"][-1] == "message 9"
