@@ -130,11 +130,11 @@ def build_plan(actor, command_text: str) -> AgentPlan:
 
 def _is_record_share_request(text: str) -> bool:
     """Match natural record-sharing requests without weakening the consent gate."""
-    normalized = re.sub(r"\\s+", " ", str(text or "").strip().lower())
+    normalized = re.sub(r"\s+", " ", str(text or "").strip().lower())
     patterns = (
-        r"\\bshare\\s+(?:my|the|a|this|that)?\\s*(?:medical\\s+)?(?:record|records|report|reports)\\b",
-        r"\\bsend\\s+(?:my|the|a|this|that)?\\s*(?:medical\\s+)?(?:record|records|report|reports)\\b",
-        r"\\bforward\\s+(?:my|the|a|this|that)?\\s*(?:medical\\s+)?(?:record|records|report|reports)\\b",
+        r"\bshare\s+(?:my|the|a|this|that)?\s*(?:medical\s+)?(?:record|records|report|reports)\b",
+        r"\bsend\s+(?:my|the|a|this|that)?\s*(?:medical\s+)?(?:record|records|report|reports)\b",
+        r"\bforward\s+(?:my|the|a|this|that)?\s*(?:medical\s+)?(?:record|records|report|reports)\b",
     )
     return any(re.search(pattern, normalized) for pattern in patterns)
 
