@@ -212,6 +212,7 @@ if (latestAIResponse) {
   const helpToggle = document.getElementById("voice-access-help-toggle");
   const status = document.getElementById("voice-access-status");
   const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const routeMap = document.getElementById("voice-route-map");
 
   if (!panel || !toggle || !status) return;
 
@@ -266,23 +267,24 @@ if (latestAIResponse) {
   const currentAIInput = () => document.getElementById("assistant-message");
   const currentAIForm = () => document.getElementById("ai-composer");
 
+  const route = (key, fallback) => routeMap?.dataset?.[key] || fallback;
   const navigationTargets = [
-    { phrases: ["doctor ai", "clinical ai"], url: "/ai?mode=doctor", label: "Doctor AI" },
-    { phrases: ["mental wellness ai", "mental ai", "wellness ai"], url: "/ai?mode=mental", label: "Mental Wellness AI" },
-    { phrases: ["general assistant", "assistant ai"], url: "/ai?mode=assistant", label: "General Assistant" },
-    { phrases: ["zendoc ai", "boss ai", "ai assistant"], url: "/ai?mode=zendoc", label: "ZENDOC AI" },
-    { phrases: ["appointments", "appointment"], url: "/appointments", label: "Appointments" },
-    { phrases: ["find care", "find doctor"], url: "/finder", label: "Find Care" },
-    { phrases: ["health memory", "health timeline"], url: "/health-memory", label: "Health Memory" },
-    { phrases: ["medical records", "records"], url: "/records", label: "Medical Records" },
-    { phrases: ["messages", "zendoc connect"], url: "/messages", label: "Messages" },
-    { phrases: ["family care", "family"], url: "/family", label: "Family Care" },
-    { phrases: ["fitness", "fitness coach"], url: "/fitness", label: "Fitness" },
-    { phrases: ["pharmacy"], url: "/pharmacy", label: "Pharmacy" },
-    { phrases: ["telehealth", "video consultation", "real doctor"], url: "/telehealth", label: "Telehealth" },
-    { phrases: ["home healthcare", "home health"], url: "/home-health", label: "Home Healthcare" },
-    { phrases: ["medical transport", "transport"], url: "/ambulance", label: "Medical Transport" },
-    { phrases: ["dashboard", "home"], url: "/dashboard", label: "Dashboard" },
+    { phrases: ["doctor ai", "clinical ai"], url: route("doctorAi", "/ai?mode=doctor"), label: "Doctor AI" },
+    { phrases: ["mental wellness ai", "mental ai", "wellness ai"], url: route("mentalAi", "/ai?mode=mental"), label: "Mental Wellness AI" },
+    { phrases: ["general assistant", "assistant ai"], url: route("generalAi", "/ai?mode=assistant"), label: "General Assistant" },
+    { phrases: ["zendoc ai", "boss ai", "ai assistant"], url: route("zendocAi", "/ai?mode=zendoc"), label: "ZENDOC AI" },
+    { phrases: ["appointments", "appointment"], url: route("appointments", "/appointments"), label: "Appointments" },
+    { phrases: ["find care", "find doctor"], url: route("findCare", "/finder"), label: "Find Care" },
+    { phrases: ["health memory", "health timeline"], url: route("healthMemory", "/health-memory"), label: "Health Memory" },
+    { phrases: ["medical records", "records"], url: route("records", "/records"), label: "Medical Records" },
+    { phrases: ["messages", "zendoc connect"], url: route("messages", "/messages"), label: "Messages" },
+    { phrases: ["family care", "family"], url: route("family", "/family"), label: "Family Care" },
+    { phrases: ["fitness", "fitness coach"], url: route("fitness", "/fitness"), label: "Fitness" },
+    { phrases: ["pharmacy"], url: route("pharmacy", "/pharmacy"), label: "Pharmacy" },
+    { phrases: ["telehealth", "video consultation", "real doctor"], url: route("telehealth", "/telehealth"), label: "Telehealth" },
+    { phrases: ["home healthcare", "home health"], url: route("homeHealth", "/home-health"), label: "Home Healthcare" },
+    { phrases: ["medical transport", "transport"], url: route("transport", "/ambulance"), label: "Medical Transport" },
+    { phrases: ["dashboard", "home"], url: route("dashboard", "/dashboard"), label: "Dashboard" },
   ];
 
   const findNavigationTarget = (spoken) => {
