@@ -64,3 +64,30 @@ Admin means the single environment-configured ZENDOC owner. Public registration 
 ZENDOC separates patient health memory, conversation memory, operational memory, agent memory, and audit history.
 - The **Admin Agent Command Center** displays aggregate operational metrics, service counts, and task queues.
 - **Privacy Boundary**: Admins do not casually gain access to read private patient-doctor clinical chat messages unless granted explicit support authorization.
+
+
+## M12.5 Agentic Care OS
+
+ZENDOC AI now has an explicit bounded Agentic Care lifecycle:
+
+**OBSERVE → UNDERSTAND → PLAN → ACT → VERIFY → REMEMBER**
+
+This lifecycle is implemented by `zendoc/agentic_care.py` and reuses the existing
+deterministic Safety Engine, Core Agent planner, permissioned Tool Registry,
+bounded executor, task engine, approval gates, and audit/event memory.
+
+Autonomy is expressed as a truthful per-run level:
+
+- **L0 SAFETY OVERRIDE** — emergency guidance; no autonomous clinical action.
+- **L2 PLAN OR GUIDE** — the agent understands and plans but has no safe tool step to execute.
+- **L3 SAFE AUTONOMY** — bounded read-only or low-risk permissioned steps execute automatically.
+- **L4 CONFIRM AND ACT** — consequential work is staged and waits for explicit human confirmation.
+
+The model router never receives direct tool authority. Models may assist with
+advisory language tasks, but deterministic policy, actor permissions, consent,
+approval state, and tool handlers remain authoritative.
+
+The product must not describe this as unrestricted autonomy. ZENDOC is agentic
+because it can plan, execute permitted steps, verify state, and persist audit
+memory — while refusing actions outside its evidence, integration, consent, or
+clinical authority boundaries.
