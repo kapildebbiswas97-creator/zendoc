@@ -110,22 +110,9 @@ class ZendocIntelligence:
 
         context = self._context(user, conversation, intent)
         if intent == "orchestration_request":
-            from .orchestrator import HealthcareOrchestrator
-            orch = HealthcareOrchestrator()
-            plan = orch.orchestrate(user, clean_message)
-            actions = [{"type": a, "label": a.replace("_", " ").title()} for a in plan.next_safe_actions]
-            result = IntelligenceResult(
-                intent="orchestration_request",
-                urgency=plan.urgency,
-                message=plan.explanation,
-                guidance=plan.explanation,
-                summary=plan.explanation,
-                possible_actions=actions,
-                recommended_actions=actions,
-                model_metadata={"orchestration_plan": plan.to_dict()},
-                provider="healthcare_orchestrator",
-                next_step=plan.next_safe_actions[0] if plan.next_safe_actions else None,
-            )
+            from .agentic_care import run_orchestrated_care
+            agentic = run_orchestrated_care(user, clean_message)
+            result = self._agentic_intelligence_result(agentic)
         elif intent == "symptoms":
             result = self._symptom_guidance(clean_message, context)
         elif intent == "appointment":
@@ -139,22 +126,10 @@ class ZendocIntelligence:
         elif intent == "family_care":
             lower_msg = clean_message.lower()
             if any(k in lower_msg for k in ("prescribe", "medicine", "medication", "drug", "test", "lab", "fulfil")):
-                from .orchestrator import HealthcareOrchestrator
-                orch = HealthcareOrchestrator()
-                plan = orch.orchestrate(user, clean_message)
-                actions = [{"type": a, "label": a.replace("_", " ").title()} for a in plan.next_safe_actions]
-                result = IntelligenceResult(
-                    intent="family_care_orchestration",
-                    urgency=plan.urgency,
-                    message=plan.explanation,
-                    guidance=plan.explanation,
-                    summary=plan.explanation,
-                    possible_actions=actions,
-                    recommended_actions=actions,
-                    model_metadata={"orchestration_plan": plan.to_dict()},
-                    provider="healthcare_orchestrator",
-                    next_step=plan.next_safe_actions[0] if plan.next_safe_actions else None,
-                )
+                from .agentic_care import run_orchestrated_care
+                agentic = run_orchestrated_care(user, clean_message)
+                result = self._agentic_intelligence_result(agentic)
+                result.intent = "family_care_orchestration"
             else:
                 result = IntelligenceResult(
                     intent="family_care",
@@ -254,6 +229,36 @@ class ZendocIntelligence:
             result = self._provider_guidance(clean_message, context)
         result.conversation_id = row_get(conversation, "id")
         return result, self._latency(started)
+
+    def _agentic_intelligence_result(self, agentic):
+        actions = agentic.get("actions") or []
+        metadata = {
+            "agentic_care": True,
+            "autonomy_level": agentic.get("autonomy_level"),
+            "execution_truth": agentic.get("execution_truth"),
+            "verification": agentic.get("verification"),
+            "run_id": agentic.get("run_id"),
+            "task_id": agentic.get("task_id"),
+            "plan": agentic.get("plan"),
+            "lifecycle": agentic.get("agentic_lifecycle") or [],
+            "orchestration_plan": agentic.get("orchestration_plan"),
+        }
+        return IntelligenceResult(
+            intent=agentic.get("intent") or "orchestration_request",
+            urgency=agentic.get("urgency") or "routine",
+            message=agentic.get("message") or "ZENDOC evaluated the care goal.",
+            guidance=agentic.get("message") or "ZENDOC evaluated the care goal.",
+            summary=agentic.get("message") or "ZENDOC evaluated the care goal.",
+            possible_actions=actions,
+            recommended_actions=actions,
+            provider="zendoc_agentic_care_os",
+            next_step=(
+                "Review the staged action and confirm only if you want ZENDOC to continue."
+                if agentic.get("requires_confirmation")
+                else "Review the verified result or continue with another care goal."
+            ),
+            model_metadata=metadata,
+        )
 
     def _symptom_guidance(self, message, context):
         recent_messages = [str(item).strip() for item in context.get("recent_user_messages", []) if str(item).strip()]
