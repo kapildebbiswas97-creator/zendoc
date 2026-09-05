@@ -1,15 +1,15 @@
 {% extends "base.html" %}
 {% block title %}Sign in to ZENDOC{% endblock %}
 {% block content %}
-<section class="auth-panel">
+<section class="auth-panel" id="voice-login-context" data-login-role="{{ role or 'account' }}">
   <div class="auth-panel-header">
     <p class="eyebrow">Secure account access</p>
     <h1>Sign in to ZENDOC</h1>
     <p class="section-copy">Use your registered email and password. ZENDOC will open the workspace that matches your account.</p>
   </div>
-  <form method="post">
+  <form method="post" id="login-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <label>Email address <span><input name="email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" required></span></label>
+    <label>Email address <span><input id="login-email" name="email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" required></span></label>
     <label>Password <span><input id="password-field" name="password" type="password" autocomplete="current-password" required></span></label>
     <label class="check-option"><input type="checkbox" id="show-password-toggle"> Show password</label>
     <label class="check-option"><input type="checkbox" name="remember_me" value="1"> Remember me</label>
