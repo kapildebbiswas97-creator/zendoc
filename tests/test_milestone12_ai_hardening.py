@@ -82,3 +82,88 @@ def test_m12_plain_chest_pain_keyword_does_not_need_intent_router_for_safety():
     # The application safety gate runs first; the router is not the authority
     # that decides whether symptom text represents an emergency.
     assert IntentRouter().detect("I have chest pain") in {"symptoms", "general_assistant"}
+
+
+from zendoc.assistant_modes import (
+    doctor_ai_response,
+    mental_wellness_ai_response,
+    normalize_ai_mode,
+)
+from tests.test_milestone1 import csrf, login_web, make_client, register_web
+
+
+def test_m12_ai_mode_normalization_is_fail_closed():
+    assert normalize_ai_mode("doctor") == "doctor"
+    assert normalize_ai_mode("MENTAL") == "mental"
+    assert normalize_ai_mode("unknown-mode") == "zendoc"
+
+
+def test_m12_doctor_ai_is_specialized_but_not_presented_as_a_real_doctor():
+    result = doctor_ai_response(
+        "I have fever and headache. Can you tell me a medicine name?"
+    )
+    assert result.intent == "doctor_ai"
+    assert result.emergency is False
+    assert "paracetamol" in result.message.lower() or "acetaminophen" in result.message.lower()
+    assert "not a licensed doctor" in result.safety_notice.lower()
+    assert any(action["type"] == "telehealth" for action in result.possible_actions)
+
+
+def test_m12_doctor_ai_refuses_autonomous_antibiotic_or_dose_selection():
+    result = doctor_ai_response("Which antibiotic should I take and can you change my dose?")
+    assert "cannot select an antibiotic" in result.message.lower()
+    assert "change a dose" in result.message.lower()
+
+
+def test_m12_mental_wellness_ai_has_separate_support_boundary():
+    result = mental_wellness_ai_response("I feel overwhelmed before exams and cannot sleep")
+    assert result.intent == "mental_wellness"
+    assert "not a therapist" in result.message.lower()
+    assert result.model_metadata["assistant_mode"] == "mental"
+
+
+def test_m12_specialized_ai_pages_render_and_keep_histories_separate(tmp_path):
+    _app, client = make_client(tmp_path)
+    register_web(client, "patient", "m12-ai@example.com", "M12 AI")
+    login_web(client, "patient", "m12-ai@example.com")
+
+    doctor_page = client.get("/ai?mode=doctor")
+    assert doctor_page.status_code == 200
+    assert b"Doctor AI" in doctor_page.data
+    assert b"Talk to a real doctor" in doctor_page.data
+
+    token = csrf(doctor_page.data.decode())
+    doctor_response = client.post(
+        "/ai",
+        data={
+            "csrf_token": token,
+            "ai_mode": "doctor",
+            "message": "I have fever and cough for two days.",
+        },
+        follow_redirects=True,
+    )
+    assert doctor_response.status_code == 200
+    assert b"Doctor AI" in doctor_response.data
+    assert b"fever and cough" in doctor_response.data
+
+    assistant_page = client.get("/ai?mode=assistant")
+    assert assistant_page.status_code == 200
+    assert b"General Assistant" in assistant_page.data
+    # Doctor-mode interaction must not be rendered in the separate assistant history.
+    assert b"fever and cough" not in assistant_page.data
+
+
+def test_m12_legacy_doctor_form_still_routes_to_doctor_mode(tmp_path):
+    _app, client = make_client(tmp_path)
+    register_web(client, "patient", "m12-legacy@example.com", "Legacy AI")
+    login_web(client, "patient", "m12-legacy@example.com")
+    page = client.get("/ai")
+    token = csrf(page.data.decode())
+    response = client.post(
+        "/ai",
+        data={"csrf_token": token, "feature": "doctor", "symptoms": "chest pain"},
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+    assert b"Emergency guidance" in response.data
+    assert b"Seek urgent care now" in response.data
