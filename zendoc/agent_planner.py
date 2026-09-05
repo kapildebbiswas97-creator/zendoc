@@ -1,6 +1,7 @@
 """Bounded deterministic planner for the ZENDOC Core Agent."""
 from __future__ import annotations
 
+import re
 import uuid
 from dataclasses import dataclass, field
 
@@ -95,8 +96,15 @@ def build_plan(actor, command_text: str) -> AgentPlan:
         return _plan(command, "contact_discovery", "CommunicationAgent", "read_only", (
             PlanStep(1, "find_contact", {"query": query.strip() or "doctor"}, "Find policy-permitted contacts."),
         ))
-    if any(text in lower for text in ("share report", "send report", "share medical record")):
-        return _plan(command, "record_share_request", "CommunicationAgent", "consent_required", (), requires_confirmation=True)
+    if _is_record_share_request(lower):
+        return _plan(
+            command,
+            "record_share_request",
+            "CommunicationAgent",
+            "consent_required",
+            (),
+            requires_confirmation=True,
+        )
     if "share video" in lower:
         return _plan(command, "video_share", "CommunicationAgent", "low_risk", (), requires_confirmation=True)
     if any(text in lower for text in ("unread message", "check message", "my message", "inbox")):
@@ -118,6 +126,17 @@ def build_plan(actor, command_text: str) -> AgentPlan:
 
     return _plan(command, "general_agent", "SearchAgent", "read_only", ())
 
+
+
+def _is_record_share_request(text: str) -> bool:
+    """Match natural record-sharing requests without weakening the consent gate."""
+    normalized = re.sub(r"\\s+", " ", str(text or "").strip().lower())
+    patterns = (
+        r"\\bshare\\s+(?:my|the|a|this|that)?\\s*(?:medical\\s+)?(?:record|records|report|reports)\\b",
+        r"\\bsend\\s+(?:my|the|a|this|that)?\\s*(?:medical\\s+)?(?:record|records|report|reports)\\b",
+        r"\\bforward\\s+(?:my|the|a|this|that)?\\s*(?:medical\\s+)?(?:record|records|report|reports)\\b",
+    )
+    return any(re.search(pattern, normalized) for pattern in patterns)
 
 def _plan(command, intent, agent, risk, steps, *, requires_confirmation=False, safety=None, urgency="routine"):
     definition = choose_agent_for_intent(intent)
