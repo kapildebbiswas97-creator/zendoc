@@ -112,6 +112,10 @@ def doctor_ai_response(message: str) -> IntelligenceResult:
             "Oral rehydration solution (ORS) is commonly used to replace fluids and salts during dehydration; use a properly prepared product and seek care if you cannot keep fluids down.",
         ])
     if any(word in lower for word in ("cough", "cold", "sore throat")):
+        if "fever" in lower and "cough" in lower:
+            tips.append(
+                "Possible respiratory infection: fever and cough can occur with respiratory infections, but Doctor AI cannot diagnose the cause from chat alone."
+            )
         tips.extend([
             "Warm fluids, rest, and avoiding smoke may help mild respiratory symptoms.",
             "Cough/cold combination medicines are not suitable for everyone, especially young children or people taking interacting medicines; a pharmacist can help choose an appropriate non-prescription product.",
