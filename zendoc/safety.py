@@ -33,8 +33,9 @@ EMERGENCY_RULES = (
     {
         "category": "stroke",
         "phrases": (
-            "stroke", "face drooping", "slurred speech", "one sided weakness", "one-sided weakness",
-            "sudden weakness on one side", "sudden numbness on one side",
+            "stroke", "face drooping", "face is drooping", "slurred speech", "speech is slurred",
+            "one sided weakness", "one-sided weakness", "sudden weakness on one side",
+            "sudden numbness on one side",
         ),
         "reason": "Possible stroke warning signs need emergency medical evaluation immediately.",
     },
@@ -51,8 +52,8 @@ EMERGENCY_RULES = (
     {
         "category": "allergic_reaction",
         "phrases": (
-            "anaphylaxis", "severe allergic reaction", "throat swelling", "tongue swelling",
-            "swelling of the throat", "swelling of the tongue",
+            "anaphylaxis", "severe allergic reaction", "throat swelling", "throat is swelling",
+            "tongue swelling", "tongue is swelling", "swelling of the throat", "swelling of the tongue",
         ),
         "reason": "A severe allergic reaction with airway swelling can become life-threatening quickly.",
     },
