@@ -177,6 +177,19 @@
     </div>
   </footer>
 
+  <section class="voice-access-panel" id="voice-access-panel" aria-label="ZENDOC Voice Access Beta" data-help-open="false" data-listening="false">
+    <div class="voice-access-row">
+      <button type="button" id="voice-access-toggle" class="voice-access-toggle" aria-pressed="false">🎙 Voice Access Beta</button>
+      <button type="button" id="voice-access-help-toggle" class="secondary-action" aria-label="Voice Access help">?</button>
+    </div>
+    <div class="voice-access-listening" aria-hidden="true"><span class="voice-dot"></span>Listening</div>
+    <p class="voice-access-status" id="voice-access-status" aria-live="polite">Tap Voice Access to enable browser speech controls. Voice commands never bypass confirmation or consent.</p>
+    <p class="voice-access-help" id="voice-access-help">
+      Try: “open appointments”, “open Doctor AI”, “open Health Memory”, “open messages”, “read page”, or “dictate” on an AI page.
+      ZENDOC will repeat navigation/send requests and ask you to say “confirm” before proceeding. Browser microphone support is required.
+    </p>
+  </section>
+
   <script src="{{ url_for('static', filename='app.js') }}" defer></script>
 </body>
 </html>
