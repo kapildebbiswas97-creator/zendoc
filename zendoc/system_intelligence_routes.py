@@ -12,6 +12,7 @@ from .regulated_domains import list_regulated_domains
 from .public_source_registry import list_public_ingestion_sources
 from .pilot_analytics import pilot_scorecard
 from .security import owner_required
+from .database_reliability import backup_readiness, create_sqlite_backup, readiness_report
 
 
 bp = Blueprint("system_intelligence", __name__)
@@ -38,3 +39,20 @@ def intelligence_manifest():
 @owner_required
 def owner_pilot_scorecard():
     return jsonify(pilot_scorecard())
+
+
+@bp.get("/owner/database-readiness")
+@owner_required
+def owner_database_readiness():
+    return jsonify({
+        "readiness": readiness_report(),
+        "backup": backup_readiness(),
+    })
+
+
+@bp.post("/owner/database-backup")
+@owner_required
+def owner_database_backup():
+    result = create_sqlite_backup()
+    status = 201 if result.get("status") == "created" else 409
+    return jsonify(result), status
