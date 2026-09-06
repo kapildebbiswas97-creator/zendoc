@@ -275,6 +275,12 @@ def run_proactive_alert_check() -> list[dict]:
                 "Database Readiness Failed",
                 "Database readiness is not healthy. Traffic should remain gated until connectivity, schema, migrations, and integrity checks recover.",
             ))
+        elif int(readiness.get("database_latency_ms") or 0) >= 1000:
+            created.append(_maybe_create_alert(
+                "medium", "database",
+                "Database Probe Latency Is High",
+                f"Database readiness probe latency is {int(readiness.get('database_latency_ms') or 0)} ms.",
+            ))
     except Exception:
         created.append(_maybe_create_alert(
             "critical", "database",
