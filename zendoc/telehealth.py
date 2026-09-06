@@ -1,4 +1,5 @@
 from .db import get_db, now_iso
+from .security import is_owner
 from .telehealth_provider import get_telehealth_provider
 
 
@@ -145,6 +146,8 @@ def list_consultations(actor):
     uid = _user_id(actor)
     role = _value(actor, "role")
     if role == "admin":
+        if not is_owner(actor):
+            raise PermissionError("Only the configured ZENDOC owner may view all consultations.")
         where = "1=1"
         params = ()
     elif role in {"doctor", "hospital"}:
@@ -184,7 +187,10 @@ def get_consultation(actor, consultation_id):
     ).fetchone()
     if not row:
         raise LookupError("Consultation not found.")
-    if role != "admin" and uid not in {row["patient_id"], row["doctor_id"]}:
+    if role == "admin":
+        if not is_owner(actor):
+            raise PermissionError("Only the configured ZENDOC owner may access arbitrary consultations.")
+    elif uid not in {row["patient_id"], row["doctor_id"]}:
         raise PermissionError("You cannot access another consultation.")
     return dict(row)
 
