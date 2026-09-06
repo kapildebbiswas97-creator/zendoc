@@ -41,6 +41,8 @@ def create_app(test_config=None):
     if app.config.get("DATABASE_ENGINE") == "sqlite" and app.config["DATABASE"] != ":memory:":
         Path(app.config["DATABASE"]).parent.mkdir(parents=True, exist_ok=True)
 
+    app.before_request(start_request_observation)
+
     app.register_blueprint(bp)
     app.register_blueprint(health_memory_bp)
     app.register_blueprint(fitness_bp)
@@ -59,7 +61,6 @@ def create_app(test_config=None):
     app.register_blueprint(public_ingestion_bp)
     app.register_blueprint(provider_onboarding_bp)
     app.register_blueprint(system_intelligence_bp)
-    app.before_request(start_request_observation)
     app.after_request(finish_request_observation)
     app.teardown_appcontext(close_db)
     validate_startup_config(app)
