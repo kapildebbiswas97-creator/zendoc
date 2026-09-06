@@ -2265,6 +2265,26 @@ def migrate_schema(db):
         ("post_submission_provider_resource_tenancy_v1", now_iso()),
     )
 
+    # Concurrency-safe slot claims. This is additive and does not require
+    # historical appointment rows to be unique.
+    db.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS appointment_slot_claims (
+            provider_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            slot_key TEXT NOT NULL,
+            appointment_id INTEGER UNIQUE REFERENCES appointments(id) ON DELETE CASCADE,
+            created_at TEXT NOT NULL,
+            PRIMARY KEY (provider_id, slot_key)
+        );
+        CREATE INDEX IF NOT EXISTS idx_appointment_slot_claims_appointment
+            ON appointment_slot_claims(appointment_id);
+        """
+    )
+    db.execute(
+        "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+        ("post_submission_concurrency_v1", now_iso()),
+    )
+
     db.execute(
         "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)",
         ("post_submission_geography_v1", now_iso()),
