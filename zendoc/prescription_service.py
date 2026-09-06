@@ -304,10 +304,13 @@ def transition_prescription_status(prescription_id: int, actor: Any, new_status:
 
     source = "PROVIDER_RECORDED" if is_prescriber else "USER_REPORTED"
     now = now_iso()
-    db.execute(
+    updated = db.execute(
         "UPDATE prescriptions SET status=?, updated_at=? WHERE id=? AND status=?",
         (target, now, int(prescription_id), current),
     )
+    if updated.rowcount != 1:
+        db.rollback()
+        raise ValueError("Prescription changed concurrently; refresh before retrying.")
     from .care_graph import record_care_continuity_event
     record_care_continuity_event(
         patient_id=int(row["patient_id"]),
