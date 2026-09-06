@@ -46,7 +46,6 @@ AUTHORITATIVE_EVIDENCE_TYPES = {
     "TRUST_APPROVAL",
     "CSR_APPROVAL",
     "HOSPITAL_FINANCIAL_AID_RESPONSE",
-    "USER_AUTHORIZED_POLICY",
 }
 
 _ALLOWED_TRANSITIONS = {
@@ -199,6 +198,7 @@ def transition_coverage_state(
     target_state: str,
     evidence_type: str | None = None,
     authoritative_confirmation: bool = False,
+    evidence_reference: str | None = None,
 ) -> dict:
     """Validate a coverage state transition without allowing AI-only approval."""
     source = get_source(source_id)
@@ -208,6 +208,7 @@ def transition_coverage_state(
     current = str(current_state or "").strip().upper()
     target = str(target_state or "").strip().upper()
     evidence = str(evidence_type or "").strip().upper() or None
+    reference = str(evidence_reference or "").strip() or None
 
     if current not in CARE_FIN_STATES or target not in CARE_FIN_STATES:
         raise ValueError("Unknown CareFin coverage state.")
@@ -223,6 +224,10 @@ def transition_coverage_state(
             raise PermissionError(
                 f"{target} requires an accepted authoritative evidence type."
             )
+        if not reference:
+            raise PermissionError(
+                f"{target} requires an authoritative response/reference identifier for auditability."
+            )
 
     if target == PAID and current != APPROVED:
         raise ValueError("PAID can only follow APPROVED.")
@@ -233,6 +238,7 @@ def transition_coverage_state(
         "previous_state": current,
         "state": target,
         "evidence_type": evidence,
+        "evidence_reference": reference,
         "authoritative_confirmation": bool(authoritative_confirmation),
         "coverage_confirmed": target in {CONFIRMED, APPROVED, PAID},
         "updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
