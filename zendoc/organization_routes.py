@@ -6,8 +6,10 @@ from .organization_service import (
     active_membership,
     approve_membership,
     bind_provider_profile,
+    create_location,
     create_organization,
     request_membership,
+    verify_organization,
 )
 from .routes import require_api_user
 from .security import is_owner
@@ -98,3 +100,28 @@ def api_admin_organizations():
         "SELECT * FROM provider_organizations ORDER BY created_at DESC LIMIT 100"
     ).fetchall()
     return jsonify({"organizations": [dict(row) for row in rows]})
+
+
+@bp.post("/api/v1/admin/provider-organizations/<int:organization_id>/verify")
+def api_verify_organization(organization_id):
+    user, error = require_api_user()
+    if error:
+        return error
+    data = request.get_json(silent=True) or {}
+    try:
+        organization = verify_organization(user, organization_id, data.get("status", "verified"))
+        return jsonify({"organization": organization})
+    except (PermissionError, LookupError, ValueError) as exc:
+        return _error(exc)
+
+
+@bp.post("/api/v1/provider-organizations/<int:organization_id>/locations")
+def api_create_organization_location(organization_id):
+    user, error = require_api_user()
+    if error:
+        return error
+    try:
+        location = create_location(user, organization_id, request.get_json(silent=True) or {})
+        return jsonify({"location": location}), 201
+    except (PermissionError, LookupError, ValueError) as exc:
+        return _error(exc)
