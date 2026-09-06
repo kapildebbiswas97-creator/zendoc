@@ -24,3 +24,9 @@ services:
         value: "10485760"
       - key: ZENDOC_RATE_LIMIT_PER_MINUTE
         value: "120"
+      - key: ZENDOC_PLACES_PROVIDER
+        value: "google"
+      - key: ZENDOC_GOOGLE_PLACES_API_KEY
+        sync: false
+      - key: ZENDOC_PLACES_TIMEOUT_SECONDS
+        value: "8"
