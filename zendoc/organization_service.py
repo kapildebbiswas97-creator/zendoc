@@ -172,7 +172,57 @@ def active_membership(user_id, organization_id=None):
     return dict(row) if row else None
 
 
+def verify_organization(actor, organization_id, status="verified"):
+    if not is_owner(actor):
+        raise PermissionError("Only the configured ZENDOC owner may verify provider organizations.")
+    status = str(status or "").strip().lower()
+    if status not in {"pending", "verified", "rejected", "suspended"}:
+        raise ValueError("Invalid organization verification status.")
+    org = get_organization(organization_id)
+    get_db().execute(
+        "UPDATE provider_organizations SET verification_status=?, updated_at=? WHERE id=?",
+        (status, now_iso(), org["id"]),
+    )
+    get_db().commit()
+    return get_organization(org["id"])
+
+
+def create_location(actor, organization_id, data):
+    org = get_organization(organization_id)
+    if not _can_manage_org(actor, org["id"]):
+        raise PermissionError("You cannot create locations for this organization.")
+    if org["verification_status"] != "verified" and not is_owner(actor):
+        raise PermissionError("Organization must be verified before provider locations are activated.")
+    name = str(data.get("name") or "").strip()
+    if not name:
+        raise ValueError("Location name is required.")
+    now = now_iso()
+    location_uid = f"loc_{uuid.uuid4().hex[:16]}"
+    db = get_db()
+    cursor = db.execute(
+        """
+        INSERT INTO organization_locations
+        (organization_id,location_uid,name,location_type,address,city,state,postal_code,latitude,longitude,active,created_at,updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,1,?,?)
+        """,
+        (
+            org["id"], location_uid, name,
+            str(data.get("location_type") or "branch").strip().lower(),
+            str(data.get("address") or "").strip() or None,
+            str(data.get("city") or "").strip() or None,
+            str(data.get("state") or "").strip() or None,
+            str(data.get("postal_code") or "").strip() or None,
+            data.get("latitude"), data.get("longitude"), now, now,
+        ),
+    )
+    db.commit()
+    return dict(db.execute("SELECT * FROM organization_locations WHERE id=?", (cursor.lastrowid,)).fetchone())
+
+
 def bind_provider_profile(actor, organization_id, location_id=None):
+    organization = get_organization(organization_id)
+    if organization["verification_status"] != "verified":
+        raise PermissionError("Organization must be verified before a provider profile can be formally bound to it.")
     membership = active_membership(_user_id(actor), organization_id)
     if not membership:
         raise PermissionError("An active organization membership is required before binding a provider profile.")
