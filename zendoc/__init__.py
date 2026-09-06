@@ -18,6 +18,7 @@ from .milestone8_routes import bp as milestone8_bp
 from .milestone82_routes import bp as milestone82_bp
 from .nutrition_routes import bp as nutrition_intelligence_bp
 from .public_ingestion_routes import bp as public_ingestion_bp
+from .provider_onboarding_routes import bp as provider_onboarding_bp
 from .system_intelligence_routes import bp as system_intelligence_bp
 from .routes import bp
 
@@ -52,6 +53,7 @@ def create_app(test_config=None):
     app.register_blueprint(language_bp)
     app.register_blueprint(geography_graph_bp)
     app.register_blueprint(public_ingestion_bp)
+    app.register_blueprint(provider_onboarding_bp)
     app.register_blueprint(system_intelligence_bp)
     app.teardown_appcontext(close_db)
     validate_startup_config(app)
