@@ -4,6 +4,7 @@ from __future__ import annotations
 from flask import Blueprint, jsonify, request
 
 from .public_data_ingestion import ingest_public_records, list_ingestion_batches
+from .dataset_adapters import adapt_records, parse_csv_text
 from .public_source_registry import list_public_ingestion_sources
 from .routes import require_api_user
 from .security import is_owner
@@ -39,6 +40,27 @@ def api_ingestion_batches():
     except (TypeError, ValueError) as exc:
         return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
     return jsonify({"batches": batches})
+
+
+@bp.post("/api/v1/admin/ingestion/adapt")
+def api_ingestion_adapt():
+    user, error = _owner()
+    if error:
+        return error
+    data = request.get_json(silent=True) or {}
+    try:
+        rows = data.get("rows")
+        if rows is None and data.get("csv_text") is not None:
+            rows = parse_csv_text(data.get("csv_text"))
+        result = adapt_records(
+            ingestion_type=data.get("ingestion_type"),
+            rows=rows or [],
+            mapping=data.get("mapping") if isinstance(data.get("mapping"), dict) else {},
+            defaults=data.get("defaults") if isinstance(data.get("defaults"), dict) else {},
+        )
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+    return jsonify({"status": "adapted", "result": result})
 
 
 @bp.post("/api/v1/admin/ingestion/preview")
