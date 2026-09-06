@@ -27,7 +27,11 @@ def api_create_care_journey():
             patient_id=data.get("patient_id"),
             provenance=data.get("provenance") if isinstance(data.get("provenance"), dict) else {},
         )
-    except (LookupError, PermissionError, TypeError, ValueError) as exc:
+    except PermissionError as exc:
+        return jsonify({"error": {"code": 403, "message": str(exc)}}), 403
+    except LookupError as exc:
+        return jsonify({"error": {"code": 404, "message": str(exc)}}), 404
+    except (TypeError, ValueError) as exc:
         return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
     return jsonify({"status": "created", "journey": journey}), 201
 
@@ -43,7 +47,11 @@ def api_list_care_journeys():
             patient_id=request.args.get("patient_id"),
             limit=request.args.get("limit", 25),
         )
-    except (LookupError, PermissionError, TypeError, ValueError) as exc:
+    except PermissionError as exc:
+        return jsonify({"error": {"code": 403, "message": str(exc)}}), 403
+    except LookupError as exc:
+        return jsonify({"error": {"code": 404, "message": str(exc)}}), 404
+    except (TypeError, ValueError) as exc:
         return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
     return jsonify({"journeys": journeys})
 
