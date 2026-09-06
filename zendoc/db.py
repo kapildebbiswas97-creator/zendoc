@@ -20,15 +20,25 @@ def now_iso():
 
 def get_db():
     if "db" not in g:
-        if current_app.config.get("DATABASE_ENGINE") == "postgresql":
-            from .postgres_backend import connect_postgresql
+        try:
+            if current_app.config.get("DATABASE_ENGINE") == "postgresql":
+                from .postgres_backend import connect_postgresql
 
-            g.db = connect_postgresql(current_app.config["DATABASE_URL"])
-        else:
-            g.db = sqlite3.connect(current_app.config["DATABASE"], timeout=15)
-            g.db.row_factory = sqlite3.Row
-            g.db.execute("PRAGMA foreign_keys = ON")
-            g.db.execute("PRAGMA busy_timeout = 5000")
+                g.db = connect_postgresql(current_app.config["DATABASE_URL"])
+            else:
+                g.db = sqlite3.connect(current_app.config["DATABASE"], timeout=15)
+                g.db.row_factory = sqlite3.Row
+                g.db.execute("PRAGMA foreign_keys = ON")
+                g.db.execute("PRAGMA busy_timeout = 5000")
+                if current_app.config.get("ZENDOC_ENV") != "testing":
+                    g.db.execute("PRAGMA journal_mode = WAL")
+                    g.db.execute("PRAGMA synchronous = NORMAL")
+        except Exception:
+            current_app.logger.exception(
+                "Database connection failed (engine=%s).",
+                current_app.config.get("DATABASE_ENGINE", "sqlite"),
+            )
+            raise
     return g.db
 
 
