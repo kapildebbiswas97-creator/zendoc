@@ -310,3 +310,35 @@ def test_diagnostic_api_rejects_unconfirmed_request_before_booking(tmp_path):
     )
     assert response.status_code == 400
     assert "confirmation" in response.get_json()["error"]["message"].lower()
+
+
+def test_dataset_adapter_maps_csv_explicitly(tmp_path):
+    from zendoc.dataset_adapters import adapt_records, parse_csv_text
+
+    rows = parse_csv_text("facility_id,facility_name,district_name\nH1,Pilot Hospital,Pilot District\n")
+    adapted = adapt_records(
+        ingestion_type="public_healthcare_entities",
+        rows=rows,
+        mapping={
+            "source_record_id": "facility_id",
+            "name": "facility_name",
+            "district": "district_name",
+        },
+        defaults={"category": "hospital", "state": "Pilot State"},
+    )
+    assert adapted["canonical_record_count"] == 1
+    assert adapted["records"][0]["source_record_id"] == "H1"
+    assert adapted["records"][0]["category"] == "hospital"
+    assert adapted["records"][0]["district"] == "Pilot District"
+
+
+def test_dataset_adapter_refuses_missing_required_mapping():
+    from zendoc.dataset_adapters import adapt_records
+
+    with pytest.raises(ValueError):
+        adapt_records(
+            ingestion_type="geography_nodes",
+            rows=[{"code": "1", "name": "State"}],
+            mapping={"source_record_id": "code", "name": "name"},
+            defaults={},
+        )
