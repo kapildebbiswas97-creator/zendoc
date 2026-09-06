@@ -125,6 +125,9 @@ def load_config(base_dir, overrides=None):
         "ZENDOC_ENV": env,
         "SECRET_KEY": secret_key or "development-only-secret-key",
         "UPLOAD_FOLDER": str(base_dir / "uploads"),
+        "DATABASE_BACKUP_DIR": str(
+            Path(os.environ.get("ZENDOC_DATABASE_BACKUP_DIR", str(base_dir / "instance" / "backups"))).resolve()
+        ),
         "MAX_CONTENT_LENGTH": int(os.environ.get("ZENDOC_MAX_UPLOAD_BYTES", str(10 * 1024 * 1024))),
         "SESSION_COOKIE_NAME": "zendoc_session",
         "SESSION_COOKIE_HTTPONLY": True,
