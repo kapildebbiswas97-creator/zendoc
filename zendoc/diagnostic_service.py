@@ -493,10 +493,6 @@ def complete_diagnostic_test(
         raise LookupError(f"Diagnostic booking #{booking_id} not found.")
 
     status = str(booking_row["status"] or "").lower()
-    if status == "completed":
-        raise ValueError("Diagnostic booking is already completed.")
-    if status not in {"requested", "accepted"}:
-        raise ValueError(f"Diagnostic booking cannot be completed from status '{booking_row['status']}'.")
 
     lab_id = int(booking_row["lab_id"] or 0)
     if not lab_id:
@@ -518,6 +514,20 @@ def complete_diagnostic_test(
     is_owner = aid == int(booking_row["patient_id"])
     if not (is_assigned_lab or is_owner):
         raise PermissionError("Only the assigned verified lab or the booking owner may record completion.")
+
+    if status == "completed":
+        completion_source = "PROVIDER_RECORDED" if is_assigned_lab else "USER_REPORTED"
+        return {
+            "success": True,
+            "booking_id": int(booking_id),
+            "status": "completed",
+            "completion_source": completion_source,
+            "review_eligible": completion_source == "PROVIDER_RECORDED",
+            "report_available": bool(booking_row["report_record_id"]),
+            "idempotent_replay": True,
+        }
+    if status not in {"requested", "accepted"}:
+        raise ValueError(f"Diagnostic booking cannot be completed from status '{booking_row['status']}'.")
 
     summary = str(results_summary or "").strip() or "Completion recorded; report details were not supplied."
     summary = summary[:2000]
