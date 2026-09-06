@@ -267,6 +267,19 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
         risk_class=LOW_RISK,
     ),
 
+    # ── CareFin / benefits tools ──────────────────────────────────────────────
+    "discover_carefin_benefits": ToolDefinition(
+        name="discover_carefin_benefits",
+        description=(
+            "Discover possible healthcare support pathways from official/public source metadata. "
+            "Returns candidates, missing information, provenance, and verification next steps. "
+            "Never confirms personal eligibility, approval, or payment."
+        ),
+        allowed_agents=["CareFinAgent"],
+        allowed_roles=ALL_ROLES,
+        risk_class=READ_ONLY,
+    ),
+
     # ── Safety / Blocked tools ─────────────────────────────────────────────────
     "autonomous_prescribe": ToolDefinition(
         name="autonomous_prescribe",
@@ -333,14 +346,14 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
     "get_diagnostic_options": ToolDefinition(
         name="get_diagnostic_options",
         description="Search available diagnostic tests and lab offers near a patient location.",
-        allowed_agents=["CareAgent", "SearchAgent"],
+        allowed_agents=["CareAgent", "SearchAgent", "DiagnosticsAgent"],
         allowed_roles=ALL_ROLES,
         risk_class=READ_ONLY,
     ),
     "get_unified_healthcare_inbox": ToolDefinition(
         name="get_unified_healthcare_inbox",
         description="Retrieve the unified healthcare inbox: recent orders, diagnostic bookings, and health memory events.",
-        allowed_agents=["CareAgent"],
+        allowed_agents=["CareAgent", "HealthMemoryAgent"],
         allowed_roles=["patient", "doctor", "admin"],
         risk_class=READ_ONLY,
     ),
