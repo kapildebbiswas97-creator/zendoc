@@ -431,89 +431,93 @@ def submit_order_from_plan(
             return _order_result(existing_ids, db, replay=True)
         raise ValueError("This fulfilment plan is already being processed by another request.")
 
-    now = now_iso()
-    by_pharmacy: dict[int, list[dict[str, Any]]] = {}
-    for item in plan_items:
-        by_pharmacy.setdefault(int(item["pharmacy_id"]), []).append(item)
-    delivery_fee = round(float(plan.get("delivery_fee_inr") or 0.0), 2)
-    created_orders: list[int] = []
-    pharmacy_entries = list(by_pharmacy.items())
-    for index, (pharmacy_id, items) in enumerate(pharmacy_entries):
-        item_total = round(sum(float(item["total_price_inr"]) for item in items), 2)
-        # The staged plan's delivery fee is the sum of provider quotes. For
-        # split fulfilment, retain a deterministic equal accounting share on
-        # each order while the plan total remains authoritative.
-        provider_count = max(1, len(pharmacy_entries))
-        equal_share = round(delivery_fee / provider_count, 2)
-        fee_share = (
-            round(delivery_fee - equal_share * (provider_count - 1), 2)
-            if index == provider_count - 1
-            else equal_share
-        )
-        total_amount = round(item_total + fee_share, 2)
-        tenant = provider_resource_context(pharmacy_id)
-        order_uid = f"ord_{patient_id}_{pharmacy_id}_{now[:10].replace('-', '')}_{len(created_orders) + 1}"
-        cursor = db.execute(
-            """
-            INSERT INTO medicine_orders
-            (patient_id, ordered_by, pharmacy_id, plan_id, prescription_id, order_uid,
-             items_json, delivery_address, total_amount_inr, payment_status,
-             acknowledgement_status, tracking_status, idempotency_key, status, data_mode,
-             organization_id, organization_location_id, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'cash_on_delivery', 'pending', 'SUBMITTED', ?, 'pending', ?, ?, ?, ?, ?)
-            """,
-            (
-                patient_id,
-                aid,
-                pharmacy_id,
-                int(plan_id),
-                plan.get("prescription_id"),
-                order_uid,
-                json.dumps(items, sort_keys=True),
-                address,
-                total_amount,
-                f"{persisted_key}:{pharmacy_id}",
-                mode,
-                tenant["organization_id"],
-                tenant["organization_location_id"],
-                now,
-                now,
-            ),
-        )
-        order_id = int(cursor.lastrowid)
+    try:
+        now = now_iso()
+        by_pharmacy: dict[int, list[dict[str, Any]]] = {}
+        for item in plan_items:
+            by_pharmacy.setdefault(int(item["pharmacy_id"]), []).append(item)
+        delivery_fee = round(float(plan.get("delivery_fee_inr") or 0.0), 2)
+        created_orders: list[int] = []
+        pharmacy_entries = list(by_pharmacy.items())
+        for index, (pharmacy_id, items) in enumerate(pharmacy_entries):
+            item_total = round(sum(float(item["total_price_inr"]) for item in items), 2)
+            # The staged plan's delivery fee is the sum of provider quotes. For
+            # split fulfilment, retain a deterministic equal accounting share on
+            # each order while the plan total remains authoritative.
+            provider_count = max(1, len(pharmacy_entries))
+            equal_share = round(delivery_fee / provider_count, 2)
+            fee_share = (
+                round(delivery_fee - equal_share * (provider_count - 1), 2)
+                if index == provider_count - 1
+                else equal_share
+            )
+            total_amount = round(item_total + fee_share, 2)
+            tenant = provider_resource_context(pharmacy_id)
+            order_uid = f"ord_{patient_id}_{pharmacy_id}_{now[:10].replace('-', '')}_{len(created_orders) + 1}"
+            cursor = db.execute(
+                """
+                INSERT INTO medicine_orders
+                (patient_id, ordered_by, pharmacy_id, plan_id, prescription_id, order_uid,
+                 items_json, delivery_address, total_amount_inr, payment_status,
+                 acknowledgement_status, tracking_status, idempotency_key, status, data_mode,
+                 organization_id, organization_location_id, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'cash_on_delivery', 'pending', 'SUBMITTED', ?, 'pending', ?, ?, ?, ?, ?)
+                """,
+                (
+                    patient_id,
+                    aid,
+                    pharmacy_id,
+                    int(plan_id),
+                    plan.get("prescription_id"),
+                    order_uid,
+                    json.dumps(items, sort_keys=True),
+                    address,
+                    total_amount,
+                    f"{persisted_key}:{pharmacy_id}",
+                    mode,
+                    tenant["organization_id"],
+                    tenant["organization_location_id"],
+                    now,
+                    now,
+                ),
+            )
+            order_id = int(cursor.lastrowid)
+            db.execute(
+                """
+                INSERT INTO order_events
+                (order_id, event_type, event_status, message, source, created_at)
+                VALUES (?, 'ORDER_SUBMITTED', 'SUBMITTED', ?, 'patient_confirmed', ?)
+                """,
+                (order_id, "Order submitted after explicit confirmation and fresh inventory recheck.", now),
+            )
+            created_orders.append(order_id)
+
         db.execute(
             """
-            INSERT INTO order_events
-            (order_id, event_type, event_status, message, source, created_at)
-            VALUES (?, 'ORDER_SUBMITTED', 'SUBMITTED', ?, 'patient_confirmed', ?)
+            UPDATE fulfilment_plans
+            SET confirmed_by_user=1, confirmed_at=?, status='ordered'
+            WHERE id=? AND status='ordering'
             """,
-            (order_id, "Order submitted after explicit confirmation and fresh inventory recheck.", now),
+            (now, int(plan_id)),
         )
-        created_orders.append(order_id)
 
-    db.execute(
-        """
-        UPDATE fulfilment_plans
-        SET confirmed_by_user=1, confirmed_at=?, status='ordered'
-        WHERE id=? AND status='ordering'
-        """,
-        (now, int(plan_id)),
-    )
+        from .care_graph import record_care_continuity_event
 
-    from .care_graph import record_care_continuity_event
-
-    record_care_continuity_event(
-        patient_id=patient_id,
-        event_type="ORDER_PLACED",
-        title="Medicine order confirmed",
-        summary=f"Prescription fulfilment order placed across {len(by_pharmacy)} participating pharmacy provider(s).",
-        source="USER_REPORTED",
-        source_ref=f"order:{created_orders[0]}",
-        actor_id=aid,
-        metadata={"order_ids": created_orders, "plan_id": int(plan_id), "data_mode": mode},
-    )
-    db.commit()
-    return _order_result(created_orders, db)
+        record_care_continuity_event(
+            patient_id=patient_id,
+            event_type="ORDER_PLACED",
+            title="Medicine order confirmed",
+            summary=f"Prescription fulfilment order placed across {len(by_pharmacy)} participating pharmacy provider(s).",
+            source="USER_REPORTED",
+            source_ref=f"order:{created_orders[0]}",
+            actor_id=aid,
+            metadata={"order_ids": created_orders, "plan_id": int(plan_id), "data_mode": mode},
+        )
+        db.commit()
+        return _order_result(created_orders, db)
+    except Exception:
+        db.rollback()
+        raise
 
 
 def _pharmacy_can_act(db, actor: Any, order: dict[str, Any]) -> tuple[Any, bool]:
