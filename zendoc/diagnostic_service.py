@@ -1,11 +1,11 @@
-import hashlib
-
 """
 ZENDOC Diagnostic Marketplace — Milestone 10
 Lab test catalog, nearby lab price comparison, home sample collection booking,
 and seamless integration with Health Memory report intelligence.
 """
 from __future__ import annotations
+
+import hashlib
 
 import json
 import math
