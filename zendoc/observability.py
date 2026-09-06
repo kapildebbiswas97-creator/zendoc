@@ -274,7 +274,11 @@ def incident_summary(window_minutes=60):
     status = "normal"
     if readiness.get("status") != "ready" or req["server_errors"] >= 10 or emergency["failed"] > 0:
         status = "incident"
-    elif req["server_errors"] > 0 or agents["failure_rate"] >= 0.1:
+    elif (
+        req["server_errors"] > 0
+        or agents["failure_rate"] >= 0.1
+        or int(readiness.get("database_latency_ms") or 0) >= 1000
+    ):
         status = "degraded"
     return {
         "status": status,
