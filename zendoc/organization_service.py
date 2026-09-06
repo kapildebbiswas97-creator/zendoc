@@ -267,3 +267,63 @@ def assert_same_organization(actor, other_user_id):
     if not same_organization(actor, other_user_id):
         raise PermissionError("Cross-organization access is not permitted.")
     return True
+
+
+def provider_resource_context(user_id):
+    """Return verified provider organization/location context or standalone NULLs."""
+    db = get_db()
+    profile = db.execute(
+        """
+        SELECT pp.organization_id, pp.organization_location_id, po.verification_status
+        FROM provider_profiles pp
+        LEFT JOIN provider_organizations po ON po.id=pp.organization_id
+        WHERE pp.user_id=?
+        """,
+        (int(user_id),),
+    ).fetchone()
+    if not profile or not profile["organization_id"]:
+        return {"organization_id": None, "organization_location_id": None}
+    membership = active_membership(int(user_id), int(profile["organization_id"]))
+    if not membership or str(profile["verification_status"] or "").lower() != "verified":
+        return {"organization_id": None, "organization_location_id": None}
+    location_id = profile["organization_location_id"]
+    if location_id:
+        location = db.execute(
+            """
+            SELECT id FROM organization_locations
+            WHERE id=? AND organization_id=? AND active=1
+            """,
+            (int(location_id), int(profile["organization_id"])),
+        ).fetchone()
+        if not location:
+            location_id = None
+    return {
+        "organization_id": int(profile["organization_id"]),
+        "organization_location_id": int(location_id) if location_id else None,
+    }
+
+
+def assert_resource_tenant(actor, resource):
+    """Fail closed on cross-tenant access for tenant-bound provider resources."""
+    if is_owner(actor):
+        return True
+    resource_org = resource.get("organization_id") if isinstance(resource, dict) else resource["organization_id"]
+    if not resource_org:
+        return True
+    membership = active_membership(_user_id(actor), int(resource_org))
+    if not membership:
+        raise PermissionError("Cross-organization resource access is not permitted.")
+    resource_location = (
+        resource.get("organization_location_id")
+        if isinstance(resource, dict)
+        else resource["organization_location_id"]
+    )
+    if resource_location:
+        profile = get_db().execute(
+            "SELECT organization_location_id FROM provider_profiles WHERE user_id=?",
+            (_user_id(actor),),
+        ).fetchone()
+        actor_location = profile["organization_location_id"] if profile else None
+        if actor_location and int(actor_location) != int(resource_location):
+            raise PermissionError("Cross-branch resource access is not permitted.")
+    return True
