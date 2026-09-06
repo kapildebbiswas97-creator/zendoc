@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Care Journey — ZENDOC{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Connected Care · Pilot</p>
+    <h1>Automatic Care Journey</h1>
+    <p class="section-copy">Track the next safe coordination step across provider discovery, consultation, prescriptions, diagnostics, CareFin, fulfilment and follow-up.</p>
+  </div>
+  <span class="status-badge working">State engine working</span>
+</section>
+
+<section class="grid two">
+  <form class="panel" method="post" action="{{ url_for('connected_care.care_journey_create_page') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <p class="eyebrow">New journey</p>
+    <h2>Start a coordination journey</h2>
+    <label>Care goal <input name="goal" maxlength="200" placeholder="Example: Find a cardiology consultation"></label>
+    <button type="submit" data-submitting-label="Starting journey…">Start journey</button>
+    <p class="form-note">Starting a journey does not diagnose, book, order or submit payment. It creates a coordination record.</p>
+  </form>
+
+  <article class="panel">
+    <p class="eyebrow">Safety contract</p>
+    <h2>AI coordinates; people authorize</h2>
+    <div class="summary-row"><strong>Clinical decisions</strong><span>Doctor / qualified professional</span></div>
+    <div class="summary-row"><strong>Orders & bookings</strong><span>Explicit user confirmation</span></div>
+    <div class="summary-row"><strong>CareFin approval</strong><span>Official authority / insurer / funder</span></div>
+    <div class="summary-row"><strong>Health Memory</strong><span>Only authorized outcomes</span></div>
+  </article>
+</section>
+
+<section class="panel spaced-panel">
+  <p class="eyebrow">Your journeys</p>
+  <h2>Coordination status</h2>
+  {% if journeys %}
+    <div class="grid two">
+    {% for item in journeys %}
+      <article class="panel">
+        <div class="summary-row">
+          <strong>#{{ item.id }} · {{ item.state|replace('_',' ') }}</strong>
+          <span class="status-badge {{ 'working' if item.status == 'completed' else 'integration' }}">{{ item.status }}</span>
+        </div>
+        <p><strong>Next safe action:</strong> {{ item.next_safe_action|replace('_',' ') }}</p>
+        {% if item.required_actor %}<p><strong>Waiting for:</strong> {{ item.required_actor }}</p>{% endif %}
+        {% if item.required_consent %}<p><strong>Consent required:</strong> {{ item.required_consent }}</p>{% endif %}
+        {% if item.blocked_reason %}<div class="alert error"><strong>Blocked</strong><span>{{ item.blocked_reason }}</span></div>{% endif %}
+
+        {% if item.status == 'active' %}
+          {% set options = {
+            'NEW': ['CONTEXT_READY','WAITING_INFORMATION','BLOCKED'],
+            'CONTEXT_READY': ['PROVIDER_SEARCH','CAREFIN_CHECK','WAITING_INFORMATION','BLOCKED'],
+            'WAITING_INFORMATION': ['CONTEXT_READY','PROVIDER_SEARCH','CAREFIN_CHECK','WAITING_HUMAN','BLOCKED'],
+            'PROVIDER_SEARCH': ['WAITING_USER_SELECTION','WAITING_INFORMATION','BLOCKED'],
+            'WAITING_USER_SELECTION': ['APPOINTMENT_STAGED','WAITING_HUMAN','PROVIDER_SEARCH','BLOCKED'],
+            'APPOINTMENT_STAGED': ['WAITING_PROVIDER','WAITING_HUMAN','BLOCKED'],
+            'WAITING_PROVIDER': ['CONSULTATION','APPOINTMENT_STAGED','WAITING_HUMAN','BLOCKED'],
+            'CONSULTATION': ['PRESCRIPTION_RECEIVED','DIAGNOSTICS_REQUIRED','CAREFIN_CHECK','FOLLOW_UP','WAITING_HUMAN','BLOCKED'],
+            'PRESCRIPTION_RECEIVED': ['DIAGNOSTICS_REQUIRED','CAREFIN_CHECK','FULFILMENT','WAITING_HUMAN','BLOCKED'],
+            'DIAGNOSTICS_REQUIRED': ['CAREFIN_CHECK','FULFILMENT','FOLLOW_UP','WAITING_HUMAN','BLOCKED'],
+            'CAREFIN_CHECK': ['FULFILMENT','FOLLOW_UP','WAITING_HUMAN','BLOCKED'],
+            'FULFILMENT': ['FOLLOW_UP','WAITING_HUMAN','BLOCKED'],
+            'FOLLOW_UP': ['COMPLETED','PROVIDER_SEARCH','WAITING_HUMAN','BLOCKED']
+          } %}
+          {% if options.get(item.state) %}
+          <form method="post" action="{{ url_for('connected_care.care_journey_transition_page', journey_id=item.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <label>Next state
+              <select name="target_state">
+                {% for state in options.get(item.state, []) %}<option value="{{ state }}">{{ state|replace('_',' ')|title }}</option>{% endfor %}
+              </select>
+            </label>
+            <label>Reason <input name="reason" required maxlength="500" placeholder="What changed?"></label>
+            <button type="submit" class="secondary-action">Record transition</button>
+          </form>
+          {% endif %}
+        {% endif %}
+
+        {% if item.history %}
+          <details class="spaced-panel">
+            <summary>View {{ item.history|length }} event{% if item.history|length != 1 %}s{% endif %}</summary>
+            {% for event in item.history %}
+              <div class="summary-row"><span>{{ event.previous_state }} → {{ event.state }}</span><small>{{ event.created_at }}</small></div>
+              <p class="form-note">{{ event.reason }}</p>
+            {% endfor %}
+          </details>
+        {% endif %}
+      </article>
+    {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state"><h3>No care journey yet</h3><p>Start one above when you want ZENDOC to coordinate a multi-step care workflow.</p></div>
+  {% endif %}
+</section>
+{% endblock %}
