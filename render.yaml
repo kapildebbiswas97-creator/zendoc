@@ -5,6 +5,7 @@ services:
     plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn run:app --bind 0.0.0.0:$PORT
+    healthCheckPath: /api/v1/ready
     envVars:
       - key: ZENDOC_ENV
         value: production
