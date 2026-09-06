@@ -2322,6 +2322,45 @@ def migrate_schema(db):
         ("post_submission_request_fingerprints_v1", now_iso()),
     )
 
+    # Production observability: metadata-only request and integration health.
+    db.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS request_observations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            correlation_id TEXT NOT NULL,
+            actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            actor_role TEXT,
+            method TEXT NOT NULL,
+            route_pattern TEXT NOT NULL,
+            status_code INTEGER NOT NULL,
+            duration_ms INTEGER NOT NULL,
+            error_class TEXT,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_request_observations_created
+            ON request_observations(created_at);
+        CREATE INDEX IF NOT EXISTS idx_request_observations_status
+            ON request_observations(status_code, created_at);
+        CREATE INDEX IF NOT EXISTS idx_request_observations_route
+            ON request_observations(route_pattern, created_at);
+
+        CREATE TABLE IF NOT EXISTS integration_health_checks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            integration_key TEXT NOT NULL,
+            status TEXT NOT NULL,
+            latency_ms INTEGER,
+            detail TEXT,
+            checked_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_integration_health_key
+            ON integration_health_checks(integration_key, checked_at);
+        """
+    )
+    db.execute(
+        "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+        ("post_submission_observability_v1", now_iso()),
+    )
+
     db.execute(
         "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)",
         ("post_submission_geography_v1", now_iso()),
