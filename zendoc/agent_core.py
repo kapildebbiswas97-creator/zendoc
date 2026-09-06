@@ -249,6 +249,51 @@ def respond_with_core_agent(actor, command_text):
         message = f"Found {len(payload)} failed or errored platform events."
         intent = "failed_operations"
         actions = [{"type": "failed_operations", "label": "Show failed operations", "data": payload}]
+    elif plan.intent == "operations_automation":
+        payload = tool_output or {}
+        message = (
+            f"Safe operations automation re-queued {payload.get('requeued_count', 0)} retriable task(s), "
+            f"created {len(payload.get('new_alerts', []))} new alert(s), and executed no arbitrary tasks."
+        )
+        intent = "operations_automation"
+        actions = [{"type": "operations_automation", "label": "Review safe maintenance results", "data": payload}]
+    elif plan.intent == "carefin":
+        payload = tool_output or {}
+        count = int(payload.get("candidate_count", 0))
+        message = (
+            f"CareFin found {count} possible support pathway(s). "
+            "These are discovery candidates only; eligibility, approval, and payment are not confirmed."
+        )
+        intent = "carefin"
+        actions = [{"type": "carefin_results", "label": "Review possible benefits and verification steps", "data": payload}]
+    elif plan.intent == "prescription":
+        message = (
+            "Prescription intelligence is safety-gated. ZENDOC can extract and match an authorized prescription, "
+            "but unclear medicine names, strength, form, dose, or frequency require human review and no substitution is automatic."
+        )
+        intent = "prescription"
+        actions = [{"type": "prescription_review", "label": "Open prescription / medical records workflow", "url": "/records"}]
+    elif plan.intent == "diagnostics":
+        message = (
+            "Diagnostics uses verified provider offers with freshness states. UNKNOWN or STALE availability is never promoted to confirmed, "
+            "and booking requires explicit user confirmation."
+        )
+        intent = "diagnostics"
+        actions = [{"type": "diagnostics", "label": "Open Diagnostics", "url": "/connected-care/diagnostics"}]
+    elif plan.intent == "provider_discovery":
+        message = (
+            "Provider Discovery separates ZENDOC-verified providers from external unverified locations. "
+            "External discovery does not imply credentials, live slots, emergency readiness, or ZENDOC booking connectivity."
+        )
+        intent = "provider_discovery"
+        actions = [{"type": "provider_discovery", "label": "Open Healthcare Finder", "url": "/finder"}]
+    elif plan.intent == "nutrition":
+        message = (
+            "Nutrition guidance is general wellness support. ZENDOC can compare labels, price, sugar, sodium, protein, fibre and hydration context, "
+            "but medical diets require clinician or dietitian review and sponsored ranking cannot override health suitability."
+        )
+        intent = "nutrition"
+        actions = [{"type": "nutrition", "label": "Open Fitness & Nutrition", "url": "/fitness"}]
     elif plan.intent == "contact_discovery":
         contacts = tool_output or []
         message = f"Found {len(contacts)} permitted contact(s) for your account."
