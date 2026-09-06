@@ -13,7 +13,6 @@ STATUS_WORKING              = "WORKING"
 STATUS_BETA                 = "BETA"
 STATUS_INTEGRATION_REQUIRED = "INTEGRATION_REQUIRED"
 STATUS_DISABLED             = "DISABLED"
-STATUS_PROTOTYPE            = "PROTOTYPE"
 STATUS_FUTURE               = "FUTURE"
 
 
@@ -167,6 +166,41 @@ def get_capability_registry() -> dict:
             "label": "CareFin Live Coverage Verification",
             "description": "Personal eligibility, insurer approval, government approval, CSR/trust approval, and payment confirmation require authoritative partner responses.",
         },
+        "automatic_care_journey": {
+            "status": STATUS_WORKING,
+            "label": "Automatic Care Journey Coordinator",
+            "description": "Deterministic care-workflow state machine with human gates, provenance, next-safe-action logic, and no diagnostic authority.",
+        },
+        "safe_operations_automation": {
+            "status": STATUS_WORKING,
+            "label": "Safe Operations Automation",
+            "description": "Owner-only re-queue of explicitly retriable failures plus deterministic alerts; never executes arbitrary tasks or consequential clinical/financial actions.",
+        },
+        "diagnostics_freshness_v2": {
+            "status": STATUS_WORKING,
+            "label": "Diagnostics Freshness & Alias Layer",
+            "description": "Diagnostic aliases, observation timestamps, CONFIRMED/STALE/UNKNOWN semantics, and stale-booking rejection.",
+        },
+        "nutrition_agent": {
+            "status": STATUS_WORKING,
+            "label": "Nutrition & Hydration Agent Foundation",
+            "description": "General-wellness label and normalized-price comparison with allergy flags, sponsorship separation, and medical-diet escalation.",
+        },
+        "multilingual_foundation": {
+            "status": STATUS_WORKING,
+            "label": "English/Bengali/Hindi Language Foundation",
+            "description": "Persistent language preference, script detection, and safety templates are working without a translation provider.",
+        },
+        "free_form_translation": {
+            "status": STATUS_INTEGRATION_REQUIRED,
+            "label": "Free-form Multilingual Translation",
+            "description": "Requires a configured local multilingual model or translation provider; no translation capability is fabricated.",
+        },
+        "geographic_healthcare_graph": {
+            "status": STATUS_WORKING,
+            "label": "Geographic Healthcare Graph v1",
+            "description": "Provenance-aware hierarchy and entity-link ingestion/search architecture is working; production starts empty until verified/official data is ingested.",
+        },
 
         # Health & Clinical
         "health_memory": {
@@ -202,7 +236,7 @@ def get_capability_registry() -> dict:
             "description": "Workout plans, session tracking, exercise library, nutrition/hydration logs.",
         },
         "pose_coach": {
-            "status": STATUS_PROTOTYPE,
+            "status": STATUS_BETA,
             "label": "Fitness Camera Preview",
             "description": "Browser-local camera preview and duration capture only. No pose model, form analysis, rep counting, or medical-device claim.",
         },
