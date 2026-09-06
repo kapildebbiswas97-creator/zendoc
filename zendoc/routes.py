@@ -225,6 +225,8 @@ def audit(action, entity_type, entity_id=None, actor=None):
 def stats_for(user):
     db = get_db()
     if user["role"] == "admin":
+        if not is_owner(user):
+            raise PermissionError("Only the configured ZENDOC owner may view global platform statistics.")
         return {
             "Users": db.execute("SELECT COUNT(*) c FROM users").fetchone()["c"],
             "Appointments": db.execute("SELECT COUNT(*) c FROM appointments").fetchone()["c"],
@@ -403,14 +405,14 @@ def dashboard():
         """
         SELECT a.*, p.name patient_name
         FROM appointments a JOIN users p ON p.id=a.patient_id
-        WHERE a.patient_id=? OR a.provider_id=? OR ?='admin'
+        WHERE a.patient_id=? OR a.provider_id=? OR ?=1
         ORDER BY
           CASE WHEN a.scheduled_for>=? AND a.status NOT IN ('completed','cancelled') THEN 0 ELSE 1 END,
           CASE WHEN a.scheduled_for>=? THEN a.scheduled_for END ASC,
           a.created_at DESC
         LIMIT 6
         """,
-        (g.user["id"], g.user["id"], g.user["role"], now_value, now_value),
+        (g.user["id"], g.user["id"], 1 if is_owner(g.user) else 0, now_value, now_value),
     ).fetchall()
     next_appointment = next(
         (
@@ -539,10 +541,10 @@ def appointments():
         """
         SELECT a.*, p.name patient_name
         FROM appointments a JOIN users p ON p.id=a.patient_id
-        WHERE a.patient_id=? OR a.provider_id=? OR ?='admin'
+        WHERE a.patient_id=? OR a.provider_id=? OR ?=1
         ORDER BY a.scheduled_for DESC
         """,
-        (g.user["id"], g.user["id"], g.user["role"]),
+        (g.user["id"], g.user["id"], 1 if is_owner(g.user) else 0),
     ).fetchall()
     providers = db.execute(
         """
@@ -610,9 +612,9 @@ def records():
         """
         SELECT mr.*, rm.report_uid, rm.report_type, rm.document_date, rm.extraction_status
         FROM medical_records mr LEFT JOIN report_metadata rm ON rm.record_id=mr.id
-        WHERE mr.owner_id=? OR ?='admin' ORDER BY mr.created_at DESC
+        WHERE mr.owner_id=? OR ?=1 ORDER BY mr.created_at DESC
         """,
-        (g.user["id"], g.user["role"]),
+        (g.user["id"], 1 if is_owner(g.user) else 0),
     ).fetchall()
     return render_template("records.html", records=rows, report_types=REPORT_TYPES)
 
@@ -1139,8 +1141,8 @@ def api_appointments():
     if error:
         return error
     rows = get_db().execute(
-        "SELECT * FROM appointments WHERE patient_id=? OR provider_id=? OR ?='admin' ORDER BY scheduled_for DESC",
-        (user["id"], user["id"], user["role"]),
+        "SELECT * FROM appointments WHERE patient_id=? OR provider_id=? OR ?=1 ORDER BY scheduled_for DESC",
+        (user["id"], user["id"], 1 if is_owner(user) else 0),
     ).fetchall()
     return jsonify({"appointments": [dict(row) for row in rows]})
 
