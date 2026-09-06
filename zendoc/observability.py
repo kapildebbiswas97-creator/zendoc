@@ -33,7 +33,7 @@ def finish_request_observation(response):
     correlation_id = str(getattr(g, "correlation_id", "") or uuid.uuid4().hex)[:80]
     started = getattr(g, "request_started_at", None)
     duration_ms = int((time.perf_counter() - started) * 1000) if started is not None else 0
-    actor = getattr(g, "user", None)
+    actor = getattr(g, "observability_actor", None) or getattr(g, "user", None)
     route_pattern = request.url_rule.rule if request.url_rule is not None else "unmatched"
     error_class = None
     if response.status_code >= 500:
