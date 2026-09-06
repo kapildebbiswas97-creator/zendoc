@@ -212,8 +212,17 @@ def get_prescription(prescription_id: int, actor: Any = None) -> dict[str, Any]:
 
     res = dict(row)
     if actor is not None:
-        from .context_engine import verify_context_authorization
-        verify_context_authorization(actor, res["patient_id"], "prescription_view")
+        actor_id = int(actor["id"])
+        actor_role = str(actor["role"] or "").lower()
+        is_patient_owner = actor_role == "patient" and actor_id == int(res["patient_id"])
+        is_recorded_prescriber = (
+            actor_role == "doctor"
+            and res.get("prescriber_id") is not None
+            and actor_id == int(res["prescriber_id"])
+        )
+        if not (is_patient_owner or is_recorded_prescriber):
+            from .context_engine import verify_context_authorization
+            verify_context_authorization(actor, res["patient_id"], "prescription_view")
 
     items = db.execute(
         """
