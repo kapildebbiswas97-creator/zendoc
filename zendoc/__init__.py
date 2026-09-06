@@ -9,6 +9,7 @@ from .connected_care_routes import bp as connected_care_bp
 from .ecosystem_routes import bp as ecosystem_bp
 from .family_routes import bp as family_bp
 from .fitness_routes import bp as fitness_bp
+from .geography_routes import bp as geography_graph_bp
 from .health_routes import bp as health_memory_bp
 from .language_routes import bp as language_bp
 from .milestone7_routes import bp as milestone7_bp
@@ -46,6 +47,7 @@ def create_app(test_config=None):
     app.register_blueprint(carefin_bp)
     app.register_blueprint(nutrition_intelligence_bp)
     app.register_blueprint(language_bp)
+    app.register_blueprint(geography_graph_bp)
     app.register_blueprint(system_intelligence_bp)
     app.teardown_appcontext(close_db)
     validate_startup_config(app)
