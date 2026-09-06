@@ -28,6 +28,10 @@ ALERT_CATEGORIES = (
     "diagnostic_stale",
     "provider_waiting",
     "security",
+    "database",
+    "emergency",
+    "rate_limit",
+    "integration",
     "operational",
 )
 
@@ -254,6 +258,69 @@ def run_proactive_alert_check() -> list[dict]:
             "medium", "provider_waiting",
             "Provider Responses Waiting Too Long",
             f"{pending_orders} medicine order(s) and {pending_consults} consultation request(s) have waited more than 2 hours for provider action.",
+        ))
+
+    # 7. Database readiness failure is a platform-critical incident.
+    try:
+        from .database_reliability import readiness_report
+        readiness = readiness_report()
+        if readiness.get("status") != "ready":
+            created.append(_maybe_create_alert(
+                "critical", "database",
+                "Database Readiness Failed",
+                "Database readiness is not healthy. Traffic should remain gated until connectivity, schema, migrations, and integrity checks recover.",
+            ))
+    except Exception:
+        created.append(_maybe_create_alert(
+            "critical", "database",
+            "Database Readiness Check Failed",
+            "ZENDOC could not complete its database readiness assessment.",
+        ))
+
+    # 8. Emergency-path errors must never be buried in general error totals.
+    emergency_failures = db.execute(
+        """
+        SELECT COUNT(*) c FROM platform_events
+        WHERE created_at > ?
+          AND status IN ('failed','error')
+          AND (event_type LIKE '%.emergency%' OR action LIKE '%emergency%')
+        """,
+        (cutoff_1h,),
+    ).fetchone()["c"]
+    if emergency_failures > 0:
+        created.append(_maybe_create_alert(
+            "critical", "emergency",
+            "Emergency Flow Failure Detected",
+            f"{emergency_failures} failed/error emergency-path event(s) were recorded in the last hour.",
+        ))
+
+    # 9. HTTP server-error and abuse/rate-limit signals from privacy-safe metadata.
+    http_errors = db.execute(
+        """
+        SELECT COUNT(*) c FROM request_observations
+        WHERE created_at > ? AND status_code >= 500
+        """,
+        (cutoff_1h,),
+    ).fetchone()["c"]
+    if http_errors >= 5:
+        created.append(_maybe_create_alert(
+            "high", "platform_error_rate",
+            "Sustained HTTP Server Errors",
+            f"{http_errors} HTTP 5xx response(s) were recorded in the last hour.",
+        ))
+
+    rate_limited = db.execute(
+        """
+        SELECT COUNT(*) c FROM request_observations
+        WHERE created_at > ? AND status_code = 429
+        """,
+        (cutoff_1h,),
+    ).fetchone()["c"]
+    if rate_limited >= 20:
+        created.append(_maybe_create_alert(
+            "medium", "rate_limit",
+            "High Rate-Limit Activity",
+            f"{rate_limited} HTTP 429 response(s) were recorded in the last hour; review abuse/load patterns without inspecting request bodies.",
         ))
 
     return [a for a in created if a is not None]
