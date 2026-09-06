@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import time
 import shutil
 from pathlib import Path
 
@@ -38,10 +39,12 @@ def _dialect(db=None):
 
 def database_probe():
     db = get_db()
+    started = time.perf_counter()
     row = db.execute("SELECT 1 AS ok").fetchone()
+    latency_ms = int((time.perf_counter() - started) * 1000)
     if not row or int(row["ok"]) != 1:
         raise RuntimeError("Database probe failed.")
-    return True
+    return {"ok": True, "latency_ms": max(0, latency_ms)}
 
 
 def migration_status():
@@ -110,8 +113,9 @@ def readiness_report():
         "persistence_verified": bool(current_app.config.get("PERSISTENCE_VERIFIED")),
     }
     try:
-        database_probe()
+        probe = database_probe()
         report["database"] = "reachable"
+        report["database_latency_ms"] = probe["latency_ms"]
     except Exception:
         report["database"] = "unreachable"
         report["status"] = "not_ready"
