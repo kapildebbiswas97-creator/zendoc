@@ -7,6 +7,14 @@ from .telehealth_provider import get_telehealth_provider
 DOCTOR_STATUSES = ("available", "busy", "offline", "consultation_only")
 CONSULTATION_TYPES = ("chat", "voice", "video")
 CONSULTATION_STATUSES = ("requested", "accepted", "rejected", "scheduled", "ended", "cancelled")
+CONSULTATION_TRANSITIONS = {
+    "requested": {"accepted", "rejected", "scheduled", "cancelled"},
+    "accepted": {"scheduled", "ended", "cancelled"},
+    "scheduled": {"accepted", "ended", "cancelled"},
+    "rejected": set(),
+    "ended": set(),
+    "cancelled": set(),
+}
 PATIENT_MESSAGE_POLICIES = ("nobody", "existing_patient", "appointment", "accepted_consultation", "anyone")
 
 
@@ -209,6 +217,11 @@ def update_consultation_status(actor, consultation_id, status, scheduled_for=Non
     status = str(status or "").strip().lower()
     if status not in CONSULTATION_STATUSES:
         raise ValueError("Invalid consultation status.")
+    current_status = str(consultation.get("status") or "requested").strip().lower()
+    if status == current_status:
+        return consultation
+    if status not in CONSULTATION_TRANSITIONS.get(current_status, set()):
+        raise ValueError(f"Consultation cannot transition from {current_status} to {status}.")
     if role not in {"admin", "doctor", "hospital"} or (role != "admin" and uid != consultation["doctor_id"]):
         raise PermissionError("Only the assigned doctor can accept, reject, schedule, or end this consultation.")
     if role == "admin":
