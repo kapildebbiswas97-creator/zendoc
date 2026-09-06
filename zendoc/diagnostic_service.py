@@ -5,6 +5,7 @@ and seamless integration with Health Memory report intelligence.
 """
 from __future__ import annotations
 
+import json
 import math
 import os
 import uuid
@@ -17,6 +18,12 @@ from .inventory_service import calculate_distance_km
 
 VALID_DATA_MODES = {"LIVE", "DEMO"}
 VALID_COLLECTION_TYPES = {"home_collection", "lab_visit"}
+AVAILABILITY_UNKNOWN = "UNKNOWN"
+AVAILABILITY_OBSERVED = "OBSERVED"
+AVAILABILITY_CONFIRMED = "CONFIRMED"
+AVAILABILITY_STALE = "STALE"
+AVAILABILITY_UNAVAILABLE = "UNAVAILABLE"
+
 
 
 def _explicit_confirmation(value: Any) -> bool:
@@ -76,6 +83,64 @@ def _parse_future_date(value: str) -> str:
     return parsed.isoformat()
 
 
+def normalize_diagnostic_test(test_query: str | int) -> dict[str, Any] | None:
+    """Resolve a diagnostic test by id, code, canonical name, or explicit alias."""
+    db = get_db()
+    if isinstance(test_query, int) or str(test_query).strip().isdigit():
+        row = db.execute("SELECT * FROM diagnostic_catalog WHERE id=?", (int(test_query),)).fetchone()
+        return dict(row) if row else None
+
+    raw = str(test_query or "").strip()
+    if not raw:
+        return None
+    rows = db.execute("SELECT * FROM diagnostic_catalog ORDER BY id").fetchall()
+    normalized = _normalize_text(raw)
+    matches = []
+    for row in rows:
+        item = dict(row)
+        candidates = [item.get("code"), item.get("name")]
+        try:
+            aliases = json.loads(item.get("aliases_json") or "[]")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            aliases = []
+        if isinstance(aliases, list):
+            candidates.extend(aliases)
+        if any(_normalize_text(candidate) == normalized for candidate in candidates if candidate):
+            matches.append(item)
+    return matches[0] if len(matches) == 1 else None
+
+
+def diagnostic_availability_state(offer: dict[str, Any], *, now: datetime | None = None) -> str:
+    """Classify provider observation freshness without promoting missing data."""
+    if not offer:
+        return AVAILABILITY_UNKNOWN
+    if not bool(offer.get("verified")):
+        return AVAILABILITY_OBSERVED
+
+    observed = offer.get("observed_at") or offer.get("created_at")
+    if not observed:
+        return AVAILABILITY_UNKNOWN
+    try:
+        observed_at = datetime.fromisoformat(str(observed).replace("Z", "+00:00"))
+        if observed_at.tzinfo is None:
+            observed_at = observed_at.replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        return AVAILABILITY_UNKNOWN
+
+    try:
+        ttl_hours = int(os.environ.get("ZENDOC_DIAGNOSTIC_FRESH_HOURS", "24"))
+    except (TypeError, ValueError):
+        ttl_hours = 24
+    ttl_hours = max(1, min(ttl_hours, 168))
+    current = now or datetime.now(timezone.utc)
+    age_seconds = max(0.0, (current - observed_at.astimezone(timezone.utc)).total_seconds())
+    return AVAILABILITY_CONFIRMED if age_seconds <= ttl_hours * 3600 else AVAILABILITY_STALE
+
+
+def _normalize_text(value: Any) -> str:
+    return " ".join(str(value or "").strip().lower().replace("-", " ").replace("_", " ").split())
+
+
 def list_diagnostic_catalog(category: str | None = None) -> list[dict[str, Any]]:
     """Return available diagnostic tests."""
     db = get_db()
@@ -102,10 +167,7 @@ def search_lab_offers(
     """
     mode = _data_mode(data_mode)
     db = get_db()
-    test_row = db.execute(
-        "SELECT * FROM diagnostic_catalog WHERE id=? OR UPPER(code)=UPPER(?)",
-        (test_code_or_id, str(test_code_or_id)),
-    ).fetchone()
+    test_row = normalize_diagnostic_test(test_code_or_id)
     if not test_row:
         return []
 
@@ -155,6 +217,9 @@ def search_lab_offers(
         item["data_mode"] = mode
         item["is_demo"] = mode == "DEMO"
         item["provider_status"] = str(item.get("verification_status") or "UNVERIFIED").upper()
+        item["availability_state"] = diagnostic_availability_state(item)
+        item["availability_confirmed"] = item["availability_state"] == AVAILABILITY_CONFIRMED
+        item["freshness_observed_at"] = item.get("observed_at") or item.get("created_at")
         dist = calculate_distance_km(user_lat, user_lon, item.get("latitude"), item.get("longitude"))
         item["distance_km"] = dist
         item["distance_text"] = f"{dist} km" if dist is not None else "Distance unavailable"
@@ -237,6 +302,11 @@ def book_diagnostic_test(
     ).fetchone()
     if not offer:
         raise LookupError("The selected lab offer is not available as a verified offer in the current data mode.")
+    availability_state = diagnostic_availability_state(dict(offer))
+    if availability_state != AVAILABILITY_CONFIRMED:
+        raise ValueError(
+            f"The selected lab offer is {availability_state}; refresh/verify provider availability before booking."
+        )
     if collection_type == "home_collection" and not bool(offer["home_collection_available"]):
         raise ValueError("The selected verified lab does not advertise home collection for this test.")
     try:
@@ -304,6 +374,7 @@ def book_diagnostic_test(
         "is_demo": mode == "DEMO",
         "requires_provider_acknowledgement": True,
         "provider_acknowledgement_status": "pending",
+        "availability_state_at_request": AVAILABILITY_CONFIRMED,
     }
 
 
