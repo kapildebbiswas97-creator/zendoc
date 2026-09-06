@@ -23,6 +23,7 @@ from .connect import (
     unread_count,
 )
 from .db import get_db, now_iso
+from .audit_privacy import redact_operational_text, summarize_user_content
 from .telehealth import get_doctor_availability, request_consultation
 from .agent_executor import execute_plan
 from .agent_planner import build_plan
@@ -93,7 +94,7 @@ def log_platform_event(actor, action, entity_type, entity_id=None, status="info"
         (actor_id, agent_name, action, entity_type, entity_id, status, error, approval_state, duration_ms, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (_user_id(actor) or None, agent_name, action, entity_type, entity_id, status, error, approval_state, duration_ms, now_iso()),
+        (_user_id(actor) or None, agent_name, action, entity_type, entity_id, status, redact_operational_text(error, 300), approval_state, duration_ms, now_iso()),
     )
 
 
@@ -104,7 +105,17 @@ def create_agent_run(actor, command_text, intent, status="completed", urgency="r
         (actor_id, agent_name, command_text, intent, status, urgency, result_summary, approval_state, duration_ms, created_at)
         VALUES (?, 'ZENDOC Core Agent', ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (_user_id(actor) or None, command_text[:1000], intent, status, urgency, result_summary[:1200], approval_state, duration_ms, now_iso()),
+        (
+            _user_id(actor) or None,
+            summarize_user_content(command_text, label="agent_command"),
+            intent,
+            status,
+            urgency,
+            redact_operational_text(result_summary, 300),
+            approval_state,
+            duration_ms,
+            now_iso(),
+        ),
     )
     return cursor.lastrowid
 
@@ -116,7 +127,7 @@ def log_agent_action(run_id, actor, action_type, tool_name=None, entity_type=Non
         (run_id, actor_id, agent_name, action_type, tool_name, entity_type, entity_id, status, approval_state, message, created_at)
         VALUES (?, ?, 'ZENDOC Core Agent', ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (run_id, _user_id(actor) or None, action_type, tool_name, entity_type, entity_id, status, approval_state, message, now_iso()),
+        (run_id, _user_id(actor) or None, action_type, tool_name, entity_type, entity_id, status, approval_state, redact_operational_text(message, 240), now_iso()),
     )
 
 
