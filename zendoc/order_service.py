@@ -373,26 +373,6 @@ def submit_order_from_plan(
             return _order_result(existing_ids, db, replay=True)
         raise ValueError("This fulfilment plan is no longer awaiting confirmation.")
 
-    claimed = db.execute(
-        """
-        UPDATE fulfilment_plans
-        SET status='ordering'
-        WHERE id=? AND status IN ('staged','confirmed')
-        """,
-        (int(plan_id),),
-    )
-    if claimed.rowcount != 1:
-        existing_ids = _existing_orders_for_submission(
-            db,
-            patient_id=patient_id,
-            plan_id=int(plan_id),
-            actor_id=aid,
-            idempotency_key=None,
-        )
-        if existing_ids:
-            return _order_result(existing_ids, db, replay=True)
-        raise ValueError("This fulfilment plan is already being processed by another request.")
-
     plan_items = [
         dict(item)
         for item in db.execute(
@@ -429,6 +409,27 @@ def submit_order_from_plan(
     )
     if existing_ids:
         return _order_result(existing_ids, db, replay=True)
+
+    claimed = db.execute(
+        """
+        UPDATE fulfilment_plans
+        SET status='ordering'
+        WHERE id=? AND status IN ('staged','confirmed')
+        """,
+        (int(plan_id),),
+    )
+    if claimed.rowcount != 1:
+        db.rollback()
+        existing_ids = _existing_orders_for_submission(
+            db,
+            patient_id=patient_id,
+            plan_id=int(plan_id),
+            actor_id=aid,
+            idempotency_key=None,
+        )
+        if existing_ids:
+            return _order_result(existing_ids, db, replay=True)
+        raise ValueError("This fulfilment plan is already being processed by another request.")
 
     now = now_iso()
     by_pharmacy: dict[int, list[dict[str, Any]]] = {}
@@ -550,11 +551,11 @@ def acknowledge_order(
         raise ValueError(f"Order cannot be {normalized_action}ed from tracking status {current}.")
 
     now = now_iso()
-    db.execute(
+    updated = db.execute(
         """
         UPDATE medicine_orders
         SET tracking_status=?, acknowledgement_status=?, acknowledged_at=?, status=?, updated_at=?
-        WHERE id=?
+        WHERE id=? AND tracking_status=?
         """,
         (
             target,
@@ -563,8 +564,12 @@ def acknowledge_order(
             "accepted" if target == "ACCEPTED" else "cancelled",
             now,
             int(order_id),
+            current,
         ),
     )
+    if updated.rowcount != 1:
+        db.rollback()
+        raise ValueError("Order changed concurrently; refresh before retrying.")
     db.execute(
         """
         INSERT INTO order_events
@@ -631,10 +636,17 @@ def update_order_tracking_status(
         "OUT_FOR_DELIVERY": "out_for_delivery",
         "DELIVERED": "delivered",
     }.get(status_upper, str(order.get("status") or "pending"))
-    db.execute(
-        "UPDATE medicine_orders SET tracking_status=?, status=?, updated_at=? WHERE id=?",
-        (status_upper, status_value, now, int(order_id)),
+    updated = db.execute(
+        """
+        UPDATE medicine_orders
+        SET tracking_status=?, status=?, updated_at=?
+        WHERE id=? AND tracking_status=?
+        """,
+        (status_upper, status_value, now, int(order_id), current),
     )
+    if updated.rowcount != 1:
+        db.rollback()
+        raise ValueError("Order changed concurrently; refresh before retrying.")
     db.execute(
         """
         INSERT INTO order_events
