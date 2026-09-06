@@ -1,0 +1,311 @@
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+
+import pytest
+
+from zendoc.db import get_db, now_iso
+from zendoc.diagnostic_service import complete_diagnostic_test
+from zendoc.inventory_service import update_inventory_observation
+from zendoc.organization_service import (
+    approve_membership,
+    bind_provider_profile,
+    create_location,
+    create_organization,
+    provider_resource_context,
+    request_membership,
+    verify_organization,
+)
+from zendoc.provider_service import available_slots, book_provider_slot, create_schedule
+from zendoc.telehealth import get_consultation, request_consultation
+from tests.test_milestone1 import make_app
+
+
+PASSWORD = "StrongPass123"
+
+
+def _register(client, email, role):
+    created = client.post(
+        "/api/v1/auth/register",
+        json={"name": email, "email": email, "password": PASSWORD, "role": role},
+    )
+    assert created.status_code == 201
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": PASSWORD},
+    )
+    assert login.status_code == 200
+
+
+def _user(app, email):
+    with app.app_context():
+        return dict(
+            get_db().execute(
+                "SELECT * FROM users WHERE email_normalized=?",
+                (email.lower(),),
+            ).fetchone()
+        )
+
+
+def _owner(app):
+    with app.app_context():
+        return dict(
+            get_db().execute(
+                "SELECT * FROM users WHERE email_normalized='admin@example.com'"
+            ).fetchone()
+        )
+
+
+def _profile(app, user, provider_type):
+    with app.app_context():
+        db = get_db()
+        now = now_iso()
+        profile_id = db.execute(
+            """
+            INSERT INTO provider_profiles
+            (user_id, provider_type, specialty, organization, verification_status, created_at, updated_at)
+            VALUES (?, ?, 'General', ?, 'verified', ?, ?)
+            """,
+            (user["id"], provider_type, f"{provider_type.title()} Standalone", now, now),
+        ).lastrowid
+        db.commit()
+        return int(profile_id)
+
+
+def _bind_verified_org(app, actor, profile_id, org_name, org_type="hospital", location_name="Main Branch"):
+    with app.app_context():
+        owner = _owner(app)
+        org = create_organization(actor, {"name": org_name, "organization_type": org_type})
+        verify_organization(owner, org["id"], "verified")
+        location = create_location(
+            actor,
+            org["id"],
+            {"name": location_name, "location_type": "branch", "city": "Kalyani"},
+        )
+        profile = bind_provider_profile(actor, org["id"], location["id"])
+        assert profile["id"] == profile_id
+        return org, location
+
+
+def _future_date_for_weekday(weekday):
+    day = datetime.now(timezone.utc).date() + timedelta(days=2)
+    while day.weekday() != weekday:
+        day += timedelta(days=1)
+    return day
+
+
+def test_standalone_provider_resource_context_remains_null(tmp_path):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    _register(client, "standalone-doctor@example.com", "doctor")
+    doctor = _user(app, "standalone-doctor@example.com")
+    _profile(app, doctor, "doctor")
+
+    with app.app_context():
+        assert provider_resource_context(doctor["id"]) == {
+            "organization_id": None,
+            "organization_location_id": None,
+        }
+
+
+def test_bound_provider_schedule_and_appointment_are_tenant_stamped(tmp_path):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    _register(client, "tenant-doctor@example.com", "doctor")
+    _register(client, "tenant-patient@example.com", "patient")
+    doctor = _user(app, "tenant-doctor@example.com")
+    patient = _user(app, "tenant-patient@example.com")
+    profile_id = _profile(app, doctor, "doctor")
+
+    with app.app_context():
+        org, location = _bind_verified_org(
+            app, doctor, profile_id, "Tenant Hospital", "hospital", "OPD Branch"
+        )
+        target_date = _future_date_for_weekday(2)
+        create_schedule(
+            doctor,
+            {
+                "weekday": target_date.weekday(),
+                "start_time": "10:00",
+                "end_time": "12:00",
+                "slot_minutes": 30,
+            },
+        )
+        schedule = get_db().execute(
+            "SELECT * FROM provider_schedules WHERE provider_profile_id=? ORDER BY id DESC LIMIT 1",
+            (profile_id,),
+        ).fetchone()
+        assert schedule["organization_id"] == org["id"]
+        assert schedule["organization_location_id"] == location["id"]
+
+        slots = available_slots(profile_id, target_date.isoformat())
+        assert slots
+        appointment_time = slots[0]
+        book_provider_slot(patient, profile_id, appointment_time, "Tenant test")
+
+        appointment = get_db().execute(
+            "SELECT * FROM appointments WHERE provider_profile_id=? ORDER BY id DESC LIMIT 1",
+            (profile_id,),
+        ).fetchone()
+        assert appointment["organization_id"] == org["id"]
+        assert appointment["organization_location_id"] == location["id"]
+
+
+def test_old_unscoped_schedule_not_promoted_after_branch_binding(tmp_path):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    _register(client, "schedule-doctor@example.com", "doctor")
+    doctor = _user(app, "schedule-doctor@example.com")
+    profile_id = _profile(app, doctor, "doctor")
+
+    with app.app_context():
+        target_date = _future_date_for_weekday(3)
+        db = get_db()
+        db.execute(
+            """
+            INSERT INTO provider_schedules
+            (provider_profile_id, weekday, start_time, end_time, slot_minutes, active, created_at, updated_at)
+            VALUES (?, ?, '09:00', '10:00', 30, 1, ?, ?)
+            """,
+            (profile_id, target_date.weekday(), now_iso(), now_iso()),
+        )
+        db.commit()
+
+        _bind_verified_org(app, doctor, profile_id, "Scoped Hospital", "hospital", "New Branch")
+        assert available_slots(profile_id, target_date.isoformat()) == []
+
+
+def test_inventory_observation_inherits_pharmacy_tenant(tmp_path):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    _register(client, "tenant-pharmacy@example.com", "pharmacy")
+    pharmacy = _user(app, "tenant-pharmacy@example.com")
+    profile_id = _profile(app, pharmacy, "pharmacy")
+
+    with app.app_context():
+        org, location = _bind_verified_org(
+            app, pharmacy, profile_id, "Tenant Pharmacy Network", "pharmacy_network", "Kalyani Store"
+        )
+        db = get_db()
+        sku = db.execute(
+            """
+            INSERT INTO medication_skus
+            (sku_code,name,generic_name,form,pack_size,pack_unit,mrp_inr,rx_required,data_mode,created_at)
+            VALUES ('TEN-SKU-1','Tenant Medicine','Tenant Generic','tablet',1,'tablet',10,0,'LIVE',?)
+            """,
+            (now_iso(),),
+        )
+        db.commit()
+        observation = update_inventory_observation(
+            pharmacy["id"], sku.lastrowid, 5, 8.0, stock_status="CONFIRMED"
+        )
+        assert observation["organization_id"] == org["id"]
+        assert observation["organization_location_id"] == location["id"]
+
+
+def test_diagnostic_booking_inherits_assigned_lab_tenant_and_rejects_moved_branch(tmp_path):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    _register(client, "diag-patient-tenant@example.com", "patient")
+    _register(client, "diag-lab-tenant@example.com", "hospital")
+    patient = _user(app, "diag-patient-tenant@example.com")
+    lab = _user(app, "diag-lab-tenant@example.com")
+    profile_id = _profile(app, lab, "diagnostic_centre")
+
+    with app.app_context():
+        org, location = _bind_verified_org(
+            app, lab, profile_id, "Diagnostic Network", "diagnostic_network", "Lab Branch A"
+        )
+        db = get_db()
+        test_id = db.execute(
+            """
+            INSERT INTO diagnostic_catalog
+            (code,name,category,fasting_required,sample_type,tat_hours,standard_price_inr,created_at)
+            VALUES ('TEN-DIAG','Tenant Diagnostic','general',0,'blood',24,100,?)
+            """,
+            (now_iso(),),
+        ).lastrowid
+        db.execute(
+            """
+            INSERT INTO diagnostic_bookings
+            (booking_uid,patient_id,booked_by,lab_id,test_id,collection_type,scheduled_date,address,status,
+             price_inr,organization_id,organization_location_id,created_at,updated_at)
+            VALUES ('tenant-diag-booking',?,?,?,?,'lab_visit','2026-12-20','Lab','requested',100,?,?,?,?)
+            """,
+            (
+                patient["id"], patient["id"], lab["id"], test_id,
+                org["id"], location["id"], now_iso(), now_iso()
+            ),
+        )
+        db.commit()
+        booking_id = db.execute(
+            "SELECT id FROM diagnostic_bookings WHERE booking_uid='tenant-diag-booking'"
+        ).fetchone()["id"]
+
+        location_b = create_location(
+            lab, org["id"], {"name": "Lab Branch B", "location_type": "branch", "city": "Kalyani"}
+        )
+        bind_provider_profile(lab, org["id"], location_b["id"])
+
+        with pytest.raises(PermissionError):
+            complete_diagnostic_test(lab, booking_id, "Completed")
+
+
+def test_telehealth_consultation_and_room_keep_doctor_tenant(tmp_path):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    _register(client, "tele-patient@example.com", "patient")
+    _register(client, "tele-doctor@example.com", "doctor")
+    patient = _user(app, "tele-patient@example.com")
+    doctor = _user(app, "tele-doctor@example.com")
+    profile_id = _profile(app, doctor, "doctor")
+
+    with app.app_context():
+        org, location = _bind_verified_org(
+            app, doctor, profile_id, "Tele Hospital", "hospital", "Tele Branch"
+        )
+        consultation = request_consultation(
+            patient,
+            {
+                "doctor_id": doctor["id"],
+                "consultation_type": "chat",
+                "reason": "Follow up",
+            },
+        )
+        assert consultation["organization_id"] == org["id"]
+        assert consultation["organization_location_id"] == location["id"]
+
+        from zendoc.telehealth import update_consultation_status
+        updated = update_consultation_status(doctor, consultation["id"], "accepted")
+        assert updated["room_id"] is not None
+        room = get_db().execute(
+            "SELECT * FROM consultation_rooms WHERE consultation_id=?",
+            (consultation["id"],),
+        ).fetchone()
+        assert room["organization_id"] == org["id"]
+        assert room["organization_location_id"] == location["id"]
+
+
+def test_cross_branch_doctor_cannot_access_old_tenant_consultation_after_move(tmp_path):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    _register(client, "move-patient@example.com", "patient")
+    _register(client, "move-doctor@example.com", "doctor")
+    patient = _user(app, "move-patient@example.com")
+    doctor = _user(app, "move-doctor@example.com")
+    profile_id = _profile(app, doctor, "doctor")
+
+    with app.app_context():
+        org, location_a = _bind_verified_org(
+            app, doctor, profile_id, "Move Hospital", "hospital", "Branch A"
+        )
+        consultation = request_consultation(
+            patient,
+            {"doctor_id": doctor["id"], "consultation_type": "chat", "reason": "Initial"},
+        )
+        location_b = create_location(
+            doctor, org["id"], {"name": "Branch B", "location_type": "branch", "city": "Kalyani"}
+        )
+        bind_provider_profile(doctor, org["id"], location_b["id"])
+        with pytest.raises(PermissionError):
+            get_consultation(doctor, consultation["id"])
