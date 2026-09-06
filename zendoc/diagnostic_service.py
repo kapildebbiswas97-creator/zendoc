@@ -461,19 +461,48 @@ def book_diagnostic_test(
         }
 
     uid = f"diag_{patient_id}_{test_id}_{uuid.uuid4().hex[:12]}"
-    cursor = db.execute(
-        """
-        INSERT INTO diagnostic_bookings
-        (booking_uid, patient_id, booked_by, lab_id, test_id, collection_type, scheduled_date,
-         slot_time, address, status, price_inr, organization_id, organization_location_id, request_fingerprint, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'requested', ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            uid, patient_id, aid, lab_id, test_id, collection_type, scheduled_date, slot_time, address,
-            round(price + fee, 2), tenant["organization_id"], tenant["organization_location_id"], request_fingerprint, now, now
-        ),
-    )
-    booking_id = cursor.lastrowid
+    try:
+        cursor = db.execute(
+            """
+            INSERT INTO diagnostic_bookings
+            (booking_uid, patient_id, booked_by, lab_id, test_id, collection_type, scheduled_date,
+             slot_time, address, status, price_inr, organization_id, organization_location_id, request_fingerprint, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'requested', ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                uid, patient_id, aid, lab_id, test_id, collection_type, scheduled_date, slot_time, address,
+                round(price + fee, 2), tenant["organization_id"], tenant["organization_location_id"],
+                request_fingerprint, now, now
+            ),
+        )
+        booking_id = cursor.lastrowid
+    except Exception as error:
+        db.rollback()
+        if is_integrity_error(error):
+            existing = db.execute(
+                "SELECT * FROM diagnostic_bookings WHERE request_fingerprint=?",
+                (request_fingerprint,),
+            ).fetchone()
+            if existing:
+                return {
+                    "success": True,
+                    "booking_id": int(existing["id"]),
+                    "booking_uid": existing["booking_uid"],
+                    "test_name": test_row["name"],
+                    "lab_id": lab_id,
+                    "lab_name": offer["lab_name"],
+                    "status": existing["status"],
+                    "price_inr": price,
+                    "collection_fee_inr": fee,
+                    "total_price_inr": float(existing["price_inr"]),
+                    "data_mode": mode,
+                    "is_demo": mode == "DEMO",
+                    "requires_provider_acknowledgement": True,
+                    "provider_acknowledgement_status": "pending",
+                    "availability_state_at_request": AVAILABILITY_CONFIRMED,
+                    "idempotent_replay": True,
+                }
+        raise
 
     from .care_graph import record_care_continuity_event
 
