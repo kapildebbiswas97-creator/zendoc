@@ -12,6 +12,7 @@ from .health_routes import bp as health_memory_bp
 from .milestone7_routes import bp as milestone7_bp
 from .milestone8_routes import bp as milestone8_bp
 from .milestone82_routes import bp as milestone82_bp
+from .system_intelligence_routes import bp as system_intelligence_bp
 from .routes import bp
 
 
@@ -39,6 +40,7 @@ def create_app(test_config=None):
     app.register_blueprint(milestone8_bp)
     app.register_blueprint(milestone82_bp)
     app.register_blueprint(connected_care_bp)
+    app.register_blueprint(system_intelligence_bp)
     app.teardown_appcontext(close_db)
     validate_startup_config(app)
     with app.app_context():
