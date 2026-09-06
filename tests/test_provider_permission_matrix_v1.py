@@ -286,3 +286,61 @@ def test_fake_admin_cannot_globally_read_telehealth_consultations(tmp_path):
     with app.app_context():
         with pytest.raises(PermissionError):
             list_consultations(fake_admin)
+
+
+def test_fake_admin_cannot_read_global_dashboard_stats(tmp_path):
+    app = make_app(tmp_path)
+    from zendoc.routes import stats_for
+
+    fake_admin = {
+        "id": 999997,
+        "role": "admin",
+        "email": "fake-stats-admin@example.com",
+        "email_normalized": "fake-stats-admin@example.com",
+        "active": 1,
+    }
+    with app.app_context():
+        with pytest.raises(PermissionError):
+            stats_for(fake_admin)
+
+
+def test_provider_cannot_directly_assign_global_staff_account(tmp_path):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    _register_api(client, "assign-doctor@example.com", "doctor")
+    _register_api(client, "assign-patient@example.com", "patient")
+    _register_api(client, "assign-staff@example.com", "hospital")
+    doctor = _user(app, "assign-doctor@example.com")
+    patient = _user(app, "assign-patient@example.com")
+    staff_user = _user(app, "assign-staff@example.com")
+
+    with app.app_context():
+        db = get_db()
+        db.execute(
+            """
+            INSERT INTO appointments
+            (patient_id, provider_id, provider_name, scheduled_for, reason, status, created_at, updated_at)
+            VALUES (?, ?, 'Assign Doctor', '2026-12-15T10:00', 'Review', 'confirmed', ?, ?)
+            """,
+            (patient["id"], doctor["id"], now_iso(), now_iso()),
+        )
+        db.execute(
+            """
+            INSERT INTO staff_profiles
+            (user_id, staff_type, service_area, status, verified, created_at, updated_at)
+            VALUES (?, 'care_coordinator', 'Kalyani', 'available', 1, ?, ?)
+            """,
+            (staff_user["id"], now_iso(), now_iso()),
+        )
+        db.commit()
+
+        with pytest.raises(PermissionError):
+            create_staff_task(
+                doctor,
+                {
+                    "task_type": "follow_up",
+                    "title": "Assign globally",
+                    "patient_id": patient["id"],
+                    "assigned_staff_id": staff_user["id"],
+                },
+            )
