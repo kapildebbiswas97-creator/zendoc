@@ -3,6 +3,8 @@ import pytest
 from zendoc.db import get_db
 from zendoc.healthcare_finder import HealthcareFinder
 from zendoc.public_data_ingestion import ingest_public_records, search_public_healthcare_entities
+from zendoc.public_source_registry import list_public_ingestion_sources
+from zendoc.data_gap_registry import list_data_gaps
 from zendoc.provider_onboarding import provider_onboarding_status
 from tests.test_milestone1 import csrf, login_web, make_app, register_web
 
@@ -394,3 +396,74 @@ def test_provider_evidence_browser_workflow(tmp_path):
     assert admin.status_code == 200
     assert b"Provider Evidence Review" in admin.data
     assert b"Browser Medical Register" in admin.data
+
+
+def test_official_source_registry_covers_core_national_and_west_bengal_sources(tmp_path):
+    app = make_app(tmp_path)
+    with app.app_context():
+        sources = {item["source_id"]: item for item in list_public_ingestion_sources()}
+        expected = {
+            "lgd",
+            "data_gov_hospitals",
+            "abdm_hfr",
+            "abdm_hpr",
+            "nmc_imr",
+            "nmc_medical_colleges",
+            "data_gov_hmis",
+            "eraktkosh",
+            "clinical_establishments",
+            "nabh_directory",
+            "nabl_labs",
+            "pmbjp_kendras",
+            "pmbjp_products",
+            "nppa_prices",
+            "cdsco_approved_drugs",
+            "cdsco_nlem",
+            "pmjay_hospitals",
+            "myscheme",
+            "swasthya_sathi_hospitals",
+            "wbhs_empanelled_hco",
+            "data_gov_cghs_hospitals",
+            "data_gov_blood_banks",
+        }
+        assert expected.issubset(set(sources))
+        assert all(item["personal_data_allowed"] is False for item in sources.values())
+
+
+def test_data_gap_registry_separates_public_directories_from_live_operational_data(tmp_path):
+    app = make_app(tmp_path)
+    with app.app_context():
+        gaps = {item["gap_id"]: item for item in list_data_gaps()}
+        assert gaps["pharmacy_live_stock"]["public_availability"] == "GENERALLY_NOT_PUBLIC"
+        assert "PHARMACY" in gaps["pharmacy_live_stock"]["preferred_collection"]
+        assert gaps["ambulance_live_dispatch"]["update_frequency"] == "REAL_TIME"
+        assert gaps["personal_health_records"]["sensitivity"] == "HIGH"
+        assert gaps["scheme_outcome"]["public_availability"] == "PRIVATE_OR_AUTHORIZED_ONLY"
+
+
+def test_owner_can_read_data_gap_registry_but_patient_cannot(tmp_path):
+    app = make_app(tmp_path)
+    client = app.test_client()
+
+    client.post(
+        "/api/v1/auth/register",
+        json={"name": "Gap Patient", "email": "gap-patient@example.com", "password": "StrongPass123", "role": "patient"},
+    )
+    patient_login = client.post(
+        "/api/v1/auth/login",
+        json={"email": "gap-patient@example.com", "password": "StrongPass123"},
+    )
+    denied = client.get(
+        "/api/v1/admin/ingestion/data-gaps",
+        headers={"Authorization": f"Bearer {patient_login.get_json()['token']}"},
+    )
+    assert denied.status_code == 403
+
+    owner = owner_token(client)
+    allowed = client.get(
+        "/api/v1/admin/ingestion/data-gaps",
+        headers={"Authorization": f"Bearer {owner}"},
+    )
+    assert allowed.status_code == 200
+    payload = allowed.get_json()
+    assert any(item["gap_id"] == "doctor_live_slots" for item in payload["data_gaps"])
