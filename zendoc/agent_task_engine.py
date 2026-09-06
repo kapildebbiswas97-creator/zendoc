@@ -11,6 +11,7 @@ from __future__ import annotations
 import time
 
 from .db import get_db, now_iso
+from .audit_privacy import redact_operational_text
 
 
 # ── Failure categories ─────────────────────────────────────────────────────────
@@ -187,8 +188,9 @@ def execute_safe_task(task_id: int, actor: dict, handler_fn=None) -> dict:
     try:
         result_summary = str(handler_fn(task) or "Task completed.")
         duration = int((time.perf_counter() - started) * 1000)
-        _update_task(task_id, "completed", result_summary=result_summary[:500], duration_ms=duration)
-        _record_attempt(task_id, "completed", result_summary[:300], duration_ms=duration)
+        safe_summary = redact_operational_text(result_summary, 300)
+        _update_task(task_id, "completed", result_summary=safe_summary, duration_ms=duration)
+        _record_attempt(task_id, "completed", safe_summary, duration_ms=duration)
         completed = get_agent_task(task_id)
         _publish_task_event(completed, actor, "completed")
         return completed
@@ -235,7 +237,7 @@ def request_approval_for_task(task_id: int, requested_by_user_id: int, action_ty
 def set_task_waiting(task_id: int, status: str, summary: str = "") -> dict:
     if status not in {"waiting_approval", "waiting_human"}:
         raise ValueError("Task may wait only for approval or human action.")
-    _update_task(task_id, status, result_summary=str(summary or "")[:500])
+    _update_task(task_id, status, result_summary=redact_operational_text(summary, 300))
     return get_agent_task(task_id)
 
 
@@ -285,8 +287,9 @@ def _update_task(
 
 def _fail_task(task_id: int, started: float, error_msg: str, category: str):
     duration = int((time.perf_counter() - started) * 1000)
-    _update_task(task_id, "failed", result_summary=error_msg[:300], last_error_category=category, duration_ms=duration)
-    _record_attempt(task_id, "failed", error_msg[:300], error_category=category, duration_ms=duration)
+    safe_error = redact_operational_text(error_msg, 300)
+    _update_task(task_id, "failed", result_summary=safe_error, last_error_category=category, duration_ms=duration)
+    _record_attempt(task_id, "failed", safe_error, error_category=category, duration_ms=duration)
 
 
 def _record_attempt(task_id: int, status: str, message: str = "", error_category: str | None = None, duration_ms: int | None = None):
