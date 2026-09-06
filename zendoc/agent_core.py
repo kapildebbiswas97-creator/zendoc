@@ -439,6 +439,7 @@ def admin_command_center_data():
     from .agent_task_engine import list_agent_tasks
     from .capability_registry import get_capability_registry
     from .infrastructure import infrastructure_status
+    from .observability import incident_summary, list_runbooks
     from .model_router import get_model_router
     from .tool_registry import TOOL_REGISTRY
 
@@ -461,6 +462,8 @@ def admin_command_center_data():
         "model_router": get_model_router().status(check_health=True),
         "capabilities": get_capability_registry(),
         "infrastructure": infrastructure_status(),
+        "incident_summary": incident_summary(60),
+        "incident_runbooks": list_runbooks(),
         "tool_registry": [tool.to_dict() for tool in TOOL_REGISTRY.values()],
         "schema_migrations": [dict(row) for row in db.execute("SELECT * FROM schema_migrations ORDER BY applied_at DESC").fetchall()],
     }
