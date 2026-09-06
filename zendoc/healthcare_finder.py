@@ -1,5 +1,6 @@
 from .places_provider import ShortLivedCache, configured_places_provider
 from .provider_service import search_registered_providers
+from .public_data_ingestion import search_public_healthcare_entities
 
 
 CATEGORIES = {"hospital", "clinic", "doctor", "pharmacy", "diagnostic_centre", "laboratory", "emergency"}
@@ -54,12 +55,24 @@ class HealthcareFinder:
             specialty=normalized["specialty"],
             location=normalized["location"],
         )
+        public_directory = search_public_healthcare_entities(
+            category=normalized["category"],
+            specialty=normalized["specialty"],
+            location=normalized["location"],
+            limit=25,
+        )
         places_result = self.places_provider.search(normalized)
         response = {
             "query": normalized,
             "registered_providers": registered,
+            "official_public_directory": public_directory,
             "external_places": places_result.to_dict(),
-            "results": registered + places_result.results,
+            "results": registered + public_directory + places_result.results,
+            "source_tiers": {
+                "zendoc_verified": len(registered),
+                "official_public_directory_not_zendoc_verified": len(public_directory),
+                "external_unverified": len(places_result.results),
+            },
             "message": None,
         }
         if not response["results"]:
