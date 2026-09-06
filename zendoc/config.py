@@ -148,6 +148,9 @@ def load_config(base_dir, overrides=None):
         "ADMIN_PASSWORD": os.environ.get("ZENDOC_ADMIN_PASSWORD"),
         "CREATE_DEV_ADMIN": env != "production" and env_bool("ZENDOC_CREATE_DEV_ADMIN", True),
         "RATE_LIMIT_PER_MINUTE": int(os.environ.get("ZENDOC_RATE_LIMIT_PER_MINUTE", "120")),
+        "OBSERVABILITY_RETENTION_DAYS": env_int(
+            "ZENDOC_OBSERVABILITY_RETENTION_DAYS", 30, minimum=1, maximum=365
+        ),
         "PLACES_PROVIDER": os.environ.get("ZENDOC_PLACES_PROVIDER", "none"),
         "VIDEO_PROVIDER": os.environ.get("ZENDOC_VIDEO_PROVIDER", "none"),
         "YOUTUBE_API_KEY": os.environ.get("ZENDOC_YOUTUBE_API_KEY", ""),
