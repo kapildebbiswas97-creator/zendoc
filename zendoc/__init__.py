@@ -5,7 +5,7 @@ from flask import Flask
 from .config import load_config, validate_startup_config
 from .carefin_routes import bp as carefin_bp
 from .care_journey_routes import bp as care_journey_bp
-from .db import close_db, init_db
+from .db import close_db, get_db, init_db
 from .connected_care_routes import bp as connected_care_bp
 from .ecosystem_routes import bp as ecosystem_bp
 from .family_routes import bp as family_bp
@@ -21,6 +21,7 @@ from .organization_routes import bp as provider_organizations_bp
 from .public_ingestion_routes import bp as public_ingestion_bp
 from .provider_onboarding_routes import bp as provider_onboarding_bp
 from .system_intelligence_routes import bp as system_intelligence_bp
+from .database_reliability import readiness_report
 from .routes import bp
 
 
@@ -60,6 +61,17 @@ def create_app(test_config=None):
     app.teardown_appcontext(close_db)
     validate_startup_config(app)
     with app.app_context():
-        init_db()
+        try:
+            init_db()
+            report = readiness_report()
+            if report.get("status") != "ready":
+                raise RuntimeError(f"Database readiness check failed after migration: {report}")
+        except Exception:
+            try:
+                get_db().rollback()
+            except Exception:
+                pass
+            app.logger.exception("ZENDOC database initialization/readiness failed.")
+            raise
 
     return app
