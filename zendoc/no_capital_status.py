@@ -31,6 +31,10 @@ NO_CAPITAL_CAPABILITY_KEYS = (
     "nutrition_agent",
     "multilingual_foundation",
     "geographic_healthcare_graph",
+    "official_public_data_ingestion",
+    "provider_onboarding_v1",
+    "carefin_pilot_ui",
+    "care_journey_pilot_ui",
     "capability_registry",
 )
 
@@ -41,6 +45,7 @@ INTEGRATION_DEPENDENCIES = (
     "free_form_translation",
     "external_notifications",
     "postgresql",
+    "official_live_connectors",
 )
 
 PARTNER_DEPENDENCIES = (
