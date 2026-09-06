@@ -772,3 +772,58 @@ def test_missing_price_and_distance_never_generates_plausible_defaults(tmp_path)
         # Invariant: Price is None, never ₹0 or estimated
         assert offers[0]["inventory"][1]["price_inr"] is None
 
+
+
+def test_session_backed_connected_care_mutations_require_csrf_header(tmp_path):
+    app = make_m10_app(tmp_path)
+    client = app.test_client()
+
+    register_api(client, "csrf-guard@example.com", role="patient", name="CSRF Guard")
+    with app.app_context():
+        db = get_db()
+        user = db.execute("SELECT id, role FROM users WHERE email_normalized=?", ("csrf-guard@example.com",)).fetchone()
+        user_id = int(user["id"])
+
+    with client.session_transaction() as sess:
+        sess["user_id"] = user_id
+        sess["role"] = "patient"
+        sess["csrf_token"] = "known-csrf-token"
+
+    mutation_requests = [
+        ("/api/v1/connected-care/fulfilment", {"prescription_id": 1}),
+        ("/api/v1/connected-care/orders/confirm", {"plan_id": 1, "user_confirmed": True, "delivery_address": "Test Address"}),
+        ("/api/v1/connected-care/prescriptions", {"prescriber_name": "Dr Test", "items": [{"medicine_name": "Test Medicine"}]}),
+        ("/api/v1/connected-care/consent", {"grantee_id": 999, "purpose": "pharmacy", "scopes": ["prescriptions", "delivery_address"]}),
+        ("/api/v1/connected-care/diagnostics/book", {"test_id": 1, "lab_id": 1, "scheduled_date": "2026-09-20", "address": "Test Address", "user_confirmed": True}),
+        ("/api/v1/connected-care/orchestrate", {"message": "find medicines"}),
+    ]
+
+    for path, payload in mutation_requests:
+        response = client.post(path, json=payload)
+        assert response.status_code == 400, path
+        data = response.get_json()
+        assert "csrf" in str(data).lower(), path
+
+
+def test_patient_prescription_api_does_not_accept_client_prescriber_identity(tmp_path):
+    app = make_m10_app(tmp_path)
+    client = app.test_client()
+
+    register_api(client, "rx-owner@example.com", role="patient", name="RX Owner")
+    login = login_api(client, "rx-owner@example.com", role="patient")
+    assert login.status_code == 200
+    token = login.get_json()["token"]
+
+    response = client.post(
+        "/api/v1/connected-care/prescriptions",
+        json={
+            "prescriber_name": "Dr Existing",
+            "prescribing_doctor_id": 999999,
+            "items": [{"medicine_name": "Uncatalogued Medicine", "extraction_confidence": 0.5}],
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 201
+    prescription = response.get_json()["prescription"]
+    assert prescription["prescriber_name"] == "Dr Existing"
+    assert prescription["prescriber_id"] is None
