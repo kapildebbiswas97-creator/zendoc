@@ -188,10 +188,40 @@ def available_slots(provider_profile_id, date_text):
     if date_value < datetime.now(timezone.utc).date():
         return []
     weekday = date_value.weekday()
-    schedules = get_db().execute(
-        "SELECT * FROM provider_schedules WHERE provider_profile_id=? AND weekday=? AND active=1",
-        (provider_profile_id, weekday),
-    ).fetchall()
+    tenant = provider_resource_context(profile["user_id"])
+    if tenant["organization_id"]:
+        if tenant["organization_location_id"]:
+            schedules = get_db().execute(
+                """
+                SELECT * FROM provider_schedules
+                WHERE provider_profile_id=? AND weekday=? AND active=1
+                  AND organization_id=? AND organization_location_id=?
+                """,
+                (
+                    provider_profile_id,
+                    weekday,
+                    tenant["organization_id"],
+                    tenant["organization_location_id"],
+                ),
+            ).fetchall()
+        else:
+            schedules = get_db().execute(
+                """
+                SELECT * FROM provider_schedules
+                WHERE provider_profile_id=? AND weekday=? AND active=1
+                  AND organization_id=? AND organization_location_id IS NULL
+                """,
+                (provider_profile_id, weekday, tenant["organization_id"]),
+            ).fetchall()
+    else:
+        schedules = get_db().execute(
+            """
+            SELECT * FROM provider_schedules
+            WHERE provider_profile_id=? AND weekday=? AND active=1
+              AND organization_id IS NULL
+            """,
+            (provider_profile_id, weekday),
+        ).fetchall()
     booked = {
         row["scheduled_for"][:16]
         for row in get_db().execute(
