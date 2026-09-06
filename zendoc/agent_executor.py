@@ -125,6 +125,93 @@ def _patient_target(actor, arguments, purpose):
 
 
 
+def _provider_discovery(actor, arguments):
+    from .healthcare_finder import HealthcareFinder, normalize_query
+    from .provider_service import SPECIALTIES
+
+    query = str(arguments.get("query") or "")[:500]
+    lower = query.lower()
+    if "pharmacy" in lower:
+        category = "pharmacy"
+    elif any(term in lower for term in ("diagnostic", "laboratory", " lab ")):
+        category = "diagnostic_centre"
+    elif "clinic" in lower:
+        category = "clinic"
+    elif "hospital" in lower:
+        category = "hospital"
+    else:
+        category = "doctor"
+
+    specialty = ""
+    for item in SPECIALTIES:
+        if item.lower() in lower:
+            specialty = item
+            break
+
+    location = str(arguments.get("location") or _value(actor, "city", "") or "").strip()
+    if not location and " in " in lower:
+        location = query.rsplit(" in ", 1)[-1].strip()[:100]
+
+    normalized = normalize_query(
+        category=category,
+        specialty=specialty,
+        location=location,
+        latitude=arguments.get("latitude"),
+        longitude=arguments.get("longitude"),
+        radius_km=arguments.get("radius_km", 10),
+    )
+    result = HealthcareFinder().search(normalized)
+    result["source_state_notice"] = (
+        "ZENDOC provider verification and external place discovery are separate. "
+        "External results do not imply credentials, live appointments, emergency readiness, or ZENDOC booking connectivity."
+    )
+    return result
+
+
+def _latest_prescription_review(actor, arguments):
+    from .db import get_db
+    from .prescription_service import get_prescription
+
+    patient_id = _patient_target(actor, arguments, "prescription_view")
+    row = get_db().execute(
+        "SELECT id FROM prescriptions WHERE patient_id=? ORDER BY issue_date DESC, id DESC LIMIT 1",
+        (patient_id,),
+    ).fetchone()
+    if not row:
+        return {
+            "status": "NO_PRESCRIPTION",
+            "patient_id": patient_id,
+            "needs_review": False,
+            "items": [],
+        }
+
+    prescription = get_prescription(int(row["id"]), actor=actor)
+    items = []
+    for item in prescription.get("items", []):
+        items.append({
+            "id": item["id"],
+            "medicine_name": item["medicine_name"],
+            "form": item.get("form"),
+            "dosage": item.get("dosage"),
+            "frequency": item.get("frequency"),
+            "extraction_confidence": item.get("extraction_confidence"),
+            "review_status": item.get("review_status"),
+            "sku_id": item.get("sku_id"),
+        })
+    return {
+        "status": "REVIEW_REQUIRED" if prescription.get("needs_review") else "VERIFIED",
+        "patient_id": patient_id,
+        "prescription_id": prescription["id"],
+        "needs_review": bool(prescription.get("needs_review")),
+        "fulfilment_ready": bool(items) and all(
+            item.get("sku_id") and item.get("review_status") in {"verified", "user_confirmed"}
+            for item in items
+        ),
+        "items": items,
+        "safety_notice": "Read-only review. No medicine substitution, dose/frequency/form change, prescribing, or order submission occurred.",
+    }
+
+
 def _carefin_discovery(actor, arguments):
     from .carefin_engine import discover_benefits
 
@@ -269,6 +356,8 @@ TOOL_HANDLERS = {
     "get_iot_devices": _iot_devices,
     "run_proactive_alert_check": _alert_check,
     "run_safe_operations_automation": _safe_operations_automation,
+    "search_healthcare_providers": _provider_discovery,
+    "get_latest_prescription_review": _latest_prescription_review,
     "discover_carefin_benefits": _carefin_discovery,
     "search_nearby_pharmacy_inventory": _pharmacy_search,
     "compare_prescription_fulfilment": _pharmacy_compare,
