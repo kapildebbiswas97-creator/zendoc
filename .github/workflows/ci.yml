@@ -1,0 +1,38 @@
+name: ZENDOC CI
+
+on:
+  push:
+    branches: [main, post-submission-production]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      ZENDOC_ENV: development
+      ZENDOC_CREATE_DEV_ADMIN: "false"
+      ZENDOC_LOCAL_AI_ENABLED: "false"
+      ZENDOC_MODEL_EVALUATION_REAL_ENABLED: "false"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt
+
+      - name: Compile application
+        run: python -m compileall -q zendoc tests
+
+      - name: Run tests
+        run: python -m pytest tests -q
