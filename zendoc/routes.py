@@ -1015,6 +1015,7 @@ def require_api_user():
         return None, (jsonify({"error": "Unauthorized"}), 401)
     if user["role"] == "admin" and not is_owner(user):
         return None, (jsonify({"error": {"code": 403, "message": "Only the ZENDOC owner may access Admin operations."}}), 403)
+    g.observability_actor = user
     return user, None
 
 
