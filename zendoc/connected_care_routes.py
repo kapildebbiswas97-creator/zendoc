@@ -7,8 +7,9 @@ URL prefix: /connected-care  (pages)
 
 Architecture invariants enforced here:
   1. Zero autonomous consequential actions — AI stages, user explicitly confirms.
-  2. Clinical boundary — AI never prescribes; prescription creation blocked for
-     agent roles, only doctors / patients with warning.
+  2. Clinical boundary — AI never prescribes; patients may only record
+     user-reported prescription information, while doctor-created records are
+     provider-recorded and bound to the authenticated doctor identity.
   3. Inventory truth — UNKNOWN inventory never shown as available.
   4. All state-changing API endpoints are CSRF-protected via require_api_user().
 """
@@ -537,7 +538,7 @@ def api_pharmacy_offers():
 @bp.post("/api/v1/connected-care/fulfilment")
 def api_optimize_fulfilment():
     """Stage a multi-pharmacy fulfilment plan. Does NOT place an order."""
-    user, err = _api_user()
+    user, err = _api_user(mutation=True)
     if err:
         return err
     try:
@@ -571,7 +572,7 @@ def api_confirm_order():
     REQUIRES explicit user confirmation (user_confirmed=True in body).
     This is the only route that places orders — all others are read/stage only.
     """
-    user, err = _api_user()
+    user, err = _api_user(mutation=True)
     if err:
         return err
     try:
@@ -606,21 +607,50 @@ def api_confirm_order():
 
 @bp.post("/api/v1/connected-care/prescriptions")
 def api_create_prescription():
-    user, err = _api_user()
+    user, err = _api_user(mutation=True)
     if err:
         return err
     try:
         body = request.get_json(force=True) or {}
         patient_id = int(body.get("patient_id") or user["id"])
         _get_patient_id(user, {"patient_id": patient_id, "purpose": "prescriptions"})
-        # Prescriptions are only created from doctor uploads / record extraction, not AI autonomy
-        prescriber_name = str(body.get("prescriber_name") or "Unknown Prescriber")
+
+        # Preserve clinical provenance instead of trusting client-supplied
+        # prescriber identity. Patients can record an existing prescription as
+        # USER_REPORTED data; authenticated doctors create PROVIDER_RECORDED
+        # entries bound to their own account. The owner may support document
+        # ingestion, but cannot impersonate a doctor through request fields.
+        role = str(user.get("role") or "").lower()
+        if role not in {"patient", "doctor", "admin"}:
+            return _api_error(
+                PermissionError("Only patients, doctors, or the ZENDOC owner may record prescription information."),
+                403,
+            )
+
+        prescriber_name = str(body.get("prescriber_name") or "").strip()
+        if role == "doctor":
+            prescriber_id = int(user["id"])
+            prescriber_name = str(user.get("name") or prescriber_name).strip()
+            source = "PROVIDER_RECORDED"
+        elif role == "patient":
+            if patient_id != int(user["id"]):
+                return _api_error(
+                    PermissionError("Patients may only record prescription information for their own account."),
+                    403,
+                )
+            prescriber_id = None
+            source = "USER_REPORTED"
+        else:
+            prescriber_id = None
+            source = "DOCUMENT_EXTRACTED"
+
         prescription = create_prescription(
             patient_id=patient_id,
             prescriber_name=prescriber_name,
             items=body.get("items", []),
-            prescriber_id=body.get("prescribing_doctor_id"),
+            prescriber_id=prescriber_id,
             diagnosis_notes=body.get("notes", ""),
+            source=source,
         )
         audit("connected_care.prescription.create", "prescription", prescription.get("id"), user)
         return jsonify({"prescription": prescription}), 201
@@ -655,7 +685,7 @@ def api_list_prescriptions():
 @bp.post("/api/v1/connected-care/inventory")
 def api_update_inventory():
     """Pharmacy-only: report current inventory observation for a SKU."""
-    user, err = _api_user()
+    user, err = _api_user(mutation=True)
     if err:
         return err
     if user.get("role") not in ("pharmacy", "admin"):
@@ -703,7 +733,7 @@ def api_next_safe_actions():
 
 @bp.post("/api/v1/connected-care/consent")
 def api_create_consent():
-    user, err = _api_user()
+    user, err = _api_user(mutation=True)
     if err:
         return err
     try:
@@ -740,7 +770,7 @@ def api_revoke_consent(grant_id):
 
 @bp.post("/api/v1/connected-care/diagnostics/book")
 def api_book_diagnostic():
-    user, err = _api_user()
+    user, err = _api_user(mutation=True)
     if err:
         return err
     try:
@@ -915,7 +945,7 @@ def api_trust_center_revoke():
 
 @bp.post("/api/v1/connected-care/orchestrate")
 def api_orchestrate():
-    user, err = _api_user()
+    user, err = _api_user(mutation=True)
     if err:
         return err
     try:
