@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from .db import get_db, now_iso
+from .db import get_db, is_integrity_error, now_iso
 from .organization_service import provider_resource_context
 
 
@@ -253,35 +253,57 @@ def book_provider_slot(patient, provider_profile_id, scheduled_for, reason):
     slot_key = scheduled_for[:16]
     if slot_key not in available_slots(provider_profile_id, scheduled_for[:10]):
         raise ValueError("Selected slot is unavailable.")
-    existing = get_db().execute(
-        """
-        SELECT id FROM appointments
-        WHERE provider_id=? AND substr(scheduled_for, 1, 16)=? AND status IN ('requested','confirmed')
-        """,
-        (profile["user_id"], slot_key),
-    ).fetchone()
-    if existing:
-        raise ValueError("Selected slot is already booked.")
-    get_db().execute(
-        """
-        INSERT INTO appointments
-        (patient_id, provider_id, provider_profile_id, provider_name, specialty, scheduled_for, reason, status,
-         organization_id, organization_location_id, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'requested', ?, ?, ?, ?)
-        """,
-        (
-            patient["id"],
-            profile["user_id"],
-            profile["id"],
-            profile["organization"] or get_db().execute(
-                "SELECT name FROM users WHERE id=?", (profile["user_id"],)
-            ).fetchone()["name"],
-            profile["specialty"],
-            scheduled_for,
-            reason,
-            provider_resource_context(profile["user_id"])["organization_id"],
-            provider_resource_context(profile["user_id"])["organization_location_id"],
-            now_iso(),
-            now_iso(),
-        ),
-    )
+
+    db = get_db()
+    tenant = provider_resource_context(profile["user_id"])
+    now = now_iso()
+    try:
+        db.execute(
+            """
+            INSERT INTO appointment_slot_claims
+            (provider_id, slot_key, appointment_id, created_at)
+            VALUES (?, ?, NULL, ?)
+            """,
+            (profile["user_id"], slot_key, now),
+        )
+        cursor = db.execute(
+            """
+            INSERT INTO appointments
+            (patient_id, provider_id, provider_profile_id, provider_name, specialty, scheduled_for, reason, status,
+             organization_id, organization_location_id, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'requested', ?, ?, ?, ?)
+            """,
+            (
+                patient["id"],
+                profile["user_id"],
+                profile["id"],
+                profile["organization"] or db.execute(
+                    "SELECT name FROM users WHERE id=?", (profile["user_id"],)
+                ).fetchone()["name"],
+                profile["specialty"],
+                scheduled_for,
+                reason,
+                tenant["organization_id"],
+                tenant["organization_location_id"],
+                now,
+                now,
+            ),
+        )
+        appointment_id = int(cursor.lastrowid)
+        claimed = db.execute(
+            """
+            UPDATE appointment_slot_claims
+            SET appointment_id=?
+            WHERE provider_id=? AND slot_key=? AND appointment_id IS NULL
+            """,
+            (appointment_id, profile["user_id"], slot_key),
+        )
+        if claimed.rowcount != 1:
+            raise ValueError("Selected slot could not be claimed atomically.")
+        db.commit()
+        return appointment_id
+    except Exception as error:
+        db.rollback()
+        if is_integrity_error(error):
+            raise ValueError("Selected slot was booked by another request; please choose a different slot.") from error
+        raise
