@@ -42,8 +42,17 @@ jobs:
       - name: Compile application and tests
         run: python -m compileall -q zendoc tests
       - name: Run critical safety/security regressions
-        run: |
-          python -m pytest -q             tests/test_security_hardening_v3.py             tests/test_provider_permission_matrix_v1.py             tests/test_provider_tenancy_v1.py             tests/test_provider_resource_tenancy_v1.py             tests/test_workflow_state_integrity_v1.py             tests/test_concurrency_integrity_v1.py             tests/test_database_reliability_v1.py             tests/test_observability_incident_v1.py
+        run: >
+          python -m pytest -q
+          tests/test_security_hardening_v3.py
+          tests/test_provider_permission_matrix_v1.py
+          tests/test_provider_tenancy_v1.py
+          tests/test_provider_resource_tenancy_v1.py
+          tests/test_workflow_state_integrity_v1.py
+          tests/test_concurrency_integrity_v1.py
+          tests/test_database_reliability_v1.py
+          tests/test_observability_incident_v1.py
+          tests/test_release_gate_v1.py
 
   full-sqlite-tests:
     name: Full SQLite Test Suite
