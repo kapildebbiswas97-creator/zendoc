@@ -57,7 +57,8 @@ def get_capability_registry() -> dict:
         and _env("ZENDOC_AI_MODEL")
         and (_env("ZENDOC_AI_BASE_URL") or _env("ZENDOC_AI_PROVIDER") == "openai")
     )
-    places = _env("ZENDOC_PLACES_PROVIDER", "none") not in {"", "none"}
+    places_provider = _env("ZENDOC_PLACES_PROVIDER", "none").lower()
+    places = places_provider == "google" and bool(_env("ZENDOC_GOOGLE_PLACES_API_KEY"))
     video_provider = _env("ZENDOC_VIDEO_PROVIDER", "none") not in {"", "none"}
     database_url = _env("DATABASE_URL")
     postgresql_configured = database_url.startswith(("postgresql://", "postgres://", "postgresql+psycopg://"))
@@ -151,6 +152,21 @@ def get_capability_registry() -> dict:
             "label": "Capability Registry",
             "description": "Central truthful status for all platform features.",
         },
+        "specialized_agent_routing": {
+            "status": STATUS_WORKING,
+            "label": "Specialized Agent Routing v2",
+            "description": "Deterministic routing exposes assigned agent, privacy class, context requirements, human gate, expected output, and fallback strategy.",
+        },
+        "carefin_engine": {
+            "status": STATUS_WORKING,
+            "label": "CareFin Benefits Discovery",
+            "description": "Deterministic public-source discovery, missing-information analysis, provenance, and coverage truth-state enforcement.",
+        },
+        "carefin_live_verification": {
+            "status": STATUS_INTEGRATION_REQUIRED,
+            "label": "CareFin Live Coverage Verification",
+            "description": "Personal eligibility, insurer approval, government approval, CSR/trust approval, and payment confirmation require authoritative partner responses.",
+        },
 
         # Health & Clinical
         "health_memory": {
@@ -232,7 +248,7 @@ def get_capability_registry() -> dict:
         "healthcare_finder": {
             "status": STATUS_WORKING if places else STATUS_BETA,
             "label": "Healthcare Finder",
-            "description": "Provider search via places API." if places else "Local provider directory — real places API not configured.",
+            "description": "Google Places credential and provider are configured; runtime calls remain subject to quota/health." if places else "Local provider directory works; live Google Places requires provider configuration plus a server-side API key.",
         },
         "video_intelligence": {
             "status": STATUS_WORKING if video_provider else STATUS_BETA,
