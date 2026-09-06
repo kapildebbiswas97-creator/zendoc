@@ -10,6 +10,7 @@ from zendoc.organization_service import (
     bind_provider_profile,
     create_organization,
     request_membership,
+    verify_organization,
 )
 from tests.test_milestone1 import make_app
 from tests.test_milestone7 import headers
@@ -132,6 +133,12 @@ def test_provider_profile_binding_requires_active_membership(tmp_path):
         with pytest.raises(PermissionError):
             bind_provider_profile(doctor, org["id"])
 
+        verify_organization(
+            dict(get_db().execute("SELECT * FROM users WHERE email_normalized='admin@example.com'").fetchone()),
+            org["id"],
+            "verified",
+        )
+
         pending = get_db().execute(
             "SELECT * FROM organization_memberships WHERE organization_id=? AND user_id=?",
             (org["id"], doctor["id"]),
@@ -221,3 +228,20 @@ def test_owner_only_global_org_listing_endpoint(tmp_path):
     )
     assert allowed.status_code == 200
     assert "organizations" in allowed.get_json()
+
+
+def test_unverified_organization_cannot_bind_provider_profile(tmp_path):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    _register(client, "pending-org-owner@example.com", "hospital")
+    _register(client, "pending-org-doctor@example.com", "doctor")
+    owner = _user(app, "pending-org-owner@example.com")
+    doctor = _user(app, "pending-org-doctor@example.com")
+    _provider_profile(app, doctor["id"], "Pending Org")
+
+    with app.app_context():
+        org = create_organization(owner, {"name": "Pending Org", "organization_type": "hospital"})
+        membership = request_membership(doctor, org["id"], "doctor")
+        approve_membership(owner, membership["id"], "active")
+        with pytest.raises(PermissionError):
+            bind_provider_profile(doctor, org["id"])
