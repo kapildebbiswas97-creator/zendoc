@@ -43,6 +43,7 @@ from .provider_service import (
 from .report_intelligence import REPORT_TYPES, store_report_upload
 from .record_storage import get_record_storage
 from .organization_service import assert_resource_tenant
+from .database_reliability import backup_readiness, readiness_report
 from .security import csrf_token, hash_token, is_owner, load_user_and_check_csrf, login_required, new_token, owner_required, role_required, start_user_session
 
 
@@ -1019,7 +1020,20 @@ def require_api_user():
 
 @bp.get("/api/v1/health")
 def api_health():
-    return jsonify({"status": "ok", "service": "zendoc", "time": now_iso()})
+    # Liveness only: process is alive. Do not imply database readiness here.
+    return jsonify({"status": "ok", "service": "zendoc", "time": now_iso(), "check": "liveness"})
+
+
+@bp.get("/api/v1/ready")
+def api_ready():
+    report = readiness_report()
+    return jsonify(report), (200 if report.get("status") == "ready" else 503)
+
+
+@bp.get("/api/v1/readiness")
+def api_readiness_alias():
+    report = readiness_report()
+    return jsonify(report), (200 if report.get("status") == "ready" else 503)
 
 
 @bp.post("/api/v1/auth/register")
