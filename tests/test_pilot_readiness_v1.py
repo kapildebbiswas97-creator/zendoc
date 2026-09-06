@@ -342,3 +342,55 @@ def test_dataset_adapter_refuses_missing_required_mapping():
             mapping={"source_record_id": "code", "name": "name"},
             defaults={},
         )
+
+
+def test_provider_evidence_browser_workflow(tmp_path):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    register_web(client, "doctor", "browser-doctor@example.com", "Browser Doctor")
+    login_web(client, "doctor", "browser-doctor@example.com")
+
+    page = client.get("/provider/profile")
+    assert page.status_code == 200
+    token = csrf(page.data.decode())
+    saved = client.post(
+        "/provider/profile",
+        data={
+            "csrf_token": token,
+            "specialty": "Cardiology",
+            "qualifications": "MBBS, MD",
+            "license_identifier": "BROWSER-REG-1",
+            "organization": "Browser Clinic",
+            "address": "1 Browser Road",
+            "city": "Browser City",
+            "state": "Browser State",
+            "postal_code": "000001",
+            "public_phone": "9999999999",
+        },
+        follow_redirects=True,
+    )
+    assert saved.status_code == 200
+    assert b"Verification readiness" in saved.data
+
+    token = csrf(saved.data.decode())
+    submitted = client.post(
+        "/provider/evidence",
+        data={
+            "csrf_token": token,
+            "evidence_type": "professional_registration",
+            "identifier": "BROWSER-REG-1",
+            "source_name": "Browser Medical Register",
+            "source_url": "https://example.invalid/BROWSER-REG-1",
+        },
+        follow_redirects=True,
+    )
+    assert submitted.status_code == 200
+    assert b"Verification evidence submitted" in submitted.data
+    assert b"Browser Medical Register" in submitted.data
+
+    client.get("/logout")
+    login_web(client, "admin", "admin@example.com", "AdminStrong123")
+    admin = client.get("/admin")
+    assert admin.status_code == 200
+    assert b"Provider Evidence Review" in admin.data
+    assert b"Browser Medical Register" in admin.data
