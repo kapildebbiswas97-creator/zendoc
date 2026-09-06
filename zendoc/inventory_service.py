@@ -29,6 +29,7 @@ from typing import Any
 from flask import current_app
 
 from .db import get_db, now_iso
+from .organization_service import provider_resource_context
 
 DEFAULT_STALE_THRESHOLD_HOURS = 2.0
 VALID_STOCK_STATUSES = {"CONFIRMED", "STALE", "UNKNOWN", "UNAVAILABLE"}
@@ -183,6 +184,7 @@ def update_inventory_observation(
     if stock_status == "UNAVAILABLE":
         quantity = 0
     now = now_iso()
+    tenant = provider_resource_context(pharmacy_id)
 
     existing = db.execute(
         "SELECT id, data_mode FROM inventory_observations WHERE pharmacy_id=? AND sku_id=? AND data_mode=?",
@@ -194,10 +196,11 @@ def update_inventory_observation(
             """
             UPDATE inventory_observations
             SET stock_status=?, quantity_available=?, price_inr=?, price_available=?,
-                discount_percent=?, source=?, observed_at=?, notes=?, data_mode=?, updated_at=?
+                discount_percent=?, source=?, observed_at=?, notes=?, data_mode=?, updated_at=?,
+                organization_id=?, organization_location_id=?
             WHERE pharmacy_id=? AND sku_id=? AND data_mode=?
             """,
-            (*values, mode),
+            (*values[:-2], tenant["organization_id"], tenant["organization_location_id"], *values[-2:], mode),
         )
     else:
         try:
@@ -205,8 +208,9 @@ def update_inventory_observation(
                 """
                 INSERT INTO inventory_observations
                 (pharmacy_id, sku_id, stock_status, quantity_available, price_inr, price_available,
-                 discount_percent, source, observed_at, notes, data_mode, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 discount_percent, source, observed_at, notes, data_mode, organization_id, organization_location_id,
+                 created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (pharmacy_id, sku_id, stock_status, quantity, stored_price, price_available,
                  discount_percent, source, now, notes, mode, now, now),
