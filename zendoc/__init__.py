@@ -22,6 +22,7 @@ from .public_ingestion_routes import bp as public_ingestion_bp
 from .provider_onboarding_routes import bp as provider_onboarding_bp
 from .system_intelligence_routes import bp as system_intelligence_bp
 from .database_reliability import readiness_report
+from .observability import finish_request_observation, start_request_observation
 from .routes import bp
 
 
@@ -58,6 +59,8 @@ def create_app(test_config=None):
     app.register_blueprint(public_ingestion_bp)
     app.register_blueprint(provider_onboarding_bp)
     app.register_blueprint(system_intelligence_bp)
+    app.before_request(start_request_observation)
+    app.after_request(finish_request_observation)
     app.teardown_appcontext(close_db)
     validate_startup_config(app)
     with app.app_context():
