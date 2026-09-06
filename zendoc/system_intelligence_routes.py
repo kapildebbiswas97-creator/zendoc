@@ -6,6 +6,8 @@ from flask import Blueprint, jsonify
 from .agent_fleet import automation_manifest, list_fleet_agents
 from .benefit_sources import list_sources
 from .model_portfolio import list_model_roles
+from .capability_registry import get_capability_registry
+from .no_capital_status import no_capital_completion_report
 from .regulated_domains import list_regulated_domains
 from .security import owner_required
 
@@ -23,4 +25,6 @@ def intelligence_manifest():
         "model_roles": list_model_roles(),
         "benefit_sources": list_sources(),
         "regulated_domains": list_regulated_domains(),
+        "capabilities": get_capability_registry(),
+        "no_capital_progress": no_capital_completion_report(),
     })
