@@ -374,6 +374,7 @@ def choose_agent_for_intent(intent: str) -> AgentDefinition | None:
         "iot_hub":          "IoTAgent",
         "iot_status":       "IoTAgent",
         "platform_health":  "OperationsAgent",
+        "operations_automation": "OperationsAgent",
         "failed_operations": "OperationsAgent",
         "core_agent":       "OperationsAgent",
         "care_coordination": "CareAgent",
