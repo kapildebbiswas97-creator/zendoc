@@ -362,7 +362,36 @@ def submit_order_from_plan(
         return _order_result(existing_ids, db, replay=True)
 
     if str(plan.get("status") or "").lower() not in {"staged", "confirmed"}:
+        existing_ids = _existing_orders_for_submission(
+            db,
+            patient_id=patient_id,
+            plan_id=int(plan_id),
+            actor_id=aid,
+            idempotency_key=None,
+        )
+        if existing_ids:
+            return _order_result(existing_ids, db, replay=True)
         raise ValueError("This fulfilment plan is no longer awaiting confirmation.")
+
+    claimed = db.execute(
+        """
+        UPDATE fulfilment_plans
+        SET status='ordering'
+        WHERE id=? AND status IN ('staged','confirmed')
+        """,
+        (int(plan_id),),
+    )
+    if claimed.rowcount != 1:
+        existing_ids = _existing_orders_for_submission(
+            db,
+            patient_id=patient_id,
+            plan_id=int(plan_id),
+            actor_id=aid,
+            idempotency_key=None,
+        )
+        if existing_ids:
+            return _order_result(existing_ids, db, replay=True)
+        raise ValueError("This fulfilment plan is already being processed by another request.")
 
     plan_items = [
         dict(item)
@@ -465,7 +494,7 @@ def submit_order_from_plan(
         """
         UPDATE fulfilment_plans
         SET confirmed_by_user=1, confirmed_at=?, status='ordered'
-        WHERE id=?
+        WHERE id=? AND status='ordering'
         """,
         (now, int(plan_id)),
     )
