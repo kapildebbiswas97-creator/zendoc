@@ -290,6 +290,14 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
         risk_class=READ_ONLY,
     ),
 
+    "compare_nutrition_products": ToolDefinition(
+        name="compare_nutrition_products",
+        description="Compare user-supplied nutrition labels and normalized prices for general wellness; sponsorship never changes health suitability ranking.",
+        allowed_agents=["NutritionAgent"],
+        allowed_roles=["patient", "admin"],
+        risk_class=READ_ONLY,
+    ),
+
     # ── CareFin / benefits tools ──────────────────────────────────────────────
     "discover_carefin_benefits": ToolDefinition(
         name="discover_carefin_benefits",
