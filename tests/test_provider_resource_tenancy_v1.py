@@ -392,3 +392,44 @@ def test_moved_branch_doctor_cannot_update_old_branch_appointment(tmp_path):
         follow_redirects=False,
     )
     assert response.status_code == 403
+
+
+def test_verified_lab_offer_is_tenant_stamped_and_unverified_provider_is_blocked(tmp_path):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    _register(client, "offer-lab@example.com", "hospital")
+    _register(client, "offer-pending@example.com", "hospital")
+    lab = _user(app, "offer-lab@example.com")
+    pending = _user(app, "offer-pending@example.com")
+    lab_profile = _profile(app, lab, "diagnostic_centre")
+
+    with app.app_context():
+        org, location = _bind_verified_org(
+            app, lab, lab_profile, "Offer Diagnostic Network", "diagnostic_network", "Offer Branch"
+        )
+        db = get_db()
+        test_id = db.execute(
+            """
+            INSERT INTO diagnostic_catalog
+            (code,name,category,fasting_required,sample_type,tat_hours,standard_price_inr,created_at)
+            VALUES ('TEN-OFFER','Tenant Offer Test','general',0,'blood',24,120,?)
+            """,
+            (now_iso(),),
+        ).lastrowid
+        db.execute(
+            """
+            INSERT INTO provider_profiles
+            (user_id,provider_type,specialty,organization,verification_status,created_at,updated_at)
+            VALUES (?, 'diagnostic_centre','General','Pending Lab','pending',?,?)
+            """,
+            (pending["id"], now_iso(), now_iso()),
+        )
+        db.commit()
+
+        from zendoc.diagnostic_service import upsert_diagnostic_offer
+        offer = upsert_diagnostic_offer(lab, test_id, 100, True, 10)
+        assert offer["organization_id"] == org["id"]
+        assert offer["organization_location_id"] == location["id"]
+
+        with pytest.raises(PermissionError):
+            upsert_diagnostic_offer(pending, test_id, 90, True, 5)
