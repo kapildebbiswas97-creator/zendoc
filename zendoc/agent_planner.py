@@ -129,6 +129,22 @@ def build_plan(actor, command_text: str) -> AgentPlan:
             required_context=("owner_identity",),
             expected_output="operational_alerts",
         )
+    if any(text in lower for text in (
+        "run operations automation", "safe operations automation", "auto retry safe tasks",
+        "retry safe failures", "operations maintenance",
+    )):
+        if not owner:
+            return _unauthorized(command, "operations_automation")
+        return _plan(
+            command,
+            "operations_automation",
+            "OperationsAgent",
+            "low_risk",
+            (PlanStep(1, "run_safe_operations_automation", {"retry_limit": 10}, "Re-queue retriable failures and create deterministic alerts only."),),
+            required_context=("owner_identity", "agent_task_state", "platform_events"),
+            expected_output="safe_maintenance_summary",
+            fallback_strategy="alerts_only_no_execution",
+        )
 
     if any(text in lower for text in (
         "government scheme", "health scheme", "insurance coverage", "insurance benefit",
