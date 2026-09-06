@@ -145,6 +145,11 @@ def run_proactive_alert_check() -> list[dict]:
     """
     created = []
     db = get_db()
+    try:
+        from .observability import prune_observability
+        prune_observability()
+    except Exception:
+        pass
     now_dt = datetime.now(timezone.utc)
 
     # 1. Pending owner approvals waiting > 6 hours
