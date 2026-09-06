@@ -1,9 +1,10 @@
-from tests.test_milestone1 import login_web, make_client
+from tests.test_milestone1 import login_web, make_client, register_web
 
 
 def test_owner_intelligence_manifest_is_owner_only(tmp_path):
     _app, client = make_client(tmp_path)
 
+    register_web(client, "patient", "normal@example.com")
     login_web(client, "patient", "normal@example.com")
     denied = client.get("/owner/intelligence-manifest")
     assert denied.status_code == 403
