@@ -104,6 +104,16 @@ def _alert_check(actor, arguments):
     return {"created_alerts": run_proactive_alert_check()}
 
 
+def _safe_operations_automation(actor, arguments):
+    from .operations_automation import run_safe_operations_automation
+    return run_safe_operations_automation(
+        actor,
+        retry_limit=int(arguments.get("retry_limit") or 10),
+    )
+
+
+
+
 def _patient_target(actor, arguments, purpose):
     """Resolve and authorize a patient target for a read/stage tool."""
     from .context_engine import verify_context_authorization
@@ -258,6 +268,7 @@ TOOL_HANDLERS = {
     "search_educational_video": _educational_video,
     "get_iot_devices": _iot_devices,
     "run_proactive_alert_check": _alert_check,
+    "run_safe_operations_automation": _safe_operations_automation,
     "discover_carefin_benefits": _carefin_discovery,
     "search_nearby_pharmacy_inventory": _pharmacy_search,
     "compare_prescription_fulfilment": _pharmacy_compare,
