@@ -10,6 +10,7 @@ from .capability_registry import get_capability_registry
 from .no_capital_status import no_capital_completion_report
 from .regulated_domains import list_regulated_domains
 from .public_source_registry import list_public_ingestion_sources
+from .pilot_analytics import pilot_scorecard
 from .security import owner_required
 
 
@@ -27,6 +28,13 @@ def intelligence_manifest():
         "benefit_sources": list_sources(),
         "regulated_domains": list_regulated_domains(),
         "public_ingestion_sources": list_public_ingestion_sources(),
+        "pilot_scorecard": pilot_scorecard(),
         "capabilities": get_capability_registry(),
         "no_capital_progress": no_capital_completion_report(),
     })
+
+
+@bp.get("/owner/pilot-scorecard")
+@owner_required
+def owner_pilot_scorecard():
+    return jsonify(pilot_scorecard())
