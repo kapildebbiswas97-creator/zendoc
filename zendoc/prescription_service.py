@@ -10,6 +10,7 @@ CLINICAL BOUNDARIES:
 from __future__ import annotations
 
 import json
+import uuid
 import re
 from typing import Any
 
@@ -71,7 +72,7 @@ def create_prescription(
     if not prescriber_name:
         raise ValueError("A prescription must identify its prescriber.")
     now = now_iso()
-    uid = f"rx_{patient_id}_{int(db.execute('SELECT COUNT(*) c FROM prescriptions').fetchone()['c']) + 1}_{now[:10].replace('-', '')}"
+    uid = f"rx_{patient_id}_{uuid.uuid4().hex[:16]}"
 
     cursor = db.execute(
         """
