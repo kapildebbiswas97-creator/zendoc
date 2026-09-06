@@ -271,13 +271,22 @@ def update_consultation_status(actor, consultation_id, status, scheduled_for=Non
     if status not in CONSULTATION_TRANSITIONS.get(current_status, set()):
         raise ValueError(f"Consultation cannot transition from {current_status} to {status}.")
     now = now_iso()
+    db = get_db()
+    updated = db.execute(
+        """
+        UPDATE consultation_requests
+        SET status=?, scheduled_for=COALESCE(?, scheduled_for), updated_at=?
+        WHERE id=? AND status=?
+        """,
+        (status, scheduled_for, now, consultation_id, current_status),
+    )
+    if updated.rowcount != 1:
+        db.rollback()
+        raise ValueError("Consultation changed concurrently; refresh before retrying.")
+
     room = None
     if status in {"accepted", "scheduled"} and not consultation.get("room_id"):
         room = get_telehealth_provider().create_room(consultation_id)
-    get_db().execute(
-        "UPDATE consultation_requests SET status=?, scheduled_for=COALESCE(?, scheduled_for), updated_at=? WHERE id=?",
-        (status, scheduled_for, now, consultation_id),
-    )
     if room:
         get_db().execute(
             """
@@ -292,7 +301,7 @@ def update_consultation_status(actor, consultation_id, status, scheduled_for=Non
         )
     if status == "ended":
         get_db().execute("UPDATE consultation_rooms SET status='ended', ended_at=? WHERE consultation_id=?", (now, consultation_id))
-    get_db().commit()
+    db.commit()
     return get_consultation(actor, consultation_id)
 
 
