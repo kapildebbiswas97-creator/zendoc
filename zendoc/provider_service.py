@@ -206,6 +206,8 @@ def available_slots(provider_profile_id, date_text):
 
 
 def book_provider_slot(patient, provider_profile_id, scheduled_for, reason):
+    if not patient or patient["role"] != "patient" or not bool(patient["active"]):
+        raise PermissionError("Only an active patient account may book a provider appointment.")
     profile = get_db().execute("SELECT * FROM provider_profiles WHERE id=?", (provider_profile_id,)).fetchone()
     if not profile:
         raise ValueError("Provider not found.")
