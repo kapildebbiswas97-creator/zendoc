@@ -1,3 +1,5 @@
+import hashlib
+
 """
 ZENDOC Diagnostic Marketplace — Milestone 10
 Lab test catalog, nearby lab price comparison, home sample collection booking,
@@ -12,7 +14,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from .db import get_db, now_iso
+from .db import get_db, is_integrity_error, now_iso
 from .organization_service import provider_resource_context, assert_resource_tenant
 from .inventory_service import calculate_distance_km
 
@@ -416,15 +418,27 @@ def book_diagnostic_test(
 
     now = now_iso()
     tenant = provider_resource_context(lab_id)
+    fingerprint_source = "|".join(
+        [
+            str(patient_id),
+            str(lab_id),
+            str(test_id),
+            collection_type,
+            scheduled_date,
+            str(slot_time or ""),
+            address,
+            mode,
+        ]
+    )
+    request_fingerprint = hashlib.sha256(fingerprint_source.encode("utf-8")).hexdigest()
     existing = db.execute(
         """
         SELECT * FROM diagnostic_bookings
-        WHERE patient_id=? AND lab_id=? AND test_id=? AND collection_type=?
-          AND scheduled_date=? AND COALESCE(slot_time,'')=COALESCE(?, '')
-          AND address=? AND status IN ('requested','accepted')
+        WHERE request_fingerprint=?
+          AND status IN ('requested','accepted')
         ORDER BY id DESC LIMIT 1
         """,
-        (patient_id, lab_id, test_id, collection_type, scheduled_date, slot_time, address),
+        (request_fingerprint,),
     ).fetchone()
     if existing:
         return {
@@ -451,12 +465,12 @@ def book_diagnostic_test(
         """
         INSERT INTO diagnostic_bookings
         (booking_uid, patient_id, booked_by, lab_id, test_id, collection_type, scheduled_date,
-         slot_time, address, status, price_inr, organization_id, organization_location_id, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'requested', ?, ?, ?, ?, ?)
+         slot_time, address, status, price_inr, organization_id, organization_location_id, request_fingerprint, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'requested', ?, ?, ?, ?, ?, ?)
         """,
         (
             uid, patient_id, aid, lab_id, test_id, collection_type, scheduled_date, slot_time, address,
-            round(price + fee, 2), tenant["organization_id"], tenant["organization_location_id"], now, now
+            round(price + fee, 2), tenant["organization_id"], tenant["organization_location_id"], request_fingerprint, now, now
         ),
     )
     booking_id = cursor.lastrowid
