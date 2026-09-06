@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .db import get_db, now_iso
+from .organization_service import provider_resource_context, assert_resource_tenant
 from .inventory_service import calculate_distance_km
 
 
@@ -338,15 +339,19 @@ def book_diagnostic_test(
         raise ValueError("The selected lab offer has no usable collection fee.")
 
     now = now_iso()
+    tenant = provider_resource_context(lab_id)
     uid = f"diag_{patient_id}_{test_id}_{uuid.uuid4().hex[:12]}"
     cursor = db.execute(
         """
         INSERT INTO diagnostic_bookings
         (booking_uid, patient_id, booked_by, lab_id, test_id, collection_type, scheduled_date,
-         slot_time, address, status, price_inr, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'requested', ?, ?, ?)
+         slot_time, address, status, price_inr, organization_id, organization_location_id, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'requested', ?, ?, ?, ?, ?)
         """,
-        (uid, patient_id, aid, lab_id, test_id, collection_type, scheduled_date, slot_time, address, round(price + fee, 2), now, now),
+        (
+            uid, patient_id, aid, lab_id, test_id, collection_type, scheduled_date, slot_time, address,
+            round(price + fee, 2), tenant["organization_id"], tenant["organization_location_id"], now, now
+        ),
     )
     booking_id = cursor.lastrowid
 
@@ -432,6 +437,8 @@ def complete_diagnostic_test(
     if not lab_row or not lab_row["active"]:
         raise PermissionError("The assigned lab is not active.")
     is_assigned_lab = aid == lab_id and str(lab_row["verification_status"] or "").lower() == "verified"
+    if is_assigned_lab:
+        assert_resource_tenant(actor, dict(booking_row))
     is_owner = aid == int(booking_row["patient_id"])
     if not (is_assigned_lab or is_owner):
         raise PermissionError("Only the assigned verified lab or the booking owner may record completion.")
