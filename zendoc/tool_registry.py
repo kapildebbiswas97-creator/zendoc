@@ -274,6 +274,22 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
         risk_class=LOW_RISK,
     ),
 
+    # ── Specialist read tools ─────────────────────────────────────────────────
+    "search_healthcare_providers": ToolDefinition(
+        name="search_healthcare_providers",
+        description="Search ZENDOC-verified providers plus configured external healthcare locations while preserving source/verification state.",
+        allowed_agents=["ProviderDiscoveryAgent", "SearchAgent"],
+        allowed_roles=ALL_ROLES,
+        risk_class=READ_ONLY,
+    ),
+    "get_latest_prescription_review": ToolDefinition(
+        name="get_latest_prescription_review",
+        description="Read the latest authorized prescription review state; never changes medicine, dose, frequency, form, or order state.",
+        allowed_agents=["MedicationSafetyAgent"],
+        allowed_roles=["patient", "doctor", "pharmacy", "admin"],
+        risk_class=READ_ONLY,
+    ),
+
     # ── CareFin / benefits tools ──────────────────────────────────────────────
     "discover_carefin_benefits": ToolDefinition(
         name="discover_carefin_benefits",
