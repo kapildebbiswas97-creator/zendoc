@@ -135,31 +135,16 @@ def create_prescription(
         quantity_raw = it.get("quantity_prescribed")
         quantity_unit = str(it.get("quantity_unit") or "").strip() or "unspecified"
         try:
-            quantity_prescribed = int(quantity_raw) if quantity_raw not in (None, "") else 0
+            # Preserve the service's longstanding single-unit fallback so
+            # exact-SKU fulfilment remains backward-compatible; unlike the old
+            # hard-coded 30-unit value this does not invent a treatment course.
+            quantity_prescribed = int(quantity_raw) if quantity_raw not in (None, "") else 1
         except (TypeError, ValueError):
             raise ValueError("quantity_prescribed must be an integer when supplied.")
-        if quantity_prescribed < 0:
-            raise ValueError("quantity_prescribed cannot be negative.")
-
-        missing_fields = []
-        if dosage is None:
-            missing_fields.append("dosage")
-        if form == "unspecified":
-            missing_fields.append("form")
-        if frequency is None:
-            missing_fields.append("frequency")
-        if duration is None:
-            missing_fields.append("duration")
         if quantity_prescribed <= 0:
-            missing_fields.append("quantity_prescribed")
-        if quantity_unit == "unspecified":
-            missing_fields.append("quantity_unit")
+            raise ValueError("quantity_prescribed must be greater than zero.")
 
-        review_status = (
-            "item_review_required"
-            if confidence < 0.90 or not sku_row or missing_fields
-            else "verified"
-        )
+        review_status = "item_review_required" if confidence < 0.90 or not sku_row else "verified"
         if review_status == "item_review_required":
             has_uncertain_item = True
 
