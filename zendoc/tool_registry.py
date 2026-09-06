@@ -266,6 +266,13 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
         allowed_roles=ADMIN_ONLY,
         risk_class=LOW_RISK,
     ),
+    "run_safe_operations_automation": ToolDefinition(
+        name="run_safe_operations_automation",
+        description="Owner-only bounded automation: re-queue retriable failures and create deterministic operational alerts without executing arbitrary tasks.",
+        allowed_agents=["OperationsAgent"],
+        allowed_roles=ADMIN_ONLY,
+        risk_class=LOW_RISK,
+    ),
 
     # ── CareFin / benefits tools ──────────────────────────────────────────────
     "discover_carefin_benefits": ToolDefinition(
