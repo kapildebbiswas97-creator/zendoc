@@ -212,6 +212,19 @@ def _latest_prescription_review(actor, arguments):
     }
 
 
+def _nutrition_compare(actor, arguments):
+    from .nutrition_agent import compare_products
+
+    products = arguments.get("products") or []
+    if not isinstance(products, list):
+        raise ValueError("products must be a list.")
+    return compare_products(
+        products,
+        goal=str(arguments.get("goal") or "general_wellness")[:100],
+        allergens=arguments.get("allergens") or [],
+    )
+
+
 def _carefin_discovery(actor, arguments):
     from .carefin_engine import discover_benefits
 
@@ -368,6 +381,7 @@ TOOL_HANDLERS = {
     "run_safe_operations_automation": _safe_operations_automation,
     "search_healthcare_providers": _provider_discovery,
     "get_latest_prescription_review": _latest_prescription_review,
+    "compare_nutrition_products": _nutrition_compare,
     "discover_carefin_benefits": _carefin_discovery,
     "search_nearby_pharmacy_inventory": _pharmacy_search,
     "compare_prescription_fulfilment": _pharmacy_compare,
