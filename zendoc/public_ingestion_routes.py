@@ -5,6 +5,7 @@ from flask import Blueprint, jsonify, request
 
 from .public_data_ingestion import ingest_public_records, list_ingestion_batches
 from .dataset_adapters import adapt_records, parse_csv_text
+from .data_gap_registry import list_data_gaps
 from .public_source_registry import list_public_ingestion_sources
 from .routes import require_api_user
 from .security import is_owner
@@ -110,3 +111,11 @@ def api_ingestion_apply():
     except (TypeError, ValueError) as exc:
         return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
     return jsonify({"status": "completed", "batch": result}), 201
+
+
+@bp.get("/api/v1/admin/ingestion/data-gaps")
+def api_ingestion_data_gaps():
+    user, error = _owner()
+    if error:
+        return error
+    return jsonify({"data_gaps": list_data_gaps()})
