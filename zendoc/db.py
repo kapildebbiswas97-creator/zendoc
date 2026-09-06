@@ -2115,6 +2115,99 @@ def migrate_schema(db):
         CREATE INDEX IF NOT EXISTS idx_geography_entity_entity ON geography_entity_links(entity_type, entity_id);
         """
     )
+    # Post-submission provider organization / multi-tenant security.
+    # Existing free-text provider_profiles.organization values are intentionally
+    # NOT auto-promoted into trusted organization memberships.
+    db.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS provider_organizations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            organization_uid TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            organization_type TEXT NOT NULL,
+            owner_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+            verification_status TEXT NOT NULL DEFAULT 'pending',
+            active INTEGER NOT NULL DEFAULT 1,
+            address TEXT,
+            city TEXT,
+            state TEXT,
+            postal_code TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_provider_org_owner
+            ON provider_organizations(owner_user_id, active);
+        CREATE INDEX IF NOT EXISTS idx_provider_org_verification
+            ON provider_organizations(verification_status, active);
+
+        CREATE TABLE IF NOT EXISTS organization_memberships (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            organization_id INTEGER NOT NULL REFERENCES provider_organizations(id) ON DELETE CASCADE,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            membership_role TEXT NOT NULL DEFAULT 'member',
+            status TEXT NOT NULL DEFAULT 'pending',
+            requested_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            approved_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(organization_id, user_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_org_memberships_user
+            ON organization_memberships(user_id, status);
+        CREATE INDEX IF NOT EXISTS idx_org_memberships_org
+            ON organization_memberships(organization_id, status, membership_role);
+
+        CREATE TABLE IF NOT EXISTS organization_locations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            organization_id INTEGER NOT NULL REFERENCES provider_organizations(id) ON DELETE CASCADE,
+            location_uid TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            location_type TEXT NOT NULL DEFAULT 'branch',
+            address TEXT,
+            city TEXT,
+            state TEXT,
+            postal_code TEXT,
+            latitude REAL,
+            longitude REAL,
+            active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_org_locations_org
+            ON organization_locations(organization_id, active);
+        """
+    )
+    for table, additions in {
+        "provider_profiles": {
+            "organization_id": "INTEGER REFERENCES provider_organizations(id) ON DELETE SET NULL",
+            "organization_location_id": "INTEGER REFERENCES organization_locations(id) ON DELETE SET NULL",
+        },
+        "staff_profiles": {
+            "organization_id": "INTEGER REFERENCES provider_organizations(id) ON DELETE SET NULL",
+            "organization_location_id": "INTEGER REFERENCES organization_locations(id) ON DELETE SET NULL",
+        },
+        "staff_tasks": {
+            "organization_id": "INTEGER REFERENCES provider_organizations(id) ON DELETE SET NULL",
+        },
+    }.items():
+        existing_columns = table_columns(db, table)
+        for column, ddl in additions.items():
+            if column not in existing_columns:
+                db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_provider_profiles_org ON provider_profiles(organization_id)"
+    )
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_staff_profiles_org ON staff_profiles(organization_id)"
+    )
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_staff_tasks_org ON staff_tasks(organization_id, status)"
+    )
+    db.execute(
+        "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+        ("post_submission_provider_tenancy_v1", now_iso()),
+    )
+
     db.execute(
         "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)",
         ("post_submission_geography_v1", now_iso()),
