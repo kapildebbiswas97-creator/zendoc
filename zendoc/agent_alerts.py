@@ -24,6 +24,9 @@ ALERT_CATEGORIES = (
     "provider_unavailable",
     "platform_error_rate",
     "iot_alert",
+    "inventory_stale",
+    "diagnostic_stale",
+    "provider_waiting",
     "security",
     "operational",
 )
@@ -189,6 +192,68 @@ def run_proactive_alert_check() -> list[dict]:
             "high", "platform_error_rate",
             f"High Error Rate: {error_count} Errors in Last Hour",
             f"Platform recorded {error_count} failed/error events in the last hour.",
+        ))
+
+
+    # 4. Confirmed pharmacy inventory observations that are now stale (> 2 hours)
+    cutoff_inventory = (now_dt - timedelta(hours=2)).isoformat(timespec="seconds")
+    stale_inventory = db.execute(
+        """
+        SELECT COUNT(*) c FROM inventory_observations
+        WHERE UPPER(COALESCE(data_mode, 'LIVE'))='LIVE'
+          AND UPPER(COALESCE(stock_status, 'UNKNOWN'))='CONFIRMED'
+          AND observed_at < ?
+        """,
+        (cutoff_inventory,),
+    ).fetchone()["c"]
+    if stale_inventory > 0:
+        created.append(_maybe_create_alert(
+            "medium", "inventory_stale",
+            "Stale Pharmacy Inventory Requires Refresh",
+            f"{stale_inventory} confirmed pharmacy inventory observation(s) are older than 2 hours and must not be treated as current.",
+        ))
+
+    # 5. Verified diagnostic offers whose observation is stale (> configured 24h default)
+    cutoff_diagnostic = (now_dt - timedelta(hours=24)).isoformat(timespec="seconds")
+    stale_diagnostics = db.execute(
+        """
+        SELECT COUNT(*) c FROM diagnostic_offers
+        WHERE UPPER(COALESCE(data_mode, 'LIVE'))='LIVE'
+          AND COALESCE(verified, 0)=1
+          AND COALESCE(observed_at, created_at) < ?
+        """,
+        (cutoff_diagnostic,),
+    ).fetchone()["c"]
+    if stale_diagnostics > 0:
+        created.append(_maybe_create_alert(
+            "medium", "diagnostic_stale",
+            "Stale Diagnostic Offers Require Verification",
+            f"{stale_diagnostics} verified diagnostic offer(s) are older than 24 hours and should be refreshed before booking.",
+        ))
+
+    # 6. Provider acknowledgements waiting > 2 hours
+    cutoff_provider = (now_dt - timedelta(hours=2)).isoformat(timespec="seconds")
+    pending_orders = db.execute(
+        """
+        SELECT COUNT(*) c FROM medicine_orders
+        WHERE LOWER(COALESCE(acknowledgement_status, 'pending'))='pending'
+          AND created_at < ?
+        """,
+        (cutoff_provider,),
+    ).fetchone()["c"]
+    pending_consults = db.execute(
+        """
+        SELECT COUNT(*) c FROM consultation_requests
+        WHERE LOWER(COALESCE(status, 'requested'))='requested'
+          AND created_at < ?
+        """,
+        (cutoff_provider,),
+    ).fetchone()["c"]
+    if pending_orders or pending_consults:
+        created.append(_maybe_create_alert(
+            "medium", "provider_waiting",
+            "Provider Responses Waiting Too Long",
+            f"{pending_orders} medicine order(s) and {pending_consults} consultation request(s) have waited more than 2 hours for provider action.",
         ))
 
     return [a for a in created if a is not None]
