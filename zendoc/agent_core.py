@@ -211,6 +211,24 @@ def respond_with_core_agent(actor, command_text):
         safety = plan.safety
         task = execute_safe_task(task["id"], actor, handler_fn=lambda _task: safety["guidance"])
         duration = int((time.perf_counter() - started) * 1000)
+        if task.get("status") == "failed":
+            try:
+                from .event_bus import publish_event
+                publish_event(
+                    "safety.emergency.failed",
+                    actor=actor,
+                    entity_type="agent_task",
+                    entity_id=str(task["id"]),
+                    status="failed",
+                    agent_name="Safety Agent",
+                    duration_ms=duration,
+                    correlation_id=plan.plan_id,
+                    payload={"intent": "emergency", "task_id": task["id"]},
+                    error=task.get("result_summary") or "Emergency safety task failed.",
+                )
+            except Exception:
+                pass
+            raise ValueError(task.get("result_summary") or "Emergency safety escalation failed.")
         run_id = create_agent_run(actor, command, "emergency", "completed", "emergency", safety["guidance"], duration_ms=duration)
         log_agent_action(run_id, actor, "emergency_escalation", "SafetyAgent.assess", "safety_alert", str(run_id), message=safety["guidance"])
         log_platform_event(actor, "emergency_escalation", "agent_run", str(run_id), "info", "Safety Agent", duration_ms=duration)
