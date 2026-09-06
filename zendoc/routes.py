@@ -51,6 +51,13 @@ ALLOWED_UPLOADS = {"pdf", "png", "jpg", "jpeg", "txt", "doc", "docx"}
 ALLOWED_MIME_PREFIXES = ("application/pdf", "image/", "text/plain")
 RATE_BUCKETS = {}
 
+APPOINTMENT_TRANSITIONS = {
+    "requested": {"confirmed", "cancelled"},
+    "confirmed": {"completed", "cancelled"},
+    "completed": set(),
+    "cancelled": set(),
+}
+
 
 @bp.before_app_request
 def before_request():
@@ -573,14 +580,21 @@ def appointments():
 @role_required("doctor", "hospital", "admin")
 def appointment_status(appointment_id):
     status = request.form.get("status", "requested")
-    if status not in {"requested", "confirmed", "completed", "cancelled"}:
+    if status not in APPOINTMENT_TRANSITIONS:
         abort(400)
     row = get_db().execute(
-        "SELECT patient_id, provider_id, organization_id, organization_location_id FROM appointments WHERE id=?",
+        "SELECT patient_id, provider_id, status, organization_id, organization_location_id FROM appointments WHERE id=?",
         (appointment_id,),
     ).fetchone()
     if not row:
         abort(404)
+    current_status = str(row["status"] or "requested").strip().lower()
+    if status == current_status:
+        flash("Appointment status is already up to date.", "info")
+        return redirect(url_for("main.appointments"))
+    if status not in APPOINTMENT_TRANSITIONS.get(current_status, set()):
+        abort(409)
+
     if g.user["role"] == "admin":
         if not is_owner(g.user):
             abort(403)
