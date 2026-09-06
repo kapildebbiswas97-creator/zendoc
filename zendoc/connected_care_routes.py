@@ -62,6 +62,7 @@ from .prescription_service import (
     create_prescription,
     get_prescription,
     is_autonomous_prescription_request,
+    transition_prescription_status,
 )
 from .family_care import revoke_family_access_grant
 from .orchestrator import HealthcareOrchestrator
@@ -681,6 +682,33 @@ def api_list_prescriptions():
         return _api_error(e, 403)
     except Exception as e:
         return _api_error(e)
+
+
+@bp.post("/api/v1/connected-care/prescriptions/<int:prescription_id>/status")
+def api_update_prescription_status(prescription_id):
+    user, err = _api_user(mutation=True)
+    if err:
+        return err
+    body = request.get_json(silent=True) or {}
+    try:
+        prescription = transition_prescription_status(
+            prescription_id=prescription_id,
+            actor=user,
+            new_status=body.get("status"),
+        )
+        audit(
+            "connected_care.prescription.status",
+            "prescriptions",
+            prescription_id,
+            user,
+        )
+        return jsonify({"prescription": prescription})
+    except PermissionError as e:
+        return _api_error(e, 403)
+    except LookupError as e:
+        return _api_error(e, 404)
+    except ValueError as e:
+        return _api_error(e, 409)
 
 
 @bp.post("/api/v1/connected-care/inventory")
