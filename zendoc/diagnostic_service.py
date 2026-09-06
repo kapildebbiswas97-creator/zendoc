@@ -95,7 +95,8 @@ def normalize_diagnostic_test(test_query: str | int) -> dict[str, Any] | None:
         return None
     rows = db.execute("SELECT * FROM diagnostic_catalog ORDER BY id").fetchall()
     normalized = _normalize_text(raw)
-    matches = []
+    exact_matches = []
+    contained_matches = []
     for row in rows:
         item = dict(row)
         candidates = [item.get("code"), item.get("name")]
@@ -105,9 +106,22 @@ def normalize_diagnostic_test(test_query: str | int) -> dict[str, Any] | None:
             aliases = []
         if isinstance(aliases, list):
             candidates.extend(aliases)
-        if any(_normalize_text(candidate) == normalized for candidate in candidates if candidate):
-            matches.append(item)
-    return matches[0] if len(matches) == 1 else None
+
+        normalized_candidates = [_normalize_text(candidate) for candidate in candidates if candidate]
+        if any(candidate == normalized for candidate in normalized_candidates):
+            exact_matches.append(item)
+            continue
+        # A longer natural-language request may contain one explicit canonical
+        # test name/alias. Only accept this if exactly one catalog item matches;
+        # ambiguous substring matches return None rather than guessing.
+        if any(len(candidate) >= 3 and candidate in normalized for candidate in normalized_candidates):
+            contained_matches.append(item)
+
+    if len(exact_matches) == 1:
+        return exact_matches[0]
+    if exact_matches:
+        return None
+    return contained_matches[0] if len(contained_matches) == 1 else None
 
 
 def diagnostic_availability_state(offer: dict[str, Any], *, now: datetime | None = None) -> str:
