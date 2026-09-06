@@ -688,8 +688,8 @@ def api_update_inventory():
     user, err = _api_user(mutation=True)
     if err:
         return err
-    if user.get("role") not in ("pharmacy", "admin"):
-        return _api_error(PermissionError("Only pharmacy accounts may update inventory."), 403)
+    if user.get("role") != "pharmacy":
+        return _api_error(PermissionError("Only the authenticated pharmacy may update its own inventory."), 403)
     try:
         body = request.get_json(force=True) or {}
         quantity = int(body.get("quantity") or body.get("quantity_available", 0))
