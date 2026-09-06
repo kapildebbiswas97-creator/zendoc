@@ -1,4 +1,6 @@
-from .db import get_db, now_iso
+import hashlib
+
+from .db import get_db, is_integrity_error, now_iso
 from .organization_service import provider_resource_context, assert_resource_tenant
 from .security import is_owner
 from .telehealth_provider import get_telehealth_provider
@@ -132,45 +134,65 @@ def request_consultation(actor, data):
     now = now_iso()
     tenant = provider_resource_context(doctor_id)
     db = get_db()
+    fingerprint_source = "|".join(
+        [
+            str(_user_id(actor)),
+            str(doctor_id),
+            consultation_type,
+            reason[:500],
+            str(data.get("scheduled_for") or ""),
+            str(data.get("appointment_id") or ""),
+        ]
+    )
+    request_fingerprint = hashlib.sha256(fingerprint_source.encode("utf-8")).hexdigest()
     existing = db.execute(
         """
         SELECT id FROM consultation_requests
-        WHERE patient_id=? AND doctor_id=? AND consultation_type=?
-          AND reason=? AND COALESCE(scheduled_for,'')=COALESCE(?, '')
-          AND COALESCE(appointment_id,0)=COALESCE(?,0)
+        WHERE request_fingerprint=?
           AND status IN ('requested','accepted','scheduled')
         ORDER BY id DESC LIMIT 1
         """,
-        (
-            _user_id(actor), doctor_id, consultation_type, reason[:500],
-            data.get("scheduled_for"), data.get("appointment_id"),
-        ),
+        (request_fingerprint,),
     ).fetchone()
     if existing:
         replay = get_consultation(actor, existing["id"])
         replay["idempotent_replay"] = True
         return replay
 
-    cursor = db.execute(
-        """
-        INSERT INTO consultation_requests
-        (patient_id, doctor_id, appointment_id, consultation_type, status, reason, scheduled_for,
-         organization_id, organization_location_id, created_at, updated_at)
-        VALUES (?, ?, ?, ?, 'requested', ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            _user_id(actor),
-            doctor_id,
-            data.get("appointment_id"),
-            consultation_type,
-            reason[:500],
-            data.get("scheduled_for"),
-            tenant["organization_id"],
-            tenant["organization_location_id"],
-            now,
-            now,
-        ),
-    )
+    try:
+        cursor = db.execute(
+            """
+            INSERT INTO consultation_requests
+            (patient_id, doctor_id, appointment_id, consultation_type, status, reason, scheduled_for,
+             organization_id, organization_location_id, request_fingerprint, created_at, updated_at)
+            VALUES (?, ?, ?, ?, 'requested', ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                _user_id(actor),
+                doctor_id,
+                data.get("appointment_id"),
+                consultation_type,
+                reason[:500],
+                data.get("scheduled_for"),
+                tenant["organization_id"],
+                tenant["organization_location_id"],
+                request_fingerprint,
+                now,
+                now,
+            ),
+        )
+    except Exception as error:
+        db.rollback()
+        if is_integrity_error(error):
+            existing = db.execute(
+                "SELECT id FROM consultation_requests WHERE request_fingerprint=?",
+                (request_fingerprint,),
+            ).fetchone()
+            if existing:
+                replay = get_consultation(actor, existing["id"])
+                replay["idempotent_replay"] = True
+                return replay
+        raise
     db.commit()
     return get_consultation(actor, cursor.lastrowid)
 
