@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from flask import Blueprint, jsonify, request
 
+from .db import get_db
+
 from .provider_onboarding import (
     EVIDENCE_TYPES,
     get_provider_evidence,
@@ -75,7 +77,7 @@ def api_admin_provider_evidence():
     status = str(request.args.get("status") or "pending").strip().lower()
     if status not in {"pending", "verified", "rejected", "all"}:
         return jsonify({"error": {"code": 400, "message": "Invalid evidence status filter."}}), 400
-    db = __import__("zendoc.db", fromlist=["get_db"]).get_db()
+    db = get_db()
     if status == "all":
         rows = db.execute(
             """
