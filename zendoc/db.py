@@ -1975,6 +1975,34 @@ def migrate_schema(db):
     )
     db.executescript(
         """
+        CREATE TABLE IF NOT EXISTS provider_verification_evidence (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            provider_profile_id INTEGER NOT NULL REFERENCES provider_profiles(id) ON DELETE CASCADE,
+            evidence_type TEXT NOT NULL,
+            identifier TEXT,
+            source_name TEXT NOT NULL,
+            source_url TEXT,
+            status TEXT NOT NULL DEFAULT 'pending',
+            notes TEXT,
+            submitted_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL,
+            reviewed_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_provider_evidence_profile ON provider_verification_evidence(provider_profile_id, status);
+
+        CREATE TABLE IF NOT EXISTS provider_onboarding_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            provider_profile_id INTEGER NOT NULL REFERENCES provider_profiles(id) ON DELETE CASCADE,
+            event_type TEXT NOT NULL,
+            status TEXT NOT NULL,
+            message TEXT NOT NULL,
+            actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_provider_onboarding_events_profile ON provider_onboarding_events(provider_profile_id, created_at);
+
         CREATE TABLE IF NOT EXISTS data_ingestion_batches (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             batch_uid TEXT NOT NULL UNIQUE,
@@ -2098,6 +2126,10 @@ def migrate_schema(db):
     db.execute(
         "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)",
         ("post_submission_official_ingestion_v1", now_iso()),
+    )
+    db.execute(
+        "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+        ("post_submission_provider_onboarding_v1", now_iso()),
     )
 
     db.execute(
