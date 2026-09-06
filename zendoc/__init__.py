@@ -4,6 +4,7 @@ from flask import Flask
 
 from .config import load_config, validate_startup_config
 from .carefin_routes import bp as carefin_bp
+from .care_journey_routes import bp as care_journey_bp
 from .db import close_db, init_db
 from .connected_care_routes import bp as connected_care_bp
 from .ecosystem_routes import bp as ecosystem_bp
@@ -45,6 +46,7 @@ def create_app(test_config=None):
     app.register_blueprint(milestone82_bp)
     app.register_blueprint(connected_care_bp)
     app.register_blueprint(carefin_bp)
+    app.register_blueprint(care_journey_bp)
     app.register_blueprint(nutrition_intelligence_bp)
     app.register_blueprint(language_bp)
     app.register_blueprint(geography_graph_bp)
