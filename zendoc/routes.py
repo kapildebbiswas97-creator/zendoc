@@ -575,7 +575,10 @@ def appointment_status(appointment_id):
     row = get_db().execute("SELECT patient_id, provider_id FROM appointments WHERE id=?", (appointment_id,)).fetchone()
     if not row:
         abort(404)
-    if g.user["role"] != "admin" and row["provider_id"] != g.user["id"]:
+    if g.user["role"] == "admin":
+        if not is_owner(g.user):
+            abort(403)
+    elif row["provider_id"] != g.user["id"]:
         abort(403)
     get_db().execute("UPDATE appointments SET status=?, updated_at=? WHERE id=?", (status, now_iso(), appointment_id))
     create_notification(row["patient_id"], "Appointment updated", f"Appointment status changed to {status}.")
@@ -1147,6 +1150,8 @@ def api_create_appointment():
     user, error = require_api_user()
     if error:
         return error
+    if user["role"] != "patient":
+        return jsonify({"error": {"code": 403, "message": "Only patient accounts may create appointments."}}), 403
     data = request.get_json(silent=True) or {}
     if data.get("provider_profile_id"):
         validation_error = require_json_fields(data, "provider_profile_id", "scheduled_for", "reason")
@@ -1203,6 +1208,9 @@ def api_provider_slots(profile_id):
     user, error = require_api_user()
     if error:
         return error
+    profile = get_public_provider_profile(profile_id)
+    if not profile:
+        return jsonify({"error": {"code": 404, "message": "Verified provider profile not found"}}), 404
     date_text = request.args.get("date", "")
     return jsonify({"provider_profile_id": profile_id, "date": date_text, "slots": available_slots(profile_id, date_text)})
 
