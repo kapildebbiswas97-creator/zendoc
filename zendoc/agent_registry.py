@@ -144,11 +144,11 @@ AGENT_REGISTRY: dict[str, AgentDefinition] = {
         identifier="NutritionAgent",
         name="Nutrition & Hydration Agent",
         purpose="Provide general evidence-aware nutrition, hydration and product comparison guidance.",
-        allowed_tools=[],
+        allowed_tools=["compare_nutrition_products"],
         allowed_actor_roles=["patient", "admin"],
         risk_level="READ_ONLY",
         approval_requirements=["clinician_or_dietitian_for_medical_diet"],
-        status="beta",
+        status="connected",
         description="No unsupported health claims, hidden sponsored ranking, or clinical diet replacement.",
     ),
 
