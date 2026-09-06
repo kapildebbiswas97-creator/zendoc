@@ -1,4 +1,5 @@
 from .db import get_db, now_iso
+from .security import is_owner
 
 
 STAFF_TYPES = (
@@ -30,8 +31,8 @@ def _user_id(user):
 
 
 def upsert_staff_profile(actor, data):
-    if _value(actor, "role") != "admin":
-        raise PermissionError("Only admins can manage staff profiles.")
+    if not is_owner(actor):
+        raise PermissionError("Only the configured ZENDOC owner can manage staff profiles.")
     user_id = int(data.get("user_id") or 0)
     staff_type = str(data.get("staff_type") or "").strip().lower()
     if staff_type not in STAFF_TYPES:
@@ -75,8 +76,63 @@ def get_staff_profile(user_id):
     return dict(row)
 
 
+def _assert_patient_task_scope(actor, patient_id):
+    """Require a real care/fulfilment relationship before provider task creation."""
+    if patient_id in (None, ""):
+        return None
+    try:
+        patient_id = int(patient_id)
+    except (TypeError, ValueError) as error:
+        raise ValueError("patient_id must be a valid patient account id.") from error
+
+    db = get_db()
+    patient = db.execute(
+        "SELECT id FROM users WHERE id=? AND role='patient' AND active=1",
+        (patient_id,),
+    ).fetchone()
+    if not patient:
+        raise LookupError("Patient account not found.")
+
+    if is_owner(actor):
+        return patient_id
+
+    actor_id = _user_id(actor)
+    role = _value(actor, "role")
+    if role in {"doctor", "hospital"}:
+        linked = db.execute(
+            """
+            SELECT 1
+            FROM appointments
+            WHERE patient_id=? AND provider_id=?
+            UNION ALL
+            SELECT 1
+            FROM consultation_requests
+            WHERE patient_id=? AND doctor_id=?
+            LIMIT 1
+            """,
+            (patient_id, actor_id, patient_id, actor_id),
+        ).fetchone()
+        if linked:
+            return patient_id
+        raise PermissionError("This provider has no active care relationship with the requested patient.")
+
+    if role == "pharmacy":
+        linked = db.execute(
+            "SELECT 1 FROM medicine_orders WHERE patient_id=? AND pharmacy_id=? LIMIT 1",
+            (patient_id, actor_id),
+        ).fetchone()
+        if linked:
+            return patient_id
+        raise PermissionError("This pharmacy has no assigned fulfilment relationship with the requested patient.")
+
+    raise PermissionError("This account cannot create patient-linked operations tasks.")
+
+
 def create_staff_task(actor, data):
-    if _value(actor, "role") not in {"admin", "doctor", "hospital", "pharmacy"}:
+    role = _value(actor, "role")
+    if role == "admin" and not is_owner(actor):
+        raise PermissionError("Only the configured ZENDOC owner may use the admin operations role.")
+    if role not in {"admin", "doctor", "hospital", "pharmacy"}:
         raise PermissionError("Only operations roles can create staff tasks.")
     task_type = str(data.get("task_type") or "").strip().lower()
     if not task_type:
@@ -87,6 +143,7 @@ def create_staff_task(actor, data):
     assigned_staff_id = data.get("assigned_staff_id")
     if assigned_staff_id:
         get_staff_profile(int(assigned_staff_id))
+    patient_id = _assert_patient_task_scope(actor, data.get("patient_id"))
     now = now_iso()
     cursor = get_db().execute(
         """
@@ -97,7 +154,7 @@ def create_staff_task(actor, data):
         (
             _user_id(actor),
             assigned_staff_id,
-            data.get("patient_id"),
+            patient_id,
             data.get("source_type"),
             data.get("source_id"),
             task_type,
@@ -117,6 +174,8 @@ def list_staff_tasks(actor):
     uid = _user_id(actor)
     role = _value(actor, "role")
     if role == "admin":
+        if not is_owner(actor):
+            raise PermissionError("Only the configured ZENDOC owner may view all staff tasks.")
         where = "1=1"
         params = ()
     else:
@@ -151,7 +210,10 @@ def get_staff_task(actor, task_id):
     ).fetchone()
     if not row:
         raise LookupError("Staff task not found.")
-    if role != "admin" and uid not in {row["requested_by"], row["assigned_staff_id"]}:
+    if role == "admin":
+        if not is_owner(actor):
+            raise PermissionError("Only the configured ZENDOC owner may access all staff tasks.")
+    elif uid not in {row["requested_by"], row["assigned_staff_id"]}:
         raise PermissionError("You cannot access another staff task.")
     return dict(row)
 
@@ -160,8 +222,11 @@ def update_staff_task(actor, task_id, status, message=None):
     task = get_staff_task(actor, task_id)
     uid = _user_id(actor)
     role = _value(actor, "role")
-    if role != "admin" and uid != task["assigned_staff_id"]:
-        raise PermissionError("Only assigned staff or admins can update this task.")
+    if role == "admin":
+        if not is_owner(actor):
+            raise PermissionError("Only the configured ZENDOC owner may update arbitrary staff tasks.")
+    elif uid != task["assigned_staff_id"]:
+        raise PermissionError("Only assigned staff or the ZENDOC owner can update this task.")
     status = str(status or "").strip().lower()
     if status not in TASK_STATUSES:
         raise ValueError("Invalid task status.")
