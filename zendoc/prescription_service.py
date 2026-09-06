@@ -22,6 +22,13 @@ RX_RESTRICTED_TERMS = {
 }
 VALID_PROVENANCE_SOURCES = {"USER_REPORTED", "DOCUMENT_EXTRACTED", "PROVIDER_RECORDED", "DEVICE_RECORDED"}
 
+PRESCRIPTION_TRANSITIONS = {
+    "active": {"completed", "cancelled", "superseded"},
+    "completed": set(),
+    "cancelled": set(),
+    "superseded": set(),
+}
+
 
 def _normalized_medicine_name(value: Any) -> str:
     return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
