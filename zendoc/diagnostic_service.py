@@ -166,6 +166,82 @@ def list_diagnostic_catalog(category: str | None = None) -> list[dict[str, Any]]
     return [dict(r) for r in rows]
 
 
+
+def upsert_diagnostic_offer(
+    actor: Any,
+    test_id: int,
+    price_inr: float,
+    home_collection_available: bool = True,
+    home_collection_fee_inr: float = 0.0,
+    data_mode: str | None = None,
+) -> dict[str, Any]:
+    """Create/update a truthful provider-backed diagnostic offer."""
+    lab_id = _user_id(actor)
+    if not lab_id:
+        raise PermissionError("Authentication required to manage diagnostic offers.")
+    db = get_db()
+    profile = db.execute(
+        """
+        SELECT * FROM provider_profiles
+        WHERE user_id=? AND verification_status='verified'
+        """,
+        (lab_id,),
+    ).fetchone()
+    if not profile or str(profile["provider_type"] or "").lower() not in {
+        "diagnostic_centre", "diagnostic_center", "lab", "hospital"
+    }:
+        raise PermissionError("Only a verified diagnostic provider may publish diagnostic offers.")
+    test = db.execute("SELECT id FROM diagnostic_catalog WHERE id=?", (int(test_id),)).fetchone()
+    if not test:
+        raise LookupError("Diagnostic test not found.")
+    try:
+        price = float(price_inr)
+        collection_fee = float(home_collection_fee_inr or 0)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Diagnostic offer prices must be valid numbers.") from exc
+    if not math.isfinite(price) or price < 0 or not math.isfinite(collection_fee) or collection_fee < 0:
+        raise ValueError("Diagnostic offer prices must be non-negative finite values.")
+
+    mode = _data_mode(data_mode)
+    tenant = provider_resource_context(lab_id)
+    now = now_iso()
+    existing = db.execute(
+        "SELECT id FROM diagnostic_offers WHERE lab_id=? AND test_id=? AND data_mode=?",
+        (lab_id, int(test_id), mode),
+    ).fetchone()
+    if existing:
+        db.execute(
+            """
+            UPDATE diagnostic_offers
+            SET price_inr=?, home_collection_available=?, home_collection_fee_inr=?,
+                verified=1, observed_at=?, organization_id=?, organization_location_id=?
+            WHERE id=?
+            """,
+            (
+                price, 1 if home_collection_available else 0, collection_fee, now,
+                tenant["organization_id"], tenant["organization_location_id"], existing["id"],
+            ),
+        )
+        offer_id = int(existing["id"])
+    else:
+        cursor = db.execute(
+            """
+            INSERT INTO diagnostic_offers
+            (lab_id,test_id,price_inr,home_collection_available,home_collection_fee_inr,verified,
+             data_mode,observed_at,organization_id,organization_location_id,created_at)
+            VALUES (?,?,?,?,?,1,?,?,?,?,?)
+            """,
+            (
+                lab_id, int(test_id), price, 1 if home_collection_available else 0,
+                collection_fee, mode, now, tenant["organization_id"],
+                tenant["organization_location_id"], now,
+            ),
+        )
+        offer_id = int(cursor.lastrowid)
+    db.commit()
+    return dict(db.execute("SELECT * FROM diagnostic_offers WHERE id=?", (offer_id,)).fetchone())
+
+
 def search_lab_offers(
     test_code_or_id: str | int,
     city: str | None = None,
