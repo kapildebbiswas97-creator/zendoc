@@ -166,15 +166,17 @@ def test_emergency_failure_creates_critical_operational_alert(tmp_path):
     app = make_app(tmp_path)
     with app.app_context():
         db = get_db()
-        db.execute(
-            """
-            INSERT INTO platform_events
-            (action,entity_type,status,event_type,payload_json,correlation_id,created_at)
-            VALUES ('emergency_failure','agent_task','failed','safety.emergency.failed','{}','emergency-test',?)
-            """,
-            (now_iso(),),
+        from zendoc.event_bus import publish_event
+
+        publish_event(
+            "safety.emergency.failed",
+            entity_type="agent_task",
+            entity_id="test-emergency-task",
+            status="failed",
+            correlation_id="emergency-test",
+            payload={"intent": "emergency", "task_id": 1},
+            error="synthetic test failure",
         )
-        db.commit()
 
         run_proactive_alert_check()
         alert = db.execute(
