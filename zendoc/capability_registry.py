@@ -226,6 +226,11 @@ def get_capability_registry() -> dict:
             "label": "Care Journey Pilot UI",
             "description": "Authenticated browser workflow for durable coordination journeys and valid next-state transitions.",
         },
+        "pilot_analytics": {
+            "status": STATUS_WORKING,
+            "label": "Pilot Analytics Scorecard",
+            "description": "Owner-only metrics computed from real ZENDOC records for onboarding, care journeys, CareFin discovery, fulfilment, diagnostics, data coverage, and operations.",
+        },
 
         # Health & Clinical
         "health_memory": {
