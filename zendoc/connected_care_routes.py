@@ -46,6 +46,7 @@ from .db import get_db, now_iso
 from .diagnostic_service import (
     book_diagnostic_test,
     search_lab_offers,
+    upsert_diagnostic_offer,
 )
 from .fulfilment_optimizer import optimize_prescription_fulfilment
 from .health_memory_continuity import (
@@ -766,6 +767,31 @@ def api_revoke_consent(grant_id):
         return _api_error(e, 403)
     except Exception as e:
         return _api_error(e)
+
+
+@bp.post("/api/v1/connected-care/diagnostic-offers")
+def api_upsert_diagnostic_offer():
+    user, err = _api_user(mutation=True)
+    if err:
+        return err
+    try:
+        body = request.get_json(force=True) or {}
+        offer = upsert_diagnostic_offer(
+            actor=user,
+            test_id=int(body.get("test_id") or 0),
+            price_inr=body.get("price_inr"),
+            home_collection_available=bool(body.get("home_collection_available", True)),
+            home_collection_fee_inr=body.get("home_collection_fee_inr", 0),
+            data_mode=body.get("data_mode"),
+        )
+        audit("connected_care.diagnostic_offer.upsert", "diagnostic_offers", offer.get("id"), user)
+        return jsonify({"offer": offer}), 201
+    except PermissionError as e:
+        return _api_error(e, 403)
+    except LookupError as e:
+        return _api_error(e, 404)
+    except (TypeError, ValueError) as e:
+        return _api_error(e, 400)
 
 
 @bp.post("/api/v1/connected-care/diagnostics/book")
