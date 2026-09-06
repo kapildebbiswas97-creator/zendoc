@@ -10,6 +10,7 @@ import json
 from datetime import datetime, timezone
 
 from .db import get_db, now_iso
+from .security import is_owner
 
 
 RELATIONSHIPS = (
@@ -237,8 +238,12 @@ def authorize_family_patient(actor, patient_id=None, scope="care_tasks"):
     ).fetchone()
     if not target:
         raise LookupError("Patient account not found.")
-    if actor_id == target_id or _row_value(actor, "role") == "admin":
+    if actor_id == target_id:
         return target_id
+    if _row_value(actor, "role") == "admin":
+        if is_owner(actor):
+            return target_id
+        raise PermissionError("Only the configured ZENDOC owner may override family-care consent.")
     if has_family_access(target_id, actor_id, scope):
         return target_id
     raise PermissionError("Explicit family consent is required for this action.")
