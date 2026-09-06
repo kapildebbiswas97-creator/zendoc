@@ -605,7 +605,18 @@ def appointment_status(appointment_id):
         return redirect(url_for("main.appointments"))
     if status not in APPOINTMENT_TRANSITIONS.get(current_status, set()):
         abort(409)
-    get_db().execute("UPDATE appointments SET status=?, updated_at=? WHERE id=?", (status, now_iso(), appointment_id))
+    updated = get_db().execute(
+        "UPDATE appointments SET status=?, updated_at=? WHERE id=? AND status=?",
+        (status, now_iso(), appointment_id, current_status),
+    )
+    if updated.rowcount != 1:
+        get_db().rollback()
+        abort(409)
+    if status == "cancelled":
+        get_db().execute(
+            "DELETE FROM appointment_slot_claims WHERE appointment_id=?",
+            (appointment_id,),
+        )
     create_notification(row["patient_id"], "Appointment updated", f"Appointment status changed to {status}.")
     audit("update_status", "appointment", str(appointment_id))
     get_db().commit()
