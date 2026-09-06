@@ -217,16 +217,17 @@ def update_consultation_status(actor, consultation_id, status, scheduled_for=Non
     status = str(status or "").strip().lower()
     if status not in CONSULTATION_STATUSES:
         raise ValueError("Invalid consultation status.")
-    current_status = str(consultation.get("status") or "requested").strip().lower()
-    if status == current_status:
-        return consultation
-    if status not in CONSULTATION_TRANSITIONS.get(current_status, set()):
-        raise ValueError(f"Consultation cannot transition from {current_status} to {status}.")
     if role not in {"admin", "doctor", "hospital"} or (role != "admin" and uid != consultation["doctor_id"]):
         raise PermissionError("Only the assigned doctor can accept, reject, schedule, or end this consultation.")
     if role == "admin":
         from .security import assert_owner
         assert_owner(actor)
+
+    current_status = str(consultation.get("status") or "requested").strip().lower()
+    if status == current_status:
+        return consultation
+    if status not in CONSULTATION_TRANSITIONS.get(current_status, set()):
+        raise ValueError(f"Consultation cannot transition from {current_status} to {status}.")
     now = now_iso()
     room = None
     if status in {"accepted", "scheduled"} and not consultation.get("room_id"):
