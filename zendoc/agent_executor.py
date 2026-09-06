@@ -114,6 +114,39 @@ def _patient_target(actor, arguments, purpose):
     return patient_id
 
 
+
+def _carefin_discovery(actor, arguments):
+    from .carefin_engine import discover_benefits
+
+    query = str(arguments.get("query") or "")[:1000]
+    lower = query.lower()
+    actor_city = str(_value(actor, "city", "") or "").strip()
+    actor_age = _value(actor, "age", None)
+
+    state = None
+    if "west bengal" in lower or " westbengal" in lower or " wb " in f" {lower} ":
+        state = "West Bengal"
+
+    desired_categories = []
+    if "insurance" in lower or "policy" in lower:
+        desired_categories.extend(["life_insurance", "government_health_assurance"])
+    if any(term in lower for term in ("csr", "charity", "trust", "ngo", "financial help", "medical funding")):
+        desired_categories.extend(["csr", "charitable_support", "health_welfare"])
+    if "government" in lower or "scheme" in lower:
+        desired_categories.extend(["government_scheme", "government_health_assurance", "state_health_scheme"])
+
+    return discover_benefits({
+        "geography": state or "INDIA",
+        "state": state,
+        "district": actor_city or None,
+        "age": actor_age,
+        "existing_insurer": "LIC" if "lic" in lower else None,
+        "needs_charitable_support": any(
+            term in lower for term in ("csr", "charity", "trust", "ngo", "financial help", "medical funding")
+        ),
+        "desired_categories": desired_categories,
+    })
+
 def _pharmacy_search(actor, arguments):
     from .inventory_service import search_pharmacy_offers
 
@@ -225,6 +258,7 @@ TOOL_HANDLERS = {
     "search_educational_video": _educational_video,
     "get_iot_devices": _iot_devices,
     "run_proactive_alert_check": _alert_check,
+    "discover_carefin_benefits": _carefin_discovery,
     "search_nearby_pharmacy_inventory": _pharmacy_search,
     "compare_prescription_fulfilment": _pharmacy_compare,
     "stage_fulfilment_plan": _pharmacy_stage,
