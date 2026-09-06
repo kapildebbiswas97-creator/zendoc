@@ -416,6 +416,36 @@ def book_diagnostic_test(
 
     now = now_iso()
     tenant = provider_resource_context(lab_id)
+    existing = db.execute(
+        """
+        SELECT * FROM diagnostic_bookings
+        WHERE patient_id=? AND lab_id=? AND test_id=? AND collection_type=?
+          AND scheduled_date=? AND COALESCE(slot_time,'')=COALESCE(?, '')
+          AND address=? AND status IN ('requested','accepted')
+        ORDER BY id DESC LIMIT 1
+        """,
+        (patient_id, lab_id, test_id, collection_type, scheduled_date, slot_time, address),
+    ).fetchone()
+    if existing:
+        return {
+            "success": True,
+            "booking_id": int(existing["id"]),
+            "booking_uid": existing["booking_uid"],
+            "test_name": test_row["name"],
+            "lab_id": lab_id,
+            "lab_name": offer["lab_name"],
+            "status": existing["status"],
+            "price_inr": price,
+            "collection_fee_inr": fee,
+            "total_price_inr": float(existing["price_inr"]),
+            "data_mode": mode,
+            "is_demo": mode == "DEMO",
+            "requires_provider_acknowledgement": True,
+            "provider_acknowledgement_status": "pending",
+            "availability_state_at_request": AVAILABILITY_CONFIRMED,
+            "idempotent_replay": True,
+        }
+
     uid = f"diag_{patient_id}_{test_id}_{uuid.uuid4().hex[:12]}"
     cursor = db.execute(
         """
