@@ -2,6 +2,7 @@ import json
 from datetime import datetime, timezone
 
 from .db import get_db, now_iso
+from .security import is_owner
 
 
 HEALTH_SCOPES = ("profile", "reports", "appointments", "measurements", "timeline")
@@ -80,7 +81,9 @@ def authorize_patient(actor, patient_id=None, scope=None):
             raise PermissionError("You cannot access another patient's health data.")
         return target_id
     if role == "admin":
-        return target_id
+        if is_owner(actor):
+            return target_id
+        raise PermissionError("Only the configured ZENDOC owner may override patient health-data access.")
     if role in PROVIDER_ACCESS_ROLES and scope and has_active_grant(target_id, actor_id, scope):
         return target_id
     raise PermissionError("Patient consent is required for this health-data scope.")
