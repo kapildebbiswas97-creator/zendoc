@@ -97,7 +97,7 @@ def _carefin_metrics(db) -> dict:
     )
     unique_users = _count(
         db,
-        "SELECT COUNT(DISTINCT user_id) c FROM audit_logs WHERE action='carefin.discovery'",
+        "SELECT COUNT(DISTINCT actor_id) c FROM audit_logs WHERE action='carefin.discovery'",
     )
     return {
         "discovery_runs": discoveries,
