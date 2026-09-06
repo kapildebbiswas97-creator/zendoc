@@ -34,4 +34,60 @@
     {% endif %}
   </article>
 </section>
+
+{% if profile and onboarding %}
+<section class="grid two spaced-panel">
+  <article class="panel">
+    <p class="eyebrow">Pilot onboarding</p>
+    <h2>Verification readiness</h2>
+    <div class="summary-row"><strong>Profile completeness</strong><span>{{ onboarding.completeness_score }}%</span></div>
+    <div class="summary-row"><strong>Verified evidence</strong><span>{{ onboarding.verified_evidence_count }}</span></div>
+    <div class="summary-row"><strong>Active schedules</strong><span>{{ onboarding.active_schedule_count }}</span></div>
+    <div class="summary-row"><strong>Ready for owner verification review</strong><span>{{ 'Yes' if onboarding.verification_ready else 'Not yet' }}</span></div>
+    {% if onboarding.blockers %}
+      <h3>What is still needed</h3>
+      <ul>{% for blocker in onboarding.blockers %}<li>{{ blocker }}</li>{% endfor %}</ul>
+    {% endif %}
+    <p class="form-note">{{ onboarding.truth_notice }}</p>
+  </article>
+
+  <form class="panel" method="post" action="{{ url_for('main.provider_evidence_submit_web') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <p class="eyebrow">Official evidence</p>
+    <h2>Submit verification evidence</h2>
+    <label>Evidence type
+      <select name="evidence_type" required>
+        {% for item in evidence_types %}<option value="{{ item }}">{{ item|replace('_',' ')|title }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Registration / evidence identifier <input name="identifier" maxlength="240"></label>
+    <label>Source / registry name <input name="source_name" required maxlength="200" placeholder="Official registry or issuing authority"></label>
+    <label>Public source URL <input name="source_url" type="url" maxlength="1000" placeholder="https://..."></label>
+    <label>Notes <textarea name="notes" rows="3" maxlength="1000"></textarea></label>
+    <button type="submit" class="secondary-action">Submit for owner review</button>
+    <p class="form-note">Submission does not verify the profile. The owner must review the evidence separately.</p>
+  </form>
+</section>
+
+{% if evidence %}
+<section class="panel spaced-panel">
+  <p class="eyebrow">Evidence history</p>
+  <h2>Submitted verification evidence</h2>
+  <table>
+    <thead><tr><th>Type</th><th>Source</th><th>Identifier</th><th>Status</th><th>Submitted</th></tr></thead>
+    <tbody>
+      {% for item in evidence %}
+      <tr>
+        <td>{{ item.evidence_type|replace('_',' ')|title }}</td>
+        <td>{{ item.source_name }}</td>
+        <td>{{ item.identifier or '—' }}</td>
+        <td>{{ item.status }}</td>
+        <td>{{ item.created_at }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+{% endif %}
 {% endblock %}
