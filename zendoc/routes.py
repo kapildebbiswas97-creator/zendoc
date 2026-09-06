@@ -22,6 +22,13 @@ from .db import ROLES, get_db, is_integrity_error, now_iso
 from .health_analytics import METRIC_TYPES, create_measurement, get_health_trend
 from .healthcare_finder import HealthcareFinder, normalize_query
 from .intelligence import ZendocIntelligence
+from .provider_onboarding import (
+    EVIDENCE_TYPES,
+    list_provider_evidence,
+    provider_onboarding_status,
+    review_provider_evidence,
+    submit_provider_evidence,
+)
 from .provider_service import (
     PROVIDER_ROLES,
     SPECIALTIES,
@@ -802,12 +809,45 @@ def provider_profile():
             flash(str(error), "error")
     profile_row = get_provider_profile_for_user(g.user["id"])
     schedules = []
+    onboarding = None
+    evidence = []
     if profile_row:
         schedules = get_db().execute(
             "SELECT * FROM provider_schedules WHERE provider_profile_id=? ORDER BY weekday,start_time",
             (profile_row["id"],),
         ).fetchall()
-    return render_template("provider_profile.html", profile=profile_row, schedules=schedules)
+        onboarding = provider_onboarding_status(profile_row["id"])
+        evidence = list_provider_evidence(profile_row["id"])
+    return render_template(
+        "provider_profile.html",
+        profile=profile_row,
+        schedules=schedules,
+        onboarding=onboarding,
+        evidence=evidence,
+        evidence_types=sorted(EVIDENCE_TYPES),
+    )
+
+
+@bp.post("/provider/evidence")
+@login_required
+def provider_evidence_submit_web():
+    if g.user["role"] not in PROVIDER_ROLES:
+        abort(403)
+    try:
+        submit_provider_evidence(
+            g.user,
+            evidence_type=request.form.get("evidence_type"),
+            identifier=request.form.get("identifier"),
+            source_name=request.form.get("source_name"),
+            source_url=request.form.get("source_url"),
+            notes=request.form.get("notes"),
+        )
+        audit("provider_evidence_submit", "provider_profile", str(g.user["id"]))
+        get_db().commit()
+        flash("Verification evidence submitted for owner review.", "success")
+    except (LookupError, ValueError) as error:
+        flash(str(error), "error")
+    return redirect(url_for("main.provider_profile"))
 
 
 @bp.post("/provider/schedules")
@@ -838,7 +878,24 @@ def admin():
         """
     ).fetchall()
     audits = db.execute("SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 25").fetchall()
-    return render_template("admin.html", stats=stats_for(g.user), users=users, providers=providers, audits=audits)
+    provider_evidence = db.execute(
+        """
+        SELECT e.*, p.organization, p.provider_type, u.name provider_name, u.email provider_email
+        FROM provider_verification_evidence e
+        JOIN provider_profiles p ON p.id=e.provider_profile_id
+        JOIN users u ON u.id=p.user_id
+        ORDER BY CASE e.status WHEN 'pending' THEN 0 ELSE 1 END, e.created_at DESC
+        LIMIT 50
+        """
+    ).fetchall()
+    return render_template(
+        "admin.html",
+        stats=stats_for(g.user),
+        users=users,
+        providers=providers,
+        audits=audits,
+        provider_evidence=provider_evidence,
+    )
 
 
 @bp.post("/admin/users/<int:user_id>/verify")
@@ -848,6 +905,21 @@ def verify_user(user_id):
     audit("verify", "user", str(user_id))
     get_db().commit()
     flash("User verified.", "success")
+    return redirect(url_for("main.admin"))
+
+
+@bp.post("/admin/provider-evidence/<int:evidence_id>/review")
+@owner_required
+def provider_evidence_review_web(evidence_id):
+    status = str(request.form.get("status") or "").strip().lower()
+    notes = str(request.form.get("notes") or "").strip()
+    try:
+        review_provider_evidence(g.user, evidence_id, status=status, notes=notes)
+        audit("provider_evidence_review", "provider_verification_evidence", f"{evidence_id}:{status}")
+        get_db().commit()
+        flash("Provider evidence review updated.", "success")
+    except (LookupError, ValueError, PermissionError) as error:
+        flash(str(error), "error")
     return redirect(url_for("main.admin"))
 
 
