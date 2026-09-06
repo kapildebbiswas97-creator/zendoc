@@ -170,7 +170,7 @@ def _provider_discovery(actor, arguments):
 
 def _latest_prescription_review(actor, arguments):
     from .db import get_db
-    from .prescription_service import get_prescription
+    from .prescription_intelligence import prescription_intelligence_state
 
     patient_id = _patient_target(actor, arguments, "prescription_view")
     row = get_db().execute(
@@ -182,32 +182,15 @@ def _latest_prescription_review(actor, arguments):
             "status": "NO_PRESCRIPTION",
             "patient_id": patient_id,
             "needs_review": False,
+            "fulfilment_ready": False,
             "items": [],
         }
 
-    prescription = get_prescription(int(row["id"]), actor=actor)
-    items = []
-    for item in prescription.get("items", []):
-        items.append({
-            "id": item["id"],
-            "medicine_name": item["medicine_name"],
-            "form": item.get("form"),
-            "dosage": item.get("dosage"),
-            "frequency": item.get("frequency"),
-            "extraction_confidence": item.get("extraction_confidence"),
-            "review_status": item.get("review_status"),
-            "sku_id": item.get("sku_id"),
-        })
+    projected = prescription_intelligence_state(int(row["id"]), actor=actor)
     return {
-        "status": "REVIEW_REQUIRED" if prescription.get("needs_review") else "VERIFIED",
+        "status": projected["overall_stage"],
         "patient_id": patient_id,
-        "prescription_id": prescription["id"],
-        "needs_review": bool(prescription.get("needs_review")),
-        "fulfilment_ready": bool(items) and all(
-            item.get("sku_id") and item.get("review_status") in {"verified", "user_confirmed"}
-            for item in items
-        ),
-        "items": items,
+        **projected,
         "safety_notice": "Read-only review. No medicine substitution, dose/frequency/form change, prescribing, or order submission occurred.",
     }
 
