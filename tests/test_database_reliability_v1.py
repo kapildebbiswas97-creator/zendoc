@@ -93,3 +93,27 @@ def test_owner_database_readiness_endpoint_is_protected(tmp_path):
 
     denied = client.get("/owner/database-readiness")
     assert denied.status_code in {302, 401, 403}
+
+
+def test_postgres_adapter_returns_ids_for_tenancy_tables():
+    from zendoc.postgres_backend import translate_sql
+
+    for table in ("provider_organizations", "organization_locations", "organization_memberships"):
+        sql, returns_id = translate_sql(f"INSERT INTO {table} (id) VALUES (?)")
+        assert returns_id is True
+        assert "RETURNING id" in sql
+
+
+def test_postgres_adapter_translates_begin_immediate_and_qmark_parameters():
+    from zendoc.postgres_backend import translate_sql
+
+    sql, returns_id = translate_sql("BEGIN IMMEDIATE", return_inserted_id=False)
+    assert sql.strip().upper() == "BEGIN"
+    assert returns_id is False
+
+    sql, _ = translate_sql(
+        "SELECT * FROM users WHERE id=? AND email_normalized=?",
+        return_inserted_id=False,
+    )
+    assert "%s" in sql
+    assert "?" not in sql
