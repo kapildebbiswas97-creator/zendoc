@@ -213,7 +213,8 @@ def update_inventory_observation(
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (pharmacy_id, sku_id, stock_status, quantity, stored_price, price_available,
-                 discount_percent, source, now, notes, mode, now, now),
+                 discount_percent, source, now, notes, mode,
+                 tenant["organization_id"], tenant["organization_location_id"], now, now),
             )
         except sqlite3.IntegrityError as exc:
             # A database created before the data-mode migration has a
