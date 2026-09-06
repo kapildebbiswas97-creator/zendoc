@@ -299,6 +299,7 @@ AGENT_REGISTRY: dict[str, AgentDefinition] = {
             "escalate_task",
             "request_owner_approval",
             "run_proactive_alert_check",
+            "run_safe_operations_automation",
         ],
         allowed_actor_roles=["admin"],
         risk_level="OWNER_APPROVAL",
