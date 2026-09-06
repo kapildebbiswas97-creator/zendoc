@@ -13,6 +13,7 @@ from .public_source_registry import list_public_ingestion_sources
 from .pilot_analytics import pilot_scorecard
 from .security import owner_required
 from .database_reliability import backup_readiness, create_sqlite_backup, readiness_report
+from .observability import incident_summary, list_runbooks, request_metrics, agent_metrics, emergency_metrics
 
 
 bp = Blueprint("system_intelligence", __name__)
@@ -56,3 +57,21 @@ def owner_database_backup():
     result = create_sqlite_backup()
     status = 201 if result.get("status") == "created" else 409
     return jsonify(result), status
+
+
+@bp.get("/owner/observability")
+@owner_required
+def owner_observability():
+    return jsonify({
+        "incident": incident_summary(60),
+        "requests_15m": request_metrics(15),
+        "requests_60m": request_metrics(60),
+        "agents_60m": agent_metrics(60),
+        "emergency_60m": emergency_metrics(60),
+    })
+
+
+@bp.get("/owner/incident-runbooks")
+@owner_required
+def owner_incident_runbooks():
+    return jsonify({"runbooks": list_runbooks()})
