@@ -131,7 +131,27 @@ def request_consultation(actor, data):
         raise ValueError("Consultation reason is required.")
     now = now_iso()
     tenant = provider_resource_context(doctor_id)
-    cursor = get_db().execute(
+    db = get_db()
+    existing = db.execute(
+        """
+        SELECT id FROM consultation_requests
+        WHERE patient_id=? AND doctor_id=? AND consultation_type=?
+          AND reason=? AND COALESCE(scheduled_for,'')=COALESCE(?, '')
+          AND COALESCE(appointment_id,0)=COALESCE(?,0)
+          AND status IN ('requested','accepted','scheduled')
+        ORDER BY id DESC LIMIT 1
+        """,
+        (
+            _user_id(actor), doctor_id, consultation_type, reason[:500],
+            data.get("scheduled_for"), data.get("appointment_id"),
+        ),
+    ).fetchone()
+    if existing:
+        replay = get_consultation(actor, existing["id"])
+        replay["idempotent_replay"] = True
+        return replay
+
+    cursor = db.execute(
         """
         INSERT INTO consultation_requests
         (patient_id, doctor_id, appointment_id, consultation_type, status, reason, scheduled_for,
@@ -151,7 +171,7 @@ def request_consultation(actor, data):
             now,
         ),
     )
-    get_db().commit()
+    db.commit()
     return get_consultation(actor, cursor.lastrowid)
 
 
