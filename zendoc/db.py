@@ -2285,6 +2285,33 @@ def migrate_schema(db):
         ("post_submission_concurrency_v1", now_iso()),
     )
 
+    # Nullable request fingerprints protect new retry-sensitive writes
+    # without requiring historical rows to be deduplicated.
+    for table, additions in {
+        "consultation_requests": {
+            "request_fingerprint": "TEXT",
+        },
+        "diagnostic_bookings": {
+            "request_fingerprint": "TEXT",
+        },
+    }.items():
+        existing_columns = table_columns(db, table)
+        for column, ddl in additions.items():
+            if column not in existing_columns:
+                db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+    db.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_consultation_request_fingerprint "
+        "ON consultation_requests(request_fingerprint) WHERE request_fingerprint IS NOT NULL"
+    )
+    db.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_diagnostic_booking_fingerprint "
+        "ON diagnostic_bookings(request_fingerprint) WHERE request_fingerprint IS NOT NULL"
+    )
+    db.execute(
+        "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+        ("post_submission_request_fingerprints_v1", now_iso()),
+    )
+
     db.execute(
         "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)",
         ("post_submission_geography_v1", now_iso()),
