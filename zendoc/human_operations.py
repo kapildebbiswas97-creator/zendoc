@@ -142,6 +142,10 @@ def create_staff_task(actor, data):
         raise ValueError("title is required.")
     assigned_staff_id = data.get("assigned_staff_id")
     if assigned_staff_id:
+        if not is_owner(actor):
+            raise PermissionError(
+                "Direct staff assignment is owner-controlled until provider organization membership is verified."
+            )
         get_staff_profile(int(assigned_staff_id))
     patient_id = _assert_patient_task_scope(actor, data.get("patient_id"))
     now = now_iso()
