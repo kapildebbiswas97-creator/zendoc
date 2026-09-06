@@ -652,19 +652,31 @@ def api_book_diagnostic():
         body = request.get_json(force=True) or {}
         patient_id = int(body.get("patient_id") or user["id"])
         _get_patient_id(user, {"patient_id": patient_id, "purpose": "diagnostics"})
-        test_id = int(body.get("test_id") or body.get("offer_id", 0))
+        if body.get("user_confirmed") is not True:
+            raise ValueError("Explicit user confirmation is required before requesting a diagnostic booking.")
+        test_id = int(body.get("test_id") or 0)
         lab_id = body.get("lab_id")
-        scheduled_date = str(body.get("scheduled_date") or body.get("scheduled_at") or now_iso()[:10])
-        address = str(body.get("address") or user.get("city") or "Patient Address")
+        if not test_id:
+            raise ValueError("test_id is required.")
+        if not lab_id:
+            raise ValueError("lab_id for a verified provider offer is required.")
+        scheduled_date = str(body.get("scheduled_date") or body.get("scheduled_at") or "").strip()
+        if not scheduled_date:
+            raise ValueError("scheduled_date is required.")
+        address = str(body.get("address") or "").strip()
+        if not address:
+            raise ValueError("A concrete collection address is required.")
+        slot_time = str(body.get("slot_time") or "").strip() or None
         booking = book_diagnostic_test(
             actor=user,
             patient_id=patient_id,
             test_id=test_id,
-            lab_id=int(lab_id) if lab_id else None,
+            lab_id=int(lab_id),
             scheduled_date=scheduled_date,
             address=address,
             collection_type=str(body.get("collection_type", "home_collection")),
-            slot_time=str(body.get("slot_time", "08:00 - 10:00")),
+            slot_time=slot_time,
+            user_confirmed=True,
         )
         audit("connected_care.diagnostic.book", "diagnostic_bookings", booking.get("id"), user)
         return jsonify({"booking": booking}), 201
