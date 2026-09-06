@@ -14,6 +14,20 @@ from .db import get_db, now_iso
 from .infrastructure import infrastructure_status
 
 
+def _observability_connection():
+    """Open an isolated connection so telemetry never commits business work."""
+    if current_app.config.get("DATABASE_ENGINE") == "postgresql":
+        from .postgres_backend import connect_postgresql
+        return connect_postgresql(current_app.config["DATABASE_URL"])
+
+    import sqlite3
+    connection = sqlite3.connect(current_app.config["DATABASE"], timeout=5)
+    connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA foreign_keys = ON")
+    connection.execute("PRAGMA busy_timeout = 3000")
+    return connection
+
+
 def _value(actor, key, default=None):
     if actor is None:
         return default
@@ -45,9 +59,10 @@ def finish_request_observation(response):
 
     # Do not record request body, query string, headers, raw path parameters,
     # symptoms, medical text, addresses, credentials, or tokens.
+    telemetry_db = None
     try:
-        db = get_db()
-        db.execute(
+        telemetry_db = _observability_connection()
+        telemetry_db.execute(
             """
             INSERT INTO request_observations
             (correlation_id,actor_id,actor_role,method,route_pattern,status_code,duration_ms,error_class,created_at)
@@ -65,13 +80,20 @@ def finish_request_observation(response):
                 now_iso(),
             ),
         )
-        db.commit()
+        telemetry_db.commit()
     except Exception:
-        try:
-            get_db().rollback()
-        except Exception:
-            pass
+        if telemetry_db is not None:
+            try:
+                telemetry_db.rollback()
+            except Exception:
+                pass
         current_app.logger.exception("Failed to persist request observation.")
+    finally:
+        if telemetry_db is not None:
+            try:
+                telemetry_db.close()
+            except Exception:
+                pass
 
     response.headers["X-Request-ID"] = correlation_id
     return response
