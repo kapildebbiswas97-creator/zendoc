@@ -260,3 +260,56 @@ def confirm_uncertain_prescription_item(item_id: int, actor: Any, sku_id: int | 
 
     updated = db.execute("SELECT * FROM prescription_items WHERE id=?", (item_id,)).fetchone()
     return dict(updated)
+
+
+def transition_prescription_status(prescription_id: int, actor: Any, new_status: str) -> dict[str, Any]:
+    """Advance a prescription through a terminal lifecycle with provenance."""
+    db = get_db()
+    row = db.execute("SELECT * FROM prescriptions WHERE id=?", (int(prescription_id),)).fetchone()
+    if not row:
+        raise LookupError(f"Prescription #{prescription_id} not found.")
+
+    try:
+        actor_id = int(actor["id"])
+        actor_role = str(actor["role"] or "").lower()
+    except Exception as exc:
+        raise PermissionError("Authentication is required to update prescription status.") from exc
+
+    target = str(new_status or "").strip().lower()
+    if target not in PRESCRIPTION_TRANSITIONS:
+        raise ValueError("Invalid prescription status.")
+
+    current = str(row["status"] or "active").strip().lower()
+    if target == current:
+        return get_prescription(int(prescription_id), actor=actor)
+    if target not in PRESCRIPTION_TRANSITIONS.get(current, set()):
+        raise ValueError(f"Prescription cannot transition from {current} to {target}.")
+
+    is_patient = actor_role == "patient" and actor_id == int(row["patient_id"])
+    is_prescriber = (
+        actor_role == "doctor"
+        and row["prescriber_id"] is not None
+        and actor_id == int(row["prescriber_id"])
+    )
+    if not (is_patient or is_prescriber):
+        raise PermissionError("Only the patient or prescribing doctor may update this prescription lifecycle.")
+
+    source = "PROVIDER_RECORDED" if is_prescriber else "USER_REPORTED"
+    now = now_iso()
+    db.execute(
+        "UPDATE prescriptions SET status=?, updated_at=? WHERE id=? AND status=?",
+        (target, now, int(prescription_id), current),
+    )
+    from .care_graph import record_care_continuity_event
+    record_care_continuity_event(
+        patient_id=int(row["patient_id"]),
+        event_type="PRESCRIPTION_STATUS_CHANGED",
+        title=f"Prescription marked {target}",
+        summary=f"Prescription #{prescription_id} lifecycle changed from {current} to {target}.",
+        source=source,
+        source_ref=f"prescription:{prescription_id}",
+        actor_id=actor_id,
+        metadata={"prescription_id": int(prescription_id), "from": current, "to": target},
+    )
+    db.commit()
+    return get_prescription(int(prescription_id), actor=actor)
