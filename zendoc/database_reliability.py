@@ -16,6 +16,7 @@ REQUIRED_MIGRATIONS = (
     "post_submission_provider_resource_tenancy_v1",
     "post_submission_concurrency_v1",
     "post_submission_request_fingerprints_v1",
+    "post_submission_observability_v1",
 )
 
 REQUIRED_TABLES = (
@@ -29,6 +30,8 @@ REQUIRED_TABLES = (
     "provider_organizations",
     "organization_memberships",
     "appointment_slot_claims",
+    "request_observations",
+    "integration_health_checks",
 )
 
 
