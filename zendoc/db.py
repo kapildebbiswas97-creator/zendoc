@@ -1975,6 +1975,36 @@ def migrate_schema(db):
     )
     db.executescript(
         """
+        CREATE TABLE IF NOT EXISTS care_journeys (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            journey_uid TEXT NOT NULL UNIQUE,
+            patient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            state TEXT NOT NULL DEFAULT 'NEW',
+            next_safe_action TEXT NOT NULL,
+            blocked_reason TEXT,
+            required_actor TEXT,
+            required_consent TEXT,
+            provenance_json TEXT NOT NULL DEFAULT '{}',
+            status TEXT NOT NULL DEFAULT 'active',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_care_journeys_patient ON care_journeys(patient_id, status, updated_at);
+
+        CREATE TABLE IF NOT EXISTS care_journey_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            journey_id INTEGER NOT NULL REFERENCES care_journeys(id) ON DELETE CASCADE,
+            previous_state TEXT NOT NULL,
+            state TEXT NOT NULL,
+            reason TEXT NOT NULL,
+            actor_type TEXT NOT NULL,
+            actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            provenance_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_care_journey_events_journey ON care_journey_events(journey_id, id);
+
         CREATE TABLE IF NOT EXISTS geography_nodes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             node_uid TEXT NOT NULL UNIQUE,
@@ -2015,6 +2045,10 @@ def migrate_schema(db):
     db.execute(
         "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)",
         ("post_submission_geography_v1", now_iso()),
+    )
+    db.execute(
+        "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+        ("post_submission_care_journey_v1", now_iso()),
     )
 
     db.execute(
