@@ -12,6 +12,9 @@ CRITICAL_FILES = (
     ".github/workflows/ci.yml",
     "scripts/ci_postgres_readiness.py",
     "scripts/ci_secret_scan.py",
+    "scripts/verify_deployment.py",
+    ".github/dependabot.yml",
+    "render.yaml",
     "zendoc/database_reliability.py",
     "zendoc/observability.py",
     "tests/test_security_hardening_v3.py",
@@ -83,6 +86,7 @@ def test_ci_workflow_contains_all_blocking_jobs():
         "postgres-production-smoke:",
         "static-security:",
         "release-readiness:",
+        "deployment-verification:",
     ):
         assert job in workflow
     assert "needs:" in workflow
@@ -109,3 +113,25 @@ def test_production_config_does_not_require_external_ai_or_maps_for_boot():
     assert app.config["PLACES_PROVIDER"] == "none"
     assert app.config["VIDEO_PROVIDER"] == "none"
     assert app.config["LOCAL_AI_ENABLED"] is False
+
+
+def test_render_uses_readiness_health_check():
+    root = Path(__file__).resolve().parents[1]
+    render = (root / "render.yaml").read_text(encoding="utf-8")
+    assert "healthCheckPath: /api/v1/ready" in render
+    assert "ZENDOC_PERSISTENCE_VERIFIED" in render
+
+
+def test_dependabot_covers_python_and_github_actions():
+    root = Path(__file__).resolve().parents[1]
+    config = (root / ".github/dependabot.yml").read_text(encoding="utf-8")
+    assert "package-ecosystem: pip" in config
+    assert "package-ecosystem: github-actions" in config
+
+
+def test_deployment_verifier_is_wired_to_optional_main_cd_job():
+    root = Path(__file__).resolve().parents[1]
+    workflow = (root / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert "deployment-verification:" in workflow
+    assert "vars.ZENDOC_DEPLOYMENT_URL" in workflow
+    assert 'python scripts/verify_deployment.py' in workflow
