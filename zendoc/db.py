@@ -2208,6 +2208,63 @@ def migrate_schema(db):
         ("post_submission_provider_tenancy_v1", now_iso()),
     )
 
+    # Provider resource tenancy. Operational resources retain legacy NULL
+    # tenant fields when they predate verified organization binding.
+    for table, additions in {
+        "appointments": {
+            "organization_id": "INTEGER REFERENCES provider_organizations(id) ON DELETE SET NULL",
+            "organization_location_id": "INTEGER REFERENCES organization_locations(id) ON DELETE SET NULL",
+        },
+        "provider_schedules": {
+            "organization_id": "INTEGER REFERENCES provider_organizations(id) ON DELETE SET NULL",
+            "organization_location_id": "INTEGER REFERENCES organization_locations(id) ON DELETE SET NULL",
+        },
+        "inventory_observations": {
+            "organization_id": "INTEGER REFERENCES provider_organizations(id) ON DELETE SET NULL",
+            "organization_location_id": "INTEGER REFERENCES organization_locations(id) ON DELETE SET NULL",
+        },
+        "medicine_orders": {
+            "organization_id": "INTEGER REFERENCES provider_organizations(id) ON DELETE SET NULL",
+            "organization_location_id": "INTEGER REFERENCES organization_locations(id) ON DELETE SET NULL",
+        },
+        "diagnostic_offers": {
+            "organization_id": "INTEGER REFERENCES provider_organizations(id) ON DELETE SET NULL",
+            "organization_location_id": "INTEGER REFERENCES organization_locations(id) ON DELETE SET NULL",
+        },
+        "diagnostic_bookings": {
+            "organization_id": "INTEGER REFERENCES provider_organizations(id) ON DELETE SET NULL",
+            "organization_location_id": "INTEGER REFERENCES organization_locations(id) ON DELETE SET NULL",
+        },
+        "consultation_requests": {
+            "organization_id": "INTEGER REFERENCES provider_organizations(id) ON DELETE SET NULL",
+            "organization_location_id": "INTEGER REFERENCES organization_locations(id) ON DELETE SET NULL",
+        },
+        "consultation_rooms": {
+            "organization_id": "INTEGER REFERENCES provider_organizations(id) ON DELETE SET NULL",
+            "organization_location_id": "INTEGER REFERENCES organization_locations(id) ON DELETE SET NULL",
+        },
+    }.items():
+        existing_columns = table_columns(db, table)
+        for column, ddl in additions.items():
+            if column not in existing_columns:
+                db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+
+    for table in (
+        "appointments",
+        "provider_schedules",
+        "inventory_observations",
+        "medicine_orders",
+        "diagnostic_offers",
+        "diagnostic_bookings",
+        "consultation_requests",
+        "consultation_rooms",
+    ):
+        db.execute(f"CREATE INDEX IF NOT EXISTS idx_{table}_org ON {table}(organization_id)")
+    db.execute(
+        "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+        ("post_submission_provider_resource_tenancy_v1", now_iso()),
+    )
+
     db.execute(
         "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)",
         ("post_submission_geography_v1", now_iso()),
