@@ -9,6 +9,7 @@ from .model_portfolio import list_model_roles
 from .capability_registry import get_capability_registry
 from .no_capital_status import no_capital_completion_report
 from .regulated_domains import list_regulated_domains
+from .public_source_registry import list_public_ingestion_sources
 from .security import owner_required
 
 
@@ -25,6 +26,7 @@ def intelligence_manifest():
         "model_roles": list_model_roles(),
         "benefit_sources": list_sources(),
         "regulated_domains": list_regulated_domains(),
+        "public_ingestion_sources": list_public_ingestion_sources(),
         "capabilities": get_capability_registry(),
         "no_capital_progress": no_capital_completion_report(),
     })
