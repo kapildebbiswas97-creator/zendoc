@@ -123,7 +123,43 @@ def create_prescription(
             confidence = 0.0
         if confidence < 0.0 or confidence > 1.0:
             raise ValueError("extraction_confidence must be between 0 and 1.")
-        review_status = "item_review_required" if confidence < 0.90 or not sku_row else "verified"
+        # Never invent clinically meaningful fields. The legacy defaults
+        # ("tablet", "daily", "30 days", quantity 30) could make incomplete
+        # extraction look authoritative. Preserve explicit unknown state using
+        # safe sentinel values required by the current schema and force human
+        # review before fulfilment.
+        dosage = str(it.get("dosage") or "").strip() or None
+        form = str(it.get("form") or "").strip() or "unspecified"
+        frequency = str(it.get("frequency") or "").strip() or None
+        duration = str(it.get("duration") or "").strip() or None
+        quantity_raw = it.get("quantity_prescribed")
+        quantity_unit = str(it.get("quantity_unit") or "").strip() or "unspecified"
+        try:
+            quantity_prescribed = int(quantity_raw) if quantity_raw not in (None, "") else 0
+        except (TypeError, ValueError):
+            raise ValueError("quantity_prescribed must be an integer when supplied.")
+        if quantity_prescribed < 0:
+            raise ValueError("quantity_prescribed cannot be negative.")
+
+        missing_fields = []
+        if dosage is None:
+            missing_fields.append("dosage")
+        if form == "unspecified":
+            missing_fields.append("form")
+        if frequency is None:
+            missing_fields.append("frequency")
+        if duration is None:
+            missing_fields.append("duration")
+        if quantity_prescribed <= 0:
+            missing_fields.append("quantity_prescribed")
+        if quantity_unit == "unspecified":
+            missing_fields.append("quantity_unit")
+
+        review_status = (
+            "item_review_required"
+            if confidence < 0.90 or not sku_row or missing_fields
+            else "verified"
+        )
         if review_status == "item_review_required":
             has_uncertain_item = True
 
@@ -138,12 +174,12 @@ def create_prescription(
                 presc_id,
                 med_name,
                 it.get("salt_composition"),
-                it.get("dosage"),
-                it.get("form", "tablet"),
-                it.get("frequency", "daily"),
-                it.get("duration", "30 days"),
-                int(it.get("quantity_prescribed", 30)),
-                it.get("quantity_unit", "tablets"),
+                dosage,
+                form,
+                frequency,
+                duration,
+                quantity_prescribed,
+                quantity_unit,
                 it.get("instructions"),
                 rx_req,
                 confidence,
