@@ -360,3 +360,28 @@ RUNBOOKS = {
 
 def list_runbooks():
     return RUNBOOKS
+
+
+def prune_observability(retention_days=None):
+    days = int(
+        retention_days
+        if retention_days is not None
+        else current_app.config.get("OBSERVABILITY_RETENTION_DAYS", 30)
+    )
+    days = max(1, min(days, 365))
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
+    db = get_db()
+    request_deleted = db.execute(
+        "DELETE FROM request_observations WHERE created_at < ?",
+        (cutoff,),
+    ).rowcount
+    integration_deleted = db.execute(
+        "DELETE FROM integration_health_checks WHERE checked_at < ?",
+        (cutoff,),
+    ).rowcount
+    db.commit()
+    return {
+        "retention_days": days,
+        "request_observations_deleted": max(0, int(request_deleted or 0)),
+        "integration_checks_deleted": max(0, int(integration_deleted or 0)),
+    }
