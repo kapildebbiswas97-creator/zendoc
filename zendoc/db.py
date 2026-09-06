@@ -1975,6 +1975,51 @@ def migrate_schema(db):
     )
     db.executescript(
         """
+        CREATE TABLE IF NOT EXISTS data_ingestion_batches (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            batch_uid TEXT NOT NULL UNIQUE,
+            source_id TEXT NOT NULL,
+            ingestion_type TEXT NOT NULL,
+            checksum_sha256 TEXT NOT NULL,
+            record_count INTEGER NOT NULL DEFAULT 0,
+            accepted_count INTEGER NOT NULL DEFAULT 0,
+            rejected_count INTEGER NOT NULL DEFAULT 0,
+            dry_run INTEGER NOT NULL DEFAULT 1,
+            status TEXT NOT NULL DEFAULT 'previewed',
+            requested_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            summary_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            completed_at TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS public_healthcare_entities (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_id TEXT NOT NULL,
+            source_record_id TEXT NOT NULL,
+            category TEXT NOT NULL,
+            name TEXT NOT NULL,
+            specialty TEXT,
+            address TEXT,
+            city TEXT,
+            district TEXT,
+            state TEXT,
+            postal_code TEXT,
+            latitude REAL,
+            longitude REAL,
+            public_phone TEXT,
+            public_email TEXT,
+            website TEXT,
+            source_trust TEXT NOT NULL DEFAULT 'OFFICIAL_PUBLIC_DATA',
+            zendoc_verification_status TEXT NOT NULL DEFAULT 'not_verified',
+            booking_connectivity TEXT NOT NULL DEFAULT 'not_connected',
+            freshness_at TEXT,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(source_id, source_record_id)
+        );
+
         CREATE TABLE IF NOT EXISTS care_journeys (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             journey_uid TEXT NOT NULL UNIQUE,
