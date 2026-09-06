@@ -57,3 +57,40 @@ def test_owner_manifest_exposes_public_ingestion_sources(tmp_path):
     assert "data_gov_hospitals" in sources
     assert "abdm_hfr" in sources
     assert sources["abdm_hfr"]["live_fetch_status"] == "ONBOARDING_OR_AUTHORIZED_ACCESS_REQUIRED"
+
+
+def test_owner_pilot_scorecard_is_real_and_owner_only(tmp_path):
+    _app, client = make_client(tmp_path)
+
+    register_web(client, "patient", "pilot-score-normal@example.com")
+    login_web(client, "patient", "pilot-score-normal@example.com")
+    denied = client.get("/owner/pilot-scorecard")
+    assert denied.status_code == 403
+
+    client.get("/logout")
+    login_web(client, "admin", "admin@example.com", "AdminStrong123")
+    allowed = client.get("/owner/pilot-scorecard")
+    assert allowed.status_code == 200
+    payload = allowed.get_json()
+    assert payload["status"] == "OK"
+    assert "providers" in payload
+    assert "care_journeys" in payload
+    assert "carefin" in payload
+    assert "fulfilment" in payload
+    assert "diagnostics" in payload
+    assert "data_coverage" in payload
+    assert "operations" in payload
+    assert payload["measurement_boundary"]
+    assert payload["carefin"]["confirmed_savings_inr"] is None
+
+
+def test_pilot_scorecard_zero_denominator_is_not_faked(tmp_path):
+    from zendoc.pilot_analytics import pilot_scorecard
+
+    app, _client = make_client(tmp_path)
+    with app.app_context():
+        payload = pilot_scorecard()
+    assert payload["providers"]["verified_rate_percent"] is None
+    assert payload["care_journeys"]["completion_rate_percent"] is None
+    assert payload["fulfilment"]["plan_to_order_conversion_percent"] is None
+    assert payload["diagnostics"]["completion_rate_percent"] is None
