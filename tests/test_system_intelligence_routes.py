@@ -44,3 +44,16 @@ def test_owner_manifest_exposes_no_capital_readiness(tmp_path):
     assert scope["measurement_rule"]
     assert report["partner_dependencies"]
     assert report["physical_capital_dependencies"]
+
+
+def test_owner_manifest_exposes_public_ingestion_sources(tmp_path):
+    _app, client = make_client(tmp_path)
+    login_web(client, "admin", "admin@example.com", "AdminStrong123")
+    response = client.get("/owner/intelligence-manifest")
+    assert response.status_code == 200
+    payload = response.get_json()
+    sources = {item["source_id"]: item for item in payload["public_ingestion_sources"]}
+    assert "lgd" in sources
+    assert "data_gov_hospitals" in sources
+    assert "abdm_hfr" in sources
+    assert sources["abdm_hfr"]["live_fetch_status"] == "ONBOARDING_OR_AUTHORIZED_ACCESS_REQUIRED"
