@@ -295,3 +295,106 @@ def test_prescribing_doctor_can_supersede_but_unrelated_doctor_cannot(tmp_path):
 
         changed = transition_prescription_status(rx["id"], doctor_a, "superseded")
         assert changed["status"] == "superseded"
+
+
+def test_duplicate_telehealth_request_reuses_existing_active_consultation(tmp_path):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    api_token(client, "tele-retry-patient@example.com")
+    register_web(client, "doctor", "tele-retry-doctor@example.com", "Retry Doctor")
+    patient = _user(app, "tele-retry-patient@example.com")
+    doctor = _user(app, "tele-retry-doctor@example.com")
+
+    payload = {
+        "doctor_id": doctor["id"],
+        "consultation_type": "chat",
+        "reason": "Same retry reason",
+        "scheduled_for": "2026-12-22T11:00",
+    }
+    with app.app_context():
+        first = request_consultation(patient, payload)
+        second = request_consultation(patient, payload)
+        assert second["id"] == first["id"]
+        assert second["idempotent_replay"] is True
+
+        count = get_db().execute(
+            """
+            SELECT COUNT(*) c FROM consultation_requests
+            WHERE patient_id=? AND doctor_id=? AND reason=?
+            """,
+            (patient["id"], doctor["id"], payload["reason"]),
+        ).fetchone()["c"]
+        assert count == 1
+
+
+def test_duplicate_diagnostic_booking_reuses_existing_request_without_new_timeline_event(tmp_path):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    api_token(client, "diag-retry-patient@example.com")
+    register_web(client, "hospital", "diag-retry-lab@example.com", "Retry Lab")
+    patient = _user(app, "diag-retry-patient@example.com")
+    lab = _user(app, "diag-retry-lab@example.com")
+
+    with app.app_context():
+        db = get_db()
+        now = now_iso()
+        db.execute(
+            """
+            INSERT INTO provider_profiles
+            (user_id,provider_type,specialty,organization,verification_status,created_at,updated_at)
+            VALUES (?, 'diagnostic_centre','General','Retry Lab','verified',?,?)
+            """,
+            (lab["id"], now, now),
+        )
+        test_id = db.execute(
+            """
+            INSERT INTO diagnostic_catalog
+            (code,name,category,fasting_required,sample_type,tat_hours,standard_price_inr,created_at)
+            VALUES ('RETRY-DIAG','Retry Diagnostic','general',0,'blood',24,100,?)
+            """,
+            (now,),
+        ).lastrowid
+        db.execute(
+            """
+            INSERT INTO diagnostic_offers
+            (lab_id,test_id,price_inr,home_collection_available,home_collection_fee_inr,verified,data_mode,observed_at,created_at)
+            VALUES (?,?,100,1,0,1,'LIVE',?,?)
+            """,
+            (lab["id"], test_id, now, now),
+        )
+        db.commit()
+
+        from zendoc.diagnostic_service import book_diagnostic_test
+        kwargs = {
+            "actor": patient,
+            "patient_id": patient["id"],
+            "test_id": test_id,
+            "lab_id": lab["id"],
+            "scheduled_date": "2026-12-23",
+            "address": "Retry Address",
+            "collection_type": "home_collection",
+            "slot_time": "09:30",
+            "user_confirmed": True,
+        }
+        first = book_diagnostic_test(**kwargs)
+        second = book_diagnostic_test(**kwargs)
+        assert second["booking_id"] == first["booking_id"]
+        assert second["idempotent_replay"] is True
+
+        booking_count = db.execute(
+            """
+            SELECT COUNT(*) c FROM diagnostic_bookings
+            WHERE patient_id=? AND lab_id=? AND test_id=? AND scheduled_date='2026-12-23'
+            """,
+            (patient["id"], lab["id"], test_id),
+        ).fetchone()["c"]
+        assert booking_count == 1
+
+        event_count = db.execute(
+            """
+            SELECT COUNT(*) c FROM health_timeline_events
+            WHERE patient_id=? AND event_type='DIAGNOSTIC_REQUESTED'
+            """,
+            (patient["id"],),
+        ).fetchone()["c"]
+        assert event_count == 1
