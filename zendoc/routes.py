@@ -588,13 +588,6 @@ def appointment_status(appointment_id):
     ).fetchone()
     if not row:
         abort(404)
-    current_status = str(row["status"] or "requested").strip().lower()
-    if status == current_status:
-        flash("Appointment status is already up to date.", "info")
-        return redirect(url_for("main.appointments"))
-    if status not in APPOINTMENT_TRANSITIONS.get(current_status, set()):
-        abort(409)
-
     if g.user["role"] == "admin":
         if not is_owner(g.user):
             abort(403)
@@ -605,6 +598,13 @@ def appointment_status(appointment_id):
             assert_resource_tenant(g.user, dict(row))
         except PermissionError:
             abort(403)
+
+    current_status = str(row["status"] or "requested").strip().lower()
+    if status == current_status:
+        flash("Appointment status is already up to date.", "info")
+        return redirect(url_for("main.appointments"))
+    if status not in APPOINTMENT_TRANSITIONS.get(current_status, set()):
+        abort(409)
     get_db().execute("UPDATE appointments SET status=?, updated_at=? WHERE id=?", (status, now_iso(), appointment_id))
     create_notification(row["patient_id"], "Appointment updated", f"Appointment status changed to {status}.")
     audit("update_status", "appointment", str(appointment_id))
