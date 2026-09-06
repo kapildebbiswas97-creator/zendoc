@@ -332,9 +332,19 @@ def _diagnostic_options(actor, arguments):
         user_lat=arguments.get("patient_lat"),
         user_lon=arguments.get("patient_lon"),
     )
+    confirmed = [item for item in offers if item.get("availability_state") == "CONFIRMED"]
+    if confirmed:
+        status = "OK"
+        message = "Confirmed-fresh diagnostic offers found."
+    elif offers:
+        status = "STALE_ONLY"
+        message = "Only stale diagnostic offers were found; refresh provider availability before booking."
+    else:
+        status = "UNKNOWN"
+        message = "No current verified diagnostic offer is known for this test; availability is unknown, not confirmed unavailable."
     return {
-        "status": "OK" if offers else "NO_RESULTS",
-        "message": ("Verified diagnostic offers found." if offers else "No verified lab offer is currently available for this test."),
+        "status": status,
+        "message": message,
         "patient_id": patient_id,
         "offers": offers,
     }
