@@ -20,3 +20,27 @@ def test_owner_intelligence_manifest_is_owner_only(tmp_path):
     assert payload["model_roles"]
     assert payload["benefit_sources"]
     assert payload["regulated_domains"]
+
+
+def test_capability_registry_uses_only_truthful_statuses(tmp_path):
+    from zendoc.capability_registry import get_capability_registry
+
+    app, _client = make_client(tmp_path)
+    with app.app_context():
+        statuses = {item["status"] for item in get_capability_registry().values()}
+    assert statuses <= {"WORKING", "BETA", "INTEGRATION_REQUIRED", "DISABLED", "FUTURE"}
+
+
+def test_owner_manifest_exposes_no_capital_readiness(tmp_path):
+    _app, client = make_client(tmp_path)
+    login_web(client, "admin", "admin@example.com", "AdminStrong123")
+    response = client.get("/owner/intelligence-manifest")
+    assert response.status_code == 200
+    payload = response.get_json()
+    report = payload["no_capital_progress"]
+    scope = report["software_no_capital_scope"]
+    assert scope["total"] > 0
+    assert 0 <= scope["working_percent"] <= 100
+    assert scope["measurement_rule"]
+    assert report["partner_dependencies"]
+    assert report["physical_capital_dependencies"]
