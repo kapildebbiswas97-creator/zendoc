@@ -164,6 +164,8 @@ def create_staff_task(actor, data):
     title = str(data.get("title") or "").strip()
     if not title:
         raise ValueError("title is required.")
+    actor_membership = active_membership(_user_id(actor))
+    organization_id = int(actor_membership["organization_id"]) if actor_membership else None
     assigned_staff_id = data.get("assigned_staff_id")
     if assigned_staff_id:
         staff_profile = get_staff_profile(int(assigned_staff_id))
@@ -176,8 +178,6 @@ def create_staff_task(actor, data):
                 raise PermissionError("Assigned staff must belong to the same provider organization.")
             assert_same_organization(actor, int(assigned_staff_id))
     patient_id = _assert_patient_task_scope(actor, data.get("patient_id"))
-    actor_membership = active_membership(_user_id(actor))
-    organization_id = int(actor_membership["organization_id"]) if actor_membership else None
     now = now_iso()
     cursor = get_db().execute(
         """
