@@ -1,4 +1,5 @@
 from .db import get_db, now_iso
+from .organization_service import provider_resource_context, assert_resource_tenant
 from .security import is_owner
 from .telehealth_provider import get_telehealth_provider
 
@@ -121,11 +122,13 @@ def request_consultation(actor, data):
     if not reason:
         raise ValueError("Consultation reason is required.")
     now = now_iso()
+    tenant = provider_resource_context(doctor_id)
     cursor = get_db().execute(
         """
         INSERT INTO consultation_requests
-        (patient_id, doctor_id, appointment_id, consultation_type, status, reason, scheduled_for, created_at, updated_at)
-        VALUES (?, ?, ?, ?, 'requested', ?, ?, ?, ?)
+        (patient_id, doctor_id, appointment_id, consultation_type, status, reason, scheduled_for,
+         organization_id, organization_location_id, created_at, updated_at)
+        VALUES (?, ?, ?, ?, 'requested', ?, ?, ?, ?, ?, ?)
         """,
         (
             _user_id(actor),
@@ -134,6 +137,8 @@ def request_consultation(actor, data):
             consultation_type,
             reason[:500],
             data.get("scheduled_for"),
+            tenant["organization_id"],
+            tenant["organization_location_id"],
             now,
             now,
         ),
@@ -192,6 +197,8 @@ def get_consultation(actor, consultation_id):
             raise PermissionError("Only the configured ZENDOC owner may access arbitrary consultations.")
     elif uid not in {row["patient_id"], row["doctor_id"]}:
         raise PermissionError("You cannot access another consultation.")
+    if role in {"doctor", "hospital"}:
+        assert_resource_tenant(actor, dict(row))
     return dict(row)
 
 
@@ -218,10 +225,14 @@ def update_consultation_status(actor, consultation_id, status, scheduled_for=Non
     if room:
         get_db().execute(
             """
-            INSERT INTO consultation_rooms (consultation_id, room_token_hash, provider, status, created_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO consultation_rooms
+            (consultation_id, room_token_hash, provider, status, organization_id, organization_location_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (consultation_id, room["room_token_hash"], room["provider"], room["status"], now),
+            (
+                consultation_id, room["room_token_hash"], room["provider"], room["status"],
+                consultation.get("organization_id"), consultation.get("organization_location_id"), now
+            ),
         )
     if status == "ended":
         get_db().execute("UPDATE consultation_rooms SET status='ended', ended_at=? WHERE consultation_id=?", (now, consultation_id))
