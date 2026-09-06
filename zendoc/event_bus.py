@@ -1,3 +1,4 @@
+from flask import g, has_request_context
 """Persistent, permission-aware event bus used by M8 workflows and polling."""
 from __future__ import annotations
 
@@ -44,7 +45,8 @@ def publish_event(
         existing = db.execute("SELECT * FROM platform_events WHERE idempotency_key=?", (idempotency_key,)).fetchone()
         if existing:
             return _event_dict(existing)
-    correlation_id = str(correlation_id or uuid.uuid4().hex)[:80]
+    request_correlation = getattr(g, "correlation_id", None) if has_request_context() else None
+    correlation_id = str(correlation_id or request_correlation or uuid.uuid4().hex)[:80]
     safe_payload_json = json.dumps(safe_payload(payload or {}), sort_keys=True, separators=(",", ":"))
     cursor = db.execute(
         """
