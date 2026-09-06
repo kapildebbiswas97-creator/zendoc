@@ -1973,6 +1973,50 @@ def migrate_schema(db):
         CREATE INDEX IF NOT EXISTS idx_verified_reviews_provider ON verified_reviews(provider_id);
         """
     )
+    db.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS geography_nodes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            node_uid TEXT NOT NULL UNIQUE,
+            node_type TEXT NOT NULL,
+            name TEXT NOT NULL,
+            normalized_name TEXT NOT NULL,
+            parent_id INTEGER REFERENCES geography_nodes(id) ON DELETE CASCADE,
+            latitude REAL,
+            longitude REAL,
+            source TEXT NOT NULL,
+            source_ref TEXT,
+            verified INTEGER NOT NULL DEFAULT 0,
+            freshness_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(node_type, normalized_name, parent_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_geography_nodes_parent ON geography_nodes(parent_id, node_type);
+        CREATE INDEX IF NOT EXISTS idx_geography_nodes_name ON geography_nodes(normalized_name, node_type);
+
+        CREATE TABLE IF NOT EXISTS geography_entity_links (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            geography_node_id INTEGER NOT NULL REFERENCES geography_nodes(id) ON DELETE CASCADE,
+            entity_type TEXT NOT NULL,
+            entity_id TEXT NOT NULL,
+            source TEXT NOT NULL,
+            verification_state TEXT NOT NULL DEFAULT 'EXTERNAL_UNVERIFIED',
+            freshness_at TEXT,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(geography_node_id, entity_type, entity_id, source)
+        );
+        CREATE INDEX IF NOT EXISTS idx_geography_entity_node ON geography_entity_links(geography_node_id, entity_type);
+        CREATE INDEX IF NOT EXISTS idx_geography_entity_entity ON geography_entity_links(entity_type, entity_id);
+        """
+    )
+    db.execute(
+        "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+        ("post_submission_geography_v1", now_iso()),
+    )
+
     db.execute(
         "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)",
         (MILESTONE83_MIGRATION_VERSION, now_iso()),
