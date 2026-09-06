@@ -42,6 +42,7 @@ from .provider_service import (
 )
 from .report_intelligence import REPORT_TYPES, store_report_upload
 from .record_storage import get_record_storage
+from .organization_service import assert_resource_tenant
 from .security import csrf_token, hash_token, is_owner, load_user_and_check_csrf, login_required, new_token, owner_required, role_required, start_user_session
 
 
@@ -574,7 +575,10 @@ def appointment_status(appointment_id):
     status = request.form.get("status", "requested")
     if status not in {"requested", "confirmed", "completed", "cancelled"}:
         abort(400)
-    row = get_db().execute("SELECT patient_id, provider_id FROM appointments WHERE id=?", (appointment_id,)).fetchone()
+    row = get_db().execute(
+        "SELECT patient_id, provider_id, organization_id, organization_location_id FROM appointments WHERE id=?",
+        (appointment_id,),
+    ).fetchone()
     if not row:
         abort(404)
     if g.user["role"] == "admin":
@@ -582,6 +586,11 @@ def appointment_status(appointment_id):
             abort(403)
     elif row["provider_id"] != g.user["id"]:
         abort(403)
+    else:
+        try:
+            assert_resource_tenant(g.user, dict(row))
+        except PermissionError:
+            abort(403)
     get_db().execute("UPDATE appointments SET status=?, updated_at=? WHERE id=?", (status, now_iso(), appointment_id))
     create_notification(row["patient_id"], "Appointment updated", f"Appointment status changed to {status}.")
     audit("update_status", "appointment", str(appointment_id))
