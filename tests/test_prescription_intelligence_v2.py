@@ -49,3 +49,27 @@ def test_exact_verified_prescription_becomes_fulfilment_ready(tmp_path):
         assert state["overall_stage"] == FULFILMENT_READY
         assert state["fulfilment_ready"] is True
         assert all(value is False for value in state["safety"].values())
+
+
+def test_missing_prescription_directions_are_not_fabricated(tmp_path):
+    app = make_m10_app(tmp_path)
+    with app.app_context():
+        db = get_db()
+        patient_id = db.execute(
+            "INSERT INTO users (name,email,email_normalized,password_hash,role,active,created_at,updated_at) VALUES (?,?,?,?, 'patient',1,?,?)",
+            ("No Defaults", "nodefaults@example.com", "nodefaults@example.com", "hash", now_iso(), now_iso()),
+        ).lastrowid
+        db.commit()
+
+        rx = create_prescription(
+            patient_id=patient_id,
+            prescriber_name="Dr Source",
+            items=[{"medicine_name": "Metformin 500 mg", "sku_id": 2, "extraction_confidence": 0.99}],
+        )
+        item = rx["items"][0]
+        assert item["dosage"] is None
+        assert item["frequency"] is None
+        assert item["duration"] is None
+        assert item["form"] == "unspecified"
+        assert item["quantity_prescribed"] == 1
+        assert item["quantity_unit"] == "unspecified"
