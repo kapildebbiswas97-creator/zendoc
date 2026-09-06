@@ -201,6 +201,31 @@ def get_capability_registry() -> dict:
             "label": "Geographic Healthcare Graph v1",
             "description": "Provenance-aware hierarchy and entity-link ingestion/search architecture is working; production starts empty until verified/official data is ingested.",
         },
+        "official_public_data_ingestion": {
+            "status": STATUS_WORKING,
+            "label": "Official/Public Data Ingestion",
+            "description": "Owner-only dry-run/apply ingestion with checksums, explicit schema mapping, row-level rejection reasons, provenance, and idempotent upserts.",
+        },
+        "official_live_connectors": {
+            "status": STATUS_INTEGRATION_REQUIRED,
+            "label": "Live Official Dataset Connectors",
+            "description": "LGD/OGD/ABDM live retrieval requires dataset-specific downloads/APIs or authorized onboarding; ZENDOC does not claim live access by default.",
+        },
+        "provider_onboarding_v1": {
+            "status": STATUS_WORKING,
+            "label": "Provider Onboarding & Evidence Review",
+            "description": "Provider completeness scoring, evidence submission, owner evidence review, and verification-readiness state are working without auto-verifying providers.",
+        },
+        "carefin_pilot_ui": {
+            "status": STATUS_WORKING,
+            "label": "CareFin Pilot UI",
+            "description": "Authenticated browser workflow for possible-benefit discovery with explicit unverified/authoritative-verification boundaries.",
+        },
+        "care_journey_pilot_ui": {
+            "status": STATUS_WORKING,
+            "label": "Care Journey Pilot UI",
+            "description": "Authenticated browser workflow for durable coordination journeys and valid next-state transitions.",
+        },
 
         # Health & Clinical
         "health_memory": {
