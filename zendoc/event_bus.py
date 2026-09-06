@@ -1,6 +1,7 @@
-from flask import g, has_request_context
 """Persistent, permission-aware event bus used by M8 workflows and polling."""
 from __future__ import annotations
+
+from flask import g, has_request_context
 
 import json
 import re
