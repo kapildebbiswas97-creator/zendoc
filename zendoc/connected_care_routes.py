@@ -32,6 +32,8 @@ from flask import (
 )
 
 from .care_graph import get_patient_care_graph, record_care_continuity_event
+from .carefin_engine import discover_benefits
+from .care_journey_store import create_persisted_journey, list_patient_journeys, advance_persisted_journey
 from .context_engine import (
     build_minimum_context_bundle,
     create_or_update_consent_grant,
@@ -200,6 +202,99 @@ def connected_care_home():
         data_mode=data_mode,
         demo_mode=data_mode == "DEMO",
     )
+
+
+@bp.route("/connected-care/carefin", methods=("GET", "POST"))
+def carefin_page():
+    uid = _current_user_id()
+    if not uid:
+        return redirect(url_for("main.login", role="patient"))
+    db = get_db()
+    user = dict(db.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone() or abort(401))
+    result = None
+    form_data = {
+        "state": request.values.get("state", ""),
+        "district": request.values.get("district", user.get("city") or ""),
+        "age": request.values.get("age", user.get("age") or ""),
+        "occupation": request.values.get("occupation", ""),
+        "income_band": request.values.get("income_band", ""),
+        "existing_insurer": request.values.get("existing_insurer", ""),
+        "needs_charitable_support": request.values.get("needs_charitable_support") == "yes",
+    }
+    if request.method == "POST":
+        result = discover_benefits({
+            "geography": form_data["state"] or "INDIA",
+            "state": form_data["state"],
+            "district": form_data["district"],
+            "age": form_data["age"],
+            "occupation": form_data["occupation"],
+            "income_band": form_data["income_band"],
+            "existing_insurer": form_data["existing_insurer"],
+            "needs_charitable_support": form_data["needs_charitable_support"],
+            "desired_categories": [
+                "government_scheme",
+                "government_health_assurance",
+                "state_health_scheme",
+                "charitable_support",
+                "csr",
+                "life_insurance",
+            ],
+        })
+        audit("carefin.discovery", "carefin", str(uid), user)
+        db.commit()
+    return render_template("carefin.html", user=user, result=result, form_data=form_data)
+
+
+@bp.get("/connected-care/journey")
+def care_journey_page():
+    uid = _current_user_id()
+    if not uid:
+        return redirect(url_for("main.login", role="patient"))
+    db = get_db()
+    user = dict(db.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone() or abort(401))
+    journeys = list_patient_journeys(user, patient_id=uid, limit=25)
+    return render_template("care_journey.html", user=user, journeys=journeys)
+
+
+@bp.post("/connected-care/journey/create")
+def care_journey_create_page():
+    uid = _current_user_id()
+    if not uid:
+        return redirect(url_for("main.login", role="patient"))
+    db = get_db()
+    user = dict(db.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone() or abort(401))
+    journey = create_persisted_journey(
+        user,
+        patient_id=uid,
+        provenance={"source": "patient_web", "goal": str(request.form.get("goal") or "general_care")[:200]},
+    )
+    audit("care_journey.create", "care_journey", str(journey["id"]), user)
+    db.commit()
+    return redirect(url_for("connected_care.care_journey_page"))
+
+
+@bp.post("/connected-care/journey/<int:journey_id>/transition")
+def care_journey_transition_page(journey_id):
+    uid = _current_user_id()
+    if not uid:
+        return redirect(url_for("main.login", role="patient"))
+    db = get_db()
+    user = dict(db.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone() or abort(401))
+    try:
+        advance_persisted_journey(
+            user,
+            journey_id,
+            target_state=str(request.form.get("target_state") or "").strip(),
+            reason=str(request.form.get("reason") or "").strip(),
+            actor_type="user",
+            required_actor=str(request.form.get("required_actor") or "").strip() or None,
+            required_consent=str(request.form.get("required_consent") or "").strip() or None,
+        )
+        audit("care_journey.transition", "care_journey", str(journey_id), user)
+        db.commit()
+    except (LookupError, PermissionError, ValueError) as exc:
+        current_app.logger.info("Care journey transition rejected: %s", exc)
+    return redirect(url_for("connected_care.care_journey_page"))
 
 
 @bp.get("/connected-care/prescriptions")
