@@ -1201,6 +1201,8 @@ def init_db():
             name TEXT NOT NULL,
             category TEXT,
             description TEXT,
+            aliases_json TEXT NOT NULL DEFAULT '[]',
+            panel_name TEXT,
             fasting_required INTEGER NOT NULL DEFAULT 0,
             sample_type TEXT NOT NULL DEFAULT 'blood',
             tat_hours INTEGER NOT NULL DEFAULT 24,
@@ -1217,6 +1219,7 @@ def init_db():
             home_collection_fee_inr REAL NOT NULL DEFAULT 0.0,
             verified INTEGER NOT NULL DEFAULT 1,
             data_mode TEXT NOT NULL DEFAULT 'LIVE',
+            observed_at TEXT,
             created_at TEXT NOT NULL,
             UNIQUE(lab_id, test_id, data_mode)
         );
@@ -1735,6 +1738,11 @@ def migrate_schema(db):
         },
         "diagnostic_offers": {
             "data_mode": "TEXT NOT NULL DEFAULT 'LIVE'",
+            "observed_at": "TEXT",
+        },
+        "diagnostic_catalog": {
+            "aliases_json": "TEXT NOT NULL DEFAULT '[]'",
+            "panel_name": "TEXT",
         },
         "medicine_orders": {
             "plan_id": "INTEGER REFERENCES fulfilment_plans(id) ON DELETE SET NULL",
@@ -1754,6 +1762,8 @@ def migrate_schema(db):
         for column, ddl in additions.items():
             if column not in existing_columns:
                 db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+
+    db.execute("UPDATE diagnostic_offers SET observed_at=created_at WHERE observed_at IS NULL OR observed_at=''")
 
     db.executescript(
         """
