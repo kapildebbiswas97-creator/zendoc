@@ -35,6 +35,7 @@ NO_CAPITAL_CAPABILITY_KEYS = (
     "provider_onboarding_v1",
     "carefin_pilot_ui",
     "care_journey_pilot_ui",
+    "pilot_analytics",
     "capability_registry",
 )
 
