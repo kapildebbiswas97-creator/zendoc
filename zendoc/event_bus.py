@@ -6,11 +6,10 @@ import re
 import uuid
 
 from .db import get_db, now_iso
+from .audit_privacy import redact_operational_text, safe_payload
 
 
 EVENT_TYPE_RE = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z0-9_]+){1,5}$")
-SENSITIVE_KEY_MARKERS = ("password", "token", "secret", "api_key", "authorization", "cookie")
-
 
 def _value(actor, key, default=None):
     if actor is None:
@@ -18,22 +17,6 @@ def _value(actor, key, default=None):
     if hasattr(actor, "keys") and key in actor.keys():
         return actor[key]
     return actor.get(key, default) if isinstance(actor, dict) else default
-
-
-def _safe_payload(value, depth=0):
-    if depth > 4:
-        return "[truncated]"
-    if isinstance(value, dict):
-        clean = {}
-        for key, item in list(value.items())[:40]:
-            normalized = str(key).strip().lower()
-            clean[str(key)[:80]] = "[redacted]" if any(marker in normalized for marker in SENSITIVE_KEY_MARKERS) else _safe_payload(item, depth + 1)
-        return clean
-    if isinstance(value, (list, tuple)):
-        return [_safe_payload(item, depth + 1) for item in list(value)[:40]]
-    if value is None or isinstance(value, (bool, int, float)):
-        return value
-    return str(value)[:500]
 
 
 def publish_event(
@@ -62,7 +45,7 @@ def publish_event(
         if existing:
             return _event_dict(existing)
     correlation_id = str(correlation_id or uuid.uuid4().hex)[:80]
-    safe_payload = json.dumps(_safe_payload(payload or {}), sort_keys=True, separators=(",", ":"))
+    safe_payload_json = json.dumps(safe_payload(payload or {}), sort_keys=True, separators=(",", ":"))
     cursor = db.execute(
         """
         INSERT INTO platform_events
@@ -78,11 +61,11 @@ def publish_event(
             str(entity_type or "platform")[:80],
             str(entity_id)[:100] if entity_id is not None else None,
             str(status or "info")[:40],
-            str(error or "")[:500] or None,
+            redact_operational_text(error, 300),
             str(approval_state or "not_required")[:40],
             int(duration_ms) if duration_ms is not None else None,
             event_type,
-            safe_payload[:4000],
+            safe_payload_json[:4000],
             correlation_id,
             idempotency_key,
             now_iso(),
