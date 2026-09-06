@@ -60,7 +60,7 @@ def test_medication_safety_agent_reads_latest_prescription_without_changing_it(t
         result = execute_plan(plan, actor)
         output = result["tool_results"][0]["output"]
         assert output["prescription_id"] == rx["id"]
-        assert output["status"] == "VERIFIED"
+        assert output["status"] == "FULFILMENT_READY"
         assert output["fulfilment_ready"] is True
         assert "No medicine substitution" in output["safety_notice"]
 
