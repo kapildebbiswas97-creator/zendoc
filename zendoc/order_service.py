@@ -19,6 +19,7 @@ import re
 from typing import Any
 
 from .db import get_db, now_iso
+from .organization_service import provider_resource_context, assert_resource_tenant
 
 
 ALLOWED_TRACKING_STATUSES = {
@@ -420,14 +421,16 @@ def submit_order_from_plan(
             else equal_share
         )
         total_amount = round(item_total + fee_share, 2)
+        tenant = provider_resource_context(pharmacy_id)
         order_uid = f"ord_{patient_id}_{pharmacy_id}_{now[:10].replace('-', '')}_{len(created_orders) + 1}"
         cursor = db.execute(
             """
             INSERT INTO medicine_orders
             (patient_id, ordered_by, pharmacy_id, plan_id, prescription_id, order_uid,
              items_json, delivery_address, total_amount_inr, payment_status,
-             acknowledgement_status, tracking_status, idempotency_key, status, data_mode, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'cash_on_delivery', 'pending', 'SUBMITTED', ?, 'pending', ?, ?, ?)
+             acknowledgement_status, tracking_status, idempotency_key, status, data_mode,
+             organization_id, organization_location_id, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'cash_on_delivery', 'pending', 'SUBMITTED', ?, 'pending', ?, ?, ?, ?, ?)
             """,
             (
                 patient_id,
@@ -441,6 +444,8 @@ def submit_order_from_plan(
                 total_amount,
                 f"{persisted_key}:{pharmacy_id}",
                 mode,
+                tenant["organization_id"],
+                tenant["organization_location_id"],
                 now,
                 now,
             ),
@@ -504,6 +509,7 @@ def acknowledge_order(
         raise LookupError(f"Order #{order_id} not found.")
     order = dict(row)
     actor_row, _owner = _pharmacy_can_act(db, pharmacy_user, order)
+    assert_resource_tenant(actor_row, order)
     normalized_action = str(action or "").strip().lower()
     if normalized_action not in {"accept", "reject"}:
         raise ValueError("Order acknowledgement action must be 'accept' or 'reject'.")
@@ -579,6 +585,7 @@ def update_order_tracking_status(
         raise LookupError(f"Order #{order_id} not found.")
     order = dict(row)
     actor_row, _owner = _pharmacy_can_act(db, actor, order)
+    assert_resource_tenant(actor_row, order)
     current = str(order.get("tracking_status") or "SUBMITTED").upper()
     if current == status_upper:
         return get_order_details(int(order_id), actor=actor_row)
