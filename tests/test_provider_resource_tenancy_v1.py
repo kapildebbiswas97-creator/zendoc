@@ -309,3 +309,86 @@ def test_cross_branch_doctor_cannot_access_old_tenant_consultation_after_move(tm
         bind_provider_profile(doctor, org["id"], location_b["id"])
         with pytest.raises(PermissionError):
             get_consultation(doctor, consultation["id"])
+
+
+def test_moved_branch_pharmacy_cannot_operate_old_branch_order(tmp_path):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    _register(client, "move-pharmacy@example.com", "pharmacy")
+    _register(client, "move-order-patient@example.com", "patient")
+    pharmacy = _user(app, "move-pharmacy@example.com")
+    patient = _user(app, "move-order-patient@example.com")
+    profile_id = _profile(app, pharmacy, "pharmacy")
+
+    with app.app_context():
+        org, location_a = _bind_verified_org(
+            app, pharmacy, profile_id, "Move Pharmacy Network", "pharmacy_network", "Store A"
+        )
+        db = get_db()
+        order_id = db.execute(
+            """
+            INSERT INTO medicine_orders
+            (patient_id, ordered_by, pharmacy_id, items_json, delivery_address, status, tracking_status,
+             organization_id, organization_location_id, created_at, updated_at)
+            VALUES (?, ?, ?, '[]', 'Test Address', 'pending', 'SUBMITTED', ?, ?, ?, ?)
+            """,
+            (
+                patient["id"], patient["id"], pharmacy["id"],
+                org["id"], location_a["id"], now_iso(), now_iso()
+            ),
+        ).lastrowid
+        db.commit()
+
+        location_b = create_location(
+            pharmacy, org["id"], {"name": "Store B", "location_type": "branch", "city": "Kalyani"}
+        )
+        bind_provider_profile(pharmacy, org["id"], location_b["id"])
+
+        from zendoc.order_service import acknowledge_order
+        with pytest.raises(PermissionError):
+            acknowledge_order(pharmacy, order_id, "accept")
+
+
+def test_moved_branch_doctor_cannot_update_old_branch_appointment(tmp_path):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    _register(client, "move-appt-doctor@example.com", "doctor")
+    _register(client, "move-appt-patient@example.com", "patient")
+    doctor = _user(app, "move-appt-doctor@example.com")
+    patient = _user(app, "move-appt-patient@example.com")
+    profile_id = _profile(app, doctor, "doctor")
+
+    with app.app_context():
+        org, location_a = _bind_verified_org(
+            app, doctor, profile_id, "Appointment Hospital", "hospital", "Branch A"
+        )
+        db = get_db()
+        appointment_id = db.execute(
+            """
+            INSERT INTO appointments
+            (patient_id, provider_id, provider_profile_id, provider_name, scheduled_for, reason, status,
+             organization_id, organization_location_id, created_at, updated_at)
+            VALUES (?, ?, ?, 'Move Doctor', '2026-12-24T10:00', 'Review', 'requested', ?, ?, ?, ?)
+            """,
+            (
+                patient["id"], doctor["id"], profile_id,
+                org["id"], location_a["id"], now_iso(), now_iso()
+            ),
+        ).lastrowid
+        db.commit()
+
+        location_b = create_location(
+            doctor, org["id"], {"name": "Branch B", "location_type": "branch", "city": "Kalyani"}
+        )
+        bind_provider_profile(doctor, org["id"], location_b["id"])
+
+    from tests.test_milestone1 import login_web, csrf
+    login_web(client, "doctor", "move-appt-doctor@example.com")
+    page = client.get("/appointments")
+    token = csrf(page.data.decode())
+    response = client.post(
+        f"/appointments/{appointment_id}/status",
+        data={"csrf_token": token, "status": "confirmed"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 403
