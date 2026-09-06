@@ -1346,6 +1346,7 @@ def migrate_schema(db):
         "gender": "ALTER TABLE users ADD COLUMN gender TEXT",
         "city": "ALTER TABLE users ADD COLUMN city TEXT",
         "emergency_contact": "ALTER TABLE users ADD COLUMN emergency_contact TEXT",
+        "language_preference": "ALTER TABLE users ADD COLUMN language_preference TEXT NOT NULL DEFAULT 'en'",
         "verified": "ALTER TABLE users ADD COLUMN verified INTEGER NOT NULL DEFAULT 0",
         "active": "ALTER TABLE users ADD COLUMN active INTEGER NOT NULL DEFAULT 1",
     }.items():
