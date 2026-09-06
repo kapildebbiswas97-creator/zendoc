@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from .db import get_db, now_iso
+from .organization_service import provider_resource_context
 
 
 PROVIDER_ROLES = {"doctor", "hospital", "pharmacy"}
@@ -160,13 +161,19 @@ def create_schedule(user, data):
     end_time = data.get("end_time")
     if not start_time or not end_time or start_time >= end_time:
         raise ValueError("Schedule end time must be after start time.")
+    tenant = provider_resource_context(user["id"])
     get_db().execute(
         """
         INSERT INTO provider_schedules
-        (provider_profile_id, weekday, start_time, end_time, slot_minutes, active, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+        (provider_profile_id, weekday, start_time, end_time, slot_minutes, active,
+         organization_id, organization_location_id, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
         """,
-        (profile["id"], weekday, start_time, end_time, slot_minutes, now_iso(), now_iso()),
+        (
+            profile["id"], weekday, start_time, end_time, slot_minutes,
+            tenant["organization_id"], tenant["organization_location_id"],
+            now_iso(), now_iso(),
+        ),
     )
 
 
@@ -228,8 +235,9 @@ def book_provider_slot(patient, provider_profile_id, scheduled_for, reason):
     get_db().execute(
         """
         INSERT INTO appointments
-        (patient_id, provider_id, provider_profile_id, provider_name, specialty, scheduled_for, reason, status, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'requested', ?, ?)
+        (patient_id, provider_id, provider_profile_id, provider_name, specialty, scheduled_for, reason, status,
+         organization_id, organization_location_id, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'requested', ?, ?, ?, ?)
         """,
         (
             patient["id"],
@@ -241,6 +249,8 @@ def book_provider_slot(patient, provider_profile_id, scheduled_for, reason):
             profile["specialty"],
             scheduled_for,
             reason,
+            provider_resource_context(profile["user_id"])["organization_id"],
+            provider_resource_context(profile["user_id"])["organization_location_id"],
             now_iso(),
             now_iso(),
         ),
