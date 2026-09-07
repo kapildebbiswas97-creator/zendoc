@@ -353,6 +353,38 @@ def _unified_inbox(actor, arguments):
     return {"status": "OK", "patient_id": patient_id, "care_graph": get_patient_care_graph(patient_id, actor=actor)}
 
 
+def _health_memory_context(actor, arguments):
+    from .context_engine import build_minimum_context_bundle
+    from .health_memory_continuity import determine_next_safe_actions, get_health_memory_provenance_summary
+
+    patient_id = _patient_target(actor, arguments, "health_memory_view")
+    bundle = build_minimum_context_bundle(
+        actor=actor,
+        patient_id=patient_id,
+        purpose="health_memory_view",
+        action="core_agent_health_memory_review",
+        requested_fields=["patient_name", "city", "allergies"],
+    )
+    return {
+        "status": "OK",
+        "patient_id": patient_id,
+        "context_contract": {
+            "consent_status": bundle.consent_status,
+            "included_fields": bundle.included_fields,
+            "excluded_fields": bundle.excluded_fields,
+            "data": bundle.data,
+            "provenance": bundle.provenance,
+            "created_at": bundle.created_at,
+        },
+        "health_memory": get_health_memory_provenance_summary(patient_id, actor=actor),
+        "next_safe_actions": determine_next_safe_actions(patient_id, actor=actor),
+        "safety_notice": (
+            "Read-only continuity support. This does not diagnose, prescribe, change treatment, "
+            "or bypass patient consent."
+        ),
+    }
+
+
 TOOL_HANDLERS = {
     "get_platform_summary": _platform_summary,
     "get_failed_operations": _failed_operations,
@@ -372,4 +404,5 @@ TOOL_HANDLERS = {
     "confirm_and_execute_order": _confirm_order,
     "get_diagnostic_options": _diagnostic_options,
     "get_unified_healthcare_inbox": _unified_inbox,
+    "get_health_memory_context": _health_memory_context,
 }
