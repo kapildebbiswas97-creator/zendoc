@@ -8,6 +8,11 @@ from .dataset_adapters import adapt_records, parse_csv_text
 from .data_gap_registry import build_collection_plan, list_data_gaps
 from .public_source_registry import list_public_ingestion_sources
 from .official_connectors import connector_readiness, infer_mapping, list_connector_profiles
+from .state_geography_bootstrap import (
+    bootstrap_state_geography,
+    list_target_states,
+    state_coverage_summary,
+)
 from .routes import require_api_user
 from .security import is_owner
 
@@ -67,6 +72,53 @@ def api_ingestion_connector_map(source_id):
     except (TypeError, ValueError) as exc:
         return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
     return jsonify({"status": "mapped", "result": result})
+
+
+@bp.get("/api/v1/admin/ingestion/geography-targets")
+def api_geography_targets():
+    user, error = _owner()
+    if error:
+        return error
+    return jsonify({"states": list_target_states()})
+
+
+@bp.get("/api/v1/admin/ingestion/geography/<state_slug>/coverage")
+def api_geography_state_coverage(state_slug):
+    user, error = _owner()
+    if error:
+        return error
+    try:
+        return jsonify({"coverage": state_coverage_summary(state_slug)})
+    except LookupError as exc:
+        return jsonify({"error": {"code": 404, "message": str(exc)}}), 404
+
+
+@bp.post("/api/v1/admin/ingestion/geography/<state_slug>/bootstrap")
+def api_geography_state_bootstrap(state_slug):
+    user, error = _owner()
+    if error:
+        return error
+    data = request.get_json(silent=True) or {}
+    try:
+        result = bootstrap_state_geography(
+            user,
+            state_slug=state_slug,
+            districts=data.get("districts"),
+            subdistricts=data.get("subdistricts"),
+            villages=data.get("villages"),
+            blocks=data.get("blocks"),
+            panchayats=data.get("panchayats"),
+            local_bodies=data.get("local_bodies"),
+            village_panchayat_links=data.get("village_panchayat_links"),
+            source=data.get("source") or "lgd",
+            freshness_at=data.get("freshness_at"),
+            dry_run=data.get("apply") is not True,
+        )
+    except LookupError as exc:
+        return jsonify({"error": {"code": 404, "message": str(exc)}}), 404
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+    return jsonify({"result": result}), 201 if result.get("status") == "APPLIED" else 200
 
 
 @bp.get("/api/v1/admin/ingestion/batches")
