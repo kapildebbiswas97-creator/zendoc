@@ -4,7 +4,7 @@ services:
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn run:app --bind 0.0.0.0:$PORT
+    startCommand: gunicorn -c gunicorn.conf.py run:app
     healthCheckPath: /api/v1/ready
     envVars:
       - key: ZENDOC_ENV
@@ -20,7 +20,11 @@ services:
       - key: ZENDOC_PERSISTENCE_VERIFIED
         value: "false"
       - key: ZENDOC_REQUIRE_DURABLE_DATABASE
-        value: "false"
+        value: "true"
+      - key: ZENDOC_GUNICORN_WORKERS
+        value: "1"
+      - key: ZENDOC_GUNICORN_THREADS
+        value: "4"
       - key: ZENDOC_MAX_UPLOAD_BYTES
         value: "10485760"
       - key: ZENDOC_RATE_LIMIT_PER_MINUTE
