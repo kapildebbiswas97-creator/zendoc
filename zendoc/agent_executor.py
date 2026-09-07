@@ -354,7 +354,7 @@ def _unified_inbox(actor, arguments):
 
 
 def _health_memory_context(actor, arguments):
-    from .context_engine import build_minimum_context_bundle
+    from .context_engine import build_minimum_context_bundle, verify_context_authorization
     from .health_memory_continuity import determine_next_safe_actions, get_health_memory_provenance_summary
 
     patient_id = _patient_target(actor, arguments, "health_memory_view")
@@ -365,6 +365,18 @@ def _health_memory_context(actor, arguments):
         action="core_agent_health_memory_review",
         requested_fields=["patient_name", "city", "allergies"],
     )
+
+    next_safe_actions = []
+    next_safe_actions_authorized = False
+    try:
+        verify_context_authorization(actor, patient_id, "next_safe_action")
+        next_safe_actions = determine_next_safe_actions(patient_id, actor=actor)
+        next_safe_actions_authorized = True
+    except PermissionError:
+        # Purpose separation is intentional: timeline/Health Memory consent
+        # does not automatically grant proactive continuity/action context.
+        pass
+
     return {
         "status": "OK",
         "patient_id": patient_id,
@@ -377,10 +389,11 @@ def _health_memory_context(actor, arguments):
             "created_at": bundle.created_at,
         },
         "health_memory": get_health_memory_provenance_summary(patient_id, actor=actor),
-        "next_safe_actions": determine_next_safe_actions(patient_id, actor=actor),
+        "next_safe_actions": next_safe_actions,
+        "next_safe_actions_authorized": next_safe_actions_authorized,
         "safety_notice": (
             "Read-only continuity support. This does not diagnose, prescribe, change treatment, "
-            "or bypass patient consent."
+            "or bypass patient consent. Proactive next-safe actions are included only when separately authorized."
         ),
     }
 
