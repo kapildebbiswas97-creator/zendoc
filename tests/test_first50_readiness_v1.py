@@ -1,3 +1,15 @@
+import pytest
+
+from zendoc.routes import RATE_BUCKETS
+
+
+@pytest.fixture(autouse=True)
+def isolate_rate_limit_buckets():
+    RATE_BUCKETS.clear()
+    yield
+    RATE_BUCKETS.clear()
+
+
 from datetime import datetime, timedelta, timezone
 
 
