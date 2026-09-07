@@ -388,6 +388,16 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
         allowed_roles=["patient", "doctor", "admin"],
         risk_class=READ_ONLY,
     ),
+    "get_health_memory_context": ToolDefinition(
+        name="get_health_memory_context",
+        description=(
+            "Build an authorized, minimum-necessary Health Memory view with provenance and non-clinical next-safe actions. "
+            "Cross-patient access requires explicit context authorization."
+        ),
+        allowed_agents=["HealthMemoryAgent"],
+        allowed_roles=["patient", "doctor", "admin"],
+        risk_class=READ_ONLY,
+    ),
 }
 
 
