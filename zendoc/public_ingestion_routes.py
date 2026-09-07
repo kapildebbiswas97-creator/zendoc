@@ -9,6 +9,7 @@ from .data_gap_registry import build_collection_plan, list_data_gaps
 from .public_source_registry import list_public_ingestion_sources, public_data_coverage_matrix
 from .official_connectors import connector_readiness, infer_mapping, list_connector_profiles
 from .geography_region_registry import import_lgd_state_registry, list_import_regions
+from .state_source_priorities import state_source_priority
 from .state_geography_bootstrap import (
     bootstrap_state_geography,
     list_target_states,
@@ -107,6 +108,14 @@ def api_geography_india_state_registry_list():
     return jsonify({
         "regions": list_import_regions(country_code="IN", region_level="state")
     })
+
+
+@bp.get("/api/v1/admin/ingestion/state-priority/<state_slug>")
+def api_ingestion_state_priority(state_slug):
+    user, error = _owner()
+    if error:
+        return error
+    return jsonify({"priority": state_source_priority(state_slug)})
 
 
 @bp.get("/api/v1/admin/ingestion/geography-targets")
