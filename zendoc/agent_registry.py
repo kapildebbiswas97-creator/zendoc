@@ -50,12 +50,12 @@ AGENT_REGISTRY: dict[str, AgentDefinition] = {
         identifier="SafetyAgent",
         name="Safety Agent",
         purpose="Emergency detection and safety escalation — always first.",
-        allowed_tools=["get_system_health"],
+        allowed_tools=[],
         allowed_actor_roles=ALL_ROLES,
         risk_level="READ_ONLY",
         approval_requirements=[],
         status="connected",
-        description="Deterministic safety engine. Never routed to an LLM. Emergency check runs before any other agent.",
+        description="Deterministic safety engine. Never routed to an LLM. Emergency plans execute zero tools and run before any other agent.",
     ),
 
     "CareAgent": AgentDefinition(
