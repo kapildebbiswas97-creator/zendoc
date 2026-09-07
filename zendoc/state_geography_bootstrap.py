@@ -14,6 +14,8 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from flask import has_app_context
+
 from .db import get_db, now_iso
 from .geography_graph import link_geography_nodes, upsert_geography_node
 from .geography_region_registry import find_import_region, list_import_regions
@@ -41,18 +43,19 @@ TARGET_STATES = {
 
 
 def list_target_states() -> list[dict]:
-    dynamic = list_import_regions(country_code="IN", region_level="state")
-    if dynamic:
-        return [
-            {
-                "slug": item["slug"],
-                "name": item["name"],
-                "aliases": item["aliases"],
-                "lgd_state_code": item["region_code"],
-                "source": item["source"],
-            }
-            for item in dynamic
-        ]
+    if has_app_context():
+        dynamic = list_import_regions(country_code="IN", region_level="state")
+        if dynamic:
+            return [
+                {
+                    "slug": item["slug"],
+                    "name": item["name"],
+                    "aliases": item["aliases"],
+                    "lgd_state_code": item["region_code"],
+                    "source": item["source"],
+                }
+                for item in dynamic
+            ]
     return [state.to_dict() for state in TARGET_STATES.values()]
 
 
