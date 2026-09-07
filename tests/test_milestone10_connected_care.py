@@ -827,3 +827,93 @@ def test_patient_prescription_api_does_not_accept_client_prescriber_identity(tmp
     prescription = response.get_json()["prescription"]
     assert prescription["prescriber_name"] == "Dr Existing"
     assert prescription["prescriber_id"] is None
+
+def test_provider_refresh_api_requires_owner_resource_and_explicit_reconfirmation(tmp_path):
+    app = make_m10_app(tmp_path)
+    client = app.test_client()
+
+    register_api(client, "refreshapi@example.com", role="pharmacy", name="Refresh API Pharmacy")
+    login = login_api(client, "refreshapi@example.com", role="pharmacy")
+    token = login.json["token"]
+    pharmacy_id = login.json["user"]["id"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    with app.app_context():
+        db = get_db()
+        profile = db.execute(
+            "SELECT * FROM provider_profiles WHERE user_id=?",
+            (pharmacy_id,),
+        ).fetchone()
+        if not profile:
+            db.execute(
+                """
+                INSERT INTO provider_profiles
+                (user_id,provider_type,organization,city,verification_status,created_at,updated_at)
+                VALUES (?, 'pharmacy', 'Refresh API Pharmacy', 'Kolkata', 'verified', ?, ?)
+                """,
+                (pharmacy_id, now_iso(), now_iso()),
+            )
+        sku_id = db.execute(
+            """
+            INSERT INTO medication_skus
+            (sku_code,name,generic_name,form,pack_size,pack_unit,mrp_inr,rx_required,data_mode,created_at)
+            VALUES ('REF-API-SKU','Refresh API Medicine','Refresh API Generic','tablet',1,'tablet',20,0,'LIVE',?)
+            """,
+            (now_iso(),),
+        ).lastrowid
+        db.commit()
+        observation = update_inventory_observation(
+            pharmacy_id, sku_id, 5, 15.0, stock_status="CONFIRMED"
+        )
+        old = (datetime.now(timezone.utc) - timedelta(hours=5)).isoformat()
+        db.execute(
+            "UPDATE inventory_observations SET observed_at=?, updated_at=? WHERE id=?",
+            (old, old, observation["id"]),
+        )
+        db.commit()
+        observation_id = observation["id"]
+
+    queue_res = client.get(
+        "/api/v1/connected-care/provider/inventory-refresh",
+        headers=headers,
+    )
+    assert queue_res.status_code == 200
+    assert queue_res.get_json()["refresh_queue"]["needs_refresh_count"] >= 1
+
+    reject = client.post(
+        f"/api/v1/connected-care/provider/inventory/{observation_id}/reconfirm",
+        json={"confirmed_unchanged": False},
+        headers=headers,
+    )
+    assert reject.status_code == 400
+
+    accept = client.post(
+        f"/api/v1/connected-care/provider/inventory/{observation_id}/reconfirm",
+        json={"confirmed_unchanged": True},
+        headers=headers,
+    )
+    assert accept.status_code == 200
+    assert accept.get_json()["observation"]["effective_status"] == "CONFIRMED"
+
+
+def test_patient_cannot_use_provider_refresh_endpoints(tmp_path):
+    app = make_m10_app(tmp_path)
+    client = app.test_client()
+
+    register_api(client, "refreshpatient@example.com", role="patient", name="Refresh Patient")
+    login = login_api(client, "refreshpatient@example.com", role="patient")
+    token = login.json["token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    inv = client.get(
+        "/api/v1/connected-care/provider/inventory-refresh",
+        headers=headers,
+    )
+    assert inv.status_code == 403
+
+    diag = client.get(
+        "/api/v1/connected-care/provider/diagnostic-refresh",
+        headers=headers,
+    )
+    assert diag.status_code == 403
+
