@@ -1,3 +1,4 @@
+import hashlib
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -115,7 +116,8 @@ def check_rate_limit():
     limit = int(current_app.config.get("RATE_LIMIT_PER_MINUTE", 120))
     remote = request.headers.get("X-Forwarded-For", request.remote_addr or "unknown")
     remote = str(remote).split(",", 1)[0].strip()
-    bucket_key = f"{remote}:{request.path}"
+    client_hash = hashlib.sha256(remote.encode("utf-8")).hexdigest()[:32]
+    bucket_key = f"{client_hash}:{request.path}"
     window = int(time.time()) // 60
 
     # Tests intentionally keep an in-memory limiter so isolated test databases
