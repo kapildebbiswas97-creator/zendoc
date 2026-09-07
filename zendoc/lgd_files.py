@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import csv
 import io
+import re
 from typing import Any
 
 
@@ -263,16 +264,18 @@ def _urban_local_bodies(state_code: str, rows: list[dict]) -> list[dict]:
 
 
 def _clean_header(value: Any) -> str:
-    return " ".join(str(value or "").replace("\n", " ").replace("\r", " ").strip().split())
+    text = str(value or "").replace("\n", " ").replace("\r", " ").strip().lower()
+    text = re.sub(r"[^a-z0-9]+", " ", text)
+    return " ".join(text.split())
 
 
 def _normalized_row(raw: dict[str, Any]) -> dict[str, Any]:
-    return {_clean_header(key).lower(): value for key, value in dict(raw or {}).items()}
+    return {_clean_header(key): value for key, value in dict(raw or {}).items()}
 
 
 def _value(row: dict[str, Any], *aliases: str) -> str:
     for alias in aliases:
-        value = row.get(_clean_header(alias).lower())
+        value = row.get(_clean_header(alias))
         if value is not None and str(value).strip():
             return str(value).strip()
     return ""
