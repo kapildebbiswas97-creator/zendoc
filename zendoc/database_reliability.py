@@ -32,6 +32,10 @@ REQUIRED_TABLES = (
     "appointment_slot_claims",
     "request_observations",
     "integration_health_checks",
+    "api_rate_limit_buckets",
+    "geography_nodes",
+    "geography_relationships",
+    "geography_import_regions",
 )
 
 
