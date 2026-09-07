@@ -1,0 +1,454 @@
+openapi: 3.1.0
+info:
+  title: ZENDOC Partner API
+  version: 1.0.0-pilot
+  description: |
+    Pilot-facing contract for ZENDOC Connected Care and provider freshness APIs.
+    This schema documents implemented software boundaries only. It does not
+    claim live pharmacy, diagnostic, insurer, government, ambulance, or other
+    external partner connectivity unless separately configured and verified.
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Connected Care
+  - name: Provider Freshness
+  - name: Provider Onboarding
+  - name: CareFin
+  - name: Care Journey
+  - name: Geography
+  - name: Official Ingestion
+
+paths:
+  /connected-care/context:
+    get:
+      tags: [Connected Care]
+      summary: Get minimum-necessary authorized patient context
+      responses:
+        "200":
+          description: Authorized minimized context
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /connected-care/pharmacy-offers:
+    get:
+      tags: [Connected Care]
+      summary: Search truthful pharmacy inventory offers
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: patient_id
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Pharmacy offers with freshness state
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /connected-care/fulfilment:
+    post:
+      tags: [Connected Care]
+      summary: Stage prescription fulfilment options
+      description: Does not submit an order.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                prescription_id: { type: integer }
+                patient_id: { type: integer }
+              required: [prescription_id]
+      responses:
+        "200":
+          description: Staged fulfilment comparison
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /connected-care/orders/confirm:
+    post:
+      tags: [Connected Care]
+      summary: Confirm and submit a staged medicine order
+      description: Requires explicit user confirmation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                plan_id: { type: integer }
+                user_confirmed: { type: boolean, const: true }
+                delivery_address: { type: string }
+                idempotency_key: { type: string }
+                plan_hash: { type: string }
+              required: [plan_id, user_confirmed]
+      responses:
+        "200":
+          description: Order submitted into ZENDOC workflow
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /connected-care/inventory:
+    post:
+      tags: [Provider Freshness]
+      summary: Submit a pharmacy inventory observation
+      description: Authenticated pharmacy only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                sku_id: { type: integer }
+                quantity: { type: integer, minimum: 0 }
+                price_inr: { type: number, minimum: 0 }
+                stock_status:
+                  type: string
+                  enum: [CONFIRMED, STALE, UNKNOWN, UNAVAILABLE]
+                source:
+                  type: string
+                  enum: [pharmacy_manual, csv_import, pos_integration, partner_api]
+              required: [sku_id]
+      responses:
+        "201":
+          description: Inventory observation recorded
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /connected-care/provider/inventory-refresh:
+    get:
+      tags: [Provider Freshness]
+      summary: List authenticated pharmacy freshness workload
+      parameters:
+        - in: query
+          name: data_mode
+          schema:
+            type: string
+            enum: [LIVE, DEMO]
+      responses:
+        "200":
+          description: Inventory refresh queue
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /connected-care/provider/inventory/{observation_id}/reconfirm:
+    post:
+      tags: [Provider Freshness]
+      summary: Reconfirm unchanged pharmacy inventory after manual recheck
+      parameters:
+        - in: path
+          name: observation_id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReconfirmRequest"
+      responses:
+        "200":
+          description: Freshness renewed after explicit provider confirmation
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /connected-care/diagnostic-offers:
+    post:
+      tags: [Provider Freshness]
+      summary: Create or update a verified diagnostic offer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                test_id: { type: integer }
+                price_inr: { type: number, minimum: 0 }
+                home_collection_available: { type: boolean }
+                home_collection_fee_inr: { type: number, minimum: 0 }
+                data_mode:
+                  type: string
+                  enum: [LIVE, DEMO]
+              required: [test_id, price_inr]
+      responses:
+        "201":
+          description: Diagnostic offer recorded
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /connected-care/provider/diagnostic-refresh:
+    get:
+      tags: [Provider Freshness]
+      summary: List authenticated diagnostic-provider freshness workload
+      parameters:
+        - in: query
+          name: data_mode
+          schema:
+            type: string
+            enum: [LIVE, DEMO]
+      responses:
+        "200":
+          description: Diagnostic refresh queue
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /connected-care/provider/diagnostic-offers/{offer_id}/reconfirm:
+    post:
+      tags: [Provider Freshness]
+      summary: Reconfirm unchanged diagnostic offer after provider recheck
+      parameters:
+        - in: path
+          name: offer_id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReconfirmRequest"
+      responses:
+        "200":
+          description: Diagnostic offer freshness renewed
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /connected-care/diagnostics/book:
+    post:
+      tags: [Connected Care]
+      summary: Request a diagnostic booking
+      description: |
+        Requires exact test, verified fresh offer, explicit user confirmation,
+        future date, and concrete address. This records a request; it does not
+        claim provider acceptance or completion.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                patient_id: { type: integer }
+                test_id: { type: integer }
+                lab_id: { type: integer }
+                scheduled_date: { type: string }
+                slot_time: { type: [string, "null"] }
+                address: { type: string }
+                collection_type:
+                  type: string
+                  enum: [home_collection, lab_visit]
+                user_confirmed: { type: boolean, const: true }
+              required: [test_id, lab_id, scheduled_date, address, collection_type, user_confirmed]
+      responses:
+        "200":
+          description: Diagnostic request created or safely replayed
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /provider/onboarding:
+    get:
+      tags: [Provider Onboarding]
+      summary: Get provider onboarding status
+      responses:
+        "200":
+          description: Provider onboarding state
+
+  /provider/evidence:
+    post:
+      tags: [Provider Onboarding]
+      summary: Submit provider verification evidence
+      responses:
+        "201":
+          description: Evidence submitted
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /carefin/discover:
+    post:
+      tags: [CareFin]
+      summary: Discover possible healthcare support pathways
+      description: Does not confirm personal eligibility, approval, coverage, or payment.
+      responses:
+        "200":
+          description: Candidate pathways and verification requirements
+
+  /care-journeys:
+    get:
+      tags: [Care Journey]
+      summary: List authorized care journeys
+      responses:
+        "200":
+          description: Care journeys
+    post:
+      tags: [Care Journey]
+      summary: Create a care journey
+      responses:
+        "201":
+          description: Care journey created
+
+  /care-journeys/{journey_id}:
+    get:
+      tags: [Care Journey]
+      summary: Get an authorized care journey
+      parameters:
+        - in: path
+          name: journey_id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Care journey
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /care-journeys/{journey_id}/transition:
+    post:
+      tags: [Care Journey]
+      summary: Request a valid care-journey transition
+      parameters:
+        - in: path
+          name: journey_id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Transition applied if actor/consent/human-gate rules allow
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /geography/search:
+    get:
+      tags: [Geography]
+      summary: Search provenance-aware geography
+      responses:
+        "200":
+          description: Geography search results
+
+  /geography/{node_id}/entities:
+    get:
+      tags: [Geography]
+      summary: List healthcare entities linked to a geography node
+      parameters:
+        - in: path
+          name: node_id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Linked healthcare entities
+
+  /admin/ingestion/sources:
+    get:
+      tags: [Official Ingestion]
+      summary: List official/public ingestion source registry
+      responses:
+        "200":
+          description: Source registry
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /admin/ingestion/preview:
+    post:
+      tags: [Official Ingestion]
+      summary: Preview official/public data ingestion
+      description: Owner only. Preview/dry-run does not apply records.
+      responses:
+        "200":
+          description: Accepted/rejected preview
+
+  /admin/ingestion/apply:
+    post:
+      tags: [Official Ingestion]
+      summary: Apply a validated official/public data batch
+      description: Owner only. Imported records are not automatically ZENDOC-verified or bookable.
+      responses:
+        "200":
+          description: Applied batch result
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+
+  schemas:
+    ReconfirmRequest:
+      type: object
+      properties:
+        confirmed_unchanged:
+          type: boolean
+          const: true
+      required: [confirmed_unchanged]
+
+    ErrorEnvelope:
+      type: object
+      properties:
+        error:
+          oneOf:
+            - type: string
+            - type: object
+              properties:
+                code: { type: integer }
+                message: { type: string }
+
+    InventoryTruthState:
+      type: string
+      enum: [CONFIRMED, STALE, UNKNOWN, UNAVAILABLE]
+
+    DiagnosticTruthState:
+      type: string
+      enum: [CONFIRMED, STALE, UNKNOWN, OBSERVED, UNAVAILABLE]
+
+    CapabilityState:
+      type: string
+      enum: [WORKING, BETA, INTEGRATION_REQUIRED, DISABLED, FUTURE]
+
+  responses:
+    BadRequest:
+      description: Invalid, incomplete, or unsafe request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    Forbidden:
+      description: Authorization, consent, owner, role, or tenant boundary denied
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    NotFound:
+      description: Authorized resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
