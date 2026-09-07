@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from zendoc.agent_executor import execute_plan
+from zendoc.agent_executor import _health_memory_context, execute_plan
 from zendoc.agent_planner import build_plan
 from zendoc.agent_task_engine import create_agent_task
 from zendoc.db import get_db, now_iso
@@ -133,3 +133,48 @@ def test_safe_operations_automation_rejects_normal_user(tmp_path):
                 "active": 1,
                 "email": "normal@example.com",
             })
+
+
+def test_health_memory_agent_routes_to_authorized_minimum_context(tmp_path):
+    app = make_m10_app(tmp_path)
+    with app.app_context():
+        db = get_db()
+        patient_id = db.execute(
+            "INSERT INTO users (name,email,email_normalized,password_hash,role,city,active,created_at,updated_at) VALUES (?,?,?,?, 'patient','Kolkata',1,?,?)",
+            ("Memory Patient", "memoryagent@example.com", "memoryagent@example.com", "hash", now_iso(), now_iso()),
+        ).lastrowid
+        db.commit()
+
+        actor = {"id": patient_id, "role": "patient", "city": "Kolkata", "active": 1}
+        plan = build_plan(actor, "Show my health memory timeline")
+        assert plan.assigned_agent == "HealthMemoryAgent"
+        assert plan.intent == "health_records"
+        assert plan.steps[0].tool_name == "get_health_memory_context"
+
+        result = execute_plan(plan, actor)
+        output = result["tool_results"][0]["output"]
+        assert output["status"] == "OK"
+        assert output["patient_id"] == patient_id
+        assert output["context_contract"]["consent_status"] == "NOT_REQUIRED_SELF"
+        assert "complete_lifetime_memory" in output["context_contract"]["excluded_fields"]
+        assert output["health_memory"]["patient_id"] == patient_id
+        assert "diagnose" in output["safety_notice"].lower()
+
+
+def test_health_memory_agent_blocks_cross_patient_idor_without_consent(tmp_path):
+    app = make_m10_app(tmp_path)
+    with app.app_context():
+        db = get_db()
+        actor_id = db.execute(
+            "INSERT INTO users (name,email,email_normalized,password_hash,role,active,created_at,updated_at) VALUES (?,?,?,?, 'patient',1,?,?)",
+            ("Actor Patient", "memoryactor@example.com", "memoryactor@example.com", "hash", now_iso(), now_iso()),
+        ).lastrowid
+        target_id = db.execute(
+            "INSERT INTO users (name,email,email_normalized,password_hash,role,active,created_at,updated_at) VALUES (?,?,?,?, 'patient',1,?,?)",
+            ("Other Patient", "memorytarget@example.com", "memorytarget@example.com", "hash", now_iso(), now_iso()),
+        ).lastrowid
+        db.commit()
+
+        actor = {"id": actor_id, "role": "patient", "active": 1}
+        with pytest.raises(PermissionError):
+            _health_memory_context(actor, {"patient_id": target_id})
