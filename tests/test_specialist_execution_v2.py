@@ -2,9 +2,16 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from zendoc.agent_executor import _health_memory_context, execute_plan
+from zendoc.agent_executor import (
+    _diagnostic_options,
+    _health_memory_context,
+    _latest_prescription_review,
+    _pharmacy_search,
+    execute_plan,
+)
 from zendoc.agent_planner import build_plan
 from zendoc.agent_task_engine import create_agent_task
+from zendoc.context_engine import create_or_update_consent_grant
 from zendoc.db import get_db, now_iso
 from zendoc.diagnostic_service import AVAILABILITY_CONFIRMED
 from zendoc.operations_automation import run_safe_operations_automation
@@ -178,3 +185,77 @@ def test_health_memory_agent_blocks_cross_patient_idor_without_consent(tmp_path)
         actor = {"id": actor_id, "role": "patient", "active": 1}
         with pytest.raises(PermissionError):
             _health_memory_context(actor, {"patient_id": target_id})
+
+
+def test_hospital_health_memory_requires_explicit_patient_consent(tmp_path):
+    app = make_m10_app(tmp_path)
+    with app.app_context():
+        db = get_db()
+        patient_id = db.execute(
+            "INSERT INTO users (name,email,email_normalized,password_hash,role,city,active,created_at,updated_at) VALUES (?,?,?,?, 'patient','Kolkata',1,?,?)",
+            ("Consent Patient", "consentpatient@example.com", "consentpatient@example.com", "hash", now_iso(), now_iso()),
+        ).lastrowid
+        hospital_id = db.execute(
+            "INSERT INTO users (name,email,email_normalized,password_hash,role,city,active,created_at,updated_at) VALUES (?,?,?,?, 'hospital','Kolkata',1,?,?)",
+            ("Consent Hospital", "consenthospital@example.com", "consenthospital@example.com", "hash", now_iso(), now_iso()),
+        ).lastrowid
+        db.commit()
+
+        actor = {"id": hospital_id, "role": "hospital", "city": "Kolkata", "active": 1}
+
+        with pytest.raises(PermissionError):
+            _health_memory_context(actor, {"patient_id": patient_id})
+
+        create_or_update_consent_grant(
+            subject_id=patient_id,
+            grantee_id=hospital_id,
+            purpose="health_memory_view",
+            scopes=["timeline"],
+            actor={"id": patient_id, "role": "patient", "active": 1},
+        )
+
+        output = _health_memory_context(actor, {"patient_id": patient_id})
+        assert output["patient_id"] == patient_id
+        assert output["context_contract"]["consent_status"] == "ACTIVE"
+        assert "complete_lifetime_memory" in output["context_contract"]["excluded_fields"]
+
+
+@pytest.mark.parametrize(
+    ("handler", "arguments"),
+    [
+        (_latest_prescription_review, {}),
+        (_diagnostic_options, {"query": "CBC"}),
+        (_pharmacy_search, {"query": "Metformin"}),
+    ],
+)
+def test_specialist_handlers_block_cross_patient_target_without_consent(tmp_path, handler, arguments):
+    app = make_m10_app(tmp_path)
+    with app.app_context():
+        db = get_db()
+        actor_id = db.execute(
+            "INSERT INTO users (name,email,email_normalized,password_hash,role,active,created_at,updated_at) VALUES (?,?,?,?, 'patient',1,?,?)",
+            ("Adversary", "adversary@example.com", "adversary@example.com", "hash", now_iso(), now_iso()),
+        ).lastrowid
+        target_id = db.execute(
+            "INSERT INTO users (name,email,email_normalized,password_hash,role,active,created_at,updated_at) VALUES (?,?,?,?, 'patient',1,?,?)",
+            ("Target", "specialisttarget@example.com", "specialisttarget@example.com", "hash", now_iso(), now_iso()),
+        ).lastrowid
+        db.commit()
+
+        actor = {"id": actor_id, "role": "patient", "active": 1}
+        attempted = dict(arguments)
+        attempted["patient_id"] = target_id
+
+        with pytest.raises(PermissionError):
+            handler(actor, attempted)
+
+
+def test_emergency_precedence_beats_health_memory_specialist_routing(tmp_path):
+    app = make_m10_app(tmp_path)
+    with app.app_context():
+        actor = {"id": 777, "role": "patient", "active": 1}
+        plan = build_plan(actor, "Show my health memory, I have severe chest pain and cannot breathe")
+        assert plan.intent == "emergency"
+        assert plan.assigned_agent == "SafetyAgent"
+        assert plan.steps == ()
+        assert plan.urgency == "emergency"
