@@ -288,6 +288,33 @@ def build_plan(actor, command_text: str) -> AgentPlan:
             (PlanStep(1, "search_educational_video", {"query": command, "category": _video_category(lower)}, "Search truthful educational guidance."),),
             expected_output="educational_video_options",
         )
+    if any(text in lower for text in (
+        "health memory",
+        "health record",
+        "medical history",
+        "health history",
+        "health timeline",
+        "my records",
+        "my reports",
+    )):
+        return _plan(
+            command,
+            "health_records",
+            "HealthMemoryAgent",
+            "read_only",
+            (
+                PlanStep(
+                    1,
+                    "get_health_memory_context",
+                    {},
+                    "Build minimum-necessary authorized Health Memory context with provenance.",
+                ),
+            ),
+            privacy_class="HEALTH_SENSITIVE",
+            required_context=("authorized_patient_context", "timeline_scope"),
+            expected_output="authorized_health_memory_summary",
+            fallback_strategy="deny_without_context_authorization",
+        )
     if any(text in lower for text in ("device", "iot", "blood pressure", "heart rate")):
         return _plan(
             command,
