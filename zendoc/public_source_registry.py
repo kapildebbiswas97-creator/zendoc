@@ -345,6 +345,50 @@ SOURCES = {
             "searches or published lists where available. A licence directory is not proof of current stock."
         ),
     ),
+    "assam_health_institutes": PublicIngestionSource(
+        source_id="assam_health_institutes",
+        name="Assam Directorate of Health Services - Health Institutes",
+        owner="Directorate of Health Service, Government of Assam",
+        official_url="https://dhs.assam.gov.in/portlets/health-institutes",
+        data_class="official_state_health_institution_directory",
+        geography="ASSAM",
+        ingestion_types=("public_healthcare_entities",),
+        trust_level="OFFICIAL_PUBLIC_DATA",
+        live_fetch_status="PUBLIC_WEB_DIRECTORY_AND_DOWNLOAD",
+        personal_data_allowed=False,
+        notes=(
+            "Official Assam health-institute directory with district-level PHC/CHC/sub-divisional/district-hospital coverage "
+            "and downloadable institution details. Directory data does not imply live beds, slots or current service capacity."
+        ),
+    ),
+    "assam_first_referral_units": PublicIngestionSource(
+        source_id="assam_first_referral_units",
+        name="Assam Health & Family Welfare - First Referral Units",
+        owner="Health & Family Welfare Department, Government of Assam",
+        official_url="https://hfw.assam.gov.in/information-services/health-institute",
+        data_class="official_state_referral_facility_directory",
+        geography="ASSAM",
+        ingestion_types=("public_healthcare_entities",),
+        trust_level="OFFICIAL_PUBLIC_DATA",
+        live_fetch_status="PUBLIC_WEB_DIRECTORY",
+        personal_data_allowed=False,
+        notes="Named FRU/CHC/SDCH facilities by district and BPHC. Use for referral discovery, not live availability.",
+    ),
+    "assam_medical_colleges": PublicIngestionSource(
+        source_id="assam_medical_colleges",
+        name="Assam Medical Colleges and Institutes",
+        owner="Health & Family Welfare / Directorate of Medical Education, Government of Assam",
+        official_url="https://hfw.assam.gov.in/information-services/medical-collegesinstitutes-0",
+        data_class="official_state_medical_education_facility_directory",
+        geography="ASSAM",
+        ingestion_types=("public_healthcare_entities",),
+        trust_level="OFFICIAL_PUBLIC_DATA",
+        live_fetch_status="PUBLIC_WEB_DIRECTORY",
+        personal_data_allowed=False,
+        notes=(
+            "Official medical colleges/institutes list including Assam Medical College Hospital in Dibrugarh and associated public contacts."
+        ),
+    ),
     "delhi_government_hospitals": PublicIngestionSource(
         source_id="delhi_government_hospitals",
         name="Delhi Government Hospitals Directory",
@@ -360,6 +404,9 @@ SOURCES = {
     ),
     "delhi_registered_nursing_homes": PublicIngestionSource(
         source_id="delhi_registered_nursing_homes",
+            "assam_health_institutes",
+            "assam_first_referral_units",
+            "assam_medical_colleges",
         name="Delhi Registered Functional Nursing Homes",
         owner="Department of Health & Family Welfare, Government of NCT of Delhi",
         official_url="https://health.delhi.gov.in/health/services",
