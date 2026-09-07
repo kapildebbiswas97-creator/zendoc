@@ -548,7 +548,7 @@ def test_diagnostic_refresh_queue_and_reconfirm_preserve_tenant(tmp_path):
             INSERT INTO diagnostic_offers
             (lab_id,test_id,price_inr,home_collection_available,home_collection_fee_inr,verified,
              data_mode,observed_at,organization_id,organization_location_id,created_at)
-            VALUES (?,?,100,1,0,1,'LIVE',?,?,?,?,?)
+            VALUES (?,?,100,1,0,1,'LIVE',?,?,?,?)
             """,
             (lab["id"], test_id, old, org["id"], location["id"], old),
         ).lastrowid
@@ -593,7 +593,7 @@ def test_moved_branch_lab_cannot_reconfirm_old_offer(tmp_path):
             INSERT INTO diagnostic_offers
             (lab_id,test_id,price_inr,home_collection_available,home_collection_fee_inr,verified,
              data_mode,observed_at,organization_id,organization_location_id,created_at)
-            VALUES (?,?,100,1,0,1,'LIVE',?,?,?,?,?)
+            VALUES (?,?,100,1,0,1,'LIVE',?,?,?,?)
             """,
             (lab["id"], test_id, now_iso(), org["id"], location_a["id"], now_iso()),
         ).lastrowid
