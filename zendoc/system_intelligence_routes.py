@@ -62,12 +62,17 @@ def owner_database_backup():
 @bp.get("/owner/observability")
 @owner_required
 def owner_observability():
+    pilot = pilot_scorecard()
     return jsonify({
         "incident": incident_summary(60),
         "requests_15m": request_metrics(15),
         "requests_60m": request_metrics(60),
         "agents_60m": agent_metrics(60),
         "emergency_60m": emergency_metrics(60),
+        "pilot_signals": pilot.get("signals", []),
+        "provider_responsiveness": pilot.get("provider_responsiveness", {}),
+        "data_freshness": pilot.get("data_freshness", {}),
+        "engagement": pilot.get("engagement", {}),
     })
 
 
