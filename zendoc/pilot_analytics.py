@@ -30,6 +30,12 @@ def pilot_scorecard() -> dict[str, Any]:
     data_freshness = _data_freshness_metrics(db)
     engagement = _engagement_metrics(db)
     reliability = _reliability_metrics()
+    signals = _pilot_signals(
+        provider_responsiveness=provider_responsiveness,
+        data_freshness=data_freshness,
+        engagement=engagement,
+        reliability=reliability,
+    )
 
     return {
         "status": "OK",
@@ -44,6 +50,7 @@ def pilot_scorecard() -> dict[str, Any]:
         "data_freshness": data_freshness,
         "engagement": engagement,
         "reliability": reliability,
+        "signals": signals,
         "measurement_boundary": (
             "Metrics are computed from ZENDOC database events/records only. "
             "They do not estimate offline outcomes, partner-side actions, clinical efficacy, or unreported savings. "
@@ -393,6 +400,135 @@ def _reliability_metrics() -> dict:
             "average_duration_ms": agents["avg_duration_ms"],
         },
     }
+
+
+def _pilot_signals(*, provider_responsiveness: dict, data_freshness: dict, engagement: dict, reliability: dict) -> list[dict]:
+    signals: list[dict] = []
+
+    request_total = int(reliability["requests"]["total"] or 0)
+    request_error_rate = reliability["requests"]["server_error_rate_percent"]
+    if request_total < 20:
+        signals.append({
+            "key": "request_reliability",
+            "status": "NO_DATA",
+            "severity": "info",
+            "message": "Fewer than 20 requests are available in the 60-minute reliability window.",
+        })
+    elif request_error_rate is not None and request_error_rate >= 5:
+        signals.append({
+            "key": "request_reliability",
+            "status": "ATTENTION",
+            "severity": "high",
+            "message": f"Server error rate is {request_error_rate}% in the current 60-minute window.",
+        })
+    else:
+        signals.append({
+            "key": "request_reliability",
+            "status": "OK",
+            "severity": "info",
+            "message": "Recent request reliability is within the current pilot guardrail.",
+        })
+
+    inventory = data_freshness["pharmacy_inventory"]
+    inventory_total = int(inventory["total_observations"] or 0)
+    if inventory_total == 0:
+        signals.append({
+            "key": "pharmacy_freshness",
+            "status": "NO_DATA",
+            "severity": "info",
+            "message": "No pharmacy inventory observations are available yet.",
+        })
+    else:
+        refresh_rate = _percent(int(inventory["needs_refresh"] or 0), inventory_total)
+        signals.append({
+            "key": "pharmacy_freshness",
+            "status": "ATTENTION" if refresh_rate is not None and refresh_rate >= 25 else "OK",
+            "severity": "medium" if refresh_rate is not None and refresh_rate >= 25 else "info",
+            "message": (
+                f"{inventory['needs_refresh']} of {inventory_total} pharmacy observations need refresh "
+                f"({refresh_rate}% of observed inventory)."
+            ),
+        })
+
+    diagnostics = data_freshness["diagnostic_offers"]
+    diagnostic_total = int(diagnostics["total_offers"] or 0)
+    if diagnostic_total == 0:
+        signals.append({
+            "key": "diagnostic_freshness",
+            "status": "NO_DATA",
+            "severity": "info",
+            "message": "No diagnostic provider offers are available yet.",
+        })
+    else:
+        refresh_rate = _percent(int(diagnostics["needs_refresh"] or 0), diagnostic_total)
+        signals.append({
+            "key": "diagnostic_freshness",
+            "status": "ATTENTION" if refresh_rate is not None and refresh_rate >= 25 else "OK",
+            "severity": "medium" if refresh_rate is not None and refresh_rate >= 25 else "info",
+            "message": (
+                f"{diagnostics['needs_refresh']} of {diagnostic_total} diagnostic offers need refresh "
+                f"({refresh_rate}% of observed offers)."
+            ),
+        })
+
+    medicine = provider_responsiveness["medicine_orders"]
+    order_count = int(medicine["submitted"] or 0)
+    if order_count == 0:
+        signals.append({
+            "key": "pharmacy_response",
+            "status": "NO_DATA",
+            "severity": "info",
+            "message": "No medicine orders are available for provider-response measurement.",
+        })
+    else:
+        response_rate = medicine["response_rate_percent"]
+        signals.append({
+            "key": "pharmacy_response",
+            "status": "ATTENTION" if response_rate is not None and response_rate < 80 else "OK",
+            "severity": "medium" if response_rate is not None and response_rate < 80 else "info",
+            "message": (
+                f"Pharmacy response rate is {response_rate}% across {order_count} submitted order(s)."
+            ),
+        })
+
+    consultations = provider_responsiveness["consultations"]
+    consultation_count = int(consultations["requested"] or 0)
+    if consultation_count == 0:
+        signals.append({
+            "key": "consultation_response",
+            "status": "NO_DATA",
+            "severity": "info",
+            "message": "No consultation requests are available for response measurement.",
+        })
+    else:
+        response_rate = consultations["response_rate_percent"]
+        signals.append({
+            "key": "consultation_response",
+            "status": "ATTENTION" if response_rate is not None and response_rate < 80 else "OK",
+            "severity": "medium" if response_rate is not None and response_rate < 80 else "info",
+            "message": (
+                f"Consultation response rate is {response_rate}% across {consultation_count} request(s)."
+            ),
+        })
+
+    active_30 = int(engagement["authenticated_active_users_30d"] or 0)
+    if active_30 < 5:
+        signals.append({
+            "key": "repeat_activity",
+            "status": "NO_DATA",
+            "severity": "info",
+            "message": "Too few authenticated active users are available for a meaningful repeat-activity signal.",
+        })
+    else:
+        repeat_rate = engagement["repeat_activity_rate_percent"]
+        signals.append({
+            "key": "repeat_activity",
+            "status": "ATTENTION" if repeat_rate is not None and repeat_rate < 30 else "OK",
+            "severity": "low" if repeat_rate is not None and repeat_rate < 30 else "info",
+            "message": f"Observed 30-day repeat-activity rate is {repeat_rate}%.",
+        })
+
+    return signals
 
 
 def _operations_metrics(db) -> dict:
