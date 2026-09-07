@@ -5,8 +5,9 @@ from flask import Blueprint, jsonify, request
 
 from .public_data_ingestion import ingest_public_records, list_ingestion_batches
 from .dataset_adapters import adapt_records, parse_csv_text
-from .data_gap_registry import list_data_gaps
+from .data_gap_registry import build_collection_plan, list_data_gaps
 from .public_source_registry import list_public_ingestion_sources
+from .official_connectors import connector_readiness, infer_mapping, list_connector_profiles
 from .routes import require_api_user
 from .security import is_owner
 
@@ -29,6 +30,43 @@ def api_ingestion_sources():
     if error:
         return error
     return jsonify({"sources": list_public_ingestion_sources()})
+
+
+@bp.get("/api/v1/admin/ingestion/connectors")
+def api_ingestion_connectors():
+    user, error = _owner()
+    if error:
+        return error
+    return jsonify({"connectors": list_connector_profiles()})
+
+
+@bp.get("/api/v1/admin/ingestion/connectors/<source_id>")
+def api_ingestion_connector_readiness(source_id):
+    user, error = _owner()
+    if error:
+        return error
+    try:
+        return jsonify({"connector": connector_readiness(source_id)})
+    except LookupError as exc:
+        return jsonify({"error": {"code": 404, "message": str(exc)}}), 404
+
+
+@bp.post("/api/v1/admin/ingestion/connectors/<source_id>/map")
+def api_ingestion_connector_map(source_id):
+    user, error = _owner()
+    if error:
+        return error
+    data = request.get_json(silent=True) or {}
+    try:
+        rows = data.get("rows")
+        if rows is None and data.get("csv_text") is not None:
+            rows = parse_csv_text(data.get("csv_text"))
+        result = infer_mapping(source_id, rows or [])
+    except LookupError as exc:
+        return jsonify({"error": {"code": 404, "message": str(exc)}}), 404
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+    return jsonify({"status": "mapped", "result": result})
 
 
 @bp.get("/api/v1/admin/ingestion/batches")
@@ -118,4 +156,7 @@ def api_ingestion_data_gaps():
     user, error = _owner()
     if error:
         return error
-    return jsonify({"data_gaps": list_data_gaps()})
+    return jsonify({
+        "data_gaps": list_data_gaps(),
+        "collection_plan": build_collection_plan(),
+    })
