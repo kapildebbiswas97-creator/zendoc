@@ -6,7 +6,7 @@ from flask import Blueprint, jsonify, request
 from .public_data_ingestion import ingest_public_records, list_ingestion_batches
 from .dataset_adapters import adapt_records, parse_csv_text
 from .data_gap_registry import build_collection_plan, list_data_gaps
-from .public_source_registry import list_public_ingestion_sources
+from .public_source_registry import list_public_ingestion_sources, public_data_coverage_matrix
 from .official_connectors import connector_readiness, infer_mapping, list_connector_profiles
 from .geography_region_registry import import_lgd_state_registry, list_import_regions
 from .state_geography_bootstrap import (
@@ -28,6 +28,14 @@ def _owner():
     if not is_owner(user):
         return None, (jsonify({"error": {"code": 403, "message": "Only the ZENDOC owner may manage public-data ingestion."}}), 403)
     return user, None
+
+
+@bp.get("/api/v1/admin/ingestion/coverage")
+def api_ingestion_coverage():
+    user, error = _owner()
+    if error:
+        return error
+    return jsonify({"coverage": public_data_coverage_matrix()})
 
 
 @bp.get("/api/v1/admin/ingestion/sources")
