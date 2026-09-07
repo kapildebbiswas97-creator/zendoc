@@ -395,7 +395,7 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
             "Cross-patient access requires explicit context authorization."
         ),
         allowed_agents=["HealthMemoryAgent"],
-        allowed_roles=["patient", "doctor", "admin"],
+        allowed_roles=["patient", "doctor", "hospital", "admin"],
         risk_class=READ_ONLY,
     ),
 }
