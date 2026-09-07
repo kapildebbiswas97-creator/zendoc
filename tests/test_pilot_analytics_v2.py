@@ -93,3 +93,55 @@ def test_pilot_scorecard_does_not_fake_missing_response_or_retention_metrics(tmp
     assert payload["provider_responsiveness"]["medicine_orders"]["median_response_minutes"] is None
     assert payload["provider_responsiveness"]["consultations"]["average_response_minutes"] is None
     assert payload["engagement"]["repeat_activity_rate_percent"] is None
+
+def test_pilot_signals_use_no_data_instead_of_fake_targets(tmp_path):
+    app, _client = make_client(tmp_path)
+    with app.app_context():
+        payload = pilot_scorecard()
+
+    signals = {item["key"]: item for item in payload["signals"]}
+    assert signals["pharmacy_freshness"]["status"] == "NO_DATA"
+    assert signals["diagnostic_freshness"]["status"] == "NO_DATA"
+    assert signals["pharmacy_response"]["status"] == "NO_DATA"
+    assert signals["consultation_response"]["status"] == "NO_DATA"
+    assert signals["repeat_activity"]["status"] == "NO_DATA"
+
+
+def test_pilot_signals_flag_stale_provider_data(tmp_path):
+    app, _client = make_client(tmp_path)
+    with app.app_context():
+        db = get_db()
+        pharmacy_id = db.execute(
+            "INSERT INTO users (name,email,email_normalized,password_hash,role,active,created_at,updated_at) VALUES (?,?,?,?, 'pharmacy',1,?,?)",
+            ("Signal Pharmacy", "signal-pharmacy@example.com", "signal-pharmacy@example.com", "hash", now_iso(), now_iso()),
+        ).lastrowid
+        lab_id = db.execute(
+            "INSERT INTO users (name,email,email_normalized,password_hash,role,active,created_at,updated_at) VALUES (?,?,?,?, 'hospital',1,?,?)",
+            ("Signal Lab", "signal-lab@example.com", "signal-lab@example.com", "hash", now_iso(), now_iso()),
+        ).lastrowid
+        old = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
+        db.execute(
+            """
+            INSERT INTO inventory_observations
+            (pharmacy_id,sku_id,stock_status,quantity_available,price_inr,price_available,
+             discount_percent,source,observed_at,data_mode,created_at,updated_at)
+            VALUES (?,1,'CONFIRMED',3,10,1,0,'pharmacy_manual',?,'LIVE',?,?)
+            """,
+            (pharmacy_id, old, old, old),
+        )
+        db.execute(
+            """
+            INSERT INTO diagnostic_offers
+            (lab_id,test_id,price_inr,home_collection_available,home_collection_fee_inr,
+             verified,data_mode,observed_at,created_at)
+            VALUES (?,1,100,1,0,1,'LIVE',?,?)
+            """,
+            (lab_id, old, old),
+        )
+        db.commit()
+
+        payload = pilot_scorecard()
+        signals = {item["key"]: item for item in payload["signals"]}
+        assert signals["pharmacy_freshness"]["status"] == "ATTENTION"
+        assert signals["diagnostic_freshness"]["status"] == "ATTENTION"
+
