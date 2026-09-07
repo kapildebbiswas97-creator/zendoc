@@ -643,3 +643,112 @@ def complete_diagnostic_test(
         "review_eligible": completion_source == "PROVIDER_RECORDED",
         "report_available": False,
     }
+
+def list_diagnostic_refresh_queue(actor: Any, data_mode: str | None = None) -> dict[str, Any]:
+    """Return only the authenticated diagnostic provider's offer freshness workload."""
+    lab_id = _user_id(actor)
+    if not lab_id:
+        raise PermissionError("Authentication required to review diagnostic offer freshness.")
+    role = str(actor.get("role") if isinstance(actor, dict) else getattr(actor, "role", "") or "").lower()
+    if role not in {"hospital", "doctor"}:
+        raise PermissionError("Only diagnostic provider accounts may review diagnostic offer freshness.")
+
+    db = get_db()
+    profile = db.execute(
+        """
+        SELECT * FROM provider_profiles
+        WHERE user_id=? AND verification_status='verified'
+        """,
+        (lab_id,),
+    ).fetchone()
+    if not profile or str(profile["provider_type"] or "").lower() not in {
+        "diagnostic_centre", "diagnostic_center", "lab", "hospital"
+    }:
+        raise PermissionError("Only a verified diagnostic provider may review diagnostic offer freshness.")
+
+    mode = _data_mode(data_mode)
+    rows = db.execute(
+        """
+        SELECT do.*, dc.code test_code, dc.name test_name
+        FROM diagnostic_offers do
+        JOIN diagnostic_catalog dc ON dc.id=do.test_id
+        WHERE do.lab_id=? AND UPPER(do.data_mode)=?
+        ORDER BY do.observed_at ASC, do.id ASC
+        """,
+        (lab_id, mode),
+    ).fetchall()
+
+    items = []
+    counts = {
+        AVAILABILITY_CONFIRMED: 0,
+        AVAILABILITY_STALE: 0,
+        AVAILABILITY_UNKNOWN: 0,
+        AVAILABILITY_OBSERVED: 0,
+    }
+    for row in rows:
+        item = dict(row)
+        assert_resource_tenant(actor, item)
+        state = diagnostic_availability_state(item)
+        item["availability_state"] = state
+        item["needs_refresh"] = state in {AVAILABILITY_STALE, AVAILABILITY_UNKNOWN, AVAILABILITY_OBSERVED}
+        counts[state] = counts.get(state, 0) + 1
+        items.append(item)
+
+    return {
+        "provider_id": lab_id,
+        "provider_type": str(profile["provider_type"]),
+        "data_mode": mode,
+        "counts": counts,
+        "needs_refresh_count": sum(1 for item in items if item["needs_refresh"]),
+        "items": items,
+    }
+
+
+def reconfirm_diagnostic_offer(
+    actor: Any,
+    offer_id: int,
+    *,
+    confirmed_unchanged: bool = False,
+) -> dict[str, Any]:
+    """Renew diagnostic-offer freshness only after explicit provider reconfirmation."""
+    lab_id = _user_id(actor)
+    if not lab_id:
+        raise PermissionError("Authentication required to reconfirm diagnostic offers.")
+    if confirmed_unchanged is not True:
+        raise ValueError("Set confirmed_unchanged=true only after rechecking the diagnostic offer values.")
+
+    db = get_db()
+    row = db.execute(
+        "SELECT * FROM diagnostic_offers WHERE id=?",
+        (int(offer_id),),
+    ).fetchone()
+    if not row:
+        raise LookupError("Diagnostic offer not found.")
+    item = dict(row)
+    if int(item["lab_id"]) != lab_id:
+        raise PermissionError("A diagnostic provider may only reconfirm its own offers.")
+    assert_resource_tenant(actor, item)
+
+    profile = db.execute(
+        """
+        SELECT * FROM provider_profiles
+        WHERE user_id=? AND verification_status='verified'
+        """,
+        (lab_id,),
+    ).fetchone()
+    if not profile or str(profile["provider_type"] or "").lower() not in {
+        "diagnostic_centre", "diagnostic_center", "lab", "hospital"
+    }:
+        raise PermissionError("Only a verified diagnostic provider may reconfirm diagnostic offers.")
+
+    now = now_iso()
+    db.execute(
+        "UPDATE diagnostic_offers SET observed_at=?, verified=1 WHERE id=? AND lab_id=?",
+        (now, int(offer_id), lab_id),
+    )
+    db.commit()
+    refreshed = dict(db.execute("SELECT * FROM diagnostic_offers WHERE id=?", (int(offer_id),)).fetchone())
+    refreshed["availability_state"] = diagnostic_availability_state(refreshed)
+    refreshed["reconfirmed_unchanged"] = True
+    return refreshed
+
