@@ -2118,6 +2118,25 @@ def migrate_schema(db):
         CREATE INDEX IF NOT EXISTS idx_geography_nodes_parent ON geography_nodes(parent_id, node_type);
         CREATE INDEX IF NOT EXISTS idx_geography_nodes_name ON geography_nodes(normalized_name, node_type);
 
+        CREATE TABLE IF NOT EXISTS geography_import_regions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            country_code TEXT NOT NULL,
+            region_level TEXT NOT NULL,
+            region_code TEXT NOT NULL,
+            slug TEXT NOT NULL,
+            name TEXT NOT NULL,
+            aliases_json TEXT NOT NULL DEFAULT '[]',
+            source TEXT NOT NULL,
+            source_ref TEXT,
+            active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(country_code, region_level, region_code),
+            UNIQUE(country_code, region_level, slug)
+        );
+        CREATE INDEX IF NOT EXISTS idx_geography_import_regions_country
+            ON geography_import_regions(country_code, region_level, active);
+
         CREATE TABLE IF NOT EXISTS geography_entity_links (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             geography_node_id INTEGER NOT NULL REFERENCES geography_nodes(id) ON DELETE CASCADE,
