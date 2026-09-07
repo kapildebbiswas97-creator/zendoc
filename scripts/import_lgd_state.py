@@ -16,6 +16,7 @@ import argparse
 from pathlib import Path
 
 from zendoc import create_app
+from zendoc.db import get_db
 from zendoc.lgd_files import normalize_lgd_bundle, parse_delimited_text
 from zendoc.state_geography_bootstrap import TARGET_STATES, bootstrap_state_geography
 
@@ -57,9 +58,14 @@ def main():
 
     app = create_app()
     with app.app_context():
-        actor = app.config.get("ZENDOC_IMPORT_OWNER_ACTOR")
-        if not actor:
-            actor = {"id": 1, "role": "admin", "active": 1}
+        owner_email = str(app.config.get("ADMIN_EMAIL") or "").strip().lower()
+        row = get_db().execute(
+            "SELECT * FROM users WHERE LOWER(COALESCE(email_normalized,email))=? AND role='admin' AND active=1 LIMIT 1",
+            (owner_email,),
+        ).fetchone()
+        if not row:
+            raise RuntimeError("Configured ZENDOC owner account was not found in the database.")
+        actor = dict(row)
         result = bootstrap_state_geography(
             actor,
             state_slug=args.state,
