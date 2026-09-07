@@ -335,6 +335,106 @@ def list_entities_for_geography(
     return [get_entity_link(row["id"]) for row in rows]
 
 
+
+RELATIONSHIP_TYPES = {
+    "ADMIN_PARENT",
+    "BLOCK_MEMBERSHIP",
+    "PANCHAYAT_MEMBERSHIP",
+    "URBAN_LOCAL_BODY_MEMBERSHIP",
+    "VILLAGE_TO_PANCHAYAT",
+    "SOURCE_EQUIVALENT",
+}
+
+
+def link_geography_nodes(
+    *,
+    from_node_id: int,
+    to_node_id: int,
+    relationship_type: str,
+    source: str,
+    source_ref: str | None = None,
+    freshness_at: str | None = None,
+    metadata: dict | None = None,
+) -> dict[str, Any]:
+    relationship_type = str(relationship_type or "").strip().upper()
+    if relationship_type not in RELATIONSHIP_TYPES:
+        raise ValueError("Unsupported geography relationship_type.")
+    source = str(source or "").strip()
+    if not source:
+        raise ValueError("Geography relationship provenance source is required.")
+
+    db = get_db()
+    for node_id in (int(from_node_id), int(to_node_id)):
+        if not db.execute("SELECT 1 FROM geography_nodes WHERE id=?", (node_id,)).fetchone():
+            raise LookupError(f"Geography node #{node_id} not found.")
+
+    now = now_iso()
+    metadata_json = json.dumps(metadata or {}, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    existing = db.execute(
+        """
+        SELECT * FROM geography_relationships
+        WHERE from_node_id=? AND to_node_id=? AND relationship_type=? AND source=?
+        LIMIT 1
+        """,
+        (int(from_node_id), int(to_node_id), relationship_type, source),
+    ).fetchone()
+    if existing:
+        db.execute(
+            """
+            UPDATE geography_relationships
+            SET source_ref=?, freshness_at=?, metadata_json=?, updated_at=?
+            WHERE id=?
+            """,
+            (str(source_ref or "").strip() or None, freshness_at, metadata_json, now, existing["id"]),
+        )
+        relationship_id = existing["id"]
+    else:
+        cursor = db.execute(
+            """
+            INSERT INTO geography_relationships
+            (from_node_id,to_node_id,relationship_type,source,source_ref,freshness_at,metadata_json,created_at,updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                int(from_node_id), int(to_node_id), relationship_type, source,
+                str(source_ref or "").strip() or None, freshness_at, metadata_json, now, now,
+            ),
+        )
+        relationship_id = cursor.lastrowid
+    db.commit()
+    return get_geography_relationship(relationship_id)
+
+
+def get_geography_relationship(relationship_id: int) -> dict[str, Any]:
+    row = get_db().execute(
+        "SELECT * FROM geography_relationships WHERE id=?",
+        (int(relationship_id),),
+    ).fetchone()
+    if not row:
+        raise LookupError(f"Geography relationship #{relationship_id} not found.")
+    result = dict(row)
+    try:
+        result["metadata"] = json.loads(result.pop("metadata_json") or "{}")
+    except json.JSONDecodeError:
+        result["metadata"] = {}
+    return result
+
+
+def list_geography_relationships(node_id: int, *, relationship_type: str | None = None) -> list[dict[str, Any]]:
+    params: list[Any] = [int(node_id), int(node_id)]
+    where = ["(from_node_id=? OR to_node_id=?)"]
+    if relationship_type:
+        clean = str(relationship_type).strip().upper()
+        if clean not in RELATIONSHIP_TYPES:
+            raise ValueError("Unsupported geography relationship_type.")
+        where.append("relationship_type=?")
+        params.append(clean)
+    rows = get_db().execute(
+        f"SELECT id FROM geography_relationships WHERE {' AND '.join(where)} ORDER BY updated_at DESC",
+        params,
+    ).fetchall()
+    return [get_geography_relationship(row["id"]) for row in rows]
+
 def normalize_geography_name(value: Any) -> str:
     text = str(value or "").strip().lower()
     text = re.sub(r"[^a-z0-9ऀ-ॿঀ-৿]+", " ", text)
