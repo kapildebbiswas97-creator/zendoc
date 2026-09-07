@@ -218,6 +218,8 @@ def test_hospital_health_memory_requires_explicit_patient_consent(tmp_path):
         assert output["patient_id"] == patient_id
         assert output["context_contract"]["consent_status"] == "ACTIVE"
         assert "complete_lifetime_memory" in output["context_contract"]["excluded_fields"]
+        assert output["next_safe_actions"] == []
+        assert output["next_safe_actions_authorized"] is False
 
 
 @pytest.mark.parametrize(
