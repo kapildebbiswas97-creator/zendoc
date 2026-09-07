@@ -154,10 +154,208 @@ DATA_GAPS = {
 }
 
 
+
+COLLECTION_METADATA = {
+    "doctor_live_slots": {
+        "tier": "PROVIDER_SURVEY_OR_INTEGRATION",
+        "priority": "P0",
+        "pilot_owner": "provider_onboarding",
+        "minimum_fields": ["provider_id", "date", "slot_start", "slot_end", "consultation_type", "confirmed_at"],
+        "funding_dependency": "NONE_FOR_SURVEY",
+    },
+    "provider_wait_time": {
+        "tier": "AUTOMATIC_OR_PROVIDER_SURVEY",
+        "priority": "P1",
+        "pilot_owner": "provider_operations",
+        "minimum_fields": ["provider_id", "queue_observed_at", "estimated_wait_minutes", "source"],
+        "funding_dependency": "NONE_FOR_PILOT",
+    },
+    "hospital_bed_availability": {
+        "tier": "AUTHORIZED_PARTNER_FEED",
+        "priority": "P1",
+        "pilot_owner": "hospital_integration",
+        "minimum_fields": ["hospital_id", "bed_type", "available_count", "confirmed_at", "source_reference"],
+        "funding_dependency": "PARTNER_OR_FUTURE_INTEGRATION",
+    },
+    "icu_bed_availability": {
+        "tier": "AUTHORIZED_PARTNER_FEED",
+        "priority": "P0",
+        "pilot_owner": "hospital_integration",
+        "minimum_fields": ["hospital_id", "icu_type", "available_count", "confirmed_at", "source_reference"],
+        "funding_dependency": "PARTNER_OR_FUTURE_INTEGRATION",
+    },
+    "pharmacy_live_stock": {
+        "tier": "PROVIDER_SURVEY_OR_INTEGRATION",
+        "priority": "P0",
+        "pilot_owner": "pharmacy_onboarding",
+        "minimum_fields": ["pharmacy_id", "sku_id", "quantity_available", "stock_status", "observed_at"],
+        "funding_dependency": "NONE_FOR_MANUAL_PILOT",
+    },
+    "pharmacy_actual_price": {
+        "tier": "PROVIDER_SURVEY_OR_INTEGRATION",
+        "priority": "P0",
+        "pilot_owner": "pharmacy_onboarding",
+        "minimum_fields": ["pharmacy_id", "sku_id", "price_inr", "discount_percent", "observed_at"],
+        "funding_dependency": "NONE_FOR_MANUAL_PILOT",
+    },
+    "lab_live_slots": {
+        "tier": "PROVIDER_SURVEY_OR_INTEGRATION",
+        "priority": "P0",
+        "pilot_owner": "diagnostic_onboarding",
+        "minimum_fields": ["lab_id", "test_id", "date", "slot_start", "slot_end", "confirmed_at"],
+        "funding_dependency": "NONE_FOR_MANUAL_PILOT",
+    },
+    "lab_actual_price": {
+        "tier": "PROVIDER_SURVEY_OR_INTEGRATION",
+        "priority": "P0",
+        "pilot_owner": "diagnostic_onboarding",
+        "minimum_fields": ["lab_id", "test_id", "price_inr", "home_collection_fee_inr", "observed_at"],
+        "funding_dependency": "NONE_FOR_MANUAL_PILOT",
+    },
+    "ambulance_live_dispatch": {
+        "tier": "AUTHORIZED_PARTNER_FEED",
+        "priority": "P0",
+        "pilot_owner": "transport_integration",
+        "minimum_fields": ["provider_id", "request_id", "dispatch_status", "eta_minutes", "confirmed_at"],
+        "funding_dependency": "PARTNER_REQUIRED",
+    },
+    "provider_response_time": {
+        "tier": "AUTOMATIC_ZENDOC_MEASUREMENT",
+        "priority": "P0",
+        "pilot_owner": "pilot_analytics",
+        "minimum_fields": ["request_created_at", "provider_response_at", "provider_id", "workflow_type"],
+        "funding_dependency": "NONE",
+    },
+    "provider_service_radius": {
+        "tier": "PROVIDER_SURVEY",
+        "priority": "P1",
+        "pilot_owner": "provider_onboarding",
+        "minimum_fields": ["provider_id", "service_type", "radius_km", "verified_at"],
+        "funding_dependency": "NONE",
+    },
+    "provider_languages": {
+        "tier": "PROVIDER_SURVEY",
+        "priority": "P1",
+        "pilot_owner": "provider_onboarding",
+        "minimum_fields": ["provider_id", "languages", "self_reported_at"],
+        "funding_dependency": "NONE",
+    },
+    "provider_accessibility": {
+        "tier": "PROVIDER_SURVEY_THEN_FIELD_VERIFY",
+        "priority": "P2",
+        "pilot_owner": "provider_onboarding",
+        "minimum_fields": ["provider_id", "wheelchair_access", "accessible_toilet", "lift_available", "verified_at"],
+        "funding_dependency": "FIELD_VERIFICATION_LATER",
+    },
+    "provider_payment_modes": {
+        "tier": "PROVIDER_SURVEY",
+        "priority": "P1",
+        "pilot_owner": "provider_onboarding",
+        "minimum_fields": ["provider_id", "payment_modes", "cashless_claimed", "verified_at"],
+        "funding_dependency": "NONE",
+    },
+    "patient_satisfaction": {
+        "tier": "PATIENT_CONSENTED_SURVEY",
+        "priority": "P1",
+        "pilot_owner": "verified_reviews",
+        "minimum_fields": ["interaction_type", "interaction_id", "rating", "consented_at"],
+        "funding_dependency": "NONE",
+    },
+    "care_barriers": {
+        "tier": "ANONYMOUS_OR_CONSENTED_SURVEY",
+        "priority": "P1",
+        "pilot_owner": "research",
+        "minimum_fields": ["district", "barrier_categories", "travel_minutes_band", "cost_band", "language_barrier", "digital_access_barrier"],
+        "funding_dependency": "NONE_FOR_DIGITAL_SURVEY",
+    },
+    "medicine_unavailability_experience": {
+        "tier": "PATIENT_AND_PROVIDER_SURVEY",
+        "priority": "P1",
+        "pilot_owner": "research",
+        "minimum_fields": ["district", "medicine_category", "unavailable_count_band", "alternative_distance_band"],
+        "funding_dependency": "NONE_FOR_DIGITAL_SURVEY",
+    },
+    "diagnostic_delay_experience": {
+        "tier": "PATIENT_AND_PROVIDER_SURVEY",
+        "priority": "P1",
+        "pilot_owner": "research",
+        "minimum_fields": ["district", "test_category", "delay_days_band", "delay_reason"],
+        "funding_dependency": "NONE_FOR_DIGITAL_SURVEY",
+    },
+    "scheme_outcome": {
+        "tier": "AUTHORIZED_PARTNER_OR_USER_EVIDENCE",
+        "priority": "P1",
+        "pilot_owner": "carefin",
+        "minimum_fields": ["source_id", "state", "evidence_type", "evidence_reference", "confirmed_at"],
+        "funding_dependency": "PARTNER_OR_AUTHORIZED_WORKFLOW",
+    },
+    "claims_and_insurance": {
+        "tier": "AUTHORIZED_PARTNER_OR_USER_EVIDENCE",
+        "priority": "P2",
+        "pilot_owner": "carefin",
+        "minimum_fields": ["payer", "claim_reference", "status", "confirmed_at"],
+        "funding_dependency": "PARTNER_REQUIRED_FOR_SCALE",
+    },
+    "personal_health_records": {
+        "tier": "PATIENT_CONSENTED_OR_AUTHORIZED_PROVIDER",
+        "priority": "P0",
+        "pilot_owner": "health_memory",
+        "minimum_fields": ["patient_id", "record_type", "source", "recorded_at", "consent_scope"],
+        "funding_dependency": "NONE_FOR_USER_UPLOAD_PARTNER_FOR_SCALE",
+    },
+}
+
+
 def list_data_gaps() -> list[dict]:
-    return [gap.to_dict() for gap in DATA_GAPS.values()]
+    result = []
+    for gap_id, gap in DATA_GAPS.items():
+        item = gap.to_dict()
+        item.update(COLLECTION_METADATA.get(gap_id, {}))
+        result.append(item)
+    return result
+
+
+def build_collection_plan() -> dict:
+    gaps = list_data_gaps()
+    order = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
+    gaps.sort(key=lambda item: (order.get(item.get("priority"), 9), item["gap_id"]))
+
+    by_tier = {}
+    for item in gaps:
+        by_tier.setdefault(item.get("tier", "UNCLASSIFIED"), []).append(item["gap_id"])
+
+    p0 = [item for item in gaps if item.get("priority") == "P0"]
+    no_capital_now = [
+        item["gap_id"]
+        for item in gaps
+        if item.get("funding_dependency") in {"NONE", "NONE_FOR_SURVEY", "NONE_FOR_PILOT", "NONE_FOR_MANUAL_PILOT", "NONE_FOR_DIGITAL_SURVEY", "NONE_FOR_USER_UPLOAD_PARTNER_FOR_SCALE"}
+    ]
+    partner_required = [
+        item["gap_id"]
+        for item in gaps
+        if "PARTNER" in str(item.get("funding_dependency") or "")
+        or item.get("tier") == "AUTHORIZED_PARTNER_FEED"
+    ]
+
+    return {
+        "priority_zero": p0,
+        "no_capital_collect_now": no_capital_now,
+        "partner_or_authorized_integration_required": partner_required,
+        "by_collection_tier": by_tier,
+        "survey_design_rule": (
+            "Collect the minimum operational fields needed for the stated purpose. "
+            "Do not collect diagnosis, prescription text, identity, financial details, or other sensitive data "
+            "when an aggregate/non-clinical field is sufficient."
+        ),
+    }
 
 
 def get_data_gap(gap_id: str) -> dict | None:
-    gap = DATA_GAPS.get(str(gap_id or "").strip().lower())
-    return gap.to_dict() if gap else None
+    key = str(gap_id or "").strip().lower()
+    gap = DATA_GAPS.get(key)
+    if not gap:
+        return None
+    item = gap.to_dict()
+    item.update(COLLECTION_METADATA.get(key, {}))
+    return item
+
