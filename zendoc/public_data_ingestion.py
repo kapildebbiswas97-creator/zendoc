@@ -26,6 +26,22 @@ ALLOWED_ENTITY_CATEGORIES = {
     "health_centre", "nursing_home", "blood_bank",
 }
 
+ENTITY_CATEGORY_ALIASES = {
+    "medical_shop": "pharmacy",
+    "medical_store": "pharmacy",
+    "chemist": "pharmacy",
+    "chemist_shop": "pharmacy",
+    "drug_store": "pharmacy",
+    "retail_pharmacy": "pharmacy",
+    "diagnostic_center": "diagnostic_centre",
+    "diagnostic_lab": "diagnostic_centre",
+    "pathology_lab": "laboratory",
+    "pathology_laboratory": "laboratory",
+    "lab": "laboratory",
+    "nursinghome": "nursing_home",
+    "health_center": "health_centre",
+}
+
 
 def ingest_public_records(
     actor: Any,
@@ -231,7 +247,8 @@ def _prepare_healthcare_entities(source: dict, records: list[dict]) -> dict:
         try:
             source_record_id = _required(row, "source_record_id")
             name = _required(row, "name")
-            category = _required(row, "category").lower().replace(" ", "_")
+            category = _required(row, "category").lower().replace("-", "_").replace(" ", "_")
+            category = ENTITY_CATEGORY_ALIASES.get(category, category)
             if category not in ALLOWED_ENTITY_CATEGORIES:
                 raise ValueError("unsupported healthcare category")
             if source_record_id in seen_ids:
