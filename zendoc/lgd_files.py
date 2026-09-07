@@ -264,18 +264,22 @@ def _urban_local_bodies(state_code: str, rows: list[dict]) -> list[dict]:
 
 
 def _clean_header(value: Any) -> str:
-    text = str(value or "").replace("\n", " ").replace("\r", " ").strip().lower()
+    return " ".join(str(value or "").replace("\n", " ").replace("\r", " ").strip().split())
+
+
+def _normalized_key(value: Any) -> str:
+    text = _clean_header(value).lower()
     text = re.sub(r"[^a-z0-9]+", " ", text)
     return " ".join(text.split())
 
 
 def _normalized_row(raw: dict[str, Any]) -> dict[str, Any]:
-    return {_clean_header(key): value for key, value in dict(raw or {}).items()}
+    return {_normalized_key(key): value for key, value in dict(raw or {}).items()}
 
 
 def _value(row: dict[str, Any], *aliases: str) -> str:
     for alias in aliases:
-        value = row.get(_clean_header(alias))
+        value = row.get(_normalized_key(alias))
         if value is not None and str(value).strip():
             return str(value).strip()
     return ""
