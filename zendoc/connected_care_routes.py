@@ -45,6 +45,8 @@ from .context_engine import (
 from .db import get_db, now_iso
 from .diagnostic_service import (
     book_diagnostic_test,
+    list_diagnostic_refresh_queue,
+    reconfirm_diagnostic_offer,
     search_lab_offers,
     upsert_diagnostic_offer,
 )
@@ -53,7 +55,12 @@ from .health_memory_continuity import (
     determine_next_safe_actions,
     get_health_memory_provenance_summary,
 )
-from .inventory_service import search_pharmacy_offers, update_inventory_observation
+from .inventory_service import (
+    list_inventory_refresh_queue,
+    reconfirm_inventory_observation,
+    search_pharmacy_offers,
+    update_inventory_observation,
+)
 from .order_service import (
     get_order_details,
     submit_order_from_plan,
@@ -740,6 +747,43 @@ def api_update_inventory():
         return _api_error(e)
 
 
+@bp.get("/api/v1/connected-care/provider/inventory-refresh")
+def api_inventory_refresh_queue():
+    user, err = _api_user()
+    if err:
+        return err
+    try:
+        queue = list_inventory_refresh_queue(user, data_mode=request.args.get("data_mode"))
+        return jsonify({"refresh_queue": queue})
+    except PermissionError as e:
+        return _api_error(e, 403)
+    except ValueError as e:
+        return _api_error(e, 400)
+
+
+@bp.post("/api/v1/connected-care/provider/inventory/<int:observation_id>/reconfirm")
+def api_inventory_reconfirm(observation_id):
+    user, err = _api_user(mutation=True)
+    if err:
+        return err
+    body = request.get_json(silent=True) or {}
+    try:
+        observation = reconfirm_inventory_observation(
+            user,
+            observation_id,
+            confirmed_unchanged=body.get("confirmed_unchanged") is True,
+        )
+        audit("connected_care.inventory.reconfirm", "inventory_observations", observation_id, user)
+        get_db().commit()
+        return jsonify({"observation": observation})
+    except PermissionError as e:
+        return _api_error(e, 403)
+    except LookupError as e:
+        return _api_error(e, 404)
+    except ValueError as e:
+        return _api_error(e, 400)
+
+
 @bp.get("/api/v1/connected-care/next-safe-actions")
 def api_next_safe_actions():
     user, err = _api_user()
@@ -819,6 +863,43 @@ def api_upsert_diagnostic_offer():
     except LookupError as e:
         return _api_error(e, 404)
     except (TypeError, ValueError) as e:
+        return _api_error(e, 400)
+
+
+@bp.get("/api/v1/connected-care/provider/diagnostic-refresh")
+def api_diagnostic_refresh_queue():
+    user, err = _api_user()
+    if err:
+        return err
+    try:
+        queue = list_diagnostic_refresh_queue(user, data_mode=request.args.get("data_mode"))
+        return jsonify({"refresh_queue": queue})
+    except PermissionError as e:
+        return _api_error(e, 403)
+    except ValueError as e:
+        return _api_error(e, 400)
+
+
+@bp.post("/api/v1/connected-care/provider/diagnostic-offers/<int:offer_id>/reconfirm")
+def api_diagnostic_offer_reconfirm(offer_id):
+    user, err = _api_user(mutation=True)
+    if err:
+        return err
+    body = request.get_json(silent=True) or {}
+    try:
+        offer = reconfirm_diagnostic_offer(
+            user,
+            offer_id,
+            confirmed_unchanged=body.get("confirmed_unchanged") is True,
+        )
+        audit("connected_care.diagnostic_offer.reconfirm", "diagnostic_offers", offer_id, user)
+        get_db().commit()
+        return jsonify({"offer": offer})
+    except PermissionError as e:
+        return _api_error(e, 403)
+    except LookupError as e:
+        return _api_error(e, 404)
+    except ValueError as e:
         return _api_error(e, 400)
 
 
