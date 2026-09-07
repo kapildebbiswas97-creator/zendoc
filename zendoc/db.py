@@ -324,13 +324,13 @@ def init_db():
 
         CREATE TABLE IF NOT EXISTS api_rate_limit_buckets (
             bucket_key TEXT NOT NULL,
-            window INTEGER NOT NULL,
+            window_id INTEGER NOT NULL,
             count INTEGER NOT NULL DEFAULT 0,
             updated_at TEXT NOT NULL,
-            PRIMARY KEY (bucket_key, window)
+            PRIMARY KEY (bucket_key, window_id)
         );
         CREATE INDEX IF NOT EXISTS idx_api_rate_limit_window
-            ON api_rate_limit_buckets(window);
+            ON api_rate_limit_buckets(window_id);
 
         CREATE TABLE IF NOT EXISTS fitness_profiles (
             user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
