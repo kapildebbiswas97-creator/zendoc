@@ -6,6 +6,8 @@ from zendoc.agent_executor import execute_plan
 from zendoc.agent_planner import AgentPlan, PlanStep, build_plan
 from zendoc.agent_registry import AGENT_REGISTRY
 from zendoc.tool_registry import TOOL_REGISTRY, check_tool_access
+from zendoc.db import get_db, now_iso
+from zendoc.iot_hub import connect_device
 from tests.test_milestone10_connected_care import make_m10_app
 
 
@@ -145,3 +147,82 @@ def test_pharmacy_provider_account_cannot_use_patient_pharmacy_agent_path(tmp_pa
 
         with pytest.raises(PermissionError):
             execute_plan(plan, actor)
+
+def test_iot_agent_returns_only_authenticated_patients_devices(tmp_path):
+    app = make_m10_app(tmp_path)
+    with app.app_context():
+        db = get_db()
+        patient_a = db.execute(
+            "INSERT INTO users (name,email,email_normalized,password_hash,role,active,created_at,updated_at) VALUES (?,?,?,?, 'patient',1,?,?)",
+            ("Device A", "device-a@example.com", "device-a@example.com", "hash", now_iso(), now_iso()),
+        ).lastrowid
+        patient_b = db.execute(
+            "INSERT INTO users (name,email,email_normalized,password_hash,role,active,created_at,updated_at) VALUES (?,?,?,?, 'patient',1,?,?)",
+            ("Device B", "device-b@example.com", "device-b@example.com", "hash", now_iso(), now_iso()),
+        ).lastrowid
+        db.commit()
+
+        connect_device(
+            {"id": patient_a, "role": "patient"},
+            {"device_name": "A Watch", "device_type": "smartwatch", "device_identifier": "A-WATCH"},
+        )
+        connect_device(
+            {"id": patient_b, "role": "patient"},
+            {"device_name": "B Watch", "device_type": "smartwatch", "device_identifier": "B-WATCH"},
+        )
+
+        actor = {"id": patient_a, "role": "patient", "active": 1}
+        plan = build_plan(actor, "Show my heart rate device")
+        assert plan.assigned_agent == "IoTAgent"
+
+        result = execute_plan(plan, actor)
+        devices = result["tool_results"][0]["output"]
+        assert [item["device_name"] for item in devices] == ["A Watch"]
+        assert all(item["user_id"] == patient_a for item in devices)
+
+
+def test_communication_agent_discovery_does_not_bypass_doctor_policy(tmp_path):
+    app = make_m10_app(tmp_path)
+    with app.app_context():
+        db = get_db()
+        patient_id = db.execute(
+            "INSERT INTO users (name,email,email_normalized,password_hash,role,active,created_at,updated_at) VALUES (?,?,?,?, 'patient',1,?,?)",
+            ("Contact Patient", "contact-patient@example.com", "contact-patient@example.com", "hash", now_iso(), now_iso()),
+        ).lastrowid
+        doctor_id = db.execute(
+            "INSERT INTO users (name,email,email_normalized,password_hash,role,active,created_at,updated_at) VALUES (?,?,?,?, 'doctor',1,?,?)",
+            ("Dr Private", "private-doctor@example.com", "private-doctor@example.com", "hash", now_iso(), now_iso()),
+        ).lastrowid
+        db.execute(
+            "INSERT INTO provider_profiles (user_id,provider_type,specialty,organization,verification_status,created_at,updated_at) VALUES (?, 'doctor','Cardiology','Private Clinic','verified',?,?)",
+            (doctor_id, now_iso(), now_iso()),
+        )
+        db.commit()
+
+        actor = {"id": patient_id, "role": "patient", "active": 1}
+        plan = build_plan(actor, "Find contact Dr Private")
+        assert plan.assigned_agent == "CommunicationAgent"
+
+        result = execute_plan(plan, actor)
+        contacts = result["tool_results"][0]["output"]
+        assert contacts == []
+
+
+@pytest.mark.parametrize(
+    ("role", "command", "expected_agent"),
+    [
+        ("doctor", "Compare nutrition labels for these foods", "NutritionAgent"),
+        ("hospital", "Show my heart rate device", "IoTAgent"),
+        ("pharmacy", "Show my health memory timeline", "HealthMemoryAgent"),
+    ],
+)
+def test_role_mismatch_blocks_specialist_execution(tmp_path, role, command, expected_agent):
+    app = make_m10_app(tmp_path)
+    with app.app_context():
+        actor = {"id": 801, "role": role, "active": 1}
+        plan = build_plan(actor, command)
+        assert plan.assigned_agent == expected_agent
+
+        with pytest.raises(PermissionError):
+            execute_plan(plan, actor)
+
