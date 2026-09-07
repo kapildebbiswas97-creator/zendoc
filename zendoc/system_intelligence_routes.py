@@ -14,6 +14,7 @@ from .pilot_analytics import pilot_scorecard
 from .security import owner_required
 from .database_reliability import backup_readiness, create_sqlite_backup, readiness_report
 from .observability import incident_summary, list_runbooks, request_metrics, agent_metrics, emergency_metrics
+from .launch_readiness import first50_launch_readiness
 
 
 bp = Blueprint("system_intelligence", __name__)
@@ -57,6 +58,12 @@ def owner_database_backup():
     result = create_sqlite_backup()
     status = 201 if result.get("status") == "created" else 409
     return jsonify(result), status
+
+
+@bp.get("/owner/first50-readiness")
+@owner_required
+def owner_first50_readiness():
+    return jsonify(first50_launch_readiness())
 
 
 @bp.get("/owner/observability")
