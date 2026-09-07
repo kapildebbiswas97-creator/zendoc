@@ -50,7 +50,7 @@ from .security import csrf_token, hash_token, is_owner, load_user_and_check_csrf
 bp = Blueprint("main", __name__)
 ALLOWED_UPLOADS = {"pdf", "png", "jpg", "jpeg", "txt", "doc", "docx"}
 ALLOWED_MIME_PREFIXES = ("application/pdf", "image/", "text/plain")
-RATE_BUCKETS = {}
+RATE_BUCKETS = {}  # test/development fallback only
 
 APPOINTMENT_TRANSITIONS = {
     "requested": {"confirmed", "cancelled"},
@@ -112,17 +112,70 @@ def render_error(error, status, message):
 def check_rate_limit():
     if not request.path.startswith("/api/"):
         return
-    limit = current_app.config.get("RATE_LIMIT_PER_MINUTE", 120)
-    bucket_key = f"{request.remote_addr}:{request.path}"
-    now = int(time.time())
-    window = now // 60
-    bucket = RATE_BUCKETS.get(bucket_key)
-    if not bucket or bucket["window"] != window:
-        RATE_BUCKETS[bucket_key] = {"window": window, "count": 1}
+    limit = int(current_app.config.get("RATE_LIMIT_PER_MINUTE", 120))
+    remote = request.headers.get("X-Forwarded-For", request.remote_addr or "unknown")
+    remote = str(remote).split(",", 1)[0].strip()
+    bucket_key = f"{remote}:{request.path}"
+    window = int(time.time()) // 60
+
+    # Tests intentionally keep an in-memory limiter so isolated test databases
+    # are not polluted by rate-limit bookkeeping and deterministic fixtures
+    # remain fast. Production/development use the shared database bucket so
+    # multiple workers/instances enforce one limit.
+    if current_app.config.get("TESTING"):
+        bucket = RATE_BUCKETS.get(bucket_key)
+        if not bucket or bucket["window"] != window:
+            RATE_BUCKETS[bucket_key] = {"window": window, "count": 1}
+            return
+        bucket["count"] += 1
+        if bucket["count"] > limit:
+            abort(429)
         return
-    bucket["count"] += 1
-    if bucket["count"] > limit:
-        abort(429)
+
+    db = get_db()
+    now = now_iso()
+    try:
+        row = db.execute(
+            "SELECT count FROM api_rate_limit_buckets WHERE bucket_key=? AND window=?",
+            (bucket_key, window),
+        ).fetchone()
+        if row:
+            db.execute(
+                "UPDATE api_rate_limit_buckets SET count=count+1, updated_at=? WHERE bucket_key=? AND window=?",
+                (now, bucket_key, window),
+            )
+        else:
+            try:
+                db.execute(
+                    "INSERT INTO api_rate_limit_buckets (bucket_key,window,count,updated_at) VALUES (?,?,1,?)",
+                    (bucket_key, window, now),
+                )
+            except Exception as error:
+                # A concurrent worker may have created the same bucket after
+                # our SELECT. Roll back only this transaction and retry the
+                # atomic increment.
+                if not is_integrity_error(error):
+                    raise
+                db.rollback()
+                db.execute(
+                    "UPDATE api_rate_limit_buckets SET count=count+1, updated_at=? WHERE bucket_key=? AND window=?",
+                    (now, bucket_key, window),
+                )
+        db.commit()
+        current = db.execute(
+            "SELECT count FROM api_rate_limit_buckets WHERE bucket_key=? AND window=?",
+            (bucket_key, window),
+        ).fetchone()
+        if current and int(current["count"]) > limit:
+            abort(429)
+
+        # Opportunistic cleanup avoids an unbounded bookkeeping table.
+        if window % 10 == 0:
+            db.execute("DELETE FROM api_rate_limit_buckets WHERE window<?", (window - 120,))
+            db.commit()
+    except Exception:
+        db.rollback()
+        raise
 
 
 @bp.app_context_processor
