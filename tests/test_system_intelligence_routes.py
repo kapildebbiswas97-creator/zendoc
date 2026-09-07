@@ -94,3 +94,17 @@ def test_pilot_scorecard_zero_denominator_is_not_faked(tmp_path):
     assert payload["care_journeys"]["completion_rate_percent"] is None
     assert payload["fulfilment"]["plan_to_order_conversion_percent"] is None
     assert payload["diagnostics"]["completion_rate_percent"] is None
+
+def test_owner_observability_exposes_pilot_signals(tmp_path):
+    _app, client = make_client(tmp_path)
+    login_web(client, "admin", "admin@example.com", "AdminStrong123")
+
+    response = client.get("/owner/observability")
+    assert response.status_code == 200
+    payload = response.get_json()
+
+    assert "pilot_signals" in payload
+    assert "provider_responsiveness" in payload
+    assert "data_freshness" in payload
+    assert "engagement" in payload
+
