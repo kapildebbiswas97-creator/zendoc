@@ -77,6 +77,36 @@ CONNECTOR_PROFILES = {
             "facilities and snapshot date. Do not infer general-public eligibility or live capacity."
         ),
     ),
+    "cdsco_state_drug_control": ConnectorProfile(
+        source_id="cdsco_state_drug_control",
+        connector_type="STATE_SPECIFIC_PUBLIC_LOOKUP_OR_SNAPSHOT",
+        ingestion_type="public_healthcare_entities",
+        availability="STATE_FRAGMENTED",
+        config_keys=(),
+        refresh_cadence="STATE_SOURCE_DEFINED",
+        notes=(
+            "Use State/UT Drug Controller public licence searches or published snapshots where available. "
+            "Do not assume national bulk retail-pharmacy coverage from CDSCO."
+        ),
+    ),
+    "delhi_government_hospitals": ConnectorProfile(
+        source_id="delhi_government_hospitals",
+        connector_type="DATED_OFFICIAL_DOWNLOAD_OR_MANUAL_SNAPSHOT",
+        ingestion_type="public_healthcare_entities",
+        availability="MANUAL_SNAPSHOT_NOW",
+        config_keys=(),
+        refresh_cadence="WEEKLY_OR_SOURCE_UPDATE",
+        notes="Official Delhi government-hospital directory; operational availability remains separate.",
+    ),
+    "delhi_registered_nursing_homes": ConnectorProfile(
+        source_id="delhi_registered_nursing_homes",
+        connector_type="DATED_OFFICIAL_DOWNLOAD_OR_MANUAL_SNAPSHOT",
+        ingestion_type="public_healthcare_entities",
+        availability="MANUAL_SNAPSHOT_NOW",
+        config_keys=(),
+        refresh_cadence="WEEKLY_OR_SOURCE_UPDATE",
+        notes="Preserve registration number/status/validity; do not promote expired or unverified facilities.",
+    ),
     "abdm_hfr": ConnectorProfile(
         source_id="abdm_hfr",
         connector_type="AUTHORIZED_PARTNER_CONNECTOR",
@@ -155,6 +185,43 @@ SOURCE_MAPPING_TEMPLATES: dict[str, dict[str, Any]] = {
             "city_classification": ("city_classification",),
             "valid_upto": ("valid_upto", "valid_until"),
             "facilities_available": ("facilities_available", "facilities"),
+        },
+    },
+    "delhi_government_hospitals": {
+        "ingestion_type": "public_healthcare_entities",
+        "field_aliases": {
+            "source_record_id": ("hospital_code", "code", "id"),
+            "name": ("hospital_name", "name"),
+            "category": ("category", "hospital_type"),
+            "address": ("address", "hospital_address"),
+            "city": ("city",),
+            "district": ("district",),
+            "state": ("state",),
+            "postal_code": ("pincode", "pin_code", "postal_code"),
+            "public_phone": ("phone", "telephone", "contact_number"),
+            "public_email": ("email", "email_address"),
+            "website": ("website", "website_url"),
+        },
+        "defaults": {"category": "hospital", "state": "Delhi"},
+    },
+    "delhi_registered_nursing_homes": {
+        "ingestion_type": "public_healthcare_entities",
+        "field_aliases": {
+            "source_record_id": ("registration_no", "registration_number", "reg_no", "code"),
+            "name": ("nursing_home_name", "facility_name", "name"),
+            "category": ("category", "facility_type"),
+            "address": ("address",),
+            "city": ("city",),
+            "district": ("district",),
+            "state": ("state",),
+            "postal_code": ("pincode", "pin_code"),
+            "public_phone": ("phone", "contact", "telephone"),
+        },
+        "defaults": {"category": "nursing_home", "state": "Delhi"},
+        "metadata_aliases": {
+            "registration_status": ("registration_status", "status"),
+            "valid_upto": ("valid_upto", "valid_until", "expiry_date"),
+            "beds": ("beds", "bed_strength", "number_of_beds"),
         },
     },
     "lgd": {
