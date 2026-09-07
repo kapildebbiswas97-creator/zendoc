@@ -1,4 +1,4 @@
-from zendoc.public_data_ingestion import adapt_public_rows
+from zendoc.public_data_ingestion import _prepare_healthcare_entities
 
 
 def test_public_healthcare_category_aliases_cover_common_state_labels():
@@ -10,13 +10,10 @@ def test_public_healthcare_category_aliases_cover_common_state_labels():
         {"source_record_id": "5", "category": "nursinghome", "name": "Nursing A"},
     ]
 
-    result = adapt_public_rows(
-        source_id="test_source",
-        ingestion_type="public_healthcare_entities",
-        rows=rows,
-    )
+    result = _prepare_healthcare_entities({"source_id": "test_source"}, rows)
 
-    categories = [record["category"] for record in result["records"]]
+    assert result["rejected"] == []
+    categories = [record["category"] for record in result["accepted"]]
     assert categories == [
         "pharmacy",
         "pharmacy",
