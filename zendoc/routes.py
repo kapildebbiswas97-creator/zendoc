@@ -138,18 +138,18 @@ def check_rate_limit():
     now = now_iso()
     try:
         row = db.execute(
-            "SELECT count FROM api_rate_limit_buckets WHERE bucket_key=? AND window=?",
+            "SELECT count FROM api_rate_limit_buckets WHERE bucket_key=? AND window_id=?",
             (bucket_key, window),
         ).fetchone()
         if row:
             db.execute(
-                "UPDATE api_rate_limit_buckets SET count=count+1, updated_at=? WHERE bucket_key=? AND window=?",
+                "UPDATE api_rate_limit_buckets SET count=count+1, updated_at=? WHERE bucket_key=? AND window_id=?",
                 (now, bucket_key, window),
             )
         else:
             try:
                 db.execute(
-                    "INSERT INTO api_rate_limit_buckets (bucket_key,window,count,updated_at) VALUES (?,?,1,?)",
+                    "INSERT INTO api_rate_limit_buckets (bucket_key,window_id,count,updated_at) VALUES (?,?,1,?)",
                     (bucket_key, window, now),
                 )
             except Exception as error:
@@ -160,12 +160,12 @@ def check_rate_limit():
                     raise
                 db.rollback()
                 db.execute(
-                    "UPDATE api_rate_limit_buckets SET count=count+1, updated_at=? WHERE bucket_key=? AND window=?",
+                    "UPDATE api_rate_limit_buckets SET count=count+1, updated_at=? WHERE bucket_key=? AND window_id=?",
                     (now, bucket_key, window),
                 )
         db.commit()
         current = db.execute(
-            "SELECT count FROM api_rate_limit_buckets WHERE bucket_key=? AND window=?",
+            "SELECT count FROM api_rate_limit_buckets WHERE bucket_key=? AND window_id=?",
             (bucket_key, window),
         ).fetchone()
         if current and int(current["count"]) > limit:
@@ -173,7 +173,7 @@ def check_rate_limit():
 
         # Opportunistic cleanup avoids an unbounded bookkeeping table.
         if window % 10 == 0:
-            db.execute("DELETE FROM api_rate_limit_buckets WHERE window<?", (window - 120,))
+            db.execute("DELETE FROM api_rate_limit_buckets WHERE window_id<?", (window - 120,))
             db.commit()
     except Exception:
         db.rollback()
