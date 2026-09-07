@@ -16,6 +16,7 @@ from typing import Any
 
 from .db import get_db, now_iso
 from .geography_graph import link_geography_nodes, upsert_geography_node
+from .geography_region_registry import find_import_region, list_import_regions
 from .security import assert_owner
 
 
@@ -40,6 +41,18 @@ TARGET_STATES = {
 
 
 def list_target_states() -> list[dict]:
+    dynamic = list_import_regions(country_code="IN", region_level="state")
+    if dynamic:
+        return [
+            {
+                "slug": item["slug"],
+                "name": item["name"],
+                "aliases": item["aliases"],
+                "lgd_state_code": item["region_code"],
+                "source": item["source"],
+            }
+            for item in dynamic
+        ]
     return [state.to_dict() for state in TARGET_STATES.values()]
 
 
@@ -401,9 +414,23 @@ def _ensure_india(*, source: str, freshness_at: str | None) -> dict:
 
 def _state(slug: str) -> TargetState:
     key = str(slug or "").strip().lower().replace("-", "_").replace(" ", "_")
+    dynamic = find_import_region(
+        country_code="IN",
+        region_level="state",
+        slug_or_code=key,
+    )
+    if dynamic:
+        return TargetState(
+            dynamic["slug"],
+            dynamic["name"],
+            tuple(dynamic["aliases"]),
+            dynamic["region_code"],
+        )
     state = TARGET_STATES.get(key)
     if not state:
-        raise LookupError(f"Unsupported target state '{slug}'.")
+        raise LookupError(
+            f"Unsupported target state '{slug}'. Import the official LGD States registry first."
+        )
     return state
 
 
