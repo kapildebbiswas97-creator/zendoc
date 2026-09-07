@@ -177,6 +177,34 @@ def build_plan(actor, command_text: str) -> AgentPlan:
             fallback_strategy="require_human_review",
         )
 
+    if any(text in lower for text in (
+        "medicine stock",
+        "pharmacy stock",
+        "medicine availability",
+        "find medicine",
+        "find prescribed medicine",
+        "nearby medicine",
+        "buy medicine",
+    )):
+        return _plan(
+            command,
+            "pharmacy",
+            "PharmacyAgent",
+            "read_only",
+            (
+                PlanStep(
+                    1,
+                    "search_nearby_pharmacy_inventory",
+                    {"query": command},
+                    "Search truthful pharmacy inventory for the authenticated patient.",
+                ),
+            ),
+            privacy_class="HEALTH_SENSITIVE",
+            required_context=("authenticated_patient", "medicine_query"),
+            expected_output="pharmacy_inventory_with_freshness_state",
+            fallback_strategy="unknown_inventory_not_available",
+        )
+
     if any(text in lower for text in ("diagnostic", "blood test", "lab test", "laboratory", "home collection")):
         return _plan(
             command,
