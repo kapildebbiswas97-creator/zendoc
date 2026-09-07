@@ -337,18 +337,20 @@ The readiness percentage is computed from a named software checklist. Only **WOR
 
 ## 8. Remaining no-capital engineering opportunities
 
+Recently completed:
+- deeper HealthMemoryAgent scoped context orchestration with minimum-necessary context and IDOR/consent tests
+- provider-facing pharmacy inventory and diagnostic-offer freshness queues with explicit reconfirmation and branch-tenancy enforcement
+- partner-facing v1 API contract and integration specification
+
 The highest-value remaining founder/software work is:
 
-1. deeper HealthMemoryAgent scoped context orchestration across more workflows
-2. richer official-data ingestion connectors for the geographic/benefits graph
-3. local multilingual-model adapter/evaluation when a suitable model can run safely on available hardware
-4. further synthetic adversarial evaluation for every specialist agent
-5. staging UI/UX for CareFin and Care Journey APIs
-6. provider-facing inventory/diagnostic refresh workflows
-7. richer reliability/observability dashboards
-8. API versioning/documentation for future partners
-9. security hardening, dependency scanning and deployment verification
-10. pilot instrumentation for retention, provider response time, CareFin verified savings and fulfilment outcomes
+1. richer official-data ingestion connectors for the geographic/benefits graph
+2. local multilingual-model adapter/evaluation when a suitable model can run safely on available hardware
+3. further synthetic adversarial evaluation for every specialist agent
+4. richer reliability/observability dashboards
+5. security hardening, dependency scanning and deployment verification
+6. pilot instrumentation for retention, provider response time, CareFin verified savings and fulfilment outcomes
+7. machine-readable API schema/versioning for future partner SDK generation
 
 ---
 
