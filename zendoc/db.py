@@ -2172,6 +2172,15 @@ def migrate_schema(db):
             ON geography_relationships(to_node_id, relationship_type);
         """
     )
+    # Compatibility for the brief pre-release shared-rate-limit schema that
+    # used the SQL keyword "window". SQLite may contain that local table even
+    # though PostgreSQL rejected it. Rename it additively before application
+    # queries use the portable window_id column.
+    rate_columns = table_columns(db, "api_rate_limit_buckets")
+    if "window" in rate_columns and "window_id" not in rate_columns:
+        db.execute("ALTER TABLE api_rate_limit_buckets RENAME COLUMN window TO window_id")
+        db.commit()
+
     # Post-submission provider organization / multi-tenant security.
     # Existing free-text provider_profiles.organization values are intentionally
     # NOT auto-promoted into trusted organization memberships.
