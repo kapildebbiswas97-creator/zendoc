@@ -115,5 +115,7 @@ def test_connector_profiles_have_truthful_availability_states():
         "MANUAL_SNAPSHOT_NOW",
         "ONBOARDING_REQUIRED",
         "DIRECTORY_NOW_LIVE_STOCK_UNVERIFIED",
+        "STATE_FRAGMENTED",
+        "REFERENCE_ONLY",
     }
     assert {item["availability"] for item in list_connector_profiles()} <= allowed
