@@ -2123,6 +2123,24 @@ def migrate_schema(db):
         );
         CREATE INDEX IF NOT EXISTS idx_geography_entity_node ON geography_entity_links(geography_node_id, entity_type);
         CREATE INDEX IF NOT EXISTS idx_geography_entity_entity ON geography_entity_links(entity_type, entity_id);
+
+        CREATE TABLE IF NOT EXISTS geography_relationships (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            from_node_id INTEGER NOT NULL REFERENCES geography_nodes(id) ON DELETE CASCADE,
+            to_node_id INTEGER NOT NULL REFERENCES geography_nodes(id) ON DELETE CASCADE,
+            relationship_type TEXT NOT NULL,
+            source TEXT NOT NULL,
+            source_ref TEXT,
+            freshness_at TEXT,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(from_node_id, to_node_id, relationship_type, source)
+        );
+        CREATE INDEX IF NOT EXISTS idx_geography_relationship_from
+            ON geography_relationships(from_node_id, relationship_type);
+        CREATE INDEX IF NOT EXISTS idx_geography_relationship_to
+            ON geography_relationships(to_node_id, relationship_type);
         """
     )
     # Post-submission provider organization / multi-tenant security.
