@@ -5,8 +5,16 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from zendoc.db import get_db, now_iso
-from zendoc.diagnostic_service import complete_diagnostic_test
-from zendoc.inventory_service import update_inventory_observation
+from zendoc.diagnostic_service import (
+    complete_diagnostic_test,
+    list_diagnostic_refresh_queue,
+    reconfirm_diagnostic_offer,
+)
+from zendoc.inventory_service import (
+    list_inventory_refresh_queue,
+    reconfirm_inventory_observation,
+    update_inventory_observation,
+)
 from zendoc.organization_service import (
     approve_membership,
     bind_provider_profile,
@@ -433,3 +441,169 @@ def test_verified_lab_offer_is_tenant_stamped_and_unverified_provider_is_blocked
 
         with pytest.raises(PermissionError):
             upsert_diagnostic_offer(pending, test_id, 90, True, 5)
+
+def test_pharmacy_refresh_queue_and_reconfirm_preserve_tenant(tmp_path):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    _register(client, "refresh-pharmacy@example.com", "pharmacy")
+    pharmacy = _user(app, "refresh-pharmacy@example.com")
+    profile_id = _profile(app, pharmacy, "pharmacy")
+
+    with app.app_context():
+        org, location = _bind_verified_org(
+            app, pharmacy, profile_id, "Refresh Pharmacy Network", "pharmacy_network", "Store A"
+        )
+        db = get_db()
+        sku_id = db.execute(
+            """
+            INSERT INTO medication_skus
+            (sku_code,name,generic_name,form,pack_size,pack_unit,mrp_inr,rx_required,data_mode,created_at)
+            VALUES ('REF-SKU-1','Refresh Medicine','Refresh Generic','tablet',1,'tablet',10,0,'LIVE',?)
+            """,
+            (now_iso(),),
+        ).lastrowid
+        db.commit()
+        observation = update_inventory_observation(
+            pharmacy["id"], sku_id, 9, 8.0, stock_status="CONFIRMED"
+        )
+
+        old = (datetime.now(timezone.utc) - timedelta(hours=6)).isoformat()
+        db.execute(
+            "UPDATE inventory_observations SET observed_at=?, updated_at=? WHERE id=?",
+            (old, old, observation["id"]),
+        )
+        db.commit()
+
+        queue = list_inventory_refresh_queue(pharmacy)
+        queued = next(item for item in queue["items"] if item["id"] == observation["id"])
+        assert queued["needs_refresh"] is True
+        assert queued["effective_status"] == "STALE"
+
+        with pytest.raises(ValueError):
+            reconfirm_inventory_observation(pharmacy, observation["id"], confirmed_unchanged=False)
+
+        refreshed = reconfirm_inventory_observation(pharmacy, observation["id"], confirmed_unchanged=True)
+        assert refreshed["effective_status"] == "CONFIRMED"
+        assert refreshed["organization_id"] == org["id"]
+        assert refreshed["organization_location_id"] == location["id"]
+
+
+def test_moved_branch_pharmacy_cannot_reconfirm_old_inventory(tmp_path):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    _register(client, "refresh-move-pharmacy@example.com", "pharmacy")
+    pharmacy = _user(app, "refresh-move-pharmacy@example.com")
+    profile_id = _profile(app, pharmacy, "pharmacy")
+
+    with app.app_context():
+        org, location_a = _bind_verified_org(
+            app, pharmacy, profile_id, "Refresh Move Pharmacy", "pharmacy_network", "Store A"
+        )
+        db = get_db()
+        sku_id = db.execute(
+            """
+            INSERT INTO medication_skus
+            (sku_code,name,generic_name,form,pack_size,pack_unit,mrp_inr,rx_required,data_mode,created_at)
+            VALUES ('REF-MOVE-SKU','Move Medicine','Move Generic','tablet',1,'tablet',10,0,'LIVE',?)
+            """,
+            (now_iso(),),
+        ).lastrowid
+        db.commit()
+        observation = update_inventory_observation(
+            pharmacy["id"], sku_id, 4, 7.0, stock_status="CONFIRMED"
+        )
+
+        location_b = create_location(
+            pharmacy, org["id"], {"name": "Store B", "location_type": "branch", "city": "Kalyani"}
+        )
+        bind_provider_profile(pharmacy, org["id"], location_b["id"])
+
+        with pytest.raises(PermissionError):
+            reconfirm_inventory_observation(pharmacy, observation["id"], confirmed_unchanged=True)
+
+
+def test_diagnostic_refresh_queue_and_reconfirm_preserve_tenant(tmp_path):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    _register(client, "refresh-lab@example.com", "hospital")
+    lab = _user(app, "refresh-lab@example.com")
+    profile_id = _profile(app, lab, "diagnostic_centre")
+
+    with app.app_context():
+        org, location = _bind_verified_org(
+            app, lab, profile_id, "Refresh Diagnostic Network", "diagnostic_network", "Lab A"
+        )
+        db = get_db()
+        test_id = db.execute(
+            """
+            INSERT INTO diagnostic_catalog
+            (code,name,category,fasting_required,sample_type,tat_hours,standard_price_inr,created_at)
+            VALUES ('REF-DIAG','Refresh Diagnostic','general',0,'blood',24,100,?)
+            """,
+            (now_iso(),),
+        ).lastrowid
+        old = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
+        offer_id = db.execute(
+            """
+            INSERT INTO diagnostic_offers
+            (lab_id,test_id,price_inr,home_collection_available,home_collection_fee_inr,verified,
+             data_mode,observed_at,organization_id,organization_location_id,created_at)
+            VALUES (?,?,100,1,0,1,'LIVE',?,?,?,?,?)
+            """,
+            (lab["id"], test_id, old, org["id"], location["id"], old),
+        ).lastrowid
+        db.commit()
+
+        queue = list_diagnostic_refresh_queue(lab)
+        queued = next(item for item in queue["items"] if item["id"] == offer_id)
+        assert queued["needs_refresh"] is True
+        assert queued["availability_state"] == "STALE"
+
+        with pytest.raises(ValueError):
+            reconfirm_diagnostic_offer(lab, offer_id, confirmed_unchanged=False)
+
+        refreshed = reconfirm_diagnostic_offer(lab, offer_id, confirmed_unchanged=True)
+        assert refreshed["availability_state"] == "CONFIRMED"
+        assert refreshed["organization_id"] == org["id"]
+        assert refreshed["organization_location_id"] == location["id"]
+
+
+def test_moved_branch_lab_cannot_reconfirm_old_offer(tmp_path):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    _register(client, "refresh-move-lab@example.com", "hospital")
+    lab = _user(app, "refresh-move-lab@example.com")
+    profile_id = _profile(app, lab, "diagnostic_centre")
+
+    with app.app_context():
+        org, location_a = _bind_verified_org(
+            app, lab, profile_id, "Refresh Move Diagnostic", "diagnostic_network", "Lab A"
+        )
+        db = get_db()
+        test_id = db.execute(
+            """
+            INSERT INTO diagnostic_catalog
+            (code,name,category,fasting_required,sample_type,tat_hours,standard_price_inr,created_at)
+            VALUES ('REF-MOVE-DIAG','Refresh Move Diagnostic','general',0,'blood',24,100,?)
+            """,
+            (now_iso(),),
+        ).lastrowid
+        offer_id = db.execute(
+            """
+            INSERT INTO diagnostic_offers
+            (lab_id,test_id,price_inr,home_collection_available,home_collection_fee_inr,verified,
+             data_mode,observed_at,organization_id,organization_location_id,created_at)
+            VALUES (?,?,100,1,0,1,'LIVE',?,?,?,?,?)
+            """,
+            (lab["id"], test_id, now_iso(), org["id"], location_a["id"], now_iso()),
+        ).lastrowid
+        db.commit()
+
+        location_b = create_location(
+            lab, org["id"], {"name": "Lab B", "location_type": "branch", "city": "Kalyani"}
+        )
+        bind_provider_profile(lab, org["id"], location_b["id"])
+
+        with pytest.raises(PermissionError):
+            reconfirm_diagnostic_offer(lab, offer_id, confirmed_unchanged=True)
+
