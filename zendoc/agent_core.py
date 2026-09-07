@@ -355,6 +355,23 @@ def respond_with_core_agent(actor, command_text):
         message = payload.get("reason") or f"Found {len(payload.get('results', []))} educational video results."
         intent = "video_intelligence"
         actions = [{"type": "video_results", "label": "Review educational videos", "data": payload}]
+    elif plan.intent == "health_records":
+        payload = tool_output or {}
+        memory = payload.get("health_memory") or {}
+        total = int(memory.get("total_events", 0) or 0)
+        actions_count = len(payload.get("next_safe_actions") or [])
+        message = (
+            f"Health Memory returned {total} authorized recent timeline event(s) and "
+            f"{actions_count} non-clinical next-safe action(s). "
+            "Only minimum-necessary authorized context was used; no diagnosis or treatment change was made."
+        )
+        intent = "health_records"
+        actions = [{
+            "type": "health_memory",
+            "label": "Open Health Memory",
+            "data": payload,
+            "url": "/records",
+        }]
     elif plan.intent == "iot_status":
         payload = tool_output or []
         message = f"I found {len(payload)} connected device records available to this account."
