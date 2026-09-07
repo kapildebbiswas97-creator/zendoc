@@ -72,6 +72,7 @@ LASTROWID_TABLES = {
     "diagnostic_offers",
     "fulfilment_plan_items",
     "fulfilment_plans",
+    "geography_relationships",
     "inventory_observations",
     "medication_skus",
     "order_events",
