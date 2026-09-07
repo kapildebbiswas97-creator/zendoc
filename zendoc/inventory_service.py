@@ -29,7 +29,7 @@ from typing import Any
 from flask import current_app
 
 from .db import get_db, now_iso
-from .organization_service import provider_resource_context
+from .organization_service import assert_resource_tenant, provider_resource_context
 
 DEFAULT_STALE_THRESHOLD_HOURS = 2.0
 VALID_STOCK_STATUSES = {"CONFIRMED", "STALE", "UNKNOWN", "UNAVAILABLE"}
@@ -49,6 +49,26 @@ def _data_mode(explicit: str | None = None) -> str:
     if mode not in VALID_DATA_MODES:
         raise ValueError("Connected Care data mode must be LIVE or DEMO.")
     return mode
+
+
+def _user_id(actor: Any) -> int:
+    if actor is None:
+        return 0
+    if isinstance(actor, (int, float)):
+        return int(actor)
+    try:
+        value = actor["id"]
+        if value is not None:
+            return int(value)
+    except Exception:
+        pass
+    try:
+        value = getattr(actor, "id", None)
+        if value is not None:
+            return int(value)
+    except Exception:
+        pass
+    return 0
 
 
 def calculate_distance_km(
@@ -416,3 +436,99 @@ def search_pharmacy_offers(
         results.append(pharm)
 
     return results
+
+def list_inventory_refresh_queue(actor: Any, data_mode: str | None = None) -> dict[str, Any]:
+    """Return only the authenticated pharmacy's inventory freshness workload."""
+    pharmacy_id = _user_id(actor)
+    if not pharmacy_id:
+        raise PermissionError("Authentication required to review inventory freshness.")
+    role = str(actor.get("role") if isinstance(actor, dict) else getattr(actor, "role", "") or "").lower()
+    if role != "pharmacy":
+        raise PermissionError("Only pharmacy accounts may review pharmacy inventory freshness.")
+
+    mode = _data_mode(data_mode)
+    rows = get_db().execute(
+        """
+        SELECT io.*, ms.sku_code, ms.name medicine_name, ms.generic_name, ms.form, ms.strength
+        FROM inventory_observations io
+        JOIN medication_skus ms ON ms.id=io.sku_id
+        WHERE io.pharmacy_id=? AND UPPER(io.data_mode)=?
+        ORDER BY io.observed_at ASC, io.id ASC
+        """,
+        (pharmacy_id, mode),
+    ).fetchall()
+
+    items = []
+    counts = {"CONFIRMED": 0, "STALE": 0, "UNKNOWN": 0, "UNAVAILABLE": 0}
+    for row in rows:
+        item = dict(row)
+        assert_resource_tenant(actor, item)
+        effective_status, freshness_label = evaluate_freshness(
+            item.get("observed_at"),
+            item.get("stock_status", "UNKNOWN"),
+        )
+        if int(item.get("quantity_available") or 0) <= 0 and effective_status == "CONFIRMED":
+            effective_status = "UNAVAILABLE"
+        item["effective_status"] = effective_status
+        item["freshness_label"] = freshness_label
+        item["needs_refresh"] = effective_status in {"STALE", "UNKNOWN"}
+        item["price_inr"] = float(item["price_inr"]) if item.get("price_available", 1) else None
+        counts[effective_status] = counts.get(effective_status, 0) + 1
+        items.append(item)
+
+    return {
+        "provider_id": pharmacy_id,
+        "provider_type": "pharmacy",
+        "data_mode": mode,
+        "counts": counts,
+        "needs_refresh_count": sum(1 for item in items if item["needs_refresh"]),
+        "items": items,
+    }
+
+
+def reconfirm_inventory_observation(
+    actor: Any,
+    observation_id: int,
+    *,
+    confirmed_unchanged: bool = False,
+) -> dict[str, Any]:
+    """Renew freshness only after the owning pharmacy explicitly confirms values are unchanged."""
+    pharmacy_id = _user_id(actor)
+    if not pharmacy_id:
+        raise PermissionError("Authentication required to reconfirm inventory.")
+    role = str(actor.get("role") if isinstance(actor, dict) else getattr(actor, "role", "") or "").lower()
+    if role != "pharmacy":
+        raise PermissionError("Only pharmacy accounts may reconfirm inventory observations.")
+    if confirmed_unchanged is not True:
+        raise ValueError("Set confirmed_unchanged=true only after physically rechecking the inventory values.")
+
+    db = get_db()
+    row = db.execute(
+        "SELECT * FROM inventory_observations WHERE id=?",
+        (int(observation_id),),
+    ).fetchone()
+    if not row:
+        raise LookupError("Inventory observation not found.")
+    item = dict(row)
+    if int(item["pharmacy_id"]) != pharmacy_id:
+        raise PermissionError("A pharmacy may only reconfirm its own inventory observations.")
+    assert_resource_tenant(actor, item)
+
+    now = now_iso()
+    db.execute(
+        "UPDATE inventory_observations SET observed_at=?, updated_at=? WHERE id=? AND pharmacy_id=?",
+        (now, now, int(observation_id), pharmacy_id),
+    )
+    db.commit()
+    refreshed = dict(db.execute("SELECT * FROM inventory_observations WHERE id=?", (int(observation_id),)).fetchone())
+    effective_status, freshness_label = evaluate_freshness(
+        refreshed.get("observed_at"),
+        refreshed.get("stock_status", "UNKNOWN"),
+    )
+    if int(refreshed.get("quantity_available") or 0) <= 0 and effective_status == "CONFIRMED":
+        effective_status = "UNAVAILABLE"
+    refreshed["effective_status"] = effective_status
+    refreshed["freshness_label"] = freshness_label
+    refreshed["reconfirmed_unchanged"] = True
+    return refreshed
+
