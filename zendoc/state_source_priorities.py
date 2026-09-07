@@ -164,6 +164,29 @@ STATE_SOURCE_PRIORITIES = {
 }
 
 
+BASELINE_INDIA_DIRECTORY_SOURCES = [
+    "lgd",
+    "data_gov_hospitals",
+    "clinical_establishments",
+    "pmjay_hospitals",
+    "nabl_labs",
+    "nabh_directory",
+    "pmbjp_kendras",
+    "data_gov_blood_banks",
+    "cdsco_state_drug_control",
+]
+
+BASELINE_LIVE_DATA_GAPS = [
+    "doctor_live_slots",
+    "pharmacy_live_stock",
+    "pharmacy_actual_price",
+    "lab_live_slots",
+    "lab_actual_price",
+    "hospital_bed_availability",
+    "ambulance_live_dispatch",
+]
+
+
 def state_source_priority(state_slug: str) -> dict:
     key = str(state_slug or "").strip().lower().replace("-", "_").replace(" ", "_")
     profile = STATE_SOURCE_PRIORITIES.get(key)
@@ -171,14 +194,36 @@ def state_source_priority(state_slug: str) -> dict:
         return {
             "state_slug": key,
             "configured": False,
-            "official_directory_sources": ["lgd", "data_gov_hospitals", "clinical_establishments"],
+            "template": "INDIA_BASELINE_V1",
+            "official_directory_sources": list(BASELINE_INDIA_DIRECTORY_SOURCES),
             "priority_districts": [],
-            "live_data_gaps": [
-                "doctor_live_slots",
-                "pharmacy_live_stock",
-                "lab_live_slots",
-                "hospital_bed_availability",
-                "ambulance_live_dispatch",
-            ],
+            "live_data_gaps": list(BASELINE_LIVE_DATA_GAPS),
+            "state_specific_sources": [],
+            "truth_notice": (
+                "Baseline national/central sources are enabled. State-specific portals are added only after official-source verification."
+            ),
         }
-    return {"state_slug": key, "configured": True, **profile}
+
+    baseline = list(BASELINE_INDIA_DIRECTORY_SOURCES)
+    state_sources = [
+        source_id
+        for source_id in profile["official_directory_sources"]
+        if source_id not in baseline
+    ]
+    merged = []
+    for source_id in profile["official_directory_sources"] + baseline:
+        if source_id not in merged:
+            merged.append(source_id)
+
+    return {
+        "state_slug": key,
+        "configured": True,
+        "template": "STATE_ENRICHED_V1",
+        "official_directory_sources": merged,
+        "priority_districts": list(profile["priority_districts"]),
+        "live_data_gaps": list(profile["live_data_gaps"]),
+        "state_specific_sources": state_sources,
+        "truth_notice": (
+            "National baseline sources plus verified state-specific sources. Directory coverage does not imply live provider operations."
+        ),
+    }
