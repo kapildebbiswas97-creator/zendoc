@@ -322,6 +322,16 @@ def init_db():
         );
         CREATE INDEX IF NOT EXISTS idx_audit_actor ON audit_logs(actor_id);
 
+        CREATE TABLE IF NOT EXISTS api_rate_limit_buckets (
+            bucket_key TEXT NOT NULL,
+            window INTEGER NOT NULL,
+            count INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (bucket_key, window)
+        );
+        CREATE INDEX IF NOT EXISTS idx_api_rate_limit_window
+            ON api_rate_limit_buckets(window);
+
         CREATE TABLE IF NOT EXISTS fitness_profiles (
             user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
             fitness_goal TEXT,
