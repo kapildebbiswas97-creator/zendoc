@@ -19,7 +19,7 @@ def test_west_bengal_priority_stack_targets_nadia():
 
 
 def test_unconfigured_state_gets_safe_default_stack():
-    profile = state_source_priority("kerala")
+    profile = state_source_priority("tamil_nadu")
     assert profile["configured"] is False
     assert "lgd" in profile["official_directory_sources"]
     assert "hospital_bed_availability" in profile["live_data_gaps"]
@@ -31,10 +31,17 @@ def test_owner_state_priority_api_is_protected(tmp_path):
     denied = client.get("/api/v1/admin/ingestion/state-priority/assam")
     assert denied.status_code in {302, 401, 403}
 
-    login = login_web(client, "admin", "admin@example.com", "AdminStrong123")
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"email": "admin@example.com", "password": "AdminStrong123"},
+    )
     assert login.status_code == 200
+    token = login.get_json()["token"]
 
-    allowed = client.get("/api/v1/admin/ingestion/state-priority/assam")
+    allowed = client.get(
+        "/api/v1/admin/ingestion/state-priority/assam",
+        headers={"Authorization": f"Bearer {token}"},
+    )
     assert allowed.status_code == 200
     payload = allowed.get_json()["priority"]
     assert "Dibrugarh" in payload["priority_districts"]
