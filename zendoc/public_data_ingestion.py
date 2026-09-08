@@ -253,11 +253,17 @@ def dedupe_public_healthcare_entities(records: list[dict]) -> list[dict]:
             for item in ranked
             if item.get("approved_claim_id") is not None
         })
+        approved_public_entity_ids = sorted({
+            int(item["id"])
+            for item in ranked
+            if item.get("approved_claim_id") is not None and item.get("id") is not None
+        })
         primary["provenance_sources"] = provenance
         primary["duplicate_source_count"] = len(provenance)
         primary["cross_source_deduplicated"] = len(provenance) > 1
         primary["dedupe_method"] = "EXACT_NAME_AND_STRONG_LOCATION" if len(provenance) > 1 else None
         primary["approved_claim_ids"] = approved_claim_ids
+        primary["approved_public_entity_ids"] = approved_public_entity_ids
         primary["approved_provider_profile_id"] = next(iter(approved_profile_ids), None)
         primary["approved_claim_link"] = bool(approved_profile_ids)
         primary["claim_link_conflict"] = False
@@ -275,6 +281,7 @@ def _with_public_provenance(record: dict) -> dict:
     result["cross_source_deduplicated"] = False
     result["dedupe_method"] = None
     result["approved_claim_ids"] = [int(record["approved_claim_id"])] if record.get("approved_claim_id") is not None else []
+    result["approved_public_entity_ids"] = [int(record["id"])] if record.get("approved_claim_id") is not None and record.get("id") is not None else []
     result["claim_link_conflict"] = False
     return result
 
