@@ -1,3 +1,5 @@
+import pytest
+
 from zendoc.geography_graph import list_geography_relationships
 from zendoc.state_geography_bootstrap import (
     bootstrap_state_geography,
@@ -168,3 +170,68 @@ def test_geography_relationships_keep_panchayat_separate_from_admin_parent(tmp_p
         types = {item["relationship_type"] for item in relationships}
         assert "VILLAGE_TO_PANCHAYAT" in types
         assert "BLOCK_MEMBERSHIP" in types
+
+
+def test_uttar_pradesh_accepts_zero_padded_lgd_state_code(tmp_path):
+    app = make_app(tmp_path)
+    with app.app_context():
+        payload = sample_payload(
+            "09", "UP-D09", "UP-SD09", "UP-B09", "UP-GP09", "UP-V09",
+            "Lucknow", "Lucknow Tehsil", "Zero Padded Village",
+        )
+        preview = bootstrap_state_geography(
+            owner_actor(),
+            state_slug="uttar_pradesh",
+            **payload,
+            dry_run=True,
+        )
+        assert preview["validation"]["valid"] is True
+
+        applied = bootstrap_state_geography(
+            owner_actor(),
+            state_slug="uttar_pradesh",
+            **payload,
+            dry_run=False,
+        )
+        assert applied["applied"]["districts"] == 1
+        assert applied["applied"]["villages"] == 1
+
+
+def test_state_bootstrap_rolls_back_all_writes_on_mid_import_failure(tmp_path):
+    app = make_app(tmp_path)
+    with app.app_context():
+        from zendoc.db import get_db
+
+        # Validation accepts structurally complete rows; application then
+        # discovers that the sub-district references an unknown district.
+        # No country/state/district rows may survive that failure.
+        with pytest.raises(ValueError, match="Unknown district_code"):
+            bootstrap_state_geography(
+                owner_actor(),
+                state_slug="west_bengal",
+                districts=[
+                    {"state_code": "19", "code": "WB-ROLLBACK-D1", "name": "Rollback District"},
+                ],
+                subdistricts=[
+                    {
+                        "state_code": "19",
+                        "code": "WB-ROLLBACK-SD1",
+                        "name": "Broken Subdistrict",
+                        "district_code": "WB-MISSING-DISTRICT",
+                    },
+                ],
+                dry_run=False,
+            )
+
+        rows = get_db().execute(
+            """
+            SELECT source_ref FROM geography_nodes
+            WHERE source_ref IN (
+                'country:IN',
+                'state:19',
+                'district:WB-ROLLBACK-D1',
+                'subdistrict:WB-ROLLBACK-SD1'
+            )
+            """
+        ).fetchall()
+        assert rows == []
