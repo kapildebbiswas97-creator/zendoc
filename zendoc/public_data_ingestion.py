@@ -238,8 +238,11 @@ def _public_entity_dedupe_key(record: dict) -> tuple | None:
         return None
 
     postal = _normalize_entity_text(record.get("postal_code"))
-    if postal:
-        return (category, name, "postal", postal)
+    city = _normalize_entity_text(record.get("city"))
+    district = _normalize_entity_text(record.get("district"))
+    state = _normalize_entity_text(record.get("state"))
+    if postal and (city or district or state):
+        return (category, name, "postal", postal, city, district, state)
 
     address = _normalize_entity_text(record.get("address"))
     if address and len(address) >= 8:
