@@ -47,7 +47,7 @@ from .organization_service import assert_resource_tenant
 from .database_reliability import backup_readiness, readiness_report
 from .security import csrf_token, hash_token, is_owner, load_user_and_check_csrf, login_required, new_token, owner_required, role_required, start_user_session
 from .startup_analytics import care_journey_conversion, india_coverage_quality, provider_onboarding_funnel, record_finder_search, record_product_activity, retention_metrics, startup_metrics, submit_finder_feedback
-from .business_api import authenticate_business_api_key
+from .business_api import authenticate_business_api_key, business_api_metrics, list_business_api_clients
 from .institution_pilots import (
     create_institution_pilot,
     institution_pilot_metrics,
@@ -1028,6 +1028,8 @@ def startup_command_center():
     provider_funnel = provider_onboarding_funnel(g.user, days=request.args.get("provider_days", 90))
     pilot_metrics = institution_pilot_metrics(g.user)
     pilots = list_institution_pilots(g.user, status=request.args.get("pilot_status"), limit=100)
+    business_metrics = business_api_metrics(g.user)
+    business_clients = list_business_api_clients(g.user)
     claims = list_public_entity_claims(g.user, status=request.args.get("claim_status"), limit=50)
     return render_template(
         "startup_command_center.html",
@@ -1038,6 +1040,8 @@ def startup_command_center():
         provider_funnel=provider_funnel,
         pilot_metrics=pilot_metrics,
         pilots=pilots,
+        business_metrics=business_metrics,
+        business_clients=business_clients,
         claims=claims,
     )
 
