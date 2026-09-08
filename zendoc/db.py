@@ -2328,6 +2328,28 @@ def migrate_schema(db):
         CREATE INDEX IF NOT EXISTS idx_partner_api_audit_event
             ON partner_api_audit_events(event_type, created_at);
 
+        CREATE TABLE IF NOT EXISTS data_refresh_tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_id TEXT NOT NULL,
+            priority TEXT NOT NULL,
+            reason_code TEXT NOT NULL,
+            ingestion_type TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'queued',
+            linked_batch_id INTEGER REFERENCES data_ingestion_batches(id) ON DELETE SET NULL,
+            owner_note TEXT,
+            blocked_reason TEXT,
+            requested_at TEXT NOT NULL,
+            started_at TEXT,
+            completed_at TEXT,
+            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_data_refresh_tasks_source
+            ON data_refresh_tasks(source_id, status, updated_at);
+        CREATE INDEX IF NOT EXISTS idx_data_refresh_tasks_priority
+            ON data_refresh_tasks(priority, status, requested_at);
+
         CREATE TABLE IF NOT EXISTS startup_financial_entries (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             entry_uid TEXT NOT NULL UNIQUE,
