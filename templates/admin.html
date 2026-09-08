@@ -3,6 +3,23 @@
 {% block content %}
 <section class="section-head"><div><p class="eyebrow">Operations</p><h1>Admin Dashboard</h1></div><div class="form-actions"><a class="primary-action" href="{{ url_for('main.startup_command_center') }}">Startup Command Center</a></div></section>
 <section class="stats">{% for label, value in stats.items() %}<article><span>{{ label }}</span><strong>{{ value }}</strong></article>{% endfor %}</section>
+<section class="panel" aria-label="Owner access center">
+  <div class="panel-head">
+    <div><p class="eyebrow">Owner Access Center</p><h2>Open every major ZENDOC workspace</h2></div>
+  </div>
+  <p class="form-note">The configured ZENDOC owner can inspect platform-wide read views and QA previews from one place. Role-specific clinical, provider, pharmacy, consent, financial, and patient mutations remain protected by their original authorization rules.</p>
+  <div class="form-actions">
+    <a class="secondary-action" href="{{ url_for('main.dashboard') }}">Owner dashboard</a>
+    <a class="secondary-action" href="{{ url_for('main.appointments') }}">All appointments</a>
+    <a class="secondary-action" href="{{ url_for('main.records') }}">All records</a>
+    <a class="secondary-action" href="{{ url_for('main.finder') }}">Find Care</a>
+    <a class="secondary-action" href="{{ url_for('main.ai_center') }}">ZENDOC AI</a>
+    <a class="secondary-action" href="{{ url_for('main.notifications') }}">Notifications</a>
+    <a class="secondary-action" href="{{ url_for('main.startup_provider_network') }}">Provider network</a>
+    <a class="secondary-action" href="{{ url_for('main.startup_data_freshness') }}">Data freshness</a>
+    <a class="secondary-action" href="{{ url_for('main.startup_b2b_operations') }}">B2B operations</a>
+  </div>
+</section>
 <section class="panel">
   <div class="panel-head">
     <div><p class="eyebrow">Owner QA</p><h2>Preview role dashboards</h2></div>
