@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 import re
 import uuid
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any
 
 from .db import get_db, now_iso
@@ -66,6 +68,38 @@ ALLOWED_PARENTS = {
 }
 
 
+_DEFER_GEOGRAPHY_COMMIT = ContextVar("zendoc_defer_geography_commit", default=False)
+
+
+@contextmanager
+def geography_write_transaction():
+    """Make a group of geography writes atomic on SQLite and PostgreSQL.
+
+    Geography write helpers historically committed every row. During an import
+    this context defers those inner commits, commits once on success, and rolls
+    the whole batch back on failure. Nested use delegates commit/rollback to
+    the outer transaction.
+    """
+    db = get_db()
+    already_deferred = _DEFER_GEOGRAPHY_COMMIT.get()
+    token = _DEFER_GEOGRAPHY_COMMIT.set(True)
+    try:
+        yield db
+        if not already_deferred:
+            db.commit()
+    except Exception:
+        if not already_deferred:
+            db.rollback()
+        raise
+    finally:
+        _DEFER_GEOGRAPHY_COMMIT.reset(token)
+
+
+def _commit_geography_write(db) -> None:
+    if not _DEFER_GEOGRAPHY_COMMIT.get():
+        db.commit()
+
+
 def upsert_geography_node(
     *,
     node_type: str,
@@ -87,6 +121,7 @@ def upsert_geography_node(
     clean_source = str(source or "").strip()
     if not clean_source:
         raise ValueError("Geography provenance source is required.")
+    clean_source_ref = clean_source_ref
 
     lat = _coordinate(latitude, -90, 90, "latitude")
     lng = _coordinate(longitude, -180, 180, "longitude")
@@ -102,32 +137,60 @@ def upsert_geography_node(
         raise ValueError(f"{node_type} cannot have parent type {parent_type or 'none'}.")
 
     normalized = normalize_geography_name(clean_name)
-    if parent_id is None:
+
+    # Official/provider source references are the stable identity when present.
+    # This lets a renamed official place update the same node instead of
+    # creating a duplicate or leaving normalized_name stale.
+    existing = None
+    if clean_source_ref:
         existing = db.execute(
-            "SELECT * FROM geography_nodes WHERE node_type=? AND normalized_name=? AND parent_id IS NULL LIMIT 1",
-            (node_type, normalized),
+            "SELECT * FROM geography_nodes WHERE node_type=? AND source_ref=? ORDER BY id ASC LIMIT 1",
+            (node_type, clean_source_ref),
         ).fetchone()
-    else:
-        existing = db.execute(
-            "SELECT * FROM geography_nodes WHERE node_type=? AND normalized_name=? AND parent_id=? LIMIT 1",
-            (node_type, normalized, int(parent_id)),
-        ).fetchone()
+
+    # Backward-compatible adoption path for legacy rows created before stable
+    # source references were used as identity. Never merge into a row that
+    # already belongs to a different source_ref.
+    if existing is None:
+        if parent_id is None:
+            existing = db.execute(
+                """
+                SELECT * FROM geography_nodes
+                WHERE node_type=? AND normalized_name=? AND parent_id IS NULL
+                  AND (source_ref IS NULL OR source_ref='')
+                LIMIT 1
+                """,
+                (node_type, normalized),
+            ).fetchone()
+        else:
+            existing = db.execute(
+                """
+                SELECT * FROM geography_nodes
+                WHERE node_type=? AND normalized_name=? AND parent_id=?
+                  AND (source_ref IS NULL OR source_ref='')
+                LIMIT 1
+                """,
+                (node_type, normalized, int(parent_id)),
+            ).fetchone()
 
     now = now_iso()
     if existing:
         db.execute(
             """
             UPDATE geography_nodes
-            SET name=?, latitude=COALESCE(?, latitude), longitude=COALESCE(?, longitude),
+            SET name=?, normalized_name=?, parent_id=?,
+                latitude=COALESCE(?, latitude), longitude=COALESCE(?, longitude),
                 source=?, source_ref=?, verified=?, freshness_at=?, updated_at=?
             WHERE id=?
             """,
             (
                 clean_name,
+                normalized,
+                int(parent_id) if parent_id is not None else None,
                 lat,
                 lng,
                 clean_source,
-                str(source_ref or "").strip() or None,
+                clean_source_ref,
                 1 if verified else 0,
                 freshness_at,
                 now,
@@ -152,7 +215,7 @@ def upsert_geography_node(
                 lat,
                 lng,
                 clean_source,
-                str(source_ref or "").strip() or None,
+                clean_source_ref,
                 1 if verified else 0,
                 freshness_at,
                 now,
@@ -160,7 +223,7 @@ def upsert_geography_node(
             ),
         )
         node_id = cursor.lastrowid
-    db.commit()
+    _commit_geography_write(db)
     return get_geography_node(node_id)
 
 
@@ -295,7 +358,7 @@ def link_entity_to_geography(
             ),
         )
         link_id = cursor.lastrowid
-    db.commit()
+    _commit_geography_write(db)
     return get_entity_link(link_id)
 
 
@@ -385,7 +448,7 @@ def link_geography_nodes(
             SET source_ref=?, freshness_at=?, metadata_json=?, updated_at=?
             WHERE id=?
             """,
-            (str(source_ref or "").strip() or None, freshness_at, metadata_json, now, existing["id"]),
+            (clean_source_ref, freshness_at, metadata_json, now, existing["id"]),
         )
         relationship_id = existing["id"]
     else:
@@ -397,11 +460,11 @@ def link_geography_nodes(
             """,
             (
                 int(from_node_id), int(to_node_id), relationship_type, source,
-                str(source_ref or "").strip() or None, freshness_at, metadata_json, now, now,
+                clean_source_ref, freshness_at, metadata_json, now, now,
             ),
         )
         relationship_id = cursor.lastrowid
-    db.commit()
+    _commit_geography_write(db)
     return get_geography_relationship(relationship_id)
 
 
