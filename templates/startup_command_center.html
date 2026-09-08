@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Startup Command Center — ZENDOC{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Startup operations</p>
+    <h1>Startup Command Center</h1>
+    <p class="section-copy">Measure real product utility, India data quality, and provider-network growth without overstating coverage or collecting clinical analytics.</p>
+  </div>
+  <div class="form-actions">
+    <a class="secondary-action" href="{{ url_for('main.admin') }}">Admin Dashboard</a>
+    <a class="secondary-action" href="{{ url_for('main.startup_command_center', days=7) }}">7 days</a>
+    <a class="secondary-action" href="{{ url_for('main.startup_command_center', days=30) }}">30 days</a>
+  </div>
+</section>
+
+<section class="stats startup-stats">
+  <article><span>Healthcare searches</span><strong>{{ metrics.healthcare_searches }}</strong></article>
+  <article><span>Useful-result rate</span><strong>{% if metrics.useful_result_rate is not none %}{{ (metrics.useful_result_rate * 100)|round(1) }}%{% else %}—{% endif %}</strong></article>
+  <article><span>Repeat search users</span><strong>{{ metrics.repeat_search_users }}</strong></article>
+  <article><span>Helpful feedback</span><strong>{% if metrics.helpful_feedback_rate is not none %}{{ (metrics.helpful_feedback_rate * 100)|round(1) }}%{% else %}—{% endif %}</strong></article>
+</section>
+
+<section class="grid two">
+  <article class="panel">
+    <div class="panel-head"><h2>Product utility</h2><span class="status-badge working">{{ metrics.window_days }} days</span></div>
+    <div class="summary-row"><span>Useful searches</span><strong>{{ metrics.useful_searches }}</strong></div>
+    <div class="summary-row"><span>No-result searches</span><strong>{{ metrics.no_result_searches }}</strong></div>
+    <div class="summary-row"><span>Active search users</span><strong>{{ metrics.active_search_users }}</strong></div>
+    <div class="summary-row"><span>Feedback responses</span><strong>{{ metrics.feedback_response_count }}</strong></div>
+    <p class="form-note">{{ metrics.metric_notice }}</p>
+  </article>
+
+  <article class="panel">
+    <div class="panel-head"><h2>India data quality</h2><span class="status-badge beta">Observed data only</span></div>
+    <div class="summary-row"><span>State/UT targets</span><strong>{{ coverage.region_target_count }}</strong></div>
+    <div class="summary-row"><span>Canonical State/UT nodes loaded</span><strong>{{ coverage.canonical_state_nodes_loaded }}</strong></div>
+    <div class="summary-row"><span>Public healthcare entities</span><strong>{{ coverage.public_healthcare_entity_count }}</strong></div>
+    <div class="summary-row"><span>Linked to canonical geography</span><strong>{{ coverage.public_healthcare_entities_linked_to_canonical_geography }}</strong></div>
+    <div class="summary-row"><span>Still unlinked</span><strong>{{ coverage.public_healthcare_entities_unlinked }}</strong></div>
+    <div class="summary-row"><span>Historical unresolved mappings</span><strong>{{ coverage.historical_unresolved_geography_imports }}</strong></div>
+    <p class="form-note">{{ coverage.truth_notice }}</p>
+  </article>
+</section>
+
+<section class="grid two spaced-panel">
+  <article class="panel">
+    <h2>Top search categories</h2>
+    {% if metrics.top_categories %}
+      {% for item in metrics.top_categories %}
+        <div class="summary-row"><span>{{ item.category|replace('_',' ')|title }}</span><strong>{{ item.search_count }}</strong></div>
+      {% endfor %}
+    {% else %}<p class="form-note">No search activity in this window yet.</p>{% endif %}
+  </article>
+  <article class="panel">
+    <h2>Top canonical search geographies</h2>
+    {% if metrics.top_canonical_geographies %}
+      {% for item in metrics.top_canonical_geographies %}
+        <div class="summary-row"><span>{{ item.name }} · {{ item.node_type|replace('_',' ')|title }}</span><strong>{{ item.search_count }}</strong></div>
+      {% endfor %}
+    {% else %}<p class="form-note">No uniquely resolved search geography in this window yet.</p>{% endif %}
+  </article>
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head"><div><h2>India State/UT coverage status</h2><p class="form-note">Priority districts are validation order only. They do not limit national scope.</p></div></div>
+  <table>
+    <thead><tr><th>Region</th><th>Status</th><th>Districts</th><th>Sub-districts</th><th>Blocks</th><th>Villages</th><th>Linked facilities</th></tr></thead>
+    <tbody>
+    {% for item in coverage.regions %}
+      {% set gc = item.geography_counts %}
+      {% set fc = item.linked_public_facility_counts %}
+      <tr>
+        <td><strong>{{ item.name }}</strong><br><small>{{ item.region_type|replace('_',' ')|title }}</small></td>
+        <td>{{ item.status|replace('_',' ')|title }}</td>
+        <td>{{ gc.get('district', 0) }}</td>
+        <td>{{ gc.get('subdivision', 0) }}</td>
+        <td>{{ gc.get('block', 0) }}</td>
+        <td>{{ gc.get('village', 0) }}</td>
+        <td>{{ fc.values()|sum }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head"><div><h2>Public listing claims</h2><p class="form-note">Approved claims link a provider profile to a directory record; they do not automatically verify the provider or connect booking.</p></div></div>
+  {% if claims %}
+  <table>
+    <thead><tr><th>Listing</th><th>Provider</th><th>Status</th><th>Provider verification</th><th>Review</th></tr></thead>
+    <tbody>
+    {% for claim in claims %}
+      <tr>
+        <td>{{ claim.public_entity_name }}<br><small>{{ claim.public_entity_category|replace('_',' ')|title }} · {{ claim.public_entity_source_id }}</small></td>
+        <td>{{ claim.organization or claim.provider_type|title }}</td>
+        <td>{{ claim.status }}</td>
+        <td>{{ claim.provider_verification_status }}</td>
+        <td>
+          {% if claim.status == 'pending' %}
+          <form class="inline-form" method="post" action="{{ url_for('main.public_entity_claim_review_web', claim_id=claim.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <select name="status"><option value="approved">Approve association</option><option value="rejected">Reject</option></select>
+            <input name="review_note" maxlength="300" placeholder="Evidence/review note">
+            <button type="submit">Review</button>
+          </form>
+          {% else %}<span>Reviewed</span>{% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="form-note">No public listing claims yet.</p>
+  {% endif %}
+</section>
+
+<aside class="trust-note"><strong>Investor-readiness rule</strong><br>Use these numbers as observed product evidence only. Do not convert incomplete source data into invented national coverage, traction, or provider-connectivity claims.</aside>
+{% endblock %}
