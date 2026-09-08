@@ -47,6 +47,12 @@ from .organization_service import assert_resource_tenant
 from .database_reliability import backup_readiness, readiness_report
 from .security import csrf_token, hash_token, is_owner, load_user_and_check_csrf, login_required, new_token, owner_required, role_required, start_user_session
 from .startup_analytics import record_finder_search
+from .public_entity_claims import (
+    list_my_public_entity_claims,
+    list_public_entity_claims,
+    review_public_entity_claim,
+    submit_public_entity_claim,
+)
 
 
 bp = Blueprint("main", __name__)
@@ -1080,6 +1086,75 @@ def require_api_user():
         return None, (jsonify({"error": {"code": 403, "message": "Only the ZENDOC owner may access Admin operations."}}), 403)
     g.observability_actor = user
     return user, None
+
+
+@bp.post("/api/v1/provider/public-entity-claims")
+def api_provider_public_entity_claim_submit():
+    user, error = require_api_user()
+    if error:
+        return error
+    data = request.get_json(silent=True) or {}
+    try:
+        claim = submit_public_entity_claim(
+            user,
+            public_entity_id=int(data.get("public_entity_id")),
+            claimant_note=data.get("claimant_note"),
+        )
+        return jsonify({"claim": claim}), 201
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+    except LookupError as exc:
+        return jsonify({"error": {"code": 404, "message": str(exc)}}), 404
+    except PermissionError as exc:
+        return jsonify({"error": {"code": 403, "message": str(exc)}}), 403
+
+
+@bp.get("/api/v1/provider/public-entity-claims")
+def api_provider_public_entity_claims_list():
+    user, error = require_api_user()
+    if error:
+        return error
+    return jsonify({"claims": list_my_public_entity_claims(user)})
+
+
+@bp.get("/api/v1/admin/public-entity-claims")
+def api_admin_public_entity_claims_list():
+    user, error = require_api_user()
+    if error:
+        return error
+    if not is_owner(user):
+        return jsonify({"error": {"code": 403, "message": "Owner access required."}}), 403
+    try:
+        claims = list_public_entity_claims(
+            user,
+            status=request.args.get("status"),
+            limit=request.args.get("limit", 100),
+        )
+        return jsonify({"claims": claims})
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+
+
+@bp.post("/api/v1/admin/public-entity-claims/<int:claim_id>/review")
+def api_admin_public_entity_claim_review(claim_id):
+    user, error = require_api_user()
+    if error:
+        return error
+    if not is_owner(user):
+        return jsonify({"error": {"code": 403, "message": "Owner access required."}}), 403
+    data = request.get_json(silent=True) or {}
+    try:
+        claim = review_public_entity_claim(
+            user,
+            claim_id,
+            status=data.get("status"),
+            review_note=data.get("review_note"),
+        )
+        return jsonify({"claim": claim})
+    except LookupError as exc:
+        return jsonify({"error": {"code": 404, "message": str(exc)}}), 404
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
 
 
 @bp.get("/api/v1/health")
