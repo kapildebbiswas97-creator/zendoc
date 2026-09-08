@@ -7,6 +7,11 @@ from .public_data_ingestion import ingest_public_records, list_ingestion_batches
 from .dataset_adapters import adapt_records, parse_csv_text
 from .data_gap_registry import build_collection_plan, list_data_gaps
 from .data_freshness import ingestion_freshness_report
+from .data_refresh import (
+    create_data_refresh_task,
+    data_refresh_operations,
+    update_data_refresh_task,
+)
 from .business_api import (
     business_api_metrics,
     create_business_api_client,
@@ -67,6 +72,56 @@ def _owner():
     if not is_owner(user):
         return None, (jsonify({"error": {"code": 403, "message": "Only the ZENDOC owner may manage public-data ingestion."}}), 403)
     return user, None
+
+
+@bp.get("/api/v1/admin/ingestion/refresh-operations")
+def api_ingestion_refresh_operations():
+    user, error = _owner()
+    if error:
+        return error
+    return jsonify({"refresh_operations": data_refresh_operations(user)})
+
+
+@bp.post("/api/v1/admin/ingestion/refresh-tasks")
+def api_ingestion_refresh_task_create():
+    user, error = _owner()
+    if error:
+        return error
+    data = request.get_json(silent=True) or {}
+    try:
+        task = create_data_refresh_task(
+            user,
+            source_id=data.get("source_id"),
+            ingestion_type=data.get("ingestion_type"),
+            owner_note=data.get("owner_note"),
+        )
+        return jsonify({"task": task}), 201
+    except LookupError as exc:
+        return jsonify({"error": {"code": 404, "message": str(exc)}}), 404
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+
+
+@bp.patch("/api/v1/admin/ingestion/refresh-tasks/<int:task_id>")
+def api_ingestion_refresh_task_update(task_id):
+    user, error = _owner()
+    if error:
+        return error
+    data = request.get_json(silent=True) or {}
+    try:
+        task = update_data_refresh_task(
+            user,
+            task_id,
+            status=data.get("status"),
+            linked_batch_id=data.get("linked_batch_id"),
+            owner_note=data.get("owner_note"),
+            blocked_reason=data.get("blocked_reason"),
+        )
+        return jsonify({"task": task})
+    except LookupError as exc:
+        return jsonify({"error": {"code": 404, "message": str(exc)}}), 404
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
 
 
 @bp.get("/api/v1/admin/ingestion/freshness")
