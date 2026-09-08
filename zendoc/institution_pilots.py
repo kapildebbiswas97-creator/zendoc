@@ -173,10 +173,10 @@ def create_pilot_milestone(actor: Any, pilot_id: int, data: dict) -> dict:
     )
     _event(int(pilot_id), "milestone_created", status, f"Milestone created: {title[:200]}", int(actor["id"]))
     get_db().commit()
-    return get_db().execute(
+    return dict(get_db().execute(
         "SELECT * FROM institution_pilot_milestones WHERE id=?",
         (int(cursor.lastrowid),),
-    ).fetchone()
+    ).fetchone())
 
 
 def update_pilot_milestone(actor: Any, milestone_id: int, data: dict) -> dict:
