@@ -116,10 +116,12 @@ def get_partner_booking_handoff(identity: dict, handoff_id: int) -> dict:
     if not row:
         raise LookupError("Partner booking handoff not found.")
     result = dict(row)
-    result["booking_confirmed"] = result["status"] == "accepted"
+    result["handoff_accepted"] = result["status"] == "accepted"
+    result["booking_confirmed"] = False
     result["truth_notice"] = (
-        "A partner handoff is not a confirmed appointment unless status is accepted. "
-        "No symptoms, diagnosis, prescriptions, medical history, or clinical notes are stored here."
+        "An accepted partner handoff means the provider accepted the coordination request; it is not a "
+        "patient appointment record and does not by itself confirm a booked appointment. No symptoms, "
+        "diagnosis, prescriptions, medical history, or clinical notes are stored here."
     )
     return result
 
@@ -136,6 +138,70 @@ def list_partner_booking_handoffs(identity: dict, *, limit: int = 100) -> list[d
         (int(identity["client_id"]), limit),
     ).fetchall()
     return [get_partner_booking_handoff(identity, int(row["id"])) for row in rows]
+
+
+def list_provider_booking_handoffs(user: Any, *, limit: int = 100) -> list[dict]:
+    if not user or user["role"] not in {"doctor", "hospital", "pharmacy"}:
+        raise PermissionError("Only provider accounts may view provider handoffs.")
+    profile = get_db().execute(
+        "SELECT id FROM provider_profiles WHERE user_id=?",
+        (int(user["id"]),),
+    ).fetchone()
+    if not profile:
+        return []
+    limit = max(1, min(int(limit or 100), 500))
+    rows = get_db().execute(
+        """
+        SELECT h.*,c.name client_name
+        FROM partner_booking_handoffs h
+        JOIN business_api_clients c ON c.id=h.client_id
+        WHERE h.provider_profile_id=?
+        ORDER BY h.created_at DESC
+        LIMIT ?
+        """,
+        (int(profile["id"]), limit),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def provider_update_partner_booking_handoff(
+    user: Any,
+    handoff_id: int,
+    *,
+    status: str,
+    status_note: str | None = None,
+) -> dict:
+    if not user or user["role"] not in {"doctor", "hospital", "pharmacy"}:
+        raise PermissionError("Only provider accounts may review provider handoffs.")
+    clean = str(status or "").strip().lower()
+    if clean not in {"pending", "accepted", "rejected", "cancelled"}:
+        raise ValueError("Unsupported handoff status.")
+
+    db = get_db()
+    row = db.execute(
+        """
+        SELECT h.*,p.user_id
+        FROM partner_booking_handoffs h
+        JOIN provider_profiles p ON p.id=h.provider_profile_id
+        WHERE h.id=? AND p.user_id=?
+        """,
+        (int(handoff_id), int(user["id"])),
+    ).fetchone()
+    if not row:
+        raise LookupError("Partner booking handoff not found for this provider.")
+
+    db.execute(
+        """
+        UPDATE partner_booking_handoffs
+        SET status=?,status_note=?,updated_at=?
+        WHERE id=?
+        """,
+        (clean, _clean(status_note, 1000), now_iso(), int(handoff_id)),
+    )
+    db.commit()
+
+    identity = {"client_id": int(row["client_id"])}
+    return get_partner_booking_handoff(identity, int(handoff_id))
 
 
 def list_all_partner_booking_handoffs(actor: Any, *, limit: int = 200) -> list[dict]:
