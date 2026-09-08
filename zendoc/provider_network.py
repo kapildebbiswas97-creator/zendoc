@@ -256,6 +256,7 @@ def provider_network_metrics(actor: Any) -> dict:
     linked_profiles = 0
     verified_profiles = 0
     activated = 0
+    pilot_linked = 0
 
     for row in rows:
         status_counts[str(row["status"])] = status_counts.get(str(row["status"]), 0) + 1
@@ -265,6 +266,8 @@ def provider_network_metrics(actor: Any) -> dict:
             onboarding = _observed_onboarding(int(row["linked_provider_profile_id"]))
             if onboarding and onboarding["verification_status"] == "verified":
                 verified_profiles += 1
+        if row["linked_pilot_id"] is not None:
+            pilot_linked += 1
         if row["status"] == "activated":
             activated += 1
 
@@ -275,6 +278,7 @@ def provider_network_metrics(actor: Any) -> dict:
         "provider_type_counts": type_counts,
         "linked_profile_count": linked_profiles,
         "linked_verified_profile_count": verified_profiles,
+        "pilot_linked_prospect_count": pilot_linked,
         "activated_count": activated,
         "activation_rate": round(activated / total, 4) if total else None,
         "truth_notice": (
