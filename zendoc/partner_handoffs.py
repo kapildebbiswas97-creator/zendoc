@@ -300,6 +300,17 @@ def owner_update_partner_booking_handoff(
         """,
         (clean, _clean(status_note, 1000), now_iso(), int(handoff_id)),
     )
+    _sync_slot_hold_after_status(int(handoff_id), clean)
+    db.commit()
+    record_partner_audit_event(
+        event_type="handoff_status_updated",
+        actor_type="owner",
+        actor_user_id=int(actor["id"]),
+        client_id=int(row["client_id"]),
+        entity_type="partner_booking_handoff",
+        entity_id=int(handoff_id),
+        metadata={"status": clean, "provider_profile_id": int(row["provider_profile_id"])},
+    )
     db.commit()
 
     identity = {"client_id": int(row["client_id"])}
