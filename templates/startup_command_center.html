@@ -23,6 +23,52 @@
 
 <section class="grid two">
   <article class="panel">
+    <div class="panel-head"><h2>Patient retention</h2><span class="status-badge working">Exact-day cohorts</span></div>
+    <div class="summary-row"><span>D7 eligible users</span><strong>{{ retention.d7.eligible_users }}</strong></div>
+    <div class="summary-row"><span>D7 retained</span><strong>{{ retention.d7.retained_users }}</strong></div>
+    <div class="summary-row"><span>D7 retention</span><strong>{% if retention.d7.retention_rate is not none %}{{ (retention.d7.retention_rate * 100)|round(1) }}%{% else %}—{% endif %}</strong></div>
+    <div class="summary-row"><span>D30 eligible users</span><strong>{{ retention.d30.eligible_users }}</strong></div>
+    <div class="summary-row"><span>D30 retained</span><strong>{{ retention.d30.retained_users }}</strong></div>
+    <div class="summary-row"><span>D30 retention</span><strong>{% if retention.d30.retention_rate is not none %}{{ (retention.d30.retention_rate * 100)|round(1) }}%{% else %}—{% endif %}</strong></div>
+    <p class="form-note">{{ retention.truth_notice }}</p>
+  </article>
+
+  <article class="panel">
+    <div class="panel-head"><h2>Care-journey conversion</h2><span class="status-badge working">{{ care_funnel.window_days }} days</span></div>
+    {% for stage in care_funnel.stages %}
+      <div class="summary-row">
+        <span>{{ stage.stage|replace('_',' ')|title }}</span>
+        <strong>{{ stage.journey_count }}{% if stage.conversion_from_started is not none %} · {{ (stage.conversion_from_started * 100)|round(1) }}%{% endif %}</strong>
+      </div>
+    {% endfor %}
+    <div class="summary-row"><span>Blocked journeys</span><strong>{{ care_funnel.blocked_journeys }}</strong></div>
+    <div class="summary-row"><span>Waiting for human</span><strong>{{ care_funnel.waiting_human_journeys }}</strong></div>
+    <p class="form-note">{{ care_funnel.truth_notice }}</p>
+  </article>
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head">
+    <div><h2>Provider onboarding funnel</h2><p class="form-note">Independent real milestones over the last {{ provider_funnel.window_days }} days.</p></div>
+    <span class="status-badge working">{{ provider_funnel.provider_profiles_created }} profiles</span>
+  </div>
+  <table>
+    <thead><tr><th>Milestone</th><th>Providers</th><th>Conversion from created</th></tr></thead>
+    <tbody>
+      {% for stage in provider_funnel.stages %}
+      <tr>
+        <td>{{ stage.stage|replace('_',' ')|title }}</td>
+        <td>{{ stage.provider_count }}</td>
+        <td>{% if stage.conversion_from_created is not none %}{{ (stage.conversion_from_created * 100)|round(1) }}%{% else %}—{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="form-note">{{ provider_funnel.truth_notice }}</p>
+</section>
+
+<section class="grid two">
+  <article class="panel">
     <div class="panel-head"><h2>Product utility</h2><span class="status-badge working">{{ metrics.window_days }} days</span></div>
     <div class="summary-row"><span>Useful searches</span><strong>{{ metrics.useful_searches }}</strong></div>
     <div class="summary-row"><span>No-result searches</span><strong>{{ metrics.no_result_searches }}</strong></div>
