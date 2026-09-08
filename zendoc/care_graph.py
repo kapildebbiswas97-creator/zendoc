@@ -77,7 +77,11 @@ def record_care_continuity_event(
     )
     event_id = cursor.lastrowid
 
-    # Emit platform event for audit
+    # Emit platform event for audit. Clinical/business data may remain in the
+    # timeline record, but the operational event must contain only minimized,
+    # redacted metadata.
+    from .audit_privacy import safe_payload
+
     db.execute(
         """
         INSERT INTO platform_events
@@ -88,7 +92,7 @@ def record_care_continuity_event(
             actor_id,
             str(event_id),
             event_type,
-            json.dumps(metadata or {}),
+            json.dumps(safe_payload(metadata or {}), sort_keys=True, separators=(",", ":")),
             now,
         ),
     )
@@ -113,7 +117,6 @@ def get_patient_care_graph(patient_id: int, actor: Any = None) -> dict[str, Any]
     if not patient_row:
         raise LookupError(f"Patient #{patient_id} not found.")
 
-    # 1. Appointments
     appts = db.execute(
         """
         SELECT a.*, d.name doctor_name, dp.specialty
@@ -126,7 +129,6 @@ def get_patient_care_graph(patient_id: int, actor: Any = None) -> dict[str, Any]
         (patient_id,),
     ).fetchall()
 
-    # 2. Prescriptions & items
     prescs = db.execute(
         """
         SELECT p.*
@@ -148,7 +150,6 @@ def get_patient_care_graph(patient_id: int, actor: Any = None) -> dict[str, Any]
         p_dict["items"] = [dict(i) for i in items]
         prescriptions_list.append(p_dict)
 
-    # 3. Medicine / Pharmacy Orders
     orders = db.execute(
         """
         SELECT mo.*, pharm.name pharmacy_name, fp.strategy_name
@@ -174,7 +175,6 @@ def get_patient_care_graph(patient_id: int, actor: Any = None) -> dict[str, Any]
         o_dict["events"] = [dict(e) for e in events]
         orders_list.append(o_dict)
 
-    # 4. Diagnostics & Lab Bookings
     diag_bookings = db.execute(
         """
         SELECT db.*, dc.name test_name, dc.category test_category, lab.name lab_name
@@ -187,7 +187,6 @@ def get_patient_care_graph(patient_id: int, actor: Any = None) -> dict[str, Any]
         (patient_id,),
     ).fetchall()
 
-    # 5. Timeline Events
     timeline = db.execute(
         """
         SELECT * FROM health_timeline_events
@@ -197,15 +196,12 @@ def get_patient_care_graph(patient_id: int, actor: Any = None) -> dict[str, Any]
         (patient_id,),
     ).fetchall()
 
-    # 6. Reminders / Follow-ups
     reminders = db.execute(
         "SELECT * FROM medicine_reminders WHERE user_id=? AND active=1 ORDER BY reminder_time ASC",
         (patient_id,),
     ).fetchall()
 
-    # Synthesize Edges (Provenance & Continuity relations)
     edges = []
-    # Appointment -> Prescription
     for p in prescriptions_list:
         if p.get("prescriber_id"):
             edges.append({
@@ -215,7 +211,6 @@ def get_patient_care_graph(patient_id: int, actor: Any = None) -> dict[str, Any]
                 "label": f"Prescribed by {p.get('prescriber_name')}",
             })
 
-    # Prescription -> Order
     for o in orders_list:
         if o.get("prescription_id"):
             edges.append({
@@ -232,7 +227,6 @@ def get_patient_care_graph(patient_id: int, actor: Any = None) -> dict[str, Any]
                 "label": f"Fulfilled by {o.get('pharmacy_name') or 'Pharmacy'}",
             })
 
-    # Diagnostic Booking -> Report Record
     for db_item in diag_bookings:
         if db_item.get("report_record_id"):
             edges.append({
@@ -242,7 +236,6 @@ def get_patient_care_graph(patient_id: int, actor: Any = None) -> dict[str, Any]
                 "label": f"Report for {db_item['test_name']}",
             })
 
-    # Order -> Reminder
     for r in reminders:
         edges.append({
             "from": "health_memory",
