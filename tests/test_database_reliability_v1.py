@@ -5,6 +5,7 @@ from pathlib import Path
 from zendoc.database_reliability import (
     backup_readiness,
     create_sqlite_backup,
+    deployment_identity,
     migration_status,
     readiness_report,
     schema_status,
@@ -117,3 +118,20 @@ def test_postgres_adapter_translates_begin_immediate_and_qmark_parameters():
     )
     assert "%s" in sql
     assert "?" not in sql
+
+
+def test_deployment_identity_uses_render_metadata(monkeypatch):
+    monkeypatch.setenv("RENDER", "true")
+    monkeypatch.setenv("RENDER_SERVICE_NAME", "zendoc-production")
+    monkeypatch.setenv("RENDER_SERVICE_ID", "srv-test")
+    monkeypatch.setenv("RENDER_EXTERNAL_HOSTNAME", "zendoc-test.onrender.com")
+    monkeypatch.setenv("RENDER_GIT_COMMIT", "0123456789abcdef0123456789abcdef01234567")
+
+    identity = deployment_identity()
+
+    assert identity["platform"] == "render"
+    assert identity["service_name"] == "zendoc-production"
+    assert identity["service_id"] == "srv-test"
+    assert identity["external_hostname"] == "zendoc-test.onrender.com"
+    assert identity["git_commit"] == "0123456789abcdef0123456789abcdef01234567"
+    assert identity["git_commit_short"] == "0123456789ab"
