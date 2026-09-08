@@ -38,6 +38,7 @@ REQUIRED_TABLES = (
     "business_api_usage",
     "partner_booking_handoffs",
     "partner_slot_holds",
+    "partner_api_audit_events",
     "geography_nodes",
     "geography_relationships",
     "geography_import_regions",
