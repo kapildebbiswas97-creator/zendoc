@@ -50,7 +50,7 @@ from .security import csrf_token, hash_token, is_owner, load_user_and_check_csrf
 from .startup_analytics import care_journey_conversion, india_coverage_quality, provider_onboarding_funnel, record_finder_search, record_product_activity, retention_metrics, startup_metrics, submit_finder_feedback
 from .startup_finance import create_financial_entry, create_financial_snapshot, financial_kpis, list_financial_entries
 from .investor_dashboard import investor_traction_snapshot
-from .business_api import authenticate_business_api_key, business_api_metrics, business_api_self_usage, list_business_api_clients
+from .business_api import BusinessApiRateLimitError, authenticate_business_api_key, business_api_metrics, business_api_self_usage, list_business_api_clients
 from .institution_pilots import (
     create_institution_pilot,
     institution_pilot_metrics,
@@ -1362,6 +1362,8 @@ def api_business_public_directory():
                 "booking connectivity, stock, beds, or ZENDOC verification."
             ),
         })
+    except BusinessApiRateLimitError as exc:
+        return jsonify({"error": {"code": 429, "message": str(exc)}}), 429
     except PermissionError as exc:
         return jsonify({"error": {"code": 401, "message": str(exc)}}), 401
 
@@ -1410,6 +1412,8 @@ def api_business_provider_search():
             "patient_data_access": False,
             "truth_notice": "Verified ZENDOC provider profiles only. No patient or clinical data is exposed.",
         })
+    except BusinessApiRateLimitError as exc:
+        return jsonify({"error": {"code": 429, "message": str(exc)}}), 429
     except PermissionError as exc:
         return jsonify({"error": {"code": 401, "message": str(exc)}}), 401
 
@@ -1428,6 +1432,8 @@ def api_business_usage():
         except (TypeError, ValueError):
             days = 30
         return jsonify({"usage": business_api_self_usage(identity, days=days)})
+    except BusinessApiRateLimitError as exc:
+        return jsonify({"error": {"code": 429, "message": str(exc)}}), 429
     except PermissionError as exc:
         return jsonify({"error": {"code": 401, "message": str(exc)}}), 401
 
@@ -1463,6 +1469,8 @@ def api_business_provider_profile(profile_id):
             "patient_data_access": False,
             "truth_notice": "Verified public provider profile only. No patient or clinical data is exposed.",
         })
+    except BusinessApiRateLimitError as exc:
+        return jsonify({"error": {"code": 429, "message": str(exc)}}), 429
     except PermissionError as exc:
         return jsonify({"error": {"code": 401, "message": str(exc)}}), 401
 
@@ -1506,6 +1514,8 @@ def api_business_linked_pilot():
                 "It cannot enumerate or access other organizations' pilots."
             ),
         })
+    except BusinessApiRateLimitError as exc:
+        return jsonify({"error": {"code": 429, "message": str(exc)}}), 429
     except PermissionError as exc:
         return jsonify({"error": {"code": 401, "message": str(exc)}}), 401
 
@@ -1549,6 +1559,8 @@ def api_business_provider_availability(profile_id):
                 "This does not expose patient identity or clinical information."
             ),
         })
+    except BusinessApiRateLimitError as exc:
+        return jsonify({"error": {"code": 429, "message": str(exc)}}), 429
     except PermissionError as exc:
         return jsonify({"error": {"code": 401, "message": str(exc)}}), 401
 
@@ -1573,6 +1585,8 @@ def api_business_ping():
             "patient_data_access": False,
             "truth_notice": "This endpoint proves partner authentication only. It exposes no patient or clinical data.",
         })
+    except BusinessApiRateLimitError as exc:
+        return jsonify({"error": {"code": 429, "message": str(exc)}}), 429
     except PermissionError as exc:
         return jsonify({"error": {"code": 401, "message": str(exc)}}), 401
 
