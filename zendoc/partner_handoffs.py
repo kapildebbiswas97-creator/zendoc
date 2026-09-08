@@ -74,7 +74,8 @@ def create_partner_booking_handoff(
         db.execute(
             """
             DELETE FROM partner_slot_holds
-            WHERE provider_profile_id=? AND slot_key=? AND expires_at<=?
+            WHERE provider_profile_id=? AND slot_key=?
+              AND (status!='active' OR expires_at<=?)
             """,
             (int(provider_profile_id), slot_key, now),
         )
