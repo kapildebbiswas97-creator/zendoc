@@ -520,6 +520,7 @@ def _public_entity(row: dict) -> dict:
         metadata = {}
     row["metadata"] = metadata
     row["source"] = row["source_id"]
+    row["claimable_public_listing"] = True
     row["verification_status"] = row["zendoc_verification_status"]
     row["bookable_in_zendoc"] = row["booking_connectivity"] == "connected"
     row["source_disclaimer"] = (
