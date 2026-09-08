@@ -182,8 +182,7 @@ jobs:
       (
         (
           github.event_name == 'push' &&
-          (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/post-submission-production') &&
-          vars.ZENDOC_DEPLOYMENT_URL != ''
+          github.ref == 'refs/heads/main'
         ) ||
         (
           github.event_name == 'workflow_dispatch' &&
@@ -192,7 +191,7 @@ jobs:
       )
     timeout-minutes: 5
     env:
-      DEPLOYMENT_URL: ${{ inputs.deployment_url || vars.ZENDOC_DEPLOYMENT_URL }}
+      DEPLOYMENT_URL: ${{ inputs.deployment_url || vars.ZENDOC_DEPLOYMENT_URL || 'https://zendoc-ykax.onrender.com' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
