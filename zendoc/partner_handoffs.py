@@ -7,7 +7,7 @@ history, clinical notes, and private patient records.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from .db import get_db, is_integrity_error, now_iso
@@ -16,6 +16,7 @@ from .security import assert_owner
 
 
 HANDOFF_STATUSES = {"received", "pending", "accepted", "rejected", "cancelled"}
+HOLD_MINUTES = 30
 
 
 def create_partner_booking_handoff(
@@ -45,13 +46,8 @@ def create_partner_booking_handoff(
         raise ValueError("requested_for must be a valid ISO date-time.") from exc
     if requested_dt.tzinfo is None:
         requested_dt = requested_dt.replace(tzinfo=timezone.utc)
-
-    requested_date = requested_dt.date().isoformat()
-    slot_text = requested_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M")
-    slots = available_slots(int(provider_profile_id), requested_date)
-    normalized_slots = {str(item)[:16] for item in slots}
-    if slot_text[:16] not in normalized_slots:
-        raise ValueError("Requested provider slot is not currently available.")
+    requested_dt = requested_dt.astimezone(timezone.utc)
+    slot_key = requested_dt.strftime("%Y-%m-%dT%H:%M")
 
     db = get_db()
     existing = db.execute(
@@ -65,8 +61,22 @@ def create_partner_booking_handoff(
     if existing:
         return get_partner_booking_handoff(identity, int(existing["id"]))
 
+    requested_date = requested_dt.date().isoformat()
+    slots = available_slots(int(provider_profile_id), requested_date)
+    normalized_slots = {str(item)[:16] for item in slots}
+    if slot_key not in normalized_slots:
+        raise ValueError("Requested provider slot is not currently available.")
+
     now = now_iso()
+    expires_at = (datetime.now(timezone.utc) + timedelta(minutes=HOLD_MINUTES)).isoformat(timespec="seconds")
     try:
+        db.execute(
+            """
+            DELETE FROM partner_slot_holds
+            WHERE provider_profile_id=? AND slot_key=? AND expires_at<=?
+            """,
+            (int(provider_profile_id), slot_key, now),
+        )
         cursor = db.execute(
             """
             INSERT INTO partner_booking_handoffs
@@ -79,25 +89,44 @@ def create_partner_booking_handoff(
                 int(identity["client_id"]),
                 int(provider_profile_id),
                 reference,
-                requested_dt.astimezone(timezone.utc).isoformat(timespec="minutes"),
+                requested_dt.isoformat(timespec="minutes"),
                 _clean(contact_reference, 300),
                 now,
                 now,
             ),
         )
         handoff_id = int(cursor.lastrowid)
+        db.execute(
+            """
+            INSERT INTO partner_slot_holds
+            (client_id,provider_profile_id,slot_key,handoff_id,status,expires_at,created_at,updated_at)
+            VALUES (?,?,?,?,'active',?,?,?)
+            """,
+            (
+                int(identity["client_id"]),
+                int(provider_profile_id),
+                slot_key,
+                handoff_id,
+                expires_at,
+                now,
+                now,
+            ),
+        )
         db.commit()
     except Exception as exc:
-        if not is_integrity_error(exc):
-            raise
         db.rollback()
-        row = db.execute(
-            "SELECT id FROM partner_booking_handoffs WHERE client_id=? AND partner_reference=?",
-            (int(identity["client_id"]), reference),
-        ).fetchone()
-        if not row:
-            raise
-        handoff_id = int(row["id"])
+        if is_integrity_error(exc):
+            existing = db.execute(
+                """
+                SELECT id FROM partner_booking_handoffs
+                WHERE client_id=? AND partner_reference=?
+                """,
+                (int(identity["client_id"]), reference),
+            ).fetchone()
+            if existing:
+                return get_partner_booking_handoff(identity, int(existing["id"]))
+            raise ValueError("Requested provider slot is temporarily held by another coordination request.") from exc
+        raise
 
     return get_partner_booking_handoff(identity, handoff_id)
 
@@ -198,6 +227,7 @@ def provider_update_partner_booking_handoff(
         """,
         (clean, _clean(status_note, 1000), now_iso(), int(handoff_id)),
     )
+    _sync_slot_hold_after_status(int(handoff_id), clean)
     db.commit()
 
     identity = {"client_id": int(row["client_id"])}
@@ -253,6 +283,26 @@ def owner_update_partner_booking_handoff(
 
     identity = {"client_id": int(row["client_id"])}
     return get_partner_booking_handoff(identity, int(handoff_id))
+
+
+def _sync_slot_hold_after_status(handoff_id: int, status: str) -> None:
+    db = get_db()
+    now = now_iso()
+    if status in {"rejected", "cancelled"}:
+        db.execute(
+            "UPDATE partner_slot_holds SET status='released',updated_at=? WHERE handoff_id=? AND status='active'",
+            (now, int(handoff_id)),
+        )
+    elif status == "accepted":
+        expires_at = (datetime.now(timezone.utc) + timedelta(minutes=HOLD_MINUTES)).isoformat(timespec="seconds")
+        db.execute(
+            """
+            UPDATE partner_slot_holds
+            SET expires_at=?,updated_at=?
+            WHERE handoff_id=? AND status='active'
+            """,
+            (expires_at, now, int(handoff_id)),
+        )
 
 
 def _clean(value: Any, limit: int) -> str | None:
