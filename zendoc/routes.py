@@ -54,6 +54,11 @@ from .record_storage import get_record_storage
 from .organization_service import assert_resource_tenant
 from .database_reliability import backup_readiness, readiness_report
 from .data_freshness import ingestion_freshness_report
+from .data_refresh import (
+    create_data_refresh_task,
+    data_refresh_operations,
+    update_data_refresh_task,
+)
 from .security import csrf_token, hash_token, is_owner, load_user_and_check_csrf, login_required, new_token, owner_required, role_required, start_user_session
 from .startup_analytics import care_journey_conversion, india_coverage_quality, provider_onboarding_funnel, record_finder_search, record_product_activity, retention_metrics, startup_metrics, submit_finder_feedback, user_activation_funnel
 from .startup_finance import create_financial_entry, create_financial_snapshot, financial_kpis, list_financial_entries
@@ -1121,7 +1126,42 @@ def startup_data_freshness():
         g.user,
         recent_batch_limit=request.args.get("limit", 50),
     )
-    return render_template("data_freshness.html", report=report)
+    operations = data_refresh_operations(g.user)
+    return render_template("data_freshness.html", report=report, operations=operations)
+
+
+@bp.post("/admin/startup/data-refresh")
+@owner_required
+def startup_data_refresh_create_web():
+    try:
+        create_data_refresh_task(
+            g.user,
+            source_id=request.form.get("source_id"),
+            ingestion_type=request.form.get("ingestion_type"),
+            owner_note=request.form.get("owner_note"),
+        )
+        flash("Data refresh task queued.", "success")
+    except (LookupError, TypeError, ValueError, PermissionError) as error:
+        flash(str(error), "error")
+    return redirect(url_for("main.startup_data_freshness"))
+
+
+@bp.post("/admin/startup/data-refresh/<int:task_id>")
+@owner_required
+def startup_data_refresh_update_web(task_id):
+    try:
+        update_data_refresh_task(
+            g.user,
+            task_id,
+            status=request.form.get("status"),
+            linked_batch_id=request.form.get("linked_batch_id") or None,
+            owner_note=request.form.get("owner_note"),
+            blocked_reason=request.form.get("blocked_reason"),
+        )
+        flash("Data refresh task updated.", "success")
+    except (LookupError, TypeError, ValueError, PermissionError) as error:
+        flash(str(error), "error")
+    return redirect(url_for("main.startup_data_freshness"))
 
 
 @bp.get("/admin/startup/b2b-operations")
