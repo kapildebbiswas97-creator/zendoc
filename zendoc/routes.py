@@ -47,6 +47,7 @@ from .organization_service import assert_resource_tenant
 from .database_reliability import backup_readiness, readiness_report
 from .security import csrf_token, hash_token, is_owner, load_user_and_check_csrf, login_required, new_token, owner_required, role_required, start_user_session
 from .startup_analytics import care_journey_conversion, india_coverage_quality, provider_onboarding_funnel, record_finder_search, record_product_activity, retention_metrics, startup_metrics, submit_finder_feedback
+from .business_api import authenticate_business_api_key
 from .institution_pilots import (
     create_institution_pilot,
     institution_pilot_metrics,
@@ -1260,6 +1261,30 @@ def api_admin_public_entity_claim_review(claim_id):
         return jsonify({"error": {"code": 404, "message": str(exc)}}), 404
     except (TypeError, ValueError) as exc:
         return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+
+
+@bp.get("/api/v1/business/ping")
+def api_business_ping():
+    raw_key = request.headers.get("X-ZENDOC-Partner-Key", "")
+    try:
+        identity = authenticate_business_api_key(
+            raw_key,
+            endpoint="/api/v1/business/ping",
+            method="GET",
+        )
+        return jsonify({
+            "status": "ok",
+            "client": {
+                "client_uid": identity["client_uid"],
+                "client_name": identity["client_name"],
+                "client_type": identity["client_type"],
+                "scopes": identity["scopes"],
+            },
+            "patient_data_access": False,
+            "truth_notice": "This endpoint proves partner authentication only. It exposes no patient or clinical data.",
+        })
+    except PermissionError as exc:
+        return jsonify({"error": {"code": 401, "message": str(exc)}}), 401
 
 
 @bp.get("/api/v1/health")
