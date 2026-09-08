@@ -130,6 +130,118 @@
   </table>
 </section>
 
+<section class="grid two spaced-panel">
+  <form class="panel" method="post" action="{{ url_for('main.startup_pilot_create_web') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <p class="eyebrow">B2B growth</p>
+    <h2>Add institution pilot</h2>
+    <label>Organization name <input name="organization_name" required maxlength="300"></label>
+    <label>Organization type
+      <select name="organization_type" required>
+        <option value="hospital">Hospital</option>
+        <option value="diagnostic_centre">Diagnostic centre / lab</option>
+        <option value="pharmacy">Pharmacy</option>
+        <option value="college">College / university</option>
+        <option value="ngo">NGO</option>
+        <option value="employer">Employer</option>
+        <option value="clinic">Clinic</option>
+        <option value="other">Other institution</option>
+      </select>
+    </label>
+    <div class="form-grid">
+      <label>State <input name="state" maxlength="120"></label>
+      <label>District <input name="district" maxlength="120"></label>
+    </div>
+    <div class="form-grid">
+      <label>Contact name <input name="contact_name" maxlength="200"></label>
+      <label>Contact email <input name="contact_email" type="email" maxlength="320"></label>
+    </div>
+    <div class="form-grid">
+      <label>Status
+        <select name="status">
+          {% for status in ['lead','proposed','active','paused','completed','converted','declined'] %}
+          <option value="{{ status }}">{{ status|title }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Commercial stage
+        <select name="commercial_status">
+          {% for status in ['none','loi','contract','paid'] %}
+          <option value="{{ status }}">{{ status|upper }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+    <div class="form-grid">
+      <label>Start date <input name="start_date" type="date"></label>
+      <label>End date <input name="end_date" type="date"></label>
+    </div>
+    <div class="form-grid">
+      <label>Target users <input name="target_users" type="number" min="0"></label>
+      <label>Provider seats <input name="target_provider_seats" type="number" min="0"></label>
+    </div>
+    <label>Agreed features <input name="agreed_features" placeholder="Appointments, discovery, provider dashboard"></label>
+    <label>Success metrics <input name="success_metrics" placeholder="Active users, useful-result rate, completed journeys"></label>
+    <label>Next action <input name="next_action" maxlength="500"></label>
+    <label>Next action due <input name="next_action_due" type="date"></label>
+    <label>Entered monthly value (₹) <input name="monthly_value_inr" type="number" min="0" step="0.01"></label>
+    <label>Internal notes <textarea name="notes" rows="3" maxlength="2000"></textarea></label>
+    <button type="submit">Add pilot</button>
+    <p class="form-note">Only enter real organizations and real commercial values. Proposal/LOI is not revenue.</p>
+  </form>
+
+  <article class="panel">
+    <div class="panel-head"><h2>Pilot pipeline</h2><span class="status-badge working">{{ pilot_metrics.pilot_count }} total</span></div>
+    <div class="summary-row"><span>Active pilots</span><strong>{{ pilot_metrics.active_pilots }}</strong></div>
+    <div class="summary-row"><span>Completed pilots</span><strong>{{ pilot_metrics.completed_pilots }}</strong></div>
+    <div class="summary-row"><span>Converted pilots</span><strong>{{ pilot_metrics.converted_pilots }}</strong></div>
+    <div class="summary-row"><span>Paid pilots</span><strong>{{ pilot_metrics.paid_pilots }}</strong></div>
+    <div class="summary-row"><span>Pilot conversion</span><strong>{% if pilot_metrics.conversion_rate is not none %}{{ (pilot_metrics.conversion_rate * 100)|round(1) }}%{% else %}—{% endif %}</strong></div>
+    <div class="summary-row"><span>Entered contract/paid monthly value</span><strong>₹{{ pilot_metrics.entered_monthly_value_inr|round(2) }}</strong></div>
+    <p class="form-note">{{ pilot_metrics.truth_notice }}</p>
+  </article>
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head"><div><h2>Institution pilots</h2><p class="form-note">Track real partner movement from lead to pilot to commercial conversion.</p></div></div>
+  {% if pilots %}
+  <table>
+    <thead><tr><th>Organization</th><th>Location</th><th>Status</th><th>Commercial</th><th>Next action</th><th>Update</th></tr></thead>
+    <tbody>
+    {% for pilot in pilots %}
+      <tr>
+        <td><strong>{{ pilot.organization_name }}</strong><br><small>{{ pilot.organization_type|replace('_',' ')|title }}</small></td>
+        <td>{{ pilot.district or '—' }}{% if pilot.state %}, {{ pilot.state }}{% endif %}</td>
+        <td>{{ pilot.status }}</td>
+        <td>{{ pilot.commercial_status }}</td>
+        <td>{{ pilot.next_action or '—' }}{% if pilot.next_action_due %}<br><small>Due {{ pilot.next_action_due }}</small>{% endif %}</td>
+        <td>
+          <form class="inline-form" method="post" action="{{ url_for('main.startup_pilot_update_web', pilot_id=pilot.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <select name="status">
+              {% for status in ['lead','proposed','active','paused','completed','converted','declined'] %}
+              <option value="{{ status }}" {% if pilot.status == status %}selected{% endif %}>{{ status }}</option>
+              {% endfor %}
+            </select>
+            <select name="commercial_status">
+              {% for status in ['none','loi','contract','paid'] %}
+              <option value="{{ status }}" {% if pilot.commercial_status == status %}selected{% endif %}>{{ status }}</option>
+              {% endfor %}
+            </select>
+            <input name="next_action" value="{{ pilot.next_action or '' }}" maxlength="500" placeholder="Next action">
+            <input name="next_action_due" value="{{ pilot.next_action_due or '' }}" type="date">
+            <button type="submit">Save</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="form-note">No institution pilots recorded yet.</p>
+  {% endif %}
+</section>
+
 <section class="panel spaced-panel">
   <div class="panel-head"><div><h2>Public listing claims</h2><p class="form-note">Approved claims link a provider profile to a directory record; they do not automatically verify the provider or connect booking.</p></div></div>
   {% if claims %}
