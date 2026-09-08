@@ -11,6 +11,12 @@ from .official_connectors import connector_readiness, infer_mapping, list_connec
 from .geography_region_registry import import_lgd_state_registry, list_import_regions
 from .state_source_priorities import state_source_priority
 from .india_regions import india_region_catalog
+from .institution_pilots import (
+    create_institution_pilot,
+    institution_pilot_metrics,
+    list_institution_pilots,
+    update_institution_pilot,
+)
 from .startup_analytics import care_journey_conversion, india_coverage_quality, provider_onboarding_funnel, retention_metrics, startup_metrics
 from .state_geography_bootstrap import (
     bootstrap_state_geography,
@@ -332,5 +338,49 @@ def api_startup_provider_funnel():
     try:
         days = int(request.args.get("days", 90))
         return jsonify({"provider_funnel": provider_onboarding_funnel(user, days=days)})
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+
+
+@bp.get("/api/v1/admin/startup/pilots")
+def api_startup_pilots():
+    user, error = _owner()
+    if error:
+        return error
+    try:
+        return jsonify({
+            "pilots": list_institution_pilots(
+                user,
+                status=request.args.get("status"),
+                limit=request.args.get("limit", 100),
+            ),
+            "metrics": institution_pilot_metrics(user),
+        })
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+
+
+@bp.post("/api/v1/admin/startup/pilots")
+def api_startup_pilot_create():
+    user, error = _owner()
+    if error:
+        return error
+    try:
+        pilot = create_institution_pilot(user, request.get_json(silent=True) or {})
+        return jsonify({"pilot": pilot}), 201
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+
+
+@bp.patch("/api/v1/admin/startup/pilots/<int:pilot_id>")
+def api_startup_pilot_update(pilot_id):
+    user, error = _owner()
+    if error:
+        return error
+    try:
+        pilot = update_institution_pilot(user, pilot_id, request.get_json(silent=True) or {})
+        return jsonify({"pilot": pilot})
+    except LookupError as exc:
+        return jsonify({"error": {"code": 404, "message": str(exc)}}), 404
     except (TypeError, ValueError) as exc:
         return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
