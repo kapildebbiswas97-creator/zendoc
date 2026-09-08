@@ -32,6 +32,114 @@
 </section>
 
 <section class="panel spaced-panel">
+  <div class="panel-head">
+    <div>
+      <h2>Urgent P0/P1 operations</h2>
+      <p class="form-note">Persistent owner work items. Completion requires a real completed non-dry-run ingestion batch.</p>
+    </div>
+    <span class="status-badge working">{{ operations.urgent_source_count }} urgent sources</span>
+  </div>
+
+  <div class="grid two">
+    <div>
+      {% for status, count in operations.task_status_counts.items() %}
+      <div class="summary-row"><span>{{ status|replace('_',' ')|title }}</span><strong>{{ count }}</strong></div>
+      {% endfor %}
+    </div>
+    <div>
+      <p class="form-note">{{ operations.truth_notice }}</p>
+    </div>
+  </div>
+
+  {% if operations.urgent_sources %}
+  <table>
+    <thead><tr><th>Priority</th><th>Source</th><th>Reason</th><th>Ingestion</th><th>Operation</th></tr></thead>
+    <tbody>
+    {% for source in operations.urgent_sources %}
+      <tr>
+        <td><strong>{{ source.refresh_priority }}</strong></td>
+        <td><strong>{{ source.name }}</strong><br><small>{{ source.source_id }} · {{ source.geography }}</small></td>
+        <td>{{ source.freshness_status|replace('_',' ')|title }}
+          {% if source.latest_geography_unresolved_count or source.latest_geography_ambiguous_count or source.last_rejected_count %}
+          <br><small>Unresolved {{ source.latest_geography_unresolved_count }} · Ambiguous {{ source.latest_geography_ambiguous_count }} · Rejected {{ source.last_rejected_count }}</small>
+          {% endif %}
+        </td>
+        <td>{{ source.ingestion_types|join(', ') }}</td>
+        <td>
+          {% if source.active_refresh_task %}
+            <strong>{{ source.active_refresh_task.status|replace('_',' ')|title }}</strong>
+            <br><small>Task #{{ source.active_refresh_task.id }} · {{ source.active_refresh_task.reason_code|replace('_',' ') }}</small>
+          {% elif source.ingestion_types %}
+            <form class="inline-form" method="post" action="{{ url_for('main.startup_data_refresh_create_web') }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <input type="hidden" name="source_id" value="{{ source.source_id }}">
+              <select name="ingestion_type">
+                {% for ingestion_type in source.ingestion_types %}
+                <option value="{{ ingestion_type }}">{{ ingestion_type|replace('_',' ') }}</option>
+                {% endfor %}
+              </select>
+              <input name="owner_note" maxlength="1200" placeholder="Optional owner note">
+              <button type="submit">Queue refresh</button>
+            </form>
+          {% else %}
+            <span class="status-badge integration">Reference/integration only</span>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="form-note">No P0/P1 sources currently require urgent refresh work.</p>
+  {% endif %}
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head"><h2>Refresh task ledger</h2></div>
+  {% if operations.tasks %}
+  <table>
+    <thead><tr><th>Task</th><th>Source</th><th>Priority</th><th>Status</th><th>Proof batch</th><th>Update</th></tr></thead>
+    <tbody>
+    {% for task in operations.tasks %}
+      <tr>
+        <td>#{{ task.id }}<br><small>{{ task.reason_code|replace('_',' ')|title }}</small></td>
+        <td><strong>{{ task.source_name }}</strong><br><small>{{ task.source_id }} · {{ task.ingestion_type }}</small></td>
+        <td>{{ task.priority }}</td>
+        <td>{{ task.status|replace('_',' ')|title }}{% if task.blocked_reason %}<br><small>{{ task.blocked_reason }}</small>{% endif %}</td>
+        <td>
+          {% if task.linked_batch_id %}
+            Batch #{{ task.linked_batch_id }} · {{ task.batch_status or '—' }}
+            <br><small>{{ task.batch_accepted_count or 0 }} accepted · {{ task.batch_rejected_count or 0 }} rejected</small>
+          {% else %}—{% endif %}
+        </td>
+        <td>
+          {% if task.status not in ['completed','cancelled'] %}
+          <form class="inline-form" method="post" action="{{ url_for('main.startup_data_refresh_update_web', task_id=task.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <select name="status">
+              {% for status in ['queued','in_progress','blocked','completed','cancelled'] %}
+              <option value="{{ status }}" {% if task.status == status %}selected{% endif %}>{{ status|replace('_',' ') }}</option>
+              {% endfor %}
+            </select>
+            <input name="linked_batch_id" type="number" min="1" value="{{ task.linked_batch_id or '' }}" placeholder="Completed batch ID">
+            <input name="blocked_reason" maxlength="1200" placeholder="Required if blocked">
+            <input name="owner_note" maxlength="1200" value="{{ task.owner_note or '' }}" placeholder="Owner note">
+            <button type="submit">Update</button>
+          </form>
+          {% else %}
+            <span class="form-note">Terminal</span>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="form-note">No persistent refresh tasks have been created yet.</p>
+  {% endif %}
+</section>
+
+<section class="panel spaced-panel">
   <div class="panel-head"><h2>Source refresh queue</h2></div>
   <table>
     <thead>
