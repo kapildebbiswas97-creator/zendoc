@@ -38,8 +38,14 @@ from .institution_pilots import (
     update_institution_pilot,
     update_pilot_milestone,
 )
-from .startup_analytics import user_activation_funnel,
- care_journey_conversion, india_coverage_quality, provider_onboarding_funnel, retention_metrics, startup_metrics
+from .startup_analytics import (
+    care_journey_conversion,
+    india_coverage_quality,
+    provider_onboarding_funnel,
+    retention_metrics,
+    startup_metrics,
+    user_activation_funnel,
+)
 from .startup_finance import create_financial_entry, create_financial_snapshot, financial_kpis, list_financial_entries
 from .investor_dashboard import investor_traction_snapshot
 from .state_geography_bootstrap import (
