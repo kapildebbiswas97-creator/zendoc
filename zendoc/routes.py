@@ -46,6 +46,7 @@ from .record_storage import get_record_storage
 from .organization_service import assert_resource_tenant
 from .database_reliability import backup_readiness, readiness_report
 from .security import csrf_token, hash_token, is_owner, load_user_and_check_csrf, login_required, new_token, owner_required, role_required, start_user_session
+from .startup_analytics import record_finder_search
 
 
 bp = Blueprint("main", __name__)
@@ -844,6 +845,13 @@ def finder():
     )
     if request.method == "POST" or request.args:
         result = HealthcareFinder().search(query)
+        record_finder_search(
+            g.user,
+            category=query["category"],
+            location=query["location"],
+            result_count=len(result.get("results") or []),
+            source_tiers=result.get("source_tiers") or {},
+        )
         audit("search", "healthcare_finder", query["category"])
         get_db().commit()
     return render_template("finder.html", result=result, query=query)
