@@ -174,7 +174,44 @@ def search_public_healthcare_entities(
         params,
     ).fetchall()
     records = [_public_entity(dict(row)) for row in rows]
+    records = _attach_approved_claim_links(records)
     return dedupe_public_healthcare_entities(records)[:limit]
+
+
+def _attach_approved_claim_links(records: list[dict]) -> list[dict]:
+    ids = [int(record["id"]) for record in records if record.get("id") is not None]
+    if not ids:
+        return [dict(record) for record in records]
+
+    placeholders = ",".join("?" for _ in ids)
+    rows = get_db().execute(
+        f"""
+        SELECT id,public_entity_id,provider_profile_id
+        FROM public_entity_claims
+        WHERE status='approved' AND public_entity_id IN ({placeholders})
+        ORDER BY reviewed_at DESC,id DESC
+        """,
+        ids,
+    ).fetchall()
+
+    claims: dict[int, dict] = {}
+    for row in rows:
+        entity_id = int(row["public_entity_id"])
+        claims.setdefault(entity_id, {
+            "approved_claim_id": int(row["id"]),
+            "approved_provider_profile_id": int(row["provider_profile_id"]),
+        })
+
+    result = []
+    for record in records:
+        item = dict(record)
+        link = claims.get(int(item["id"])) if item.get("id") is not None else None
+        item["approved_claim_id"] = link["approved_claim_id"] if link else None
+        item["approved_provider_profile_id"] = link["approved_provider_profile_id"] if link else None
+        item["approved_claim_link"] = bool(link)
+        result.append(item)
+    return result
+
 
 
 def dedupe_public_healthcare_entities(records: list[dict]) -> list[dict]:
@@ -195,13 +232,35 @@ def dedupe_public_healthcare_entities(records: list[dict]) -> list[dict]:
 
     merged = []
     for items in groups.values():
+        approved_profile_ids = {
+            int(item["approved_provider_profile_id"])
+            for item in items
+            if item.get("approved_provider_profile_id") is not None
+        }
+        if len(approved_profile_ids) > 1:
+            for item in items:
+                conflict = _with_public_provenance(item)
+                conflict["claim_link_conflict"] = True
+                conflict["claim_link_conflict_provider_profile_ids"] = sorted(approved_profile_ids)
+                merged.append(conflict)
+            continue
+
         ranked = sorted(items, key=_public_entity_rank)
         primary = dict(ranked[0])
         provenance = [_public_provenance(item) for item in ranked]
+        approved_claim_ids = sorted({
+            int(item["approved_claim_id"])
+            for item in ranked
+            if item.get("approved_claim_id") is not None
+        })
         primary["provenance_sources"] = provenance
         primary["duplicate_source_count"] = len(provenance)
         primary["cross_source_deduplicated"] = len(provenance) > 1
         primary["dedupe_method"] = "EXACT_NAME_AND_STRONG_LOCATION" if len(provenance) > 1 else None
+        primary["approved_claim_ids"] = approved_claim_ids
+        primary["approved_provider_profile_id"] = next(iter(approved_profile_ids), None)
+        primary["approved_claim_link"] = bool(approved_profile_ids)
+        primary["claim_link_conflict"] = False
         merged.append(primary)
 
     merged.extend(passthrough)
@@ -215,6 +274,8 @@ def _with_public_provenance(record: dict) -> dict:
     result["duplicate_source_count"] = 1
     result["cross_source_deduplicated"] = False
     result["dedupe_method"] = None
+    result["approved_claim_ids"] = [int(record["approved_claim_id"])] if record.get("approved_claim_id") is not None else []
+    result["claim_link_conflict"] = False
     return result
 
 
@@ -226,6 +287,8 @@ def _public_provenance(record: dict) -> dict:
         "freshness_at": record.get("freshness_at"),
         "verification_status": record.get("verification_status"),
         "bookable_in_zendoc": bool(record.get("bookable_in_zendoc")),
+        "approved_claim_id": record.get("approved_claim_id"),
+        "approved_provider_profile_id": record.get("approved_provider_profile_id"),
     }
 
 
