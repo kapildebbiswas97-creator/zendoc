@@ -1424,6 +1424,14 @@ def migrate_schema(db):
     )
     db.execute("CREATE INDEX IF NOT EXISTS idx_ai_conversations_user ON ai_conversations(user_id, updated_at)")
 
+    provider_network_columns = table_columns(db, "provider_network_prospects")
+    if "linked_pilot_id" not in provider_network_columns:
+        db.execute("ALTER TABLE provider_network_prospects ADD COLUMN linked_pilot_id INTEGER")
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_provider_network_prospects_pilot "
+        "ON provider_network_prospects(linked_pilot_id, status, updated_at)"
+    )
+
     notification_delivery_columns = table_columns(db, "notification_deliveries")
     for column, ddl in {
         "provider_message_id": "ALTER TABLE notification_deliveries ADD COLUMN provider_message_id TEXT",
@@ -2078,6 +2086,7 @@ def migrate_schema(db):
             city TEXT,
             source_type TEXT NOT NULL,
             source_reference TEXT,
+            linked_pilot_id INTEGER,
             status TEXT NOT NULL DEFAULT 'discovered',
             first_contact_at TEXT,
             last_contact_at TEXT,
@@ -2095,6 +2104,8 @@ def migrate_schema(db):
             ON provider_network_prospects(status, provider_type, updated_at);
         CREATE INDEX IF NOT EXISTS idx_provider_network_prospects_location
             ON provider_network_prospects(state, district, city);
+        CREATE INDEX IF NOT EXISTS idx_provider_network_prospects_pilot
+            ON provider_network_prospects(linked_pilot_id, status, updated_at);
 
         CREATE TABLE IF NOT EXISTS data_ingestion_batches (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
