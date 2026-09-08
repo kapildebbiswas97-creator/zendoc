@@ -952,6 +952,7 @@ def provider_profile():
     schedules = []
     onboarding = None
     evidence = []
+    listing_claims = []
     if profile_row:
         schedules = get_db().execute(
             "SELECT * FROM provider_schedules WHERE provider_profile_id=? ORDER BY weekday,start_time",
@@ -959,6 +960,7 @@ def provider_profile():
         ).fetchall()
         onboarding = provider_onboarding_status(profile_row["id"])
         evidence = list_provider_evidence(profile_row["id"])
+        listing_claims = list_my_public_entity_claims(g.user)
     return render_template(
         "provider_profile.html",
         profile=profile_row,
@@ -966,6 +968,7 @@ def provider_profile():
         onboarding=onboarding,
         evidence=evidence,
         evidence_types=sorted(EVIDENCE_TYPES),
+        listing_claims=listing_claims,
     )
 
 
