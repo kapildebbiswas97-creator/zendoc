@@ -16,7 +16,7 @@ import uuid
 from typing import Any
 
 from .db import get_db, now_iso
-from .geography_graph import link_entity_to_geography, normalize_geography_name, upsert_geography_node
+from .geography_graph import geography_write_transaction, link_entity_to_geography, normalize_geography_name, upsert_geography_node
 from .public_source_registry import get_public_ingestion_source
 from .security import assert_owner
 
@@ -185,57 +185,58 @@ def _prepare_geography_records(source: dict, records: list[dict]) -> dict:
 
 
 def _apply_geography_records(source: dict, records: list[dict]) -> dict:
-    pending = list(records)
-    resolved: dict[str, int] = {}
-    applied = []
-    rejected = []
-    db = get_db()
+    with geography_write_transaction():
+        pending = list(records)
+        resolved: dict[str, int] = {}
+        applied = []
+        rejected = []
+        db = get_db()
 
-    # Existing source refs may satisfy parents across multiple batches.
-    for row in db.execute(
-        "SELECT id, source_ref FROM geography_nodes WHERE source=? AND source_ref IS NOT NULL",
-        (source["source_id"],),
-    ).fetchall():
-        resolved[str(row["source_ref"])] = int(row["id"])
+        # Existing source refs may satisfy parents across multiple batches.
+        for row in db.execute(
+            "SELECT id, source_ref FROM geography_nodes WHERE source=? AND source_ref IS NOT NULL",
+            (source["source_id"],),
+        ).fetchall():
+            resolved[str(row["source_ref"])] = int(row["id"])
 
-    for _pass in range(20):
-        if not pending:
-            break
-        progress = False
-        remaining = []
+        for _pass in range(20):
+            if not pending:
+                break
+            progress = False
+            remaining = []
+            for row in pending:
+                parent_ref = row.get("parent_source_record_id")
+                if parent_ref and parent_ref not in resolved:
+                    remaining.append(row)
+                    continue
+                try:
+                    node = upsert_geography_node(
+                        node_type=row["node_type"],
+                        name=row["name"],
+                        source=source["source_id"],
+                        source_ref=row["source_record_id"],
+                        parent_id=resolved.get(parent_ref) if parent_ref else None,
+                        latitude=row.get("latitude"),
+                        longitude=row.get("longitude"),
+                        verified=row.get("verified", True),
+                        freshness_at=row.get("freshness_at"),
+                    )
+                    resolved[row["source_record_id"]] = int(node["id"])
+                    applied.append({"row_number": row["row_number"], "node_id": node["id"], "source_record_id": row["source_record_id"]})
+                    progress = True
+                except (LookupError, TypeError, ValueError) as exc:
+                    rejected.append({"row_number": row["row_number"], "reason": str(exc), "source_record_id": row["source_record_id"]})
+            pending = remaining
+            if not progress:
+                break
+
         for row in pending:
-            parent_ref = row.get("parent_source_record_id")
-            if parent_ref and parent_ref not in resolved:
-                remaining.append(row)
-                continue
-            try:
-                node = upsert_geography_node(
-                    node_type=row["node_type"],
-                    name=row["name"],
-                    source=source["source_id"],
-                    source_ref=row["source_record_id"],
-                    parent_id=resolved.get(parent_ref) if parent_ref else None,
-                    latitude=row.get("latitude"),
-                    longitude=row.get("longitude"),
-                    verified=row.get("verified", True),
-                    freshness_at=row.get("freshness_at"),
-                )
-                resolved[row["source_record_id"]] = int(node["id"])
-                applied.append({"row_number": row["row_number"], "node_id": node["id"], "source_record_id": row["source_record_id"]})
-                progress = True
-            except (LookupError, TypeError, ValueError) as exc:
-                rejected.append({"row_number": row["row_number"], "reason": str(exc), "source_record_id": row["source_record_id"]})
-        pending = remaining
-        if not progress:
-            break
-
-    for row in pending:
-        rejected.append({
-            "row_number": row["row_number"],
-            "reason": f"unresolved parent_source_record_id '{row.get('parent_source_record_id')}'",
-            "source_record_id": row["source_record_id"],
-        })
-    return {"applied": applied, "rejected_during_apply": rejected}
+            rejected.append({
+                "row_number": row["row_number"],
+                "reason": f"unresolved parent_source_record_id '{row.get('parent_source_record_id')}'",
+                "source_record_id": row["source_record_id"],
+            })
+        return {"applied": applied, "rejected_during_apply": rejected}
 
 
 def _prepare_healthcare_entities(source: dict, records: list[dict]) -> dict:
@@ -287,114 +288,111 @@ def _apply_healthcare_entities(source: dict, records: list[dict]) -> dict:
     rejected = []
     inserted = updated = unchanged = linked = 0
 
-    for row in records:
-        metadata_json = json.dumps(row["metadata"], sort_keys=True, ensure_ascii=False, separators=(",", ":"))
-        existing = db.execute(
-            "SELECT * FROM public_healthcare_entities WHERE source_id=? AND source_record_id=?",
-            (source["source_id"], row["source_record_id"]),
-        ).fetchone()
-        values = (
-            row["category"], row["name"], row["specialty"], row["address"], row["city"],
-            row["district"], row["state"], row["postal_code"], row["latitude"], row["longitude"],
-            row["public_phone"], row["public_email"], row["website"], source["trust_level"],
-            row["freshness_at"], metadata_json,
-        )
-        if existing:
-            current = (
-                existing["category"], existing["name"], existing["specialty"], existing["address"],
-                existing["city"], existing["district"], existing["state"], existing["postal_code"],
-                existing["latitude"], existing["longitude"], existing["public_phone"], existing["public_email"],
-                existing["website"], existing["source_trust"], existing["freshness_at"], existing["metadata_json"],
-            )
-            if current == values and int(existing["active"] or 0) == 1:
-                entity_id = existing["id"]
-                disposition = "unchanged"
-                unchanged += 1
-            else:
-                db.execute(
+    with geography_write_transaction():
+        for row in records:
+            geography_node_id = None
+            geography_source = row.get("geography_source")
+            geography_source_record_id = row.get("geography_source_record_id")
+            if geography_source_record_id:
+                geo = db.execute(
                     """
-                    UPDATE public_healthcare_entities
-                    SET category=?,name=?,specialty=?,address=?,city=?,district=?,state=?,postal_code=?,
-                        latitude=?,longitude=?,public_phone=?,public_email=?,website=?,source_trust=?,
-                        freshness_at=?,metadata_json=?,active=1,updated_at=?
-                    WHERE id=?
+                    SELECT id FROM geography_nodes
+                    WHERE source=? AND source_ref=?
+                    ORDER BY id ASC LIMIT 1
                     """,
-                    (*values, now, existing["id"]),
-                )
-                entity_id = existing["id"]
-                disposition = "updated"
-                updated += 1
-        else:
-            cursor = db.execute(
-                """
-                INSERT INTO public_healthcare_entities
-                (source_id,source_record_id,category,name,specialty,address,city,district,state,postal_code,
-                 latitude,longitude,public_phone,public_email,website,source_trust,zendoc_verification_status,
-                 booking_connectivity,freshness_at,metadata_json,active,created_at,updated_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'not_verified','not_connected',?,?,1,?,?)
-                """,
-                (
-                    source["source_id"], row["source_record_id"], row["category"], row["name"], row["specialty"],
-                    row["address"], row["city"], row["district"], row["state"], row["postal_code"],
-                    row["latitude"], row["longitude"], row["public_phone"], row["public_email"], row["website"],
-                    source["trust_level"], row["freshness_at"], metadata_json, now, now,
-                ),
-            )
-            entity_id = cursor.lastrowid
-            disposition = "inserted"
-            inserted += 1
-
-        geography_source = row.get("geography_source")
-        geography_source_record_id = row.get("geography_source_record_id")
-        if geography_source_record_id:
-            geo = db.execute(
-                """
-                SELECT id FROM geography_nodes
-                WHERE source=? AND source_ref=?
-                ORDER BY id ASC LIMIT 1
-                """,
-                (geography_source or "lgd", geography_source_record_id),
-            ).fetchone()
-            if geo:
-                try:
-                    link_entity_to_geography(
-                        geography_node_id=geo["id"],
-                        entity_type=row["category"],
-                        entity_id=entity_id,
-                        source=source["source_id"],
-                        verification_state="EXTERNAL_UNVERIFIED",
-                        freshness_at=row.get("freshness_at"),
-                        metadata={
-                            "source_record_id": row["source_record_id"],
-                            "canonical_geography_source": geography_source or "lgd",
-                            "canonical_geography_source_record_id": geography_source_record_id,
-                        },
-                    )
-                    linked += 1
-                except (LookupError, TypeError, ValueError) as exc:
+                    (geography_source or "lgd", geography_source_record_id),
+                ).fetchone()
+                if not geo:
                     rejected.append({
                         "row_number": row["row_number"],
-                        "reason": f"geography link failed: {exc}",
+                        "reason": (
+                            f"canonical geography not found for source={geography_source or 'lgd'} "
+                            f"source_ref={geography_source_record_id}"
+                        ),
                         "source_record_id": row["source_record_id"],
                     })
+                    continue
+                geography_node_id = int(geo["id"])
+
+            metadata_json = json.dumps(row["metadata"], sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+            existing = db.execute(
+                "SELECT * FROM public_healthcare_entities WHERE source_id=? AND source_record_id=?",
+                (source["source_id"], row["source_record_id"]),
+            ).fetchone()
+            values = (
+                row["category"], row["name"], row["specialty"], row["address"], row["city"],
+                row["district"], row["state"], row["postal_code"], row["latitude"], row["longitude"],
+                row["public_phone"], row["public_email"], row["website"], source["trust_level"],
+                row["freshness_at"], metadata_json,
+            )
+            if existing:
+                current = (
+                    existing["category"], existing["name"], existing["specialty"], existing["address"],
+                    existing["city"], existing["district"], existing["state"], existing["postal_code"],
+                    existing["latitude"], existing["longitude"], existing["public_phone"], existing["public_email"],
+                    existing["website"], existing["source_trust"], existing["freshness_at"], existing["metadata_json"],
+                )
+                if current == values and int(existing["active"] or 0) == 1:
+                    entity_id = existing["id"]
+                    disposition = "unchanged"
+                    unchanged += 1
+                else:
+                    db.execute(
+                        """
+                        UPDATE public_healthcare_entities
+                        SET category=?,name=?,specialty=?,address=?,city=?,district=?,state=?,postal_code=?,
+                            latitude=?,longitude=?,public_phone=?,public_email=?,website=?,source_trust=?,
+                            freshness_at=?,metadata_json=?,active=1,updated_at=?
+                        WHERE id=?
+                        """,
+                        (*values, now, existing["id"]),
+                    )
+                    entity_id = existing["id"]
+                    disposition = "updated"
+                    updated += 1
             else:
-                rejected.append({
-                    "row_number": row["row_number"],
-                    "reason": (
-                        f"canonical geography not found for source={geography_source or 'lgd'} "
-                        f"source_ref={geography_source_record_id}"
+                cursor = db.execute(
+                    """
+                    INSERT INTO public_healthcare_entities
+                    (source_id,source_record_id,category,name,specialty,address,city,district,state,postal_code,
+                     latitude,longitude,public_phone,public_email,website,source_trust,zendoc_verification_status,
+                     booking_connectivity,freshness_at,metadata_json,active,created_at,updated_at)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'not_verified','not_connected',?,?,1,?,?)
+                    """,
+                    (
+                        source["source_id"], row["source_record_id"], row["category"], row["name"], row["specialty"],
+                        row["address"], row["city"], row["district"], row["state"], row["postal_code"],
+                        row["latitude"], row["longitude"], row["public_phone"], row["public_email"], row["website"],
+                        source["trust_level"], row["freshness_at"], metadata_json, now, now,
                     ),
-                    "source_record_id": row["source_record_id"],
-                })
+                )
+                entity_id = cursor.lastrowid
+                disposition = "inserted"
+                inserted += 1
 
-        applied.append({
-            "row_number": row["row_number"],
-            "entity_id": entity_id,
-            "source_record_id": row["source_record_id"],
-            "disposition": disposition,
-        })
+            if geography_node_id is not None:
+                link_entity_to_geography(
+                    geography_node_id=geography_node_id,
+                    entity_type=row["category"],
+                    entity_id=entity_id,
+                    source=source["source_id"],
+                    verification_state="EXTERNAL_UNVERIFIED",
+                    freshness_at=row.get("freshness_at"),
+                    metadata={
+                        "source_record_id": row["source_record_id"],
+                        "canonical_geography_source": geography_source or "lgd",
+                        "canonical_geography_source_record_id": geography_source_record_id,
+                    },
+                )
+                linked += 1
 
-    db.commit()
+            applied.append({
+                "row_number": row["row_number"],
+                "entity_id": entity_id,
+                "source_record_id": row["source_record_id"],
+                "disposition": disposition,
+            })
+
     return {
         "applied": applied,
         "rejected_during_apply": rejected,
