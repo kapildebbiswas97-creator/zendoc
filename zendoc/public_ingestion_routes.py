@@ -6,6 +6,13 @@ from flask import Blueprint, jsonify, request
 from .public_data_ingestion import ingest_public_records, list_ingestion_batches
 from .dataset_adapters import adapt_records, parse_csv_text
 from .data_gap_registry import build_collection_plan, list_data_gaps
+from .business_api import (
+    business_api_metrics,
+    create_business_api_client,
+    issue_business_api_key,
+    list_business_api_clients,
+    revoke_business_api_key,
+)
 from .public_source_registry import list_public_ingestion_sources, public_data_coverage_matrix
 from .official_connectors import connector_readiness, infer_mapping, list_connector_profiles
 from .geography_region_registry import import_lgd_state_registry, list_import_regions
@@ -384,3 +391,56 @@ def api_startup_pilot_update(pilot_id):
         return jsonify({"error": {"code": 404, "message": str(exc)}}), 404
     except (TypeError, ValueError) as exc:
         return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+
+
+@bp.get("/api/v1/admin/startup/business-api-clients")
+def api_business_clients_list():
+    user, error = _owner()
+    if error:
+        return error
+    return jsonify({
+        "clients": list_business_api_clients(user),
+        "metrics": business_api_metrics(user),
+    })
+
+
+@bp.post("/api/v1/admin/startup/business-api-clients")
+def api_business_client_create():
+    user, error = _owner()
+    if error:
+        return error
+    try:
+        client = create_business_api_client(user, request.get_json(silent=True) or {})
+        return jsonify({"client": client}), 201
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+
+
+@bp.post("/api/v1/admin/startup/business-api-clients/<int:client_id>/keys")
+def api_business_key_issue(client_id):
+    user, error = _owner()
+    if error:
+        return error
+    data = request.get_json(silent=True) or {}
+    try:
+        key = issue_business_api_key(
+            user,
+            client_id,
+            expires_in_days=data.get("expires_in_days", 90),
+        )
+        return jsonify({"key": key}), 201
+    except LookupError as exc:
+        return jsonify({"error": {"code": 404, "message": str(exc)}}), 404
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+
+
+@bp.post("/api/v1/admin/startup/business-api-keys/<int:key_id>/revoke")
+def api_business_key_revoke(key_id):
+    user, error = _owner()
+    if error:
+        return error
+    try:
+        return jsonify({"key": revoke_business_api_key(user, key_id)})
+    except LookupError as exc:
+        return jsonify({"error": {"code": 404, "message": str(exc)}}), 404
