@@ -23,6 +23,8 @@ LASTROWID_TABLES = {
     "api_tokens",
     "appointments",
     "business_api_usage",
+    "startup_financial_snapshots",
+    "startup_financial_entries",
     "business_api_keys",
     "business_api_clients",
     "audit_logs",
