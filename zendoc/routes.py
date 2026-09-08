@@ -46,7 +46,7 @@ from .record_storage import get_record_storage
 from .organization_service import assert_resource_tenant
 from .database_reliability import backup_readiness, readiness_report
 from .security import csrf_token, hash_token, is_owner, load_user_and_check_csrf, login_required, new_token, owner_required, role_required, start_user_session
-from .startup_analytics import record_finder_search
+from .startup_analytics import india_coverage_quality, record_finder_search, startup_metrics, submit_finder_feedback
 from .public_entity_claims import (
     list_my_public_entity_claims,
     list_public_entity_claims,
@@ -849,9 +849,10 @@ def finder():
         request.values.get("longitude"),
         request.values.get("radius_km", 10),
     )
+    search_event_id = None
     if request.method == "POST" or request.args:
         result = HealthcareFinder().search(query)
-        record_finder_search(
+        search_event_id = record_finder_search(
             g.user,
             category=query["category"],
             location=query["location"],
@@ -860,7 +861,38 @@ def finder():
         )
         audit("search", "healthcare_finder", query["category"])
         get_db().commit()
-    return render_template("finder.html", result=result, query=query)
+    return render_template("finder.html", result=result, query=query, search_event_id=search_event_id)
+
+
+@bp.post("/finder/feedback")
+@login_required
+def finder_feedback():
+    try:
+        submit_finder_feedback(
+            g.user,
+            analytics_event_id=int(request.form.get("analytics_event_id")),
+            helpful=request.form.get("helpful") == "yes",
+            reason_code=request.form.get("reason_code"),
+        )
+        flash("Thanks — your feedback will help improve ZENDOC search quality.", "success")
+    except (TypeError, ValueError, LookupError, PermissionError) as error:
+        flash(str(error), "error")
+    return redirect(url_for("main.finder"))
+
+
+@bp.post("/provider/public-entity-claims")
+@login_required
+def provider_public_entity_claim_submit_web():
+    try:
+        submit_public_entity_claim(
+            g.user,
+            public_entity_id=int(request.form.get("public_entity_id")),
+            claimant_note=request.form.get("claimant_note"),
+        )
+        flash("Listing claim submitted for owner review.", "success")
+    except (TypeError, ValueError, LookupError, PermissionError) as error:
+        flash(str(error), "error")
+    return redirect(url_for("main.finder"))
 
 
 @bp.get("/providers/<int:profile_id>")
@@ -972,6 +1004,36 @@ def provider_schedule():
     except (ValueError, PermissionError) as error:
         flash(str(error), "error")
     return redirect(url_for("main.provider_profile"))
+
+
+@bp.get("/admin/startup")
+@owner_required
+def startup_command_center():
+    metrics = startup_metrics(g.user, days=request.args.get("days", 30))
+    coverage = india_coverage_quality(g.user)
+    claims = list_public_entity_claims(g.user, status=request.args.get("claim_status"), limit=50)
+    return render_template(
+        "startup_command_center.html",
+        metrics=metrics,
+        coverage=coverage,
+        claims=claims,
+    )
+
+
+@bp.post("/admin/public-entity-claims/<int:claim_id>/review")
+@owner_required
+def public_entity_claim_review_web(claim_id):
+    try:
+        review_public_entity_claim(
+            g.user,
+            claim_id,
+            status=request.form.get("status"),
+            review_note=request.form.get("review_note"),
+        )
+        flash("Public listing claim review updated.", "success")
+    except (LookupError, ValueError, PermissionError) as error:
+        flash(str(error), "error")
+    return redirect(url_for("main.startup_command_center"))
 
 
 @bp.get("/admin")
