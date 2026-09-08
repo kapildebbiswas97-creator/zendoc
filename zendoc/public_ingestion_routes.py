@@ -10,6 +10,7 @@ from .public_source_registry import list_public_ingestion_sources, public_data_c
 from .official_connectors import connector_readiness, infer_mapping, list_connector_profiles
 from .geography_region_registry import import_lgd_state_registry, list_import_regions
 from .state_source_priorities import state_source_priority
+from .india_regions import india_region_catalog
 from .state_geography_bootstrap import (
     bootstrap_state_geography,
     list_target_states,
@@ -107,6 +108,30 @@ def api_geography_india_state_registry_list():
         return error
     return jsonify({
         "regions": list_import_regions(country_code="IN", region_level="state")
+    })
+
+
+@bp.get("/api/v1/admin/ingestion/india-regions")
+def api_ingestion_india_regions():
+    user, error = _owner()
+    if error:
+        return error
+    regions = india_region_catalog()
+    return jsonify({
+        "country": "India",
+        "state_count": sum(1 for item in regions if item["region_type"] == "state"),
+        "union_territory_count": sum(1 for item in regions if item["region_type"] == "union_territory"),
+        "regions": [
+            {
+                **item,
+                "coverage": state_source_priority(item["slug"]),
+            }
+            for item in regions
+        ],
+        "truth_notice": (
+            "All listed States/UTs are product coverage targets. Full local accuracy depends on official LGD "
+            "geography and official/public provider datasets actually imported for the relevant area."
+        ),
     })
 
 
