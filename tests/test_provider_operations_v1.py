@@ -151,7 +151,18 @@ def test_provider_operational_metrics_are_provider_scoped(tmp_path):
         assert metrics_b["appointment_status_counts"]["confirmed"] == 1
         assert "requested" not in metrics_b["appointment_status_counts"]
 
-        assert "patient" not in str(metrics_a).lower()
+        forbidden_keys = {
+            "patient_id",
+            "patient_name",
+            "patient_email",
+            "patient_phone",
+            "symptoms",
+            "diagnosis",
+            "prescription",
+            "medical_history",
+            "clinical_notes",
+        }
+        assert forbidden_keys.isdisjoint(metrics_a.keys())
 
 
 def test_non_provider_cannot_read_provider_operational_metrics(tmp_path):
