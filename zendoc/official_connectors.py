@@ -143,6 +143,18 @@ CONNECTOR_PROFILES = {
         refresh_cadence="ANNUAL_OR_SOURCE_UPDATE",
         notes="Use as infrastructure/coverage reference unless a current facility-level official export is available.",
     ),
+    "up_nhm_health_facilities": ConnectorProfile(
+        source_id="up_nhm_health_facilities",
+        connector_type="DATED_OFFICIAL_WEB_OR_DOCUMENT_SNAPSHOT",
+        ingestion_type="public_healthcare_entities",
+        availability="MANUAL_SNAPSHOT_NOW",
+        config_keys=(),
+        refresh_cadence="MONTHLY_OR_SOURCE_UPDATE",
+        notes=(
+            "Use only facility-level rows from official UP NHM pages/documents. Preserve programme/source date. "
+            "No live staffing, bed, appointment or pharmacy-stock inference."
+        ),
+    ),
     "assam_health_institutes": ConnectorProfile(
         source_id="assam_health_institutes",
         connector_type="DATED_OFFICIAL_DOWNLOAD_OR_MANUAL_SNAPSHOT",
@@ -249,6 +261,27 @@ SOURCE_MAPPING_TEMPLATES: dict[str, dict[str, Any]] = {
         },
         "defaults": {"category": "blood_bank"},
     },
+    "swasthya_sathi_hospitals": {
+        "ingestion_type": "public_healthcare_entities",
+        "field_aliases": {
+            "source_record_id": ("hospital_code", "facility_code", "empanelment_id", "code", "id"),
+            "name": ("hospital_name", "facility_name", "name"),
+            "category": ("facility_type", "hospital_type", "category"),
+            "address": ("address", "hospital_address"),
+            "city": ("city", "town"),
+            "district": ("district", "district_name"),
+            "state": ("state", "state_name"),
+            "postal_code": ("pincode", "pin_code", "postal_code"),
+            "public_phone": ("phone", "telephone", "contact_number", "contact"),
+            "website": ("website", "website_url"),
+        },
+        "defaults": {"category": "hospital", "state": "West Bengal"},
+        "metadata_aliases": {
+            "empanelment_status": ("status", "empanelment_status", "active_status"),
+            "facility_level": ("facility_level", "hospital_level", "level"),
+            "services": ("services", "specialities", "specialties", "facilities"),
+        },
+    },
     "wbhs_empanelled_hco": {
         "ingestion_type": "public_healthcare_entities",
         "field_aliases": {
@@ -319,6 +352,27 @@ SOURCE_MAPPING_TEMPLATES: dict[str, dict[str, Any]] = {
         "defaults": {"state": "Maharashtra", "category": "hospital"},
         "metadata_aliases": {
             "medical_college": ("medical_college", "college_name", "medical college"),
+        },
+    },
+    "up_nhm_health_facilities": {
+        "ingestion_type": "public_healthcare_entities",
+        "field_aliases": {
+            "source_record_id": ("facility_code", "facility_id", "hospital_code", "code", "id"),
+            "name": ("facility_name", "hospital_name", "health_facility_name", "name"),
+            "category": ("facility_type", "facility_category", "category", "type"),
+            "address": ("address", "facility_address"),
+            "city": ("city", "town"),
+            "district": ("district", "district_name"),
+            "state": ("state", "state_name"),
+            "postal_code": ("pincode", "pin_code", "postal_code"),
+            "public_phone": ("phone", "telephone", "contact_number", "contact"),
+            "public_email": ("email", "email_address"),
+        },
+        "defaults": {"state": "Uttar Pradesh"},
+        "metadata_aliases": {
+            "programme": ("programme", "program", "scheme"),
+            "facility_level": ("facility_level", "level"),
+            "source_date": ("source_date", "published_date", "updated_date"),
         },
     },
     "assam_health_institutes": {
@@ -399,6 +453,44 @@ SOURCE_MAPPING_TEMPLATES: dict[str, dict[str, Any]] = {
             "registration_status": ("registration_status", "status"),
             "valid_upto": ("valid_upto", "valid_until", "expiry_date"),
             "beds": ("beds", "bed_strength", "number_of_beds"),
+        },
+    },
+    "nabl_labs": {
+        "ingestion_type": "public_healthcare_entities",
+        "field_aliases": {
+            "source_record_id": ("accreditation_no", "accreditation_number", "lab_id", "code", "id"),
+            "name": ("laboratory_name", "lab_name", "organisation_name", "organization_name", "name"),
+            "address": ("address",),
+            "city": ("city",),
+            "district": ("district",),
+            "state": ("state",),
+            "postal_code": ("pincode", "pin_code", "postal_code"),
+            "public_phone": ("phone", "telephone", "contact"),
+            "public_email": ("email",),
+            "website": ("website", "website_url"),
+        },
+        "defaults": {"category": "laboratory"},
+        "metadata_aliases": {
+            "accreditation_status": ("status", "accreditation_status"),
+            "valid_upto": ("valid_upto", "valid_until", "expiry_date"),
+            "scope": ("scope", "scope_of_accreditation"),
+        },
+    },
+    "pmbjp_kendras": {
+        "ingestion_type": "public_healthcare_entities",
+        "field_aliases": {
+            "source_record_id": ("kendra_code", "store_code", "code", "id"),
+            "name": ("kendra_name", "store_name", "name"),
+            "address": ("address",),
+            "city": ("city", "town"),
+            "district": ("district",),
+            "state": ("state",),
+            "postal_code": ("pincode", "pin_code", "postal_code"),
+            "public_phone": ("phone", "telephone", "contact"),
+        },
+        "defaults": {"category": "pharmacy"},
+        "metadata_aliases": {
+            "kendra_code": ("kendra_code", "store_code", "code"),
         },
     },
     "lgd": {
