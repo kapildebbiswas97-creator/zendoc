@@ -349,3 +349,257 @@ def india_coverage_quality(actor: Any) -> dict:
             "coverage unless an official denominator for the relevant geography/facility class has been imported."
         ),
     }
+
+
+def retention_metrics(actor: Any, *, as_of: str | None = None) -> dict:
+    """Return exact-day D7/D30 retention for patient product activity.
+
+    Cohort date is the date of a patient's first recorded privacy-safe product
+    activity. D7 means activity on cohort_date + 7 days; D30 means activity on
+    cohort_date + 30 days. Users too young for a window are excluded from that
+    denominator instead of being counted as churned.
+    """
+    assert_owner(actor)
+    db = get_db()
+    now = _parse_timestamp(as_of) if as_of else datetime.now(timezone.utc)
+
+    rows = db.execute(
+        """
+        SELECT e.user_id,e.created_at
+        FROM product_analytics_events e
+        JOIN users u ON u.id=e.user_id
+        WHERE e.user_id IS NOT NULL AND u.role='patient' AND u.active=1
+        ORDER BY e.user_id,e.created_at
+        """
+    ).fetchall()
+
+    activity_dates: dict[int, set] = defaultdict(set)
+    for row in rows:
+        try:
+            activity_dates[int(row["user_id"])].add(_parse_timestamp(row["created_at"]).date())
+        except (TypeError, ValueError):
+            continue
+
+    def _window(day_offset: int) -> dict:
+        eligible = retained = 0
+        cohorts = []
+        for user_id, dates in activity_dates.items():
+            if not dates:
+                continue
+            first_date = min(dates)
+            target_date = first_date + timedelta(days=day_offset)
+            if target_date > now.date():
+                continue
+            eligible += 1
+            did_return = target_date in dates
+            retained += 1 if did_return else 0
+            cohorts.append({
+                "user_id": user_id,
+                "cohort_date": first_date.isoformat(),
+                "target_date": target_date.isoformat(),
+                "retained": did_return,
+            })
+        return {
+            "eligible_users": eligible,
+            "retained_users": retained,
+            "retention_rate": round(retained / eligible, 4) if eligible else None,
+            "definition": f"Exact-day D{day_offset}: activity on first activity date + {day_offset} days.",
+            "cohort_rows": cohorts[:200],
+        }
+
+    return {
+        "patient_users_with_recorded_activity": len(activity_dates),
+        "d7": _window(7),
+        "d30": _window(30),
+        "truth_notice": (
+            "Retention is calculated only from privacy-safe product activity currently recorded by ZENDOC. "
+            "Users without recorded product activity are not included in the cohort denominator."
+        ),
+    }
+
+
+def care_journey_conversion(actor: Any, *, days: int = 30) -> dict:
+    assert_owner(actor)
+    days = max(1, min(int(days or 30), 365))
+    cutoff = _cutoff_iso(days)
+    db = get_db()
+
+    journeys = db.execute(
+        """
+        SELECT id,state,status,created_at
+        FROM care_journeys
+        WHERE created_at>=?
+        ORDER BY created_at
+        """,
+        (cutoff,),
+    ).fetchall()
+    journey_ids = [int(row["id"]) for row in journeys]
+    states_by_journey: dict[int, set[str]] = defaultdict(set)
+    for row in journeys:
+        states_by_journey[int(row["id"])].add(str(row["state"]))
+
+    if journey_ids:
+        placeholders = ",".join("?" for _ in journey_ids)
+        events = db.execute(
+            f"SELECT journey_id,state FROM care_journey_events WHERE journey_id IN ({placeholders})",
+            journey_ids,
+        ).fetchall()
+        for row in events:
+            states_by_journey[int(row["journey_id"])].add(str(row["state"]))
+
+    stages = [
+        ("started", {"NEW", "CONTEXT_READY", "WAITING_INFORMATION", "PROVIDER_SEARCH", "WAITING_USER_SELECTION",
+                     "APPOINTMENT_STAGED", "WAITING_PROVIDER", "CONSULTATION", "PRESCRIPTION_RECEIVED",
+                     "DIAGNOSTICS_REQUIRED", "CAREFIN_CHECK", "FULFILMENT", "FOLLOW_UP", "COMPLETED", "BLOCKED", "WAITING_HUMAN"}),
+        ("context_ready", {"CONTEXT_READY", "PROVIDER_SEARCH", "WAITING_USER_SELECTION", "APPOINTMENT_STAGED",
+                           "WAITING_PROVIDER", "CONSULTATION", "PRESCRIPTION_RECEIVED", "DIAGNOSTICS_REQUIRED",
+                           "CAREFIN_CHECK", "FULFILMENT", "FOLLOW_UP", "COMPLETED"}),
+        ("provider_search", {"PROVIDER_SEARCH", "WAITING_USER_SELECTION", "APPOINTMENT_STAGED", "WAITING_PROVIDER",
+                             "CONSULTATION", "PRESCRIPTION_RECEIVED", "DIAGNOSTICS_REQUIRED", "CAREFIN_CHECK",
+                             "FULFILMENT", "FOLLOW_UP", "COMPLETED"}),
+        ("appointment_staged", {"APPOINTMENT_STAGED", "WAITING_PROVIDER", "CONSULTATION", "PRESCRIPTION_RECEIVED",
+                                "DIAGNOSTICS_REQUIRED", "CAREFIN_CHECK", "FULFILMENT", "FOLLOW_UP", "COMPLETED"}),
+        ("consultation", {"CONSULTATION", "PRESCRIPTION_RECEIVED", "DIAGNOSTICS_REQUIRED", "CAREFIN_CHECK",
+                          "FULFILMENT", "FOLLOW_UP", "COMPLETED"}),
+        ("follow_up", {"FOLLOW_UP", "COMPLETED"}),
+        ("completed", {"COMPLETED"}),
+    ]
+
+    total = len(journeys)
+    stage_rows = []
+    for name, qualifying in stages:
+        count = sum(1 for jid in journey_ids if states_by_journey[jid] & qualifying)
+        stage_rows.append({
+            "stage": name,
+            "journey_count": count,
+            "conversion_from_started": round(count / total, 4) if total else None,
+        })
+
+    blocked = sum(1 for jid in journey_ids if "BLOCKED" in states_by_journey[jid])
+    waiting_human = sum(1 for jid in journey_ids if "WAITING_HUMAN" in states_by_journey[jid])
+
+    return {
+        "window_days": days,
+        "started_journeys": total,
+        "stages": stage_rows,
+        "blocked_journeys": blocked,
+        "waiting_human_journeys": waiting_human,
+        "truth_notice": (
+            "This funnel measures workflow states actually persisted in ZENDOC. A staged appointment is not a completed "
+            "appointment, and COMPLETED means the care-journey workflow reached its terminal completed state."
+        ),
+    }
+
+
+def provider_onboarding_funnel(actor: Any, *, days: int = 90) -> dict:
+    assert_owner(actor)
+    days = max(1, min(int(days or 90), 3650))
+    cutoff = _cutoff_iso(days)
+    db = get_db()
+
+    profiles = db.execute(
+        """
+        SELECT p.*,u.role,u.active
+        FROM provider_profiles p
+        JOIN users u ON u.id=p.user_id
+        WHERE p.created_at>=? AND u.active=1
+        ORDER BY p.created_at
+        """,
+        (cutoff,),
+    ).fetchall()
+    profile_ids = [int(row["id"]) for row in profiles]
+    total = len(profiles)
+
+    evidence_submitted = set()
+    evidence_verified = set()
+    schedule_profiles = set()
+    claim_submitted = set()
+    claim_approved = set()
+    patient_interaction = set()
+
+    if profile_ids:
+        placeholders = ",".join("?" for _ in profile_ids)
+        for row in db.execute(
+            f"SELECT provider_profile_id,status FROM provider_verification_evidence WHERE provider_profile_id IN ({placeholders})",
+            profile_ids,
+        ).fetchall():
+            pid = int(row["provider_profile_id"])
+            evidence_submitted.add(pid)
+            if row["status"] == "verified":
+                evidence_verified.add(pid)
+
+        for row in db.execute(
+            f"SELECT DISTINCT provider_profile_id FROM provider_schedules WHERE provider_profile_id IN ({placeholders}) AND active=1",
+            profile_ids,
+        ).fetchall():
+            schedule_profiles.add(int(row["provider_profile_id"]))
+
+        for row in db.execute(
+            f"SELECT provider_profile_id,status FROM public_entity_claims WHERE provider_profile_id IN ({placeholders})",
+            profile_ids,
+        ).fetchall():
+            pid = int(row["provider_profile_id"])
+            claim_submitted.add(pid)
+            if row["status"] == "approved":
+                claim_approved.add(pid)
+
+        for row in db.execute(
+            f"SELECT DISTINCT provider_profile_id FROM appointments WHERE provider_profile_id IN ({placeholders})",
+            profile_ids,
+        ).fetchall():
+            if row["provider_profile_id"] is not None:
+                patient_interaction.add(int(row["provider_profile_id"]))
+
+    complete_profiles = set()
+    verified_profiles = set()
+    for row in profiles:
+        pid = int(row["id"])
+        role = str(row["role"])
+        required = {
+            "doctor": ("specialty", "qualifications", "license_identifier", "address", "city", "state", "public_phone"),
+            "hospital": ("organization", "license_identifier", "address", "city", "state", "public_phone"),
+            "pharmacy": ("organization", "license_identifier", "address", "city", "state", "public_phone"),
+        }.get(role, ("address", "city", "state", "public_phone"))
+        if all(str(row[field] or "").strip() for field in required):
+            complete_profiles.add(pid)
+        if row["verification_status"] == "verified":
+            verified_profiles.add(pid)
+
+    stages = [
+        ("profile_created", set(profile_ids)),
+        ("profile_complete", complete_profiles),
+        ("evidence_submitted", evidence_submitted),
+        ("evidence_verified", evidence_verified),
+        ("provider_verified", verified_profiles),
+        ("schedule_published", schedule_profiles),
+        ("listing_claim_submitted", claim_submitted),
+        ("listing_claim_approved", claim_approved),
+        ("patient_interaction", patient_interaction),
+    ]
+
+    return {
+        "window_days": days,
+        "provider_profiles_created": total,
+        "stages": [
+            {
+                "stage": name,
+                "provider_count": len(ids),
+                "conversion_from_created": round(len(ids) / total, 4) if total else None,
+            }
+            for name, ids in stages
+        ],
+        "truth_notice": (
+            "Stages are independent observed milestones, not a forced linear sequence for every provider type. "
+            "For example, pharmacies may not use appointment schedules."
+        ),
+    }
+
+
+def _parse_timestamp(value: Any) -> datetime:
+    text = str(value or "").strip()
+    if not text:
+        raise ValueError("timestamp required")
+    parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
