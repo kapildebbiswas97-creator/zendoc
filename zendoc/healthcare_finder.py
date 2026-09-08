@@ -1,3 +1,4 @@
+from .db import get_db
 from .places_provider import ShortLivedCache, configured_places_provider
 from .provider_service import search_registered_providers
 from .public_data_ingestion import search_public_healthcare_entities
@@ -45,7 +46,7 @@ class HealthcareFinder:
 
     def search(self, query):
         normalized = normalize_query(**query)
-        cache_key = tuple(sorted(normalized.items()))
+        cache_key = (tuple(sorted(normalized.items())), finder_data_revision())
         cached = _CACHE.get(cache_key)
         if cached:
             return cached
@@ -88,6 +89,22 @@ class HealthcareFinder:
 
 
 
+
+def finder_data_revision():
+    """Return a lightweight revision tuple so finder cache follows data changes."""
+    db = get_db()
+    parts = []
+    for query in (
+        "SELECT COUNT(*) c,MAX(updated_at) m FROM provider_profiles",
+        "SELECT COUNT(*) c,MAX(updated_at) m FROM public_healthcare_entities",
+        "SELECT COUNT(*) c,MAX(updated_at) m FROM public_entity_claims",
+        "SELECT COUNT(*) c,MAX(updated_at) m FROM users WHERE role IN ('doctor','hospital','pharmacy')",
+    ):
+        row = db.execute(query).fetchone()
+        parts.append((int(row["c"] or 0), str(row["m"] or "")))
+    return tuple(parts)
+
+
 def merge_registered_with_approved_public_claims(registered, public_directory):
     """Merge only explicit owner-approved public listing links into verified providers."""
     registered_by_profile = {
@@ -120,8 +137,12 @@ def merge_registered_with_approved_public_claims(registered, public_directory):
         provenance.extend(public.get("provenance_sources") or [])
         provider["public_directory_provenance"] = provenance
         provider["public_listing_claim_linked"] = True
+        approved_entity_ids = [
+            int(value)
+            for value in public.get("approved_public_entity_ids", [])
+        ]
         provider["approved_public_listing_ids"] = sorted(set(
-            list(provider.get("approved_public_listing_ids") or []) + [int(public["id"])]
+            list(provider.get("approved_public_listing_ids") or []) + approved_entity_ids
         ))
         provider["approved_public_claim_ids"] = sorted(set(
             list(provider.get("approved_public_claim_ids") or []) +
@@ -134,7 +155,8 @@ def merge_registered_with_approved_public_claims(registered, public_directory):
         registered_by_profile[profile_id] = provider
         claimed_links.append({
             "provider_profile_id": profile_id,
-            "public_entity_id": int(public["id"]),
+            "public_entity_id": approved_entity_ids[0] if len(approved_entity_ids) == 1 else None,
+            "approved_public_entity_ids": approved_entity_ids,
             "public_entity_name": public.get("name"),
             "provenance_sources": list(public.get("provenance_sources") or []),
             "approved_claim_ids": list(public.get("approved_claim_ids") or []),
