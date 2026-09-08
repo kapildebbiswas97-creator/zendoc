@@ -11,7 +11,7 @@ from .official_connectors import connector_readiness, infer_mapping, list_connec
 from .geography_region_registry import import_lgd_state_registry, list_import_regions
 from .state_source_priorities import state_source_priority
 from .india_regions import india_region_catalog
-from .startup_analytics import india_coverage_quality, startup_metrics
+from .startup_analytics import care_journey_conversion, india_coverage_quality, provider_onboarding_funnel, retention_metrics, startup_metrics
 from .state_geography_bootstrap import (
     bootstrap_state_geography,
     list_target_states,
@@ -302,3 +302,35 @@ def api_startup_india_coverage():
     if error:
         return error
     return jsonify({"coverage": india_coverage_quality(user)})
+
+
+@bp.get("/api/v1/admin/startup/retention")
+def api_startup_retention():
+    user, error = _owner()
+    if error:
+        return error
+    return jsonify({"retention": retention_metrics(user)})
+
+
+@bp.get("/api/v1/admin/startup/care-funnel")
+def api_startup_care_funnel():
+    user, error = _owner()
+    if error:
+        return error
+    try:
+        days = int(request.args.get("days", 30))
+        return jsonify({"care_funnel": care_journey_conversion(user, days=days)})
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+
+
+@bp.get("/api/v1/admin/startup/provider-funnel")
+def api_startup_provider_funnel():
+    user, error = _owner()
+    if error:
+        return error
+    try:
+        days = int(request.args.get("days", 90))
+        return jsonify({"provider_funnel": provider_onboarding_funnel(user, days=days)})
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
