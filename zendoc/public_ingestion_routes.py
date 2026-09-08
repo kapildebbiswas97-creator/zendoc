@@ -11,6 +11,7 @@ from .official_connectors import connector_readiness, infer_mapping, list_connec
 from .geography_region_registry import import_lgd_state_registry, list_import_regions
 from .state_source_priorities import state_source_priority
 from .india_regions import india_region_catalog
+from .startup_analytics import india_coverage_quality, startup_metrics
 from .state_geography_bootstrap import (
     bootstrap_state_geography,
     list_target_states,
@@ -281,3 +282,23 @@ def api_ingestion_data_gaps():
         "data_gaps": list_data_gaps(),
         "collection_plan": build_collection_plan(),
     })
+
+
+@bp.get("/api/v1/admin/startup/metrics")
+def api_startup_metrics():
+    user, error = _owner()
+    if error:
+        return error
+    try:
+        days = int(request.args.get("days", 30))
+        return jsonify({"metrics": startup_metrics(user, days=days)})
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+
+
+@bp.get("/api/v1/admin/startup/india-coverage")
+def api_startup_india_coverage():
+    user, error = _owner()
+    if error:
+        return error
+    return jsonify({"coverage": india_coverage_quality(user)})
