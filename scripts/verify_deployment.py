@@ -42,6 +42,10 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("base_url")
     parser.add_argument("--timeout", type=float, default=10.0)
+    parser.add_argument("--expected-commit")
+    parser.add_argument("--require-platform")
+    parser.add_argument("--require-engine")
+    parser.add_argument("--require-persistence-verified", action="store_true")
     args = parser.parse_args()
 
     base = args.base_url.rstrip("/")
@@ -68,9 +72,37 @@ def main() -> int:
     if not schema.get("ready") or schema.get("missing_tables"):
         fail(f"Schema readiness failed: {schema}")
 
+    deployment = ready.get("deployment") or {}
+    if args.require_platform and deployment.get("platform") != args.require_platform:
+        fail(
+            f"Expected deployment platform {args.require_platform!r}, "
+            f"got {deployment.get('platform')!r}."
+        )
+
+    if args.expected_commit:
+        deployed_commit = str(deployment.get("git_commit") or "").strip()
+        expected_commit = str(args.expected_commit).strip()
+        if not deployed_commit:
+            fail("Readiness did not expose the deployed Git commit.")
+        if deployed_commit.lower() != expected_commit.lower():
+            fail(
+                f"Deployed commit mismatch: expected {expected_commit}, "
+                f"got {deployed_commit}."
+            )
+
+    if args.require_engine and ready.get("database_engine") != args.require_engine:
+        fail(
+            f"Expected database engine {args.require_engine!r}, "
+            f"got {ready.get('database_engine')!r}."
+        )
+
+    if args.require_persistence_verified and ready.get("persistence_verified") is not True:
+        fail("Production persistence verification is not confirmed.")
+
     print(
         "Deployment verification PASSED "
-        f"(engine={ready.get('database_engine')}, db_latency_ms={ready.get('database_latency_ms')})"
+        f"(platform={deployment.get('platform')}, commit={deployment.get('git_commit_short')}, "
+        f"engine={ready.get('database_engine')}, db_latency_ms={ready.get('database_latency_ms')})"
     )
     return 0
 
