@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from .db import get_db, now_iso
@@ -88,14 +89,15 @@ def list_partner_audit_events(actor: Any, *, limit: int = 200) -> list[dict]:
 def partner_audit_metrics(actor: Any, *, days: int = 30) -> dict:
     assert_owner(actor)
     days = max(1, min(int(days or 30), 365))
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
     rows = get_db().execute(
         """
         SELECT event_type,outcome,COUNT(*) c
         FROM partner_api_audit_events
-        WHERE created_at>=datetime('now', ?)
+        WHERE created_at>=?
         GROUP BY event_type,outcome
         """,
-        (f"-{days} days",),
+        (cutoff,),
     ).fetchall()
     counts = {}
     total = 0
