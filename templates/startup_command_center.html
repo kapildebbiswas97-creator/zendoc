@@ -392,6 +392,7 @@
       <label><input type="checkbox" name="allowed_scopes" value="provider_profile.read"> Verified provider profiles</label>
       <label><input type="checkbox" name="allowed_scopes" value="provider_availability.read"> Connected provider availability</label>
       <label><input type="checkbox" name="allowed_scopes" value="pilot_metrics.read"> Own linked pilot metrics</label>
+      <label><input type="checkbox" name="allowed_scopes" value="booking_handoff.write"> Booking handoff requests</label>
     </fieldset>
     <label>Rate limit / minute <input type="number" name="rate_limit_per_minute" min="1" max="1000" value="60"></label>
     <button type="submit">Create partner client</button>
@@ -435,7 +436,7 @@
               {% endfor %}
             </select>
             <input type="number" name="rate_limit_per_minute" min="1" max="1000" value="{{ client.rate_limit_per_minute }}">
-            {% for scope in ['public_directory.read','provider_profile.read','provider_availability.read','pilot_metrics.read'] %}
+            {% for scope in ['public_directory.read','provider_profile.read','provider_availability.read','pilot_metrics.read','booking_handoff.write'] %}
             <label><input type="checkbox" name="allowed_scopes" value="{{ scope }}" {% if scope in client.allowed_scopes %}checked{% endif %}> {{ scope }}</label>
             {% endfor %}
             <button type="submit">Save client</button>
@@ -476,6 +477,46 @@
     <div class="summary-row"><span>Authenticated requests · 30 days</span><strong>{{ business_metrics.requests_last_30_days }}</strong></div>
     <p class="form-note">{{ business_metrics.truth_notice }}</p>
   </article>
+
+<section class="panel spaced-panel">
+  <div class="panel-head">
+    <div>
+      <h2>Partner booking handoffs</h2>
+      <p class="form-note">Operational requests only. A handoff is not a confirmed appointment until its status is accepted.</p>
+    </div>
+  </div>
+  {% if booking_handoffs %}
+  <table>
+    <thead><tr><th>Partner</th><th>Provider</th><th>Requested slot</th><th>Status</th><th>Reference</th><th>Review</th></tr></thead>
+    <tbody>
+      {% for handoff in booking_handoffs %}
+      <tr>
+        <td>{{ handoff.client_name }}</td>
+        <td>{{ handoff.provider_name }}{% if handoff.organization %}<br><small>{{ handoff.organization }}</small>{% endif %}</td>
+        <td>{{ handoff.requested_for }}</td>
+        <td>{{ handoff.status }}</td>
+        <td>{{ handoff.partner_reference }}{% if handoff.contact_reference %}<br><small>{{ handoff.contact_reference }}</small>{% endif %}</td>
+        <td>
+          <form class="inline-form" method="post" action="{{ url_for('main.startup_booking_handoff_review_web', handoff_id=handoff.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <select name="status">
+              {% for status in ['pending','accepted','rejected','cancelled'] %}
+              <option value="{{ status }}" {% if handoff.status == status %}selected{% endif %}>{{ status }}</option>
+              {% endfor %}
+            </select>
+            <input name="status_note" maxlength="1000" value="{{ handoff.status_note or '' }}" placeholder="Operational review note">
+            <button type="submit">Update</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="form-note">No partner booking handoffs yet.</p>
+  {% endif %}
+  <aside class="trust-note"><strong>Privacy boundary</strong><br>Do not enter symptoms, diagnoses, prescriptions, medical history, or clinical notes into booking handoff fields.</aside>
+</section>
 
 <section class="panel spaced-panel">
   <div class="panel-head"><div><h2>Public listing claims</h2><p class="form-note">Approved claims link a provider profile to a directory record; they do not automatically verify the provider or connect booking.</p></div></div>
