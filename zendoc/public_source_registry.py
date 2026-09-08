@@ -290,6 +290,23 @@ SOURCES = {
         personal_data_allowed=False,
         notes="Useful for CareFin scheme discovery, eligibility criteria, benefits, documents and application links. ZENDOC must still label results as discovery until authoritative eligibility is confirmed.",
     ),
+    "up_nhm_health_facilities": PublicIngestionSource(
+        source_id="up_nhm_health_facilities",
+        name="Uttar Pradesh National Health Mission - Public Health Facility Lists",
+        owner="National Health Mission, Uttar Pradesh",
+        official_url="https://upnrhm.gov.in/",
+        data_class="official_state_public_health_facility_reference",
+        geography="UTTAR_PRADESH",
+        ingestion_types=("public_healthcare_entities",),
+        trust_level="OFFICIAL_PUBLIC_DATA",
+        live_fetch_status="PUBLIC_PROGRAM_PAGES_AND_DATED_DOCUMENTS_NO_SINGLE_VERIFIED_BULK_API",
+        personal_data_allowed=False,
+        notes=(
+            "Use dated/public UP NHM facility material for PHC, CHC, U-PHC, U-CHC, district/sub-district "
+            "hospitals and referral facilities where facility-level rows are published. Preserve source date/programme. "
+            "Do not infer current staffing, live beds, appointments or service availability."
+        ),
+    ),
     "swasthya_sathi_hospitals": PublicIngestionSource(
         source_id="swasthya_sathi_hospitals",
         name="Swasthya Sathi Active Hospital Directory",
