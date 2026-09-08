@@ -2068,6 +2068,25 @@ def migrate_schema(db):
             UNIQUE(source_id, source_record_id)
         );
 
+        CREATE TABLE IF NOT EXISTS public_entity_claims (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            public_entity_id INTEGER NOT NULL REFERENCES public_healthcare_entities(id) ON DELETE CASCADE,
+            provider_profile_id INTEGER NOT NULL REFERENCES provider_profiles(id) ON DELETE CASCADE,
+            claimed_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            status TEXT NOT NULL DEFAULT 'pending',
+            claimant_note TEXT,
+            review_note TEXT,
+            reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            reviewed_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(public_entity_id, provider_profile_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_public_entity_claims_status
+            ON public_entity_claims(status, created_at);
+        CREATE INDEX IF NOT EXISTS idx_public_entity_claims_profile
+            ON public_entity_claims(provider_profile_id, status);
+
         CREATE TABLE IF NOT EXISTS care_journeys (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             journey_uid TEXT NOT NULL UNIQUE,
