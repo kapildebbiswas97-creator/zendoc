@@ -79,7 +79,7 @@ def resolve_canonical_geography(
             "candidate_count": 0,
         }
 
-    matched_ancestor_ids: set[int] = set()
+    matched_ids: dict[str, int] = {}
     deepest_result = None
 
     for level, node_types, normalized in provided:
@@ -97,15 +97,13 @@ def resolve_canonical_geography(
 
         candidates = []
         for row in rows:
-            if matched_ancestor_ids:
-                path_ids = {int(item["id"]) for item in geography_path(int(row["id"]))}
-                if not matched_ancestor_ids <= path_ids:
-                    continue
+            if not _matches_hierarchy_context(int(row["id"]), level, matched_ids):
+                continue
             candidates.append(row)
 
         if len(candidates) == 1:
             node_id = int(candidates[0]["id"])
-            matched_ancestor_ids.add(node_id)
+            matched_ids[level] = node_id
             deepest_result = {
                 "status": "MATCHED",
                 "geography_node_id": node_id,
@@ -147,6 +145,64 @@ def resolve_canonical_geography(
         "source": clean_source,
     }
 
+
+
+def _matches_hierarchy_context(candidate_id: int, candidate_level: str, matched_ids: dict[str, int]) -> bool:
+    if not matched_ids:
+        return True
+
+    db = get_db()
+    path_ids = {int(item["id"]) for item in geography_path(candidate_id)}
+
+    for level in ("state", "district", "subdistrict", "village"):
+        matched_id = matched_ids.get(level)
+        if matched_id is not None and matched_id not in path_ids:
+            return False
+
+    block_id = matched_ids.get("block")
+    if block_id is not None and candidate_level in {"village", "locality"}:
+        if block_id in path_ids:
+            return True
+        relationship = db.execute(
+            """
+            SELECT 1 FROM geography_relationships
+            WHERE (
+                from_node_id=? AND to_node_id=?
+                OR from_node_id=? AND to_node_id=?
+            )
+              AND relationship_type='BLOCK_MEMBERSHIP'
+            LIMIT 1
+            """,
+            (candidate_id, block_id, block_id, candidate_id),
+        ).fetchone()
+        if relationship:
+            return True
+
+        # A locality may descend from a village that carries the block
+        # membership relationship.
+        if candidate_level == "locality":
+            for ancestor_id in path_ids:
+                relationship = db.execute(
+                    """
+                    SELECT 1 FROM geography_relationships
+                    WHERE (
+                        from_node_id=? AND to_node_id=?
+                        OR from_node_id=? AND to_node_id=?
+                    )
+                      AND relationship_type='BLOCK_MEMBERSHIP'
+                    LIMIT 1
+                    """,
+                    (ancestor_id, block_id, block_id, ancestor_id),
+                ).fetchone()
+                if relationship:
+                    return True
+        return False
+
+    block_id = matched_ids.get("block")
+    if block_id is not None and candidate_level == "block" and candidate_id != block_id:
+        return False
+
+    return True
 
 def _resolution_from_rows(
     rows,
