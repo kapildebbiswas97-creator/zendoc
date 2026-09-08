@@ -352,6 +352,10 @@
     <div>
       <h3>Headline evidence</h3>
       <div class="summary-row"><span>Healthcare searches</span><strong>{{ investor_snapshot.evidence.product.healthcare_searches }}</strong></div>
+      <div class="summary-row"><span>Registered patient accounts</span><strong>{{ investor_snapshot.evidence.activation.registered_patient_accounts }}</strong></div>
+      <div class="summary-row"><span>Useful-search patients</span><strong>{{ investor_snapshot.evidence.activation.useful_search_patients }}</strong></div>
+      <div class="summary-row"><span>Provider-view patients</span><strong>{{ investor_snapshot.evidence.activation.provider_view_patients }}</strong></div>
+      <div class="summary-row"><span>Appointment-request patients</span><strong>{{ investor_snapshot.evidence.activation.appointment_request_patients }}</strong></div>
       <div class="summary-row"><span>D7 eligible users</span><strong>{{ investor_snapshot.evidence.retention.d7_eligible_users }}</strong></div>
       <div class="summary-row"><span>D30 eligible users</span><strong>{{ investor_snapshot.evidence.retention.d30_eligible_users }}</strong></div>
       <div class="summary-row"><span>Verified providers</span><strong>{{ investor_snapshot.evidence.providers.provider_verified }}</strong></div>
@@ -360,6 +364,18 @@
       <div class="summary-row"><span>Business API clients</span><strong>{{ investor_snapshot.evidence.business_api.client_count }}</strong></div>
     </div>
   </div>
+
+  <div class="spaced-panel">
+    <h3>Operational data risks</h3>
+    <div class="summary-row"><span>Urgent refresh sources</span><strong>{{ investor_snapshot.operational_risks.urgent_data_refresh_sources }}</strong></div>
+    <div class="summary-row"><span>P0 sources</span><strong>{{ investor_snapshot.operational_risks.p0_data_sources }}</strong></div>
+    <div class="summary-row"><span>P1 sources</span><strong>{{ investor_snapshot.operational_risks.p1_data_sources }}</strong></div>
+    <div class="summary-row"><span>Queued refresh tasks</span><strong>{{ investor_snapshot.operational_risks.queued_refresh_tasks }}</strong></div>
+    <div class="summary-row"><span>Blocked refresh tasks</span><strong>{{ investor_snapshot.operational_risks.blocked_refresh_tasks }}</strong></div>
+    <div class="summary-row"><span>Unlinked public entities</span><strong>{{ investor_snapshot.operational_risks.unlinked_public_healthcare_entities }}</strong></div>
+    <p class="form-note">{{ investor_snapshot.operational_risks.truth_notice }}</p>
+  </div>
+
   <p class="form-note">{{ investor_snapshot.truth_notice }}</p>
 </section>
 
