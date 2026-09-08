@@ -23,6 +23,7 @@ from .db import ROLES, get_db, is_integrity_error, now_iso
 from .health_analytics import METRIC_TYPES, create_measurement, get_health_trend
 from .healthcare_finder import HealthcareFinder, normalize_query
 from .intelligence import ZendocIntelligence
+from .provider_operations import provider_operational_metrics
 from .provider_onboarding import (
     EVIDENCE_TYPES,
     list_provider_evidence,
@@ -984,6 +985,7 @@ def provider_profile():
     evidence = []
     listing_claims = []
     partner_handoffs = []
+    provider_operations = provider_operational_metrics(g.user)
     if profile_row:
         schedules = get_db().execute(
             "SELECT * FROM provider_schedules WHERE provider_profile_id=? ORDER BY weekday,start_time",
@@ -1002,6 +1004,7 @@ def provider_profile():
         evidence_types=sorted(EVIDENCE_TYPES),
         listing_claims=listing_claims,
         partner_handoffs=partner_handoffs,
+        provider_operations=provider_operations,
     )
 
 
