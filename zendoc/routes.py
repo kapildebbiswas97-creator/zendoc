@@ -39,6 +39,7 @@ from .provider_service import (
     create_schedule,
     get_provider_profile_for_user,
     get_public_provider_profile,
+    search_registered_providers,
     upsert_provider_profile,
 )
 from .report_intelligence import REPORT_TYPES, store_report_upload
@@ -49,7 +50,7 @@ from .security import csrf_token, hash_token, is_owner, load_user_and_check_csrf
 from .startup_analytics import care_journey_conversion, india_coverage_quality, provider_onboarding_funnel, record_finder_search, record_product_activity, retention_metrics, startup_metrics, submit_finder_feedback
 from .startup_finance import create_financial_entry, create_financial_snapshot, financial_kpis, list_financial_entries
 from .investor_dashboard import investor_traction_snapshot
-from .business_api import authenticate_business_api_key, business_api_metrics, list_business_api_clients
+from .business_api import authenticate_business_api_key, business_api_metrics, business_api_self_usage, list_business_api_clients
 from .institution_pilots import (
     create_institution_pilot,
     institution_pilot_metrics,
@@ -1361,6 +1362,72 @@ def api_business_public_directory():
                 "booking connectivity, stock, beds, or ZENDOC verification."
             ),
         })
+    except PermissionError as exc:
+        return jsonify({"error": {"code": 401, "message": str(exc)}}), 401
+
+
+@bp.get("/api/v1/business/providers")
+def api_business_provider_search():
+    raw_key = request.headers.get("X-ZENDOC-Partner-Key", "")
+    try:
+        identity = authenticate_business_api_key(
+            raw_key,
+            required_scope="provider_profile.read",
+            endpoint="/api/v1/business/providers",
+            method="GET",
+        )
+        category = request.args.get("category")
+        specialty = request.args.get("specialty")
+        location = request.args.get("location")
+        results = search_registered_providers(
+            category=category,
+            specialty=specialty,
+            location=location,
+        )
+        safe = [
+            {
+                "id": item.get("id"),
+                "name": item.get("name"),
+                "provider_name": item.get("provider_name"),
+                "category": item.get("category"),
+                "specialty": item.get("specialty"),
+                "address": item.get("address"),
+                "city": item.get("city"),
+                "state": item.get("state"),
+                "postal_code": item.get("postal_code"),
+                "latitude": item.get("latitude"),
+                "longitude": item.get("longitude"),
+                "phone": item.get("phone"),
+                "verification_status": item.get("verification_status"),
+                "source": item.get("source"),
+            }
+            for item in results
+        ]
+        return jsonify({
+            "client_uid": identity["client_uid"],
+            "count": len(safe),
+            "results": safe,
+            "patient_data_access": False,
+            "truth_notice": "Verified ZENDOC provider profiles only. No patient or clinical data is exposed.",
+        })
+    except PermissionError as exc:
+        return jsonify({"error": {"code": 401, "message": str(exc)}}), 401
+
+
+@bp.get("/api/v1/business/usage")
+def api_business_usage():
+    raw_key = request.headers.get("X-ZENDOC-Partner-Key", "")
+    try:
+        identity = authenticate_business_api_key(
+            raw_key,
+            endpoint="/api/v1/business/usage",
+            method="GET",
+        )
+        try:
+            days = int(request.args.get("days", 30))
+        except (TypeError, ValueError):
+            days = 30
+        return jsonify({"usage": business_api_self_usage(identity, days=days)})
     except PermissionError as exc:
         return jsonify({"error": {"code": 401, "message": str(exc)}}), 401
 
