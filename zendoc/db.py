@@ -2157,6 +2157,20 @@ def migrate_schema(db):
         CREATE INDEX IF NOT EXISTS idx_product_analytics_geography_time
             ON product_analytics_events(geography_node_id, created_at);
 
+        CREATE TABLE IF NOT EXISTS product_feedback (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            analytics_event_id INTEGER NOT NULL REFERENCES product_analytics_events(id) ON DELETE CASCADE,
+            user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            helpful INTEGER NOT NULL,
+            reason_code TEXT,
+            created_at TEXT NOT NULL,
+            UNIQUE(analytics_event_id, user_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_product_feedback_event
+            ON product_feedback(analytics_event_id);
+        CREATE INDEX IF NOT EXISTS idx_product_feedback_created
+            ON product_feedback(created_at);
+
         CREATE TABLE IF NOT EXISTS geography_import_regions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             country_code TEXT NOT NULL,
