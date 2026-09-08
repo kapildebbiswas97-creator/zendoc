@@ -2170,6 +2170,33 @@ def migrate_schema(db):
         CREATE INDEX IF NOT EXISTS idx_business_api_usage_client_time
             ON business_api_usage(client_id, created_at);
 
+        CREATE TABLE IF NOT EXISTS startup_financial_entries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            entry_uid TEXT NOT NULL UNIQUE,
+            entry_date TEXT NOT NULL,
+            entry_type TEXT NOT NULL,
+            category TEXT NOT NULL,
+            amount_inr REAL NOT NULL,
+            recurring INTEGER NOT NULL DEFAULT 0,
+            description TEXT,
+            source_ref TEXT,
+            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_startup_financial_entries_date
+            ON startup_financial_entries(entry_date, entry_type, recurring);
+
+        CREATE TABLE IF NOT EXISTS startup_financial_snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            snapshot_month TEXT NOT NULL UNIQUE,
+            cash_balance_inr REAL,
+            notes TEXT,
+            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS care_journeys (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             journey_uid TEXT NOT NULL UNIQUE,
