@@ -242,6 +242,31 @@
   {% endif %}
 </section>
 
+<section class="grid two spaced-panel">
+  <article class="panel">
+    <div class="panel-head"><h2>Business API foundation</h2><span class="status-badge working">{{ business_metrics.active_clients }} active clients</span></div>
+    <div class="summary-row"><span>Total partner clients</span><strong>{{ business_metrics.client_count }}</strong></div>
+    <div class="summary-row"><span>Active API keys</span><strong>{{ business_metrics.active_keys }}</strong></div>
+    <div class="summary-row"><span>Authenticated requests · 30 days</span><strong>{{ business_metrics.requests_last_30_days }}</strong></div>
+    <p class="form-note">{{ business_metrics.truth_notice }}</p>
+  </article>
+
+  <article class="panel">
+    <h2>Partner API clients</h2>
+    {% if business_clients %}
+      {% for client in business_clients %}
+        <div class="summary-row">
+          <span>{{ client.name }} · {{ client.client_type|replace('_',' ')|title }}</span>
+          <strong>{{ client.status }}</strong>
+          <small>{{ client.allowed_scopes|join(', ') }} · {{ client.rate_limit_per_minute }}/min</small>
+        </div>
+      {% endfor %}
+    {% else %}
+      <p class="form-note">No business API clients yet. Create clients only for real partner integrations.</p>
+    {% endif %}
+  </article>
+</section>
+
 <section class="panel spaced-panel">
   <div class="panel-head"><div><h2>Public listing claims</h2><p class="form-note">Approved claims link a provider profile to a directory record; they do not automatically verify the provider or connect booking.</p></div></div>
   {% if claims %}
