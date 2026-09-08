@@ -2128,6 +2128,38 @@ def migrate_schema(db):
         CREATE INDEX IF NOT EXISTS idx_institution_pilot_events
             ON institution_pilot_events(pilot_id, created_at);
 
+        CREATE TABLE IF NOT EXISTS institution_pilot_milestones (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pilot_id INTEGER NOT NULL REFERENCES institution_pilots(id) ON DELETE CASCADE,
+            title TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'planned',
+            due_date TEXT,
+            completed_at TEXT,
+            notes TEXT,
+            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_institution_pilot_milestones
+            ON institution_pilot_milestones(pilot_id, status, due_date);
+
+        CREATE TABLE IF NOT EXISTS institution_pilot_usage_snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pilot_id INTEGER NOT NULL REFERENCES institution_pilots(id) ON DELETE CASCADE,
+            observed_at TEXT NOT NULL,
+            active_users INTEGER,
+            active_providers INTEGER,
+            healthcare_searches INTEGER,
+            completed_handoffs INTEGER,
+            api_requests INTEGER,
+            source_type TEXT NOT NULL DEFAULT 'owner_entered_observed',
+            notes TEXT,
+            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_institution_pilot_usage
+            ON institution_pilot_usage_snapshots(pilot_id, observed_at);
+
         CREATE TABLE IF NOT EXISTS business_api_clients (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             client_uid TEXT NOT NULL UNIQUE,
