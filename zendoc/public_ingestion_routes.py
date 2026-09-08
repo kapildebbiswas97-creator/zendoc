@@ -693,6 +693,7 @@ def api_startup_provider_network():
                 user,
                 status=request.args.get("status"),
                 provider_type=request.args.get("provider_type"),
+                linked_pilot_id=request.args.get("linked_pilot_id"),
                 limit=request.args.get("limit", 200),
             ),
         })
