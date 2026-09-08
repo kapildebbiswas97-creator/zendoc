@@ -209,3 +209,30 @@ def test_claim_api_requires_provider_and_owner_review(tmp_path):
     )
     assert approved.status_code == 200
     assert approved.get_json()["claim"]["status"] == "approved"
+
+
+def test_pharmacy_cannot_claim_hospital_listing(tmp_path):
+    app = make_app(tmp_path)
+    with app.app_context():
+        db = get_db()
+        pharmacy = create_provider_user(db, email="pharmacy-role@example.com", role="pharmacy")
+        upsert_provider_profile(
+            pharmacy,
+            {
+                "organization": "Role Pharmacy",
+                "license_identifier": "PH-ROLE-1",
+                "address": "Nadia",
+                "city": "Kalyani",
+                "state": "West Bengal",
+                "public_phone": "1234567890",
+            },
+        )
+        db.commit()
+
+        public_entity_id = create_public_hospital()
+        blocked = False
+        try:
+            submit_public_entity_claim(pharmacy, public_entity_id=public_entity_id)
+        except PermissionError:
+            blocked = True
+        assert blocked is True
