@@ -54,6 +54,7 @@ LASTROWID_TABLES = {
     "nutrition_logs",
     "platform_events",
     "product_analytics_events",
+    "product_feedback",
     "public_entity_claims",
     "provider_profiles",
     "provider_schedules",
