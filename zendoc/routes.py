@@ -1961,7 +1961,7 @@ def api_register():
         return jsonify({"error": "Password must be at least 8 characters"}), 400
     try:
         now = now_iso()
-        get_db().execute(
+        cursor = get_db().execute(
             """
             INSERT INTO users (name,email,email_normalized,password_hash,role,phone,age,city,created_at,updated_at)
             VALUES (?,?,?,?,?,?,?,?,?,?)
@@ -1979,6 +1979,8 @@ def api_register():
                 now,
             ),
         )
+        created_user = get_db().execute("SELECT * FROM users WHERE id=?", (int(cursor.lastrowid),)).fetchone()
+        record_product_activity(created_user, event_type="account_registered")
         get_db().commit()
         return jsonify({"status": "created"}), 201
     except Exception as error:
@@ -2011,6 +2013,7 @@ def api_login():
         "INSERT INTO api_tokens (user_id,token_hash,token_type,created_at) VALUES (?,?,'access',?)",
         (user["id"], hash_token(token), now_iso()),
     )
+    record_product_activity(user, event_type="session_login")
     get_db().commit()
     return jsonify({"token": token, "user": {"id": user["id"], "name": user["name"], "role": user["role"]}})
 
@@ -2115,6 +2118,7 @@ def api_create_appointment():
             return validation_error
         try:
             book_provider_slot(user, int(data["provider_profile_id"]), data["scheduled_for"], data["reason"])
+            record_product_activity(user, event_type="appointment_requested")
             get_db().commit()
             return jsonify({"status": "created"}), 201
         except PermissionError as error:
@@ -2131,6 +2135,7 @@ def api_create_appointment():
         """,
         (user["id"], data.get("provider_name", "Provider"), data.get("scheduled_for"), data.get("reason", ""), now_iso(), now_iso()),
     )
+    record_product_activity(user, event_type="appointment_requested")
     get_db().commit()
     return jsonify({"status": "created"}), 201
 
@@ -2148,7 +2153,16 @@ def api_healthcare_search():
         request.args.get("longitude"),
         request.args.get("radius_km", 10),
     )
-    return jsonify(HealthcareFinder().search(query))
+    result = HealthcareFinder().search(query)
+    record_finder_search(
+        user,
+        category=query["category"],
+        location=query["location"],
+        result_count=len(result.get("results") or []),
+        source_tiers=result.get("source_tiers") or {},
+    )
+    get_db().commit()
+    return jsonify(result)
 
 
 @bp.get("/api/v1/providers")
@@ -2168,6 +2182,9 @@ def api_provider_slots(profile_id):
     if not profile:
         return jsonify({"error": {"code": 404, "message": "Verified provider profile not found"}}), 404
     date_text = request.args.get("date", "")
+    if user["role"] == "patient":
+        record_product_activity(user, event_type="provider_view")
+        get_db().commit()
     return jsonify({"provider_profile_id": profile_id, "date": date_text, "slots": available_slots(profile_id, date_text)})
 
 
