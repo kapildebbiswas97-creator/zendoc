@@ -1,11 +1,10 @@
-from .db import get_db
 from .places_provider import ShortLivedCache, configured_places_provider
 from .provider_service import search_registered_providers
 from .public_data_ingestion import search_public_healthcare_entities
 
 
 CATEGORIES = {"hospital", "clinic", "doctor", "pharmacy", "diagnostic_centre", "laboratory", "emergency"}
-_CACHE = ShortLivedCache(ttl_seconds=300)
+_PLACES_CACHE = ShortLivedCache(ttl_seconds=300)
 
 
 def normalize_query(category=None, specialty=None, location=None, latitude=None, longitude=None, radius_km=10):
@@ -46,10 +45,6 @@ class HealthcareFinder:
 
     def search(self, query):
         normalized = normalize_query(**query)
-        cache_key = (tuple(sorted(normalized.items())), finder_data_revision())
-        cached = _CACHE.get(cache_key)
-        if cached:
-            return cached
 
         registered = search_registered_providers(
             category="doctor" if normalized["category"] in {"doctor", "clinic"} else normalized["category"],
@@ -66,7 +61,15 @@ class HealthcareFinder:
             registered,
             public_directory,
         )
-        places_result = self.places_provider.search(normalized)
+        places_cache_key = (
+            getattr(self.places_provider, "source", self.places_provider.__class__.__name__),
+            tuple(sorted(normalized.items())),
+        )
+        places_result = _PLACES_CACHE.get(places_cache_key)
+        if places_result is None:
+            places_result = self.places_provider.search(normalized)
+            _PLACES_CACHE.set(places_cache_key, places_result)
+
         response = {
             "query": normalized,
             "registered_providers": registered,
@@ -84,25 +87,9 @@ class HealthcareFinder:
         }
         if not response["results"]:
             response["message"] = places_result.message or "No healthcare providers were found for this search."
-        _CACHE.set(cache_key, response)
         return response
 
 
-
-
-def finder_data_revision():
-    """Return a lightweight revision tuple so finder cache follows data changes."""
-    db = get_db()
-    parts = []
-    for query in (
-        "SELECT COUNT(*) c,MAX(updated_at) m FROM provider_profiles",
-        "SELECT COUNT(*) c,MAX(updated_at) m FROM public_healthcare_entities",
-        "SELECT COUNT(*) c,MAX(updated_at) m FROM public_entity_claims",
-        "SELECT COUNT(*) c,MAX(updated_at) m FROM users WHERE role IN ('doctor','hospital','pharmacy')",
-    ):
-        row = db.execute(query).fetchone()
-        parts.append((int(row["c"] or 0), str(row["m"] or "")))
-    return tuple(parts)
 
 
 def merge_registered_with_approved_public_claims(registered, public_directory):
