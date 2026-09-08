@@ -34,6 +34,8 @@ REQUIRED_TABLES = (
     "integration_health_checks",
     "api_rate_limit_buckets",
     "business_api_clients",
+    "institution_pilot_usage_snapshots",
+    "institution_pilot_milestones",
     "business_api_keys",
     "business_api_usage",
     "partner_booking_handoffs",
