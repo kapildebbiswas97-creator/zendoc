@@ -1,6 +1,8 @@
 """Priority source stacks for operational geography expansion."""
 from __future__ import annotations
 
+from .india_regions import INDIA_REGION_BY_SLUG, VALIDATION_PRIORITY_DISTRICTS
+
 STATE_SOURCE_PRIORITIES = {
     "west_bengal": {
         "official_directory_sources": [
@@ -191,16 +193,22 @@ BASELINE_LIVE_DATA_GAPS = [
 def state_source_priority(state_slug: str) -> dict:
     key = str(state_slug or "").strip().lower().replace("-", "_").replace(" ", "_")
     profile = STATE_SOURCE_PRIORITIES.get(key)
+    region = INDIA_REGION_BY_SLUG.get(key)
     if not profile:
         return {
             "state_slug": key,
-            "configured": False,
-            "template": "INDIA_BASELINE_V1",
+            "configured": bool(region),
+            "template": "INDIA_NATIONAL_SCOPE_V1" if region else "INDIA_BASELINE_V1",
             "official_directory_sources": list(BASELINE_INDIA_DIRECTORY_SOURCES),
-            "priority_districts": [],
+            "priority_districts": list(VALIDATION_PRIORITY_DISTRICTS.get(key, [])),
             "live_data_gaps": list(BASELINE_LIVE_DATA_GAPS),
             "state_specific_sources": [],
+            "region_type": region["region_type"] if region else None,
+            "coverage_scope": "FULL_REGION" if region else "UNREGISTERED_REGION",
             "truth_notice": (
+                "This State/UT is in ZENDOC's India-wide coverage scope. National official sources apply immediately; "
+                "state-specific portals are added only after source verification. Priority districts are validation order only, not coverage limits."
+                if region else
                 "Baseline national/central sources are enabled. State-specific portals are added only after official-source verification."
             ),
         }
@@ -224,7 +232,10 @@ def state_source_priority(state_slug: str) -> dict:
         "priority_districts": list(profile["priority_districts"]),
         "live_data_gaps": list(profile["live_data_gaps"]),
         "state_specific_sources": state_sources,
+        "region_type": (INDIA_REGION_BY_SLUG.get(key) or {}).get("region_type"),
+        "coverage_scope": "FULL_REGION",
         "truth_notice": (
-            "National baseline sources plus verified state-specific sources. Directory coverage does not imply live provider operations."
+            "National baseline sources plus verified state-specific sources. Priority districts are validation order only, "
+            "not coverage limits. Directory coverage does not imply live provider operations."
         ),
     }
