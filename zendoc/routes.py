@@ -56,6 +56,7 @@ from .institution_pilots import (
     list_institution_pilots,
     update_institution_pilot,
 )
+from .public_data_ingestion import search_public_healthcare_entities
 from .public_entity_claims import (
     list_my_public_entity_claims,
     list_public_entity_claims,
@@ -1299,6 +1300,112 @@ def api_admin_public_entity_claim_review(claim_id):
         return jsonify({"error": {"code": 404, "message": str(exc)}}), 404
     except (TypeError, ValueError) as exc:
         return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+
+
+@bp.get("/api/v1/business/public-directory")
+def api_business_public_directory():
+    raw_key = request.headers.get("X-ZENDOC-Partner-Key", "")
+    try:
+        identity = authenticate_business_api_key(
+            raw_key,
+            required_scope="public_directory.read",
+            endpoint="/api/v1/business/public-directory",
+            method="GET",
+        )
+        category = request.args.get("category")
+        specialty = request.args.get("specialty")
+        location = request.args.get("location")
+        try:
+            limit = int(request.args.get("limit", 25))
+        except (TypeError, ValueError):
+            limit = 25
+        records = search_public_healthcare_entities(
+            category=category,
+            specialty=specialty,
+            location=location,
+            limit=limit,
+        )
+        safe_records = [
+            {
+                "id": item.get("id"),
+                "source_id": item.get("source_id"),
+                "source_record_id": item.get("source_record_id"),
+                "category": item.get("category"),
+                "name": item.get("name"),
+                "specialty": item.get("specialty"),
+                "address": item.get("address"),
+                "city": item.get("city"),
+                "district": item.get("district"),
+                "state": item.get("state"),
+                "postal_code": item.get("postal_code"),
+                "latitude": item.get("latitude"),
+                "longitude": item.get("longitude"),
+                "public_phone": item.get("public_phone"),
+                "public_email": item.get("public_email"),
+                "website": item.get("website"),
+                "source_trust": item.get("source_trust"),
+                "verification_status": item.get("verification_status"),
+                "bookable_in_zendoc": item.get("bookable_in_zendoc"),
+                "freshness_at": item.get("freshness_at"),
+                "source_disclaimer": item.get("source_disclaimer"),
+            }
+            for item in records
+        ]
+        return jsonify({
+            "client_uid": identity["client_uid"],
+            "count": len(safe_records),
+            "results": safe_records,
+            "patient_data_access": False,
+            "truth_notice": (
+                "Public-directory records only. Directory presence does not prove live availability, "
+                "booking connectivity, stock, beds, or ZENDOC verification."
+            ),
+        })
+    except PermissionError as exc:
+        return jsonify({"error": {"code": 401, "message": str(exc)}}), 401
+
+
+@bp.get("/api/v1/business/providers/<int:profile_id>/availability")
+def api_business_provider_availability(profile_id):
+    raw_key = request.headers.get("X-ZENDOC-Partner-Key", "")
+    try:
+        identity = authenticate_business_api_key(
+            raw_key,
+            required_scope="provider_availability.read",
+            endpoint=f"/api/v1/business/providers/{profile_id}/availability",
+            method="GET",
+        )
+        profile = get_public_provider_profile(profile_id)
+        if not profile:
+            return jsonify({"error": {"code": 404, "message": "Verified public provider not found."}}), 404
+        date_text = str(request.args.get("date") or "").strip()
+        if not date_text:
+            return jsonify({"error": {"code": 400, "message": "date is required in YYYY-MM-DD format."}}), 400
+        slots = available_slots(profile_id, date_text)
+        return jsonify({
+            "client_uid": identity["client_uid"],
+            "provider": {
+                "id": profile["id"],
+                "provider_type": profile["provider_type"],
+                "provider_name": profile["provider_name"],
+                "organization": profile["organization"],
+                "specialty": profile["specialty"],
+                "city": profile["city"],
+                "state": profile["state"],
+                "postal_code": profile["postal_code"],
+                "public_phone": profile["public_phone"],
+                "verification_status": profile["verification_status"],
+            },
+            "date": date_text,
+            "available_slots": slots,
+            "patient_data_access": False,
+            "truth_notice": (
+                "Slots are derived from ZENDOC-connected provider schedules and current ZENDOC bookings. "
+                "This does not expose patient identity or clinical information."
+            ),
+        })
+    except PermissionError as exc:
+        return jsonify({"error": {"code": 401, "message": str(exc)}}), 401
 
 
 @bp.get("/api/v1/business/ping")
