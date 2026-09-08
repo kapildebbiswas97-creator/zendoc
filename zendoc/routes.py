@@ -1143,6 +1143,7 @@ def startup_b2b_operations():
 def startup_command_center():
     days = request.args.get("days", 30)
     metrics = startup_metrics(g.user, days=days)
+    activation_funnel = user_activation_funnel(g.user, days=days)
     coverage = india_coverage_quality(g.user)
     retention = retention_metrics(g.user)
     care_funnel = care_journey_conversion(g.user, days=days)
@@ -1163,6 +1164,7 @@ def startup_command_center():
     return render_template(
         "startup_command_center.html",
         metrics=metrics,
+        activation_funnel=activation_funnel,
         coverage=coverage,
         retention=retention,
         care_funnel=care_funnel,
