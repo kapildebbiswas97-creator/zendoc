@@ -2204,6 +2204,25 @@ def migrate_schema(db):
         CREATE INDEX IF NOT EXISTS idx_partner_slot_holds_active
             ON partner_slot_holds(provider_profile_id, status, expires_at);
 
+        CREATE TABLE IF NOT EXISTS partner_api_audit_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            client_id INTEGER REFERENCES business_api_clients(id) ON DELETE SET NULL,
+            key_id INTEGER REFERENCES business_api_keys(id) ON DELETE SET NULL,
+            actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            actor_type TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            entity_type TEXT,
+            entity_id TEXT,
+            endpoint TEXT,
+            outcome TEXT NOT NULL DEFAULT 'success',
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_partner_api_audit_client
+            ON partner_api_audit_events(client_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_partner_api_audit_event
+            ON partner_api_audit_events(event_type, created_at);
+
         CREATE TABLE IF NOT EXISTS startup_financial_entries (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             entry_uid TEXT NOT NULL UNIQUE,
