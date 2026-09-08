@@ -1,6 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Health Command Center — ZENDOC{% endblock %}
 {% block content %}
+{% if preview_mode %}
+<aside class="emergency-strip" aria-label="Owner QA preview">
+  <p><strong>Owner QA preview · {{ preview_role|title }}</strong> — This is a visual dashboard preview only. You remain authenticated as the ZENDOC owner; no role impersonation or private patient/provider data access is granted by this preview.</p>
+  <a href="{{ url_for('main.admin') }}" class="secondary-action">Back to Admin</a>
+</aside>
+{% endif %}
 <section class="section-head dashboard-hero">
   <div>
     <p class="eyebrow">{{ 'Health command center' if current_user.role == 'patient' else current_user.role.replace('_',' ').title() + ' workspace' }}</p>

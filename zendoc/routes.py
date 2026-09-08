@@ -583,6 +583,42 @@ def dashboard():
     )
 
 
+@bp.get("/admin/dashboard-preview/<role>")
+@owner_required
+def admin_dashboard_preview(role):
+    preview_role = normalize_role(role)
+    if preview_role not in {"patient", "doctor", "hospital", "pharmacy"}:
+        abort(404)
+
+    preview_user = {
+        "id": g.user["id"],
+        "name": f"QA Preview · {preview_role.title()}",
+        "email": g.user["email"],
+        "role": preview_role,
+        "active": 1,
+        "verified": 1,
+    }
+    preview_stats = {
+        "Appointments": 0,
+        "Records": 0,
+        "Unread": 0,
+        "AI Uses": 0,
+    }
+    audit("preview_dashboard", "role_dashboard", preview_role)
+    get_db().commit()
+    return render_template(
+        "dashboard.html",
+        current_user=preview_user,
+        stats=preview_stats,
+        appointments=[],
+        next_appointment=None,
+        recent_notifications=[],
+        health_activity=[],
+        preview_mode=True,
+        preview_role=preview_role,
+    )
+
+
 @bp.route("/profile", methods=("GET", "POST"))
 @login_required
 def profile():
