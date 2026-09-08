@@ -7,6 +7,22 @@ import re
 from typing import Any
 
 
+def normalize_lgd_state_code(value: Any) -> str:
+    """Return the canonical numeric LGD state code used inside ZENDOC.
+
+    LGD exports may serialize numeric state codes with or without leading
+    zeroes (for example Uttar Pradesh as 9 or 09). Only purely numeric state
+    codes are canonicalized; unexpected non-numeric values are preserved so
+    validation can reject them rather than silently coercing unrelated IDs.
+    """
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    if not re.fullmatch(r"\d{1,3}", text):
+        return text
+    return str(int(text))
+
+
 def parse_delimited_text(text: str, *, delimiter: str | None = None, max_rows: int = 250000) -> list[dict[str, str]]:
     raw = str(text or "")
     if not raw.strip():
@@ -37,7 +53,7 @@ def normalize_lgd_bundle(
     urban_local_bodies: list[dict[str, Any]] | None = None,
     ulb_coverage: list[dict[str, Any]] | None = None,
 ) -> dict[str, list[dict]]:
-    state_code = str(state_code or "").strip()
+    state_code = normalize_lgd_state_code(state_code)
     if not state_code:
         raise ValueError("state_code is required.")
 
@@ -56,7 +72,7 @@ def normalize_lgd_bundle(
 
     for raw in villages_by_blocks or []:
         row = _normalized_row(raw)
-        if _value(row, "state code", "statecode") != state_code:
+        if normalize_lgd_state_code(_value(row, "state code", "statecode")) != state_code:
             continue
         village_code = _value(row, "village code", "villagecode")
         if not village_code:
@@ -111,7 +127,7 @@ def normalize_lgd_bundle(
     ulb_map = {item["code"]: item for item in result["local_bodies"]}
     for raw in ulb_coverage or []:
         row = _normalized_row(raw)
-        row_state = _value(row, "state code", "statecode")
+        row_state = normalize_lgd_state_code(_value(row, "state code", "statecode"))
         state_name = _value(row, "state name", "state name in english")
         if row_state and row_state != state_code:
             continue
@@ -146,7 +162,7 @@ def _districts(state_code: str, rows: list[dict]) -> list[dict]:
     result = []
     for raw in rows:
         row = _normalized_row(raw)
-        if _value(row, "state code", "statecode") != state_code:
+        if normalize_lgd_state_code(_value(row, "state code", "statecode")) != state_code:
             continue
         code = _value(row, "district code", "districtcode")
         name = _value(row, "district name in english", "district name", "districtname")
@@ -159,7 +175,7 @@ def _subdistricts(state_code: str, rows: list[dict]) -> list[dict]:
     result = []
     for raw in rows:
         row = _normalized_row(raw)
-        if _value(row, "state code", "statecode") != state_code:
+        if normalize_lgd_state_code(_value(row, "state code", "statecode")) != state_code:
             continue
         code = _value(row, "sub district code", "subdistrict code", "subdistrictcode")
         name = _value(row, "sub district name", "subdistrict name", "sub district name in english", "subdistrict name in english")
@@ -178,7 +194,7 @@ def _villages(state_code: str, rows: list[dict]) -> list[dict]:
     result = []
     for raw in rows:
         row = _normalized_row(raw)
-        if _value(row, "state code", "statecode") != state_code:
+        if normalize_lgd_state_code(_value(row, "state code", "statecode")) != state_code:
             continue
         code = _value(row, "village code", "villagecode")
         name = _value(
@@ -205,7 +221,7 @@ def _blocks(state_code: str, rows: list[dict]) -> list[dict]:
     result = []
     for raw in rows:
         row = _normalized_row(raw)
-        if _value(row, "state code", "statecode") != state_code:
+        if normalize_lgd_state_code(_value(row, "state code", "statecode")) != state_code:
             continue
         code = _value(row, "block code", "development block code", "blockcode")
         name = _value(row, "block name in english", "block name", "development block name")
@@ -226,7 +242,7 @@ def _panchayats(state_code: str, rows: list[dict]) -> list[dict]:
     result = []
     for raw in rows:
         row = _normalized_row(raw)
-        if _value(row, "state code", "statecode") != state_code:
+        if normalize_lgd_state_code(_value(row, "state code", "statecode")) != state_code:
             continue
         code = _value(row, "local body code", "localbody code", "panchayat code")
         name = _value(row, "local body name in english", "localbody name in english", "panchayat name")
@@ -247,7 +263,7 @@ def _urban_local_bodies(state_code: str, rows: list[dict]) -> list[dict]:
     result = []
     for raw in rows:
         row = _normalized_row(raw)
-        if _value(row, "state code", "statecode") != state_code:
+        if normalize_lgd_state_code(_value(row, "state code", "statecode")) != state_code:
             continue
         code = _value(row, "local body code", "localbody code")
         name = _value(row, "local body name in english", "localbody name in english", "local body name")
