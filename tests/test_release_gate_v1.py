@@ -135,3 +135,7 @@ def test_deployment_verifier_is_wired_to_optional_main_cd_job():
     assert "deployment-verification:" in workflow
     assert "vars.ZENDOC_DEPLOYMENT_URL" in workflow
     assert 'python scripts/verify_deployment.py' in workflow
+    assert '--expected-commit "${{ github.sha }}"' in workflow
+    assert "--require-platform render" in workflow
+    assert "--require-engine postgresql" in workflow
+    assert "--require-persistence-verified" in workflow
