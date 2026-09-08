@@ -13,6 +13,7 @@ from typing import Any
 from .db import get_db, is_integrity_error, now_iso
 from .provider_service import available_slots, get_public_provider_profile
 from .partner_audit import record_partner_audit_event
+from .notification_providers import deliver_notification
 from .security import assert_owner
 
 
@@ -123,6 +124,18 @@ def create_partner_booking_handoff(
             entity_id=handoff_id,
             metadata={"provider_profile_id": int(provider_profile_id), "slot_key": slot_key, "status": "received"},
         )
+        provider_user = db.execute(
+            "SELECT user_id FROM provider_profiles WHERE id=?",
+            (int(provider_profile_id),),
+        ).fetchone()
+        if provider_user:
+            deliver_notification(
+                int(provider_user["user_id"]),
+                "New partner coordination request",
+                "A partner requested coordination for one of your available slots. Review it in your provider workspace.",
+                channel="in_app",
+                template_type="partner_handoff_received",
+            )
         db.commit()
     except Exception as exc:
         db.rollback()
