@@ -25,7 +25,7 @@ CANONICAL_FIELDS = {
         "optional": {
             "specialty", "address", "city", "district", "state", "postal_code",
             "latitude", "longitude", "public_phone", "public_email", "website",
-            "freshness_at", "metadata",
+            "freshness_at", "metadata", "geography_source", "geography_source_record_id",
         },
     },
 }
