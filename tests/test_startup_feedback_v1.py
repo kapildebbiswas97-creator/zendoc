@@ -35,7 +35,7 @@ def test_feedback_is_bound_to_own_search_event_and_updatable(tmp_path):
         assert first["helpful"] == 0
 
         second = submit_finder_feedback(
-            {"id": 10},
+            user_a,
             analytics_event_id=event_id,
             helpful=True,
         )
