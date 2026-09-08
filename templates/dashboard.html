@@ -3,7 +3,7 @@
 {% block content %}
 {% if preview_mode %}
 <aside class="emergency-strip" aria-label="Owner QA preview">
-  <p><strong>Owner QA preview · {{ preview_role|title }}</strong> — This is a visual dashboard preview only. You remain authenticated as the ZENDOC owner; no role impersonation or private patient/provider data access is granted by this preview.</p>
+  <p><strong>Owner QA preview · {{ preview_role|title }}</strong> — You remain authenticated as the ZENDOC owner. This preview never impersonates another account and never grants hidden write access.</p>
   <a href="{{ url_for('main.admin') }}" class="secondary-action">Back to Admin</a>
 </aside>
 {% endif %}
@@ -20,6 +20,16 @@
     <a href="{{ url_for('main.notifications') }}" class="secondary-action">Notifications{% if stats.get('Unread') %} ({{ stats.get('Unread') }}){% endif %}</a>
   </div>
 </section>
+
+{% if preview_mode %}
+<section class="panel" aria-label="Owner-safe workspace inspection">
+  <div class="panel-head"><div><p class="eyebrow">Owner inspection</p><h2>Safe links for the {{ preview_role|title }} workspace</h2></div></div>
+  <p class="form-note">These links are intentionally owner-safe and should open without role-switching. Use them to inspect real platform-wide read views; role-specific writes remain protected.</p>
+  <div class="form-actions">
+    {% for label, href in preview_links %}<a class="secondary-action" href="{{ href }}">{{ label }}</a>{% endfor %}
+  </div>
+</section>
+{% else %}
 
 {% if current_user.role == 'patient' %}
 <aside class="emergency-strip" aria-label="Emergency guidance">
@@ -121,5 +131,6 @@
     </div>
   </article>
 </section>
+{% endif %}
 {% endif %}
 {% endblock %}
