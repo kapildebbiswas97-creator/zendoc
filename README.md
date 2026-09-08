@@ -47,27 +47,35 @@ Milestone 11 delivers Trust-First Intelligence & Healthcare Orchestration. A cen
 
 ## Production Notes
 
-Set `ZENDOC_ENV=production`, `ZENDOC_SECRET_KEY`, `ZENDOC_ADMIN_EMAIL`, and `ZENDOC_ADMIN_PASSWORD` in the environment. The live selection deployment is connected to managed PostgreSQL via `DATABASE_URL`. Local development and automated testing default to isolated SQLite. Follow `docs/PRODUCTION_PERSISTENCE.md` for migration guidelines.
+Set `ZENDOC_ENV=production`, `ZENDOC_SECRET_KEY`, `ZENDOC_ADMIN_EMAIL`, and `ZENDOC_ADMIN_PASSWORD` in the environment. The live production-pilot deployment is connected to managed PostgreSQL via `DATABASE_URL`. Local development and automated testing default to isolated SQLite. Follow `docs/PRODUCTION_PERSISTENCE.md` for migration guidelines.
 
-## Selection Beta — Truthful Status Disclosure
+## Startup Product Status — Truthful Production Pilot
 
-ZENDOC is currently in **Selection Beta** (Milestone 11 hardened). All 229 automated tests pass. The persistence architecture is configured as follows:
+ZENDOC is developed as a startup product, not as a time-boxed hackathon prototype. Public demonstrations, competitions, pilots, accelerators, and investor meetings may use the same production branch, but product decisions optimize for long-term safety, data quality, interoperability, scalability, and user trust.
 
 | Tier | Status |
 |---|---|
 | Local / test SQLite | WORKING |
 | Same-database restart persistence | WORKING |
-| Managed PostgreSQL (Render live deployment) | WORKING via `DATABASE_URL` |
+| Managed PostgreSQL production-pilot path | WORKING via `DATABASE_URL` |
+| India-wide geography/facility ingestion architecture | WORKING; official source imports remain coverage-dependent |
 | Enterprise Multi-Region HA & Automated Backups | INTEGRATION REQUIRED |
-| Free-tier container sleep after prolonged inactivity | Disclosed hosting characteristic |
+| Free-tier/container hosting constraints | Hosting-dependent and must be disclosed truthfully |
+
+Current operating principles:
+- no fabricated providers, availability, prices, stock, beds, ETAs, or integrations;
+- no unauthorized private clinical-data ingestion;
+- nationwide India coverage is a product target, with pilot areas used only for faster validation;
+- external investment or accelerator participation is optional, not a dependency for product continuation;
+- clinical, regulatory, security, and privacy claims remain evidence-bound.
 
 Relevant documentation:
-- `docs/MILESTONE11.md` — Trust-First Intelligence & Healthcare Orchestration
-- `docs/MILESTONE10.md` — Connected Care & Truthfulness Architecture
-- `docs/FEATURE_TRUTH_MATRIX.md` — Complete 43-capability truthful classification
-- `docs/FINAL_SELECTION_VIDEO_RUNBOOK.md` — 5-minute video demonstration runbook
-- `docs/EXTERNAL_BETA_CHECKLIST.md` — 9-journey tester checklist with seed accounts
-- `docs/FINAL_RELEASE_AUDIT.md` — Full audit report (issues found, fixed, verified)
+- `docs/STARTUP_STRATEGY.md` — startup operating model, growth strategy, rollout, monetization, and investor path
+- `docs/INVESTOR_READINESS.md` — evidence, traction, diligence, data room, metrics, and funding-readiness checklist
+- `docs/ROADMAP.md` — product and infrastructure roadmap
+- `docs/FEATURE_TRUTH_MATRIX.md` — capability truth classification
+- `docs/PRODUCTION_PERSISTENCE.md` — production persistence and migration guidance
+- `docs/FINAL_RELEASE_AUDIT.md` — security/release audit history
 
 Optional local model providers are controlled with `ZENDOC_LOCAL_AI_*` (`ZENDOC_SLM_*` is retained as a legacy compatibility alias); cloud providers use `ZENDOC_AI_*`. If a provider is not ready or privacy policy disallows it, ZENDOC uses deterministic local fallback and never claims model inference occurred.
 
