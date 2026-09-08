@@ -57,7 +57,7 @@
               <a class="primary-action" href="{{ url_for('main.provider_detail', profile_id=item.id) }}">View profile &amp; availability</a>
             {% else %}
               <p class="form-note">Booking is not connected for this external listing. Verify details directly before visiting.</p>
-              {% if current_user and current_user.role in ['doctor','hospital','pharmacy'] and item.id %}
+              {% if current_user and current_user.role in ['doctor','hospital','pharmacy'] and item.id and item.claimable_public_listing %}
               <details class="claim-listing">
                 <summary>Is this your listing?</summary>
                 <form method="post" action="{{ url_for('main.provider_public_entity_claim_submit_web') }}">
