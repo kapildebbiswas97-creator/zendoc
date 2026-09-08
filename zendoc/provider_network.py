@@ -54,6 +54,12 @@ def create_provider_prospect(actor: Any, data: dict) -> dict:
     linked_user_id = _optional_positive_int(data.get("linked_user_id"))
     linked_profile_id = _optional_positive_int(data.get("linked_provider_profile_id"))
     _validate_links(linked_user_id, linked_profile_id, provider_type)
+    _validate_status_against_links(
+        status=status,
+        linked_user_id=linked_user_id,
+        linked_profile_id=linked_profile_id,
+        provider_type=provider_type,
+    )
 
     now = now_iso()
     first_contact = _clean(data.get("first_contact_at"), 64)
@@ -121,6 +127,12 @@ def update_provider_prospect(actor: Any, prospect_id: int, data: dict) -> dict:
         data.get("linked_provider_profile_id", existing["linked_provider_profile_id"])
     )
     _validate_links(linked_user_id, linked_profile_id, provider_type)
+    _validate_status_against_links(
+        status=status,
+        linked_user_id=linked_user_id,
+        linked_profile_id=linked_profile_id,
+        provider_type=provider_type,
+    )
 
     first_contact = _clean(data.get("first_contact_at", existing["first_contact_at"]), 64)
     last_contact = _clean(data.get("last_contact_at", existing["last_contact_at"]), 64)
@@ -276,6 +288,38 @@ def _observed_onboarding(profile_id: int | None) -> dict | None:
         "verification_ready": status["verification_ready"],
         "blockers": status["blockers"],
     }
+
+
+def _validate_status_against_links(
+    *,
+    status: str,
+    linked_user_id: int | None,
+    linked_profile_id: int | None,
+    provider_type: str,
+) -> None:
+    if status in {"registered", "profile_created", "evidence_submitted", "verified", "activated"} and linked_user_id is None:
+        raise ValueError(f"status '{status}' requires a linked registered provider account.")
+
+    if status in {"profile_created", "evidence_submitted", "verified", "activated"} and linked_profile_id is None:
+        raise ValueError(f"status '{status}' requires a linked provider profile.")
+
+    if linked_profile_id is None:
+        return
+
+    onboarding = _observed_onboarding(linked_profile_id)
+    if onboarding is None:
+        raise ValueError("Linked provider profile onboarding state is unavailable.")
+
+    if status == "evidence_submitted" and onboarding["evidence_count"] < 1:
+        raise ValueError("Cannot mark evidence_submitted before real verification evidence exists.")
+
+    if status in {"verified", "activated"} and onboarding["verification_status"] != "verified":
+        raise ValueError(f"Cannot mark {status} before the linked provider is actually verified.")
+
+    if status == "activated":
+        if provider_type in {"doctor", "hospital"} and onboarding["active_schedule_count"] < 1:
+            raise ValueError("Doctor/hospital activation requires at least one active published schedule.")
+
 
 
 def _validate_links(
