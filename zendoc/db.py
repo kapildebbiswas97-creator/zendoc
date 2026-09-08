@@ -1425,12 +1425,13 @@ def migrate_schema(db):
     db.execute("CREATE INDEX IF NOT EXISTS idx_ai_conversations_user ON ai_conversations(user_id, updated_at)")
 
     provider_network_columns = table_columns(db, "provider_network_prospects")
-    if "linked_pilot_id" not in provider_network_columns:
-        db.execute("ALTER TABLE provider_network_prospects ADD COLUMN linked_pilot_id INTEGER")
-    db.execute(
-        "CREATE INDEX IF NOT EXISTS idx_provider_network_prospects_pilot "
-        "ON provider_network_prospects(linked_pilot_id, status, updated_at)"
-    )
+    if provider_network_columns:
+        if "linked_pilot_id" not in provider_network_columns:
+            db.execute("ALTER TABLE provider_network_prospects ADD COLUMN linked_pilot_id INTEGER")
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_provider_network_prospects_pilot "
+            "ON provider_network_prospects(linked_pilot_id, status, updated_at)"
+        )
 
     notification_delivery_columns = table_columns(db, "notification_deliveries")
     for column, ddl in {
