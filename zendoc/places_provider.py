@@ -337,19 +337,29 @@ class GooglePlacesProvider(PlacesProvider):
         return payload
 
 
+def _effective_places_provider():
+    configured = os.environ.get("ZENDOC_PLACES_PROVIDER", "none").strip().lower()
+    production = os.environ.get("ZENDOC_ENV", "development").strip().lower() == "production"
+    if production and configured in {"", "none"}:
+        return configured or "none", "nominatim", True
+    return configured or "none", configured or "none", False
+
+
 def places_configuration_status():
-    provider = os.environ.get("ZENDOC_PLACES_PROVIDER", "none").strip().lower()
+    configured_provider, effective_provider, production_fallback_active = _effective_places_provider()
     has_google_key = bool(os.environ.get("ZENDOC_GOOGLE_PLACES_API_KEY"))
-    if provider == "google" and has_google_key:
+    if effective_provider == "google" and has_google_key:
         mode = "google_with_openstreetmap_fallback"
-    elif provider == "google":
+    elif effective_provider == "google":
         mode = "openstreetmap_fallback_google_key_missing"
-    elif provider in {"nominatim", "openstreetmap", "osm"}:
-        mode = "openstreetmap_nominatim"
+    elif effective_provider in {"nominatim", "openstreetmap", "osm"}:
+        mode = "production_openstreetmap_fallback" if production_fallback_active else "openstreetmap_nominatim"
     else:
         mode = "unconfigured"
     return {
-        "configured_provider": provider,
+        "configured_provider": configured_provider,
+        "effective_provider": effective_provider,
+        "production_fallback_active": production_fallback_active,
         "mode": mode,
         "google_places_key_configured": has_google_key,
         "external_discovery_available": mode != "unconfigured",
@@ -361,7 +371,7 @@ def places_configuration_status():
 
 
 def configured_places_provider():
-    provider = os.environ.get("ZENDOC_PLACES_PROVIDER", "none").lower()
+    _configured_provider, provider, _production_fallback_active = _effective_places_provider()
     timeout = os.environ.get("ZENDOC_PLACES_TIMEOUT_SECONDS", "8")
     try:
         timeout = int(timeout)
