@@ -49,7 +49,7 @@ def create_partner_booking_handoff(
     requested_date = requested_dt.date().isoformat()
     slot_text = requested_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M")
     slots = available_slots(int(provider_profile_id), requested_date)
-    normalized_slots = {str(item.get("start") or item.get("scheduled_for") or item)[:16] for item in slots}
+    normalized_slots = {str(item)[:16] for item in slots}
     if slot_text[:16] not in normalized_slots:
         raise ValueError("Requested provider slot is not currently available.")
 
