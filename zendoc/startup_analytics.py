@@ -46,7 +46,10 @@ def record_product_activity(user: Any, *, event_type: str) -> int:
     clean_event = str(event_type or "").strip().lower()
     allowed = {
         "session_login",
+        "account_registered",
+        "profile_updated",
         "healthcare_search",
+        "provider_view",
         "provider_profile_update",
         "appointment_requested",
         "finder_feedback",
@@ -251,6 +254,103 @@ def startup_metrics(actor: Any, *, days: int = 30) -> dict:
         "metric_notice": (
             "repeat_search_user_rate is a product-usage signal, not cohort D7/D30 retention. True retention should "
             "be added after enough real-user history exists."
+        ),
+    }
+
+
+def user_activation_funnel(actor: Any, *, days: int = 30) -> dict:
+    """Observed patient activation funnel built only from real stored accounts/events."""
+    assert_owner(actor)
+    days = max(1, min(int(days or 30), 365))
+    cutoff = _cutoff_iso(days)
+    db = get_db()
+
+    users = db.execute(
+        """
+        SELECT id,created_at
+        FROM users
+        WHERE role='patient' AND active=1 AND created_at>=?
+        ORDER BY created_at ASC
+        """,
+        (cutoff,),
+    ).fetchall()
+    user_ids = [int(row["id"]) for row in users]
+    created_at_by_user = {int(row["id"]): str(row["created_at"]) for row in users}
+
+    events_by_user: dict[int, list[dict]] = defaultdict(list)
+    if user_ids:
+        placeholders = ",".join("?" for _ in user_ids)
+        events = db.execute(
+            f"""
+            SELECT user_id,event_type,useful_result,created_at
+            FROM product_analytics_events
+            WHERE user_id IN ({placeholders})
+            ORDER BY created_at ASC
+            """,
+            user_ids,
+        ).fetchall()
+        for row in events:
+            uid = int(row["user_id"])
+            if str(row["created_at"]) >= created_at_by_user[uid]:
+                events_by_user[uid].append(dict(row))
+
+    feedback_users = set()
+    if user_ids:
+        placeholders = ",".join("?" for _ in user_ids)
+        rows = db.execute(
+            f"""
+            SELECT DISTINCT f.user_id
+            FROM product_feedback f
+            WHERE f.user_id IN ({placeholders}) AND f.created_at>=?
+            """,
+            [*user_ids, cutoff],
+        ).fetchall()
+        feedback_users = {int(row["user_id"]) for row in rows}
+
+    def _has_event(uid: int, event_type: str) -> bool:
+        return any(event["event_type"] == event_type for event in events_by_user.get(uid, []))
+
+    def _has_useful_search(uid: int) -> bool:
+        return any(
+            event["event_type"] == "healthcare_search" and int(event.get("useful_result") or 0) == 1
+            for event in events_by_user.get(uid, [])
+        )
+
+    stages = [
+        ("registered", set(user_ids)),
+        ("logged_in", {uid for uid in user_ids if _has_event(uid, "session_login")}),
+        ("healthcare_search", {uid for uid in user_ids if _has_event(uid, "healthcare_search")}),
+        ("useful_search", {uid for uid in user_ids if _has_useful_search(uid)}),
+        ("provider_view", {uid for uid in user_ids if _has_event(uid, "provider_view")}),
+        ("appointment_requested", {uid for uid in user_ids if _has_event(uid, "appointment_requested")}),
+        ("finder_feedback", feedback_users),
+    ]
+
+    registered = len(user_ids)
+    stage_rows = []
+    previous_count = None
+    for name, members in stages:
+        count = len(members)
+        stage_rows.append({
+            "stage": name,
+            "patient_count": count,
+            "conversion_from_registered": round(count / registered, 4) if registered else None,
+            "conversion_from_previous_stage": (
+                round(count / previous_count, 4)
+                if previous_count not in (None, 0)
+                else None
+            ),
+        })
+        previous_count = count
+
+    return {
+        "window_days": days,
+        "registered_patient_accounts": registered,
+        "stages": stage_rows,
+        "truth_notice": (
+            "Registered counts come from real patient account rows created in the window. Later stages come only "
+            "from privacy-safe product events or finder feedback actually recorded by ZENDOC. No synthetic users "
+            "or inferred activation is included."
         ),
     }
 
