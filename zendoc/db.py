@@ -2023,6 +2023,37 @@ def migrate_schema(db):
         );
         CREATE INDEX IF NOT EXISTS idx_provider_onboarding_events_profile ON provider_onboarding_events(provider_profile_id, created_at);
 
+        CREATE TABLE IF NOT EXISTS provider_network_prospects (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            prospect_uid TEXT NOT NULL UNIQUE,
+            provider_type TEXT NOT NULL,
+            organization_name TEXT,
+            contact_name TEXT,
+            contact_email TEXT,
+            contact_phone TEXT,
+            state TEXT,
+            district TEXT,
+            city TEXT,
+            source_type TEXT NOT NULL,
+            source_reference TEXT,
+            status TEXT NOT NULL DEFAULT 'discovered',
+            first_contact_at TEXT,
+            last_contact_at TEXT,
+            next_action TEXT,
+            next_action_due TEXT,
+            owner_note TEXT,
+            linked_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            linked_provider_profile_id INTEGER REFERENCES provider_profiles(id) ON DELETE SET NULL,
+            activated_at TEXT,
+            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_provider_network_prospects_status
+            ON provider_network_prospects(status, provider_type, updated_at);
+        CREATE INDEX IF NOT EXISTS idx_provider_network_prospects_location
+            ON provider_network_prospects(state, district, city);
+
         CREATE TABLE IF NOT EXISTS data_ingestion_batches (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             batch_uid TEXT NOT NULL UNIQUE,
