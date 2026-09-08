@@ -62,7 +62,8 @@ from .business_api import (
     revoke_business_api_key,
     update_business_api_client,
 )
-from .partner_handoffs import create_partner_booking_handoff, get_partner_booking_handoff, list_all_partner_booking_handoffs, list_partner_booking_handoffs, list_provider_booking_handoffs, owner_update_partner_booking_handoff, provider_update_partner_booking_handoff
+from .partner_audit import list_partner_audit_events, partner_audit_metrics
+from .partner_handoffs import create_partner_booking_handoff, get_partner_booking_handoff, list_all_partner_booking_handoffs, list_partner_booking_handoffs, list_provider_booking_handoffs, owner_update_partner_booking_handoff, partner_operations_metrics, provider_update_partner_booking_handoff
 from .institution_pilots import (
     create_institution_pilot,
     institution_pilot_metrics,
@@ -1052,6 +1053,20 @@ def provider_schedule():
     except (ValueError, PermissionError) as error:
         flash(str(error), "error")
     return redirect(url_for("main.provider_profile"))
+
+
+@bp.get("/admin/startup/b2b-operations")
+@owner_required
+def startup_b2b_operations():
+    return render_template(
+        "b2b_operations.html",
+        business_metrics=business_api_metrics(g.user),
+        business_clients=list_business_api_clients(g.user),
+        handoff_metrics=partner_operations_metrics(g.user),
+        handoffs=list_all_partner_booking_handoffs(g.user, limit=200),
+        audit_metrics=partner_audit_metrics(g.user, days=request.args.get("days", 30)),
+        audit_events=list_partner_audit_events(g.user, limit=200),
+    )
 
 
 @bp.get("/admin/startup")
