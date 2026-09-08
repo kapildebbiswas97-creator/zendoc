@@ -2170,6 +2170,21 @@ def migrate_schema(db):
         CREATE INDEX IF NOT EXISTS idx_business_api_usage_client_time
             ON business_api_usage(client_id, created_at);
 
+        CREATE TABLE IF NOT EXISTS partner_slot_holds (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            client_id INTEGER NOT NULL REFERENCES business_api_clients(id) ON DELETE CASCADE,
+            provider_profile_id INTEGER NOT NULL REFERENCES provider_profiles(id) ON DELETE CASCADE,
+            slot_key TEXT NOT NULL,
+            handoff_id INTEGER REFERENCES partner_booking_handoffs(id) ON DELETE CASCADE,
+            status TEXT NOT NULL DEFAULT 'active',
+            expires_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(provider_profile_id, slot_key)
+        );
+        CREATE INDEX IF NOT EXISTS idx_partner_slot_holds_active
+            ON partner_slot_holds(provider_profile_id, status, expires_at);
+
         CREATE TABLE IF NOT EXISTS partner_booking_handoffs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             handoff_uid TEXT NOT NULL UNIQUE,
