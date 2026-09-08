@@ -14,6 +14,14 @@ from .security import assert_owner
 
 
 CLAIM_STATUSES = {"pending", "approved", "rejected", "revoked"}
+CLAIMABLE_CATEGORIES_BY_ROLE = {
+    "doctor": {"doctor", "clinic"},
+    "hospital": {
+        "hospital", "clinic", "health_centre", "nursing_home",
+        "diagnostic_centre", "laboratory", "blood_bank",
+    },
+    "pharmacy": {"pharmacy"},
+}
 
 
 def submit_public_entity_claim(
@@ -37,6 +45,12 @@ def submit_public_entity_claim(
     ).fetchone()
     if not entity:
         raise LookupError(f"Active public healthcare entity #{public_entity_id} not found.")
+
+    allowed_categories = CLAIMABLE_CATEGORIES_BY_ROLE.get(role, set())
+    if str(entity["category"]) not in allowed_categories:
+        raise PermissionError(
+            f"A {role} account cannot claim a public {entity['category']} listing."
+        )
 
     existing_approved = db.execute(
         """
