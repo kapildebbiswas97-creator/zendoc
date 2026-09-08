@@ -53,6 +53,7 @@ from .investor_dashboard import investor_traction_snapshot
 from .business_api import (
     BusinessApiRateLimitError,
     authenticate_business_api_key,
+    business_api_integration_status,
     business_api_metrics,
     business_api_self_usage,
     create_business_api_client,
@@ -61,7 +62,7 @@ from .business_api import (
     revoke_business_api_key,
     update_business_api_client,
 )
-from .partner_handoffs import create_partner_booking_handoff, get_partner_booking_handoff, list_all_partner_booking_handoffs, list_partner_booking_handoffs, owner_update_partner_booking_handoff
+from .partner_handoffs import create_partner_booking_handoff, get_partner_booking_handoff, list_all_partner_booking_handoffs, list_partner_booking_handoffs, list_provider_booking_handoffs, owner_update_partner_booking_handoff, provider_update_partner_booking_handoff
 from .institution_pilots import (
     create_institution_pilot,
     institution_pilot_metrics,
@@ -976,6 +977,7 @@ def provider_profile():
     onboarding = None
     evidence = []
     listing_claims = []
+    partner_handoffs = []
     if profile_row:
         schedules = get_db().execute(
             "SELECT * FROM provider_schedules WHERE provider_profile_id=? ORDER BY weekday,start_time",
@@ -984,6 +986,7 @@ def provider_profile():
         onboarding = provider_onboarding_status(profile_row["id"])
         evidence = list_provider_evidence(profile_row["id"])
         listing_claims = list_my_public_entity_claims(g.user)
+        partner_handoffs = list_provider_booking_handoffs(g.user)
     return render_template(
         "provider_profile.html",
         profile=profile_row,
@@ -992,6 +995,7 @@ def provider_profile():
         evidence=evidence,
         evidence_types=sorted(EVIDENCE_TYPES),
         listing_claims=listing_claims,
+        partner_handoffs=partner_handoffs,
     )
 
 
@@ -1013,6 +1017,24 @@ def provider_evidence_submit_web():
         get_db().commit()
         flash("Verification evidence submitted for owner review.", "success")
     except (LookupError, ValueError) as error:
+        flash(str(error), "error")
+    return redirect(url_for("main.provider_profile"))
+
+
+@bp.post("/provider/booking-handoffs/<int:handoff_id>")
+@login_required
+def provider_booking_handoff_review_web(handoff_id):
+    if g.user["role"] not in PROVIDER_ROLES:
+        abort(403)
+    try:
+        provider_update_partner_booking_handoff(
+            g.user,
+            handoff_id,
+            status=request.form.get("status"),
+            status_note=request.form.get("status_note"),
+        )
+        flash("Partner booking handoff updated.", "success")
+    except (LookupError, ValueError, PermissionError) as error:
         flash(str(error), "error")
     return redirect(url_for("main.provider_profile"))
 
@@ -1577,6 +1599,22 @@ def api_business_booking_handoff_get(handoff_id):
         return jsonify({"error": {"code": 429, "message": str(exc)}}), 429
     except LookupError as exc:
         return jsonify({"error": {"code": 404, "message": str(exc)}}), 404
+    except PermissionError as exc:
+        return jsonify({"error": {"code": 401, "message": str(exc)}}), 401
+
+
+@bp.get("/api/v1/business/integration-status")
+def api_business_integration_status():
+    raw_key = request.headers.get("X-ZENDOC-Partner-Key", "")
+    try:
+        identity = authenticate_business_api_key(
+            raw_key,
+            endpoint="/api/v1/business/integration-status",
+            method="GET",
+        )
+        return jsonify({"integration": business_api_integration_status(identity)})
+    except BusinessApiRateLimitError as exc:
+        return jsonify({"error": {"code": 429, "message": str(exc)}}), 429
     except PermissionError as exc:
         return jsonify({"error": {"code": 401, "message": str(exc)}}), 401
 
