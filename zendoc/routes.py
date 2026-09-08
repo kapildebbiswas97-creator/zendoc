@@ -46,6 +46,7 @@ from .report_intelligence import REPORT_TYPES, store_report_upload
 from .record_storage import get_record_storage
 from .organization_service import assert_resource_tenant
 from .database_reliability import backup_readiness, readiness_report
+from .data_freshness import ingestion_freshness_report
 from .security import csrf_token, hash_token, is_owner, load_user_and_check_csrf, login_required, new_token, owner_required, role_required, start_user_session
 from .startup_analytics import care_journey_conversion, india_coverage_quality, provider_onboarding_funnel, record_finder_search, record_product_activity, retention_metrics, startup_metrics, submit_finder_feedback
 from .startup_finance import create_financial_entry, create_financial_snapshot, financial_kpis, list_financial_entries
@@ -1053,6 +1054,16 @@ def provider_schedule():
     except (ValueError, PermissionError) as error:
         flash(str(error), "error")
     return redirect(url_for("main.provider_profile"))
+
+
+@bp.get("/admin/startup/data-freshness")
+@owner_required
+def startup_data_freshness():
+    report = ingestion_freshness_report(
+        g.user,
+        recent_batch_limit=request.args.get("limit", 50),
+    )
+    return render_template("data_freshness.html", report=report)
 
 
 @bp.get("/admin/startup/b2b-operations")
