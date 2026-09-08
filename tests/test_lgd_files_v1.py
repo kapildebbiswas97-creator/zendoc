@@ -94,3 +94,17 @@ def test_assam_and_up_state_codes_are_filterable():
 
     assert [row["name"] for row in assam["districts"]] == ["DIBRUGARH"]
     assert [row["name"] for row in up["districts"]] == ["LUCKNOW"]
+
+
+def test_state_code_normalization_accepts_up_leading_zero_variants():
+    rows = [
+        {"State Code": "09", "District Code": "UP1", "District Name(In English)": "LUCKNOW"},
+        {"State Code": 9, "District Code": "UP2", "District Name(In English)": "KANPUR"},
+    ]
+
+    from_zero_padded = normalize_lgd_bundle(state_code="9", districts=rows)
+    from_plain = normalize_lgd_bundle(state_code="09", districts=rows)
+
+    assert [row["code"] for row in from_zero_padded["districts"]] == ["UP1", "UP2"]
+    assert [row["code"] for row in from_plain["districts"]] == ["UP1", "UP2"]
+    assert all(row["state_code"] == "9" for row in from_plain["districts"])
