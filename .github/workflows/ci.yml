@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main, post-submission-production]
   workflow_dispatch:
+    inputs:
+      deployment_url:
+        description: "Optional Render base URL for deployment health verification"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -173,15 +178,25 @@ jobs:
     runs-on: ubuntu-latest
     needs: release-readiness
     if: >-
-      github.event_name == 'push' &&
-      github.ref == 'refs/heads/main' &&
       needs.release-readiness.result == 'success' &&
-      vars.ZENDOC_DEPLOYMENT_URL != ''
+      (
+        (
+          github.event_name == 'push' &&
+          (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/post-submission-production') &&
+          vars.ZENDOC_DEPLOYMENT_URL != ''
+        ) ||
+        (
+          github.event_name == 'workflow_dispatch' &&
+          inputs.deployment_url != ''
+        )
+      )
     timeout-minutes: 5
+    env:
+      DEPLOYMENT_URL: ${{ inputs.deployment_url || vars.ZENDOC_DEPLOYMENT_URL }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Verify deployed liveness/readiness
-        run: python scripts/verify_deployment.py "${{ vars.ZENDOC_DEPLOYMENT_URL }}"
+        run: python scripts/verify_deployment.py "$DEPLOYMENT_URL"
