@@ -24,11 +24,9 @@ def test_registered_roles_can_login_and_render_role_dashboard(tmp_path):
         assert expected in response.data
         assert b"ZENDOC" in response.data
 
-        client.post(
-            "/logout",
-            data={"csrf_token": client.get("/profile").request.environ.get("csrf_token", "")},
-            follow_redirects=True,
-        )
+        logout = client.get("/logout", follow_redirects=True)
+        assert logout.status_code == 200
+        assert b"Logged out" in logout.data
 
 
 def test_login_redirect_lands_on_dashboard_not_login_loop(tmp_path):
