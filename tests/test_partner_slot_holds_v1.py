@@ -159,3 +159,13 @@ def test_rejection_releases_slot_and_acceptance_extends_hold_without_confirming_
         ).fetchone()
         assert hold["status"] == "released"
         assert slot[:16] in available_slots(profile_id, target_date)
+
+        second_identity = partner_identity("Replacement Partner")
+        replacement = create_partner_booking_handoff(
+            second_identity,
+            provider_profile_id=profile_id,
+            partner_reference="REPLACEMENT-1",
+            requested_for=slot,
+        )
+        assert replacement["status"] == "received"
+        assert replacement["booking_confirmed"] is False
