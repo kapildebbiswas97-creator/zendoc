@@ -320,6 +320,31 @@ def pilot_system_telemetry(actor: Any, pilot_id: int, *, days: int = 30) -> dict
             ).fetchone()["c"] or 0
         )
 
+    provider_rows = db.execute(
+        """
+        SELECT p.status,p.linked_user_id,p.linked_provider_profile_id,
+               pp.verification_status
+        FROM provider_network_prospects p
+        LEFT JOIN provider_profiles pp ON pp.id=p.linked_provider_profile_id
+        WHERE p.linked_pilot_id=?
+        """,
+        (int(pilot_id),),
+    ).fetchall()
+    provider_status_counts = {status: 0 for status in (
+        "discovered","contacted","interested","registered","profile_created",
+        "evidence_submitted","verified","activated","paused","declined"
+    )}
+    for row in provider_rows:
+        provider_status_counts[str(row["status"])] = provider_status_counts.get(str(row["status"]), 0) + 1
+
+    linked_registered_accounts = sum(1 for row in provider_rows if row["linked_user_id"] is not None)
+    linked_profiles = sum(1 for row in provider_rows if row["linked_provider_profile_id"] is not None)
+    linked_verified_profiles = sum(
+        1 for row in provider_rows
+        if row["linked_provider_profile_id"] is not None and row["verification_status"] == "verified"
+    )
+    linked_activated_providers = sum(1 for row in provider_rows if row["status"] == "activated")
+
     return {
         "window_days": days,
         "linked_api_clients": len(client_ids),
@@ -328,10 +353,23 @@ def pilot_system_telemetry(actor: Any, pilot_id: int, *, days: int = 30) -> dict
         "handoff_status_counts": handoff_status_counts,
         "handoff_requests_total": sum(handoff_status_counts.values()),
         "distinct_provider_profiles_touched": distinct_provider_profiles,
+        "provider_network": {
+            "prospect_count": len(provider_rows),
+            "status_counts": provider_status_counts,
+            "linked_registered_accounts": linked_registered_accounts,
+            "linked_provider_profiles": linked_profiles,
+            "linked_verified_profiles": linked_verified_profiles,
+            "activated_providers": linked_activated_providers,
+            "activation_rate": (
+                round(linked_activated_providers / len(provider_rows), 4)
+                if provider_rows else None
+            ),
+        },
         "source_type": "system_derived",
         "truth_notice": (
-            "System telemetry is derived only from ZENDOC-linked Business API clients and partner handoff records. "
-            "It does not infer patient users, completed appointments, or provider activity beyond those recorded B2B interactions."
+            "System telemetry is derived only from ZENDOC-linked Business API clients, partner handoff records, and provider "
+            "network prospects explicitly linked to this pilot. Provider verification comes from real linked provider profiles; "
+            "activation requires the provider-network activation rules. It does not infer patient users or completed appointments."
         ),
     }
 
@@ -385,9 +423,23 @@ def pilot_execution_summary(actor: Any, pilot_id: int) -> dict:
         "user_progress": _progress("active_users", "target_users"),
         "provider_progress": _progress("active_providers", "target_provider_seats"),
         "system_telemetry": system_telemetry,
+        "system_provider_progress": {
+            "actual": system_telemetry["provider_network"]["activated_providers"],
+            "target": pilot.get("target_provider_seats"),
+            "progress_rate": (
+                round(
+                    system_telemetry["provider_network"]["activated_providers"]
+                    / float(pilot["target_provider_seats"]),
+                    4,
+                )
+                if pilot.get("target_provider_seats") not in (None, 0)
+                else None
+            ),
+        },
         "truth_notice": (
             "Targets are plans; usage snapshots are observed values. Owner-entered observed snapshots are not "
-            "system-verified analytics and must not be presented as automated telemetry."
+            "system-verified analytics. System provider progress is derived only from provider-network prospects explicitly "
+            "linked to this pilot and validated against real provider onboarding state."
         ),
     }
 
