@@ -198,5 +198,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - name: Verify deployed liveness/readiness
-        run: python scripts/verify_deployment.py "$DEPLOYMENT_URL"
+      - name: Verify deployed liveness/readiness and exact release identity
+        run: >
+          python scripts/verify_deployment.py "$DEPLOYMENT_URL"
+          --expected-commit "${{ github.sha }}"
+          --require-platform render
+          --require-engine postgresql
+          --require-persistence-verified
