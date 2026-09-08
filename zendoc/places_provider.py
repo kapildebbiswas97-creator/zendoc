@@ -1,11 +1,17 @@
 import json
 import os
+import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 
 GOOGLE_NEARBY_SEARCH_URL = "https://places.googleapis.com/v1/places:searchNearby"
+NOMINATIM_SEARCH_URL = "https://nominatim.openstreetmap.org/search"
+NOMINATIM_USER_AGENT = "ZENDOC/1.0 (+https://github.com/kapildebbiswas97-creator/zendoc)"
+_NOMINATIM_REQUEST_LOCK = threading.Lock()
+_NOMINATIM_LAST_REQUEST_AT = 0.0
 GOOGLE_TEXT_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText"
 GOOGLE_FIELD_MASK = ",".join(
     (
@@ -74,6 +80,140 @@ class UnconfiguredPlacesProvider(PlacesProvider):
             message="Nearby healthcare search is unavailable because no maps/places provider is configured. Enter a location manually or configure ZENDOC_PLACES_PROVIDER and its API key.",
             source=self.source,
         )
+
+
+class NominatimPlacesProvider(PlacesProvider):
+    """Moderate-volume OpenStreetMap/Nominatim fallback for beta discovery.
+
+    This adapter is intentionally limited to end-user-triggered searches and
+    must not be used for bulk provider harvesting. Results are external,
+    unverified, and never imply ZENDOC booking connectivity.
+    """
+
+    source = "openstreetmap_nominatim"
+
+    def __init__(self, timeout_seconds=8):
+        self.timeout_seconds = max(1, min(int(timeout_seconds or 8), 20))
+        self.cache = ShortLivedCache(ttl_seconds=3600)
+
+    def search(self, query):
+        normalized = dict(query or {})
+        location = str(normalized.get("location") or "").strip()
+        if not location:
+            return PlacesResult(
+                available=True,
+                results=[],
+                message=(
+                    "OpenStreetMap fallback needs a city, area, or PIN code. "
+                    "Enter a location manually to search healthcare listings."
+                ),
+                source=self.source,
+            )
+
+        cache_key = tuple(sorted(normalized.items()))
+        cached = self.cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        category = str(normalized.get("category") or "doctor").strip().lower()
+        specialty = str(normalized.get("specialty") or "").strip()
+        human_category = {
+            "diagnostic_centre": "diagnostic centre",
+            "laboratory": "medical laboratory",
+            "emergency": "hospital",
+        }.get(category, category.replace("_", " "))
+        terms = [term for term in (specialty, human_category, f"in {location}, India") if term]
+        params = {
+            "q": " ".join(terms),
+            "format": "jsonv2",
+            "addressdetails": "1",
+            "extratags": "1",
+            "namedetails": "1",
+            "countrycodes": "in",
+            "layer": "poi",
+            "limit": "20",
+        }
+        url = f"{NOMINATIM_SEARCH_URL}?{urllib.parse.urlencode(params)}"
+
+        try:
+            payload = self._get_json(url)
+            results = [
+                _public_nominatim_place(place, normalized)
+                for place in payload
+                if isinstance(place, dict)
+            ]
+            results = [item for item in results if item]
+            result = PlacesResult(
+                available=True,
+                results=results,
+                message=(
+                    None
+                    if results
+                    else "OpenStreetMap returned no matching healthcare listings for this search."
+                ),
+                source=self.source,
+            )
+        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, ValueError, json.JSONDecodeError):
+            result = PlacesResult(
+                available=False,
+                results=[],
+                message=(
+                    "OpenStreetMap fallback could not be reached. "
+                    "No external provider data was fabricated."
+                ),
+                source=self.source,
+            )
+
+        self.cache.set(cache_key, result)
+        return result
+
+    def _get_json(self, url):
+        global _NOMINATIM_LAST_REQUEST_AT
+        with _NOMINATIM_REQUEST_LOCK:
+            elapsed = time.monotonic() - _NOMINATIM_LAST_REQUEST_AT
+            if elapsed < 1.0:
+                time.sleep(1.0 - elapsed)
+            request = urllib.request.Request(
+                url,
+                headers={
+                    "Accept": "application/json",
+                    "User-Agent": NOMINATIM_USER_AGENT,
+                },
+                method="GET",
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
+                    raw = response.read(2_097_153)
+            finally:
+                _NOMINATIM_LAST_REQUEST_AT = time.monotonic()
+
+        if len(raw) > 2_097_152:
+            raise ValueError("OpenStreetMap response exceeded the safe response limit.")
+        payload = json.loads(raw.decode("utf-8"))
+        if not isinstance(payload, list):
+            raise ValueError("OpenStreetMap returned an invalid response.")
+        return payload
+
+
+class FallbackPlacesProvider(PlacesProvider):
+    source = "fallback_chain"
+
+    def __init__(self, primary, fallback):
+        self.primary = primary
+        self.fallback = fallback
+
+    def search(self, query):
+        primary = self.primary.search(query)
+        if primary.results:
+            return primary
+
+        fallback = self.fallback.search(query)
+        if fallback.results:
+            return fallback
+
+        if primary.available and primary.message:
+            fallback.message = fallback.message or primary.message
+        return fallback
 
 
 class GooglePlacesProvider(PlacesProvider):
@@ -199,13 +339,25 @@ class GooglePlacesProvider(PlacesProvider):
 
 def configured_places_provider():
     provider = os.environ.get("ZENDOC_PLACES_PROVIDER", "none").lower()
-    if provider == "google" and os.environ.get("ZENDOC_GOOGLE_PLACES_API_KEY"):
-        timeout = os.environ.get("ZENDOC_PLACES_TIMEOUT_SECONDS", "8")
-        try:
-            timeout = int(timeout)
-        except (TypeError, ValueError):
-            timeout = 8
-        return GooglePlacesProvider(os.environ["ZENDOC_GOOGLE_PLACES_API_KEY"], timeout_seconds=timeout)
+    timeout = os.environ.get("ZENDOC_PLACES_TIMEOUT_SECONDS", "8")
+    try:
+        timeout = int(timeout)
+    except (TypeError, ValueError):
+        timeout = 8
+
+    if provider == "google":
+        fallback = NominatimPlacesProvider(timeout_seconds=timeout)
+        api_key = os.environ.get("ZENDOC_GOOGLE_PLACES_API_KEY")
+        if api_key:
+            return FallbackPlacesProvider(
+                GooglePlacesProvider(api_key, timeout_seconds=timeout),
+                fallback,
+            )
+        return fallback
+
+    if provider in {"nominatim", "openstreetmap", "osm"}:
+        return NominatimPlacesProvider(timeout_seconds=timeout)
+
     return UnconfiguredPlacesProvider()
 
 
@@ -238,6 +390,62 @@ def _public_place(place, query):
         "verification_status": "external_unverified",
         "bookable_in_zendoc": False,
         "source": "google_places",
+    }
+
+
+def _public_nominatim_place(place, query):
+    display_name = str(place.get("display_name") or "").strip()
+    namedetails = place.get("namedetails") if isinstance(place.get("namedetails"), dict) else {}
+    address = place.get("address") if isinstance(place.get("address"), dict) else {}
+    name = str(
+        namedetails.get("name")
+        or address.get("amenity")
+        or address.get("healthcare")
+        or address.get("office")
+        or (display_name.split(",", 1)[0] if display_name else "")
+    ).strip()
+    if not name:
+        return None
+
+    category = str(query.get("category") or "doctor").strip().lower()
+    osm_type = str(place.get("osm_type") or "").strip().lower()
+    osm_id = place.get("osm_id")
+    map_url = None
+    if osm_type in {"node", "way", "relation"} and osm_id is not None:
+        map_url = f"https://www.openstreetmap.org/{osm_type}/{osm_id}"
+
+    city = (
+        address.get("city")
+        or address.get("town")
+        or address.get("village")
+        or address.get("municipality")
+        or str(query.get("location") or "").strip()
+    )
+    state = address.get("state") or ""
+    extratags = place.get("extratags") if isinstance(place.get("extratags"), dict) else {}
+
+    return {
+        "id": f"osm:{osm_type}:{osm_id or place.get('place_id')}",
+        "place_id": place.get("place_id"),
+        "name": name,
+        "category": category,
+        "provider_type": place.get("type") or category,
+        "specialty": None,
+        "search_specialty": str(query.get("specialty") or "").strip() or None,
+        "address": display_name,
+        "city": city,
+        "state": state,
+        "postal_code": address.get("postcode"),
+        "phone": extratags.get("phone") or extratags.get("contact:phone"),
+        "website": extratags.get("website") or extratags.get("contact:website"),
+        "latitude": _number(place.get("lat")),
+        "longitude": _number(place.get("lon")),
+        "map_url": map_url,
+        "verification_status": "external_unverified",
+        "bookable_in_zendoc": False,
+        "claimable_public_listing": False,
+        "source": "openstreetmap_nominatim",
+        "attribution": "© OpenStreetMap contributors",
     }
 
 

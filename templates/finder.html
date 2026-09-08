@@ -46,7 +46,15 @@
           <article class="provider-card">
             <div class="provider-card-head">
               <div><h3>{{ item.name }}</h3><p>{{ (item.specialty or item.category or 'Healthcare provider').replace('_',' ').title() }}</p></div>
-              {% if item.source == 'zendoc_provider_network' %}<span class="status-badge working">Reviewed profile</span>{% else %}<span class="status-badge beta">External listing</span>{% endif %}
+              {% if item.source == 'zendoc_provider_network' %}
+                <span class="status-badge working">Reviewed profile</span>
+              {% elif item.source == 'openstreetmap_nominatim' %}
+                <span class="status-badge beta">OpenStreetMap listing</span>
+              {% elif item.source == 'google_places' %}
+                <span class="status-badge beta">Google Places listing</span>
+              {% else %}
+                <span class="status-badge beta">External listing</span>
+              {% endif %}
             </div>
             <div class="provider-facts">
               {% if item.city or item.address %}<span>{{ item.address or '' }}{% if item.address and item.city %}, {% endif %}{{ item.city or '' }}{% if item.state %}, {{ item.state }}{% endif %}</span>{% endif %}
@@ -57,6 +65,9 @@
               <a class="primary-action" href="{{ url_for('main.provider_detail', profile_id=item.id) }}">View profile &amp; availability</a>
             {% else %}
               <p class="form-note">Booking is not connected for this external listing. Verify details directly before visiting.</p>
+              {% if item.map_url %}<a class="secondary-action" href="{{ item.map_url }}" target="_blank" rel="noopener noreferrer">Open in OpenStreetMap</a>{% endif %}
+              {% if item.google_maps_url %}<a class="secondary-action" href="{{ item.google_maps_url }}" target="_blank" rel="noopener noreferrer">Open in Google Maps</a>{% endif %}
+              {% if item.attribution %}<p class="form-note">{{ item.attribution }}</p>{% endif %}
               {% if current_user and current_user.role in ['doctor','hospital','pharmacy'] and item.id and item.claimable_public_listing %}
               <details class="claim-listing">
                 <summary>Is this your listing?</summary>
