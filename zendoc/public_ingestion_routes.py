@@ -15,6 +15,12 @@ from .business_api import (
     revoke_business_api_key,
     update_business_api_client,
 )
+from .provider_network import (
+    create_provider_prospect,
+    list_provider_prospects,
+    provider_network_metrics,
+    update_provider_prospect,
+)
 from .public_source_registry import list_public_ingestion_sources, public_data_coverage_matrix
 from .official_connectors import connector_readiness, infer_mapping, list_connector_profiles
 from .geography_region_registry import import_lgd_state_registry, list_import_regions
@@ -607,6 +613,51 @@ def api_startup_pilot_usage_create(pilot_id):
     try:
         snapshot = record_pilot_usage_snapshot(user, pilot_id, request.get_json(silent=True) or {})
         return jsonify({"snapshot": snapshot}), 201
+    except LookupError as exc:
+        return jsonify({"error": {"code": 404, "message": str(exc)}}), 404
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+
+
+@bp.get("/api/v1/admin/startup/provider-network")
+def api_startup_provider_network():
+    user, error = _owner()
+    if error:
+        return error
+    try:
+        return jsonify({
+            "metrics": provider_network_metrics(user),
+            "prospects": list_provider_prospects(
+                user,
+                status=request.args.get("status"),
+                provider_type=request.args.get("provider_type"),
+                limit=request.args.get("limit", 200),
+            ),
+        })
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+
+
+@bp.post("/api/v1/admin/startup/provider-network")
+def api_startup_provider_prospect_create():
+    user, error = _owner()
+    if error:
+        return error
+    try:
+        prospect = create_provider_prospect(user, request.get_json(silent=True) or {})
+        return jsonify({"prospect": prospect}), 201
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+
+
+@bp.patch("/api/v1/admin/startup/provider-network/<int:prospect_id>")
+def api_startup_provider_prospect_update(prospect_id):
+    user, error = _owner()
+    if error:
+        return error
+    try:
+        prospect = update_provider_prospect(user, prospect_id, request.get_json(silent=True) or {})
+        return jsonify({"prospect": prospect})
     except LookupError as exc:
         return jsonify({"error": {"code": 404, "message": str(exc)}}), 404
     except (TypeError, ValueError) as exc:
