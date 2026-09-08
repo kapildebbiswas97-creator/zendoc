@@ -2087,6 +2087,47 @@ def migrate_schema(db):
         CREATE INDEX IF NOT EXISTS idx_public_entity_claims_profile
             ON public_entity_claims(provider_profile_id, status);
 
+        CREATE TABLE IF NOT EXISTS institution_pilots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pilot_uid TEXT NOT NULL UNIQUE,
+            organization_name TEXT NOT NULL,
+            organization_type TEXT NOT NULL,
+            contact_name TEXT,
+            contact_email TEXT,
+            contact_phone TEXT,
+            state TEXT,
+            district TEXT,
+            status TEXT NOT NULL DEFAULT 'lead',
+            commercial_status TEXT NOT NULL DEFAULT 'none',
+            start_date TEXT,
+            end_date TEXT,
+            target_users INTEGER,
+            target_provider_seats INTEGER,
+            agreed_features_json TEXT NOT NULL DEFAULT '[]',
+            success_metrics_json TEXT NOT NULL DEFAULT '[]',
+            next_action TEXT,
+            next_action_due TEXT,
+            monthly_value_inr REAL,
+            notes TEXT,
+            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_institution_pilots_status
+            ON institution_pilots(status, commercial_status, updated_at);
+
+        CREATE TABLE IF NOT EXISTS institution_pilot_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pilot_id INTEGER NOT NULL REFERENCES institution_pilots(id) ON DELETE CASCADE,
+            event_type TEXT NOT NULL,
+            status TEXT,
+            message TEXT,
+            actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_institution_pilot_events
+            ON institution_pilot_events(pilot_id, created_at);
+
         CREATE TABLE IF NOT EXISTS care_journeys (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             journey_uid TEXT NOT NULL UNIQUE,
