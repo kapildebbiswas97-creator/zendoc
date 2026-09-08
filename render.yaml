@@ -1,7 +1,7 @@
 services:
   - type: web
     name: zendoc
-    branch: post-submission-production
+    branch: main
     autoDeployTrigger: checksPass
     env: python
     plan: free
