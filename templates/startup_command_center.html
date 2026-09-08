@@ -210,7 +210,7 @@
     <tbody>
     {% for pilot in pilots %}
       <tr>
-        <td><strong>{{ pilot.organization_name }}</strong><br><small>{{ pilot.organization_type|replace('_',' ')|title }}</small></td>
+        <td><strong><a href="{{ url_for('main.startup_pilot_execution', pilot_id=pilot.id) }}">{{ pilot.organization_name }}</a></strong><br><small>{{ pilot.organization_type|replace('_',' ')|title }}</small></td>
         <td>{{ pilot.district or '—' }}{% if pilot.state %}, {{ pilot.state }}{% endif %}</td>
         <td>{{ pilot.status }}</td>
         <td>{{ pilot.commercial_status }}</td>
