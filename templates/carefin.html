@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}CareFin — ZENDOC{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Connected Care · Pilot</p>
+    <h1>CareFin benefits discovery</h1>
+    <p class="section-copy">Explore possible government, insurance and charitable healthcare support. Discovery is not proof of eligibility, approval or payment.</p>
+  </div>
+  <span class="status-badge working">Discovery working</span>
+</section>
+
+<section class="grid two">
+  <form class="panel" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <p class="eyebrow">Minimum information</p>
+    <h2>Find possible support</h2>
+    <div class="form-grid">
+      <label>State <input name="state" value="{{ form_data.state }}" placeholder="West Bengal"></label>
+      <label>District / city <input name="district" value="{{ form_data.district }}" placeholder="Nadia"></label>
+    </div>
+    <div class="form-grid">
+      <label>Age <input name="age" type="number" min="0" max="120" value="{{ form_data.age }}"></label>
+      <label>Occupation <input name="occupation" value="{{ form_data.occupation }}" placeholder="Self employed"></label>
+    </div>
+    <div class="form-grid">
+      <label>Income band
+        <select name="income_band">
+          <option value="">Prefer not to say / unknown</option>
+          {% for value in ['low','lower_middle','middle','upper_middle','high'] %}
+          <option value="{{ value }}" {% if form_data.income_band == value %}selected{% endif %}>{{ value|replace('_',' ')|title }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Existing insurer <input name="existing_insurer" value="{{ form_data.existing_insurer }}" placeholder="Optional"></label>
+    </div>
+    <label class="summary-row">
+      <span>Need charitable / CSR support</span>
+      <input type="checkbox" name="needs_charitable_support" value="yes" {% if form_data.needs_charitable_support %}checked{% endif %}>
+    </label>
+    <button type="submit" data-submitting-label="Checking official pathways…">Discover support pathways</button>
+    <p class="form-note">ZENDOC does not submit applications or claim benefits from this screen.</p>
+  </form>
+
+  <article class="panel">
+    <p class="eyebrow">Truth boundary</p>
+    <h2>What the states mean</h2>
+    <div class="summary-row"><strong>Discovered</strong><span>A public/official pathway may be relevant.</span></div>
+    <div class="summary-row"><strong>Potentially eligible</strong><span>Context matches, but official verification is still required.</span></div>
+    <div class="summary-row"><strong>Confirmed / Approved / Paid</strong><span>Requires an authoritative response/reference. AI cannot create these states.</span></div>
+    <div class="empty-state spaced-panel">
+      <h3>Personal data stays minimal</h3>
+      <p>Do not enter policy passwords, OTPs, bank PINs, full Aadhaar numbers, or other secrets here.</p>
+    </div>
+  </article>
+</section>
+
+{% if result %}
+<section class="panel spaced-panel">
+  <div class="section-head compact">
+    <div><p class="eyebrow">Results</p><h2>{{ result.candidate_count }} possible pathway{% if result.candidate_count != 1 %}s{% endif %}</h2></div>
+    <span class="status-badge integration">Not yet verified</span>
+  </div>
+  <p>{{ result.disclaimer }}</p>
+  {% if result.candidates %}
+    <div class="grid two">
+    {% for item in result.candidates %}
+      <article class="panel">
+        <div class="summary-row">
+          <strong>{{ item.source_name }}</strong>
+          <span class="status-badge {{ 'working' if item.state == 'POTENTIALLY_ELIGIBLE' else 'integration' }}">{{ item.state|replace('_',' ') }}</span>
+        </div>
+        <p>{{ item.owner }}</p>
+        {% if item.reasons %}
+          <h3>Why it may be relevant</h3>
+          <ul>{% for reason in item.reasons %}<li>{{ reason }}</li>{% endfor %}</ul>
+        {% endif %}
+        {% if item.missing_information %}
+          <h3>Still needed</h3>
+          <p>{{ item.missing_information|join(', ')|replace('_',' ') }}</p>
+        {% endif %}
+        <h3>Verification evidence</h3>
+        <ul>{% for evidence in item.evidence_to_verify %}<li>{{ evidence }}</li>{% endfor %}</ul>
+        <p class="form-note">{{ item.verification_next_step }}</p>
+        <a class="secondary-action" href="{{ item.official_url }}" target="_blank" rel="noopener noreferrer">Open official source</a>
+      </article>
+    {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state"><h3>No pathway matched this context</h3><p>This does not prove that no support exists. More official sources and partner integrations may be needed.</p></div>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

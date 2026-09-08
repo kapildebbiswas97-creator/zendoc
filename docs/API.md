@@ -225,3 +225,140 @@ These endpoints require a bearer token belonging to the single environment-confi
 - `GET /api/v1/admin/model-evaluation/runs/{run_id}`
 
 The API rejects `real_local` mode. A real-local evaluation is available only through the owner web UI's default-off, short-lived, two-step confirmation workflow. Requests cannot supply a provider endpoint, arbitrary model name, raw dataset path, prompt, or executable tool/action. Result payloads contain scores and metadata, not raw prompts, responses, credentials, patient information, or hidden reasoning. See [Milestone 8.2](MILESTONE8_2.md).
+
+## Connected Care & Partner APIs (Milestone 10 / Pilot Readiness)
+
+All JSON endpoints below use the existing `/api/v1` bearer-token boundary unless explicitly marked owner-only. Session-backed browser mutations additionally require the existing CSRF token boundary.
+
+### Partner contract invariants
+
+- A client-supplied patient ID is never sufficient authorization. Cross-patient access requires an active matching consent/care grant.
+- `UNKNOWN` and `STALE` inventory/diagnostic states are never promoted to confirmed availability.
+- Provider reconfirmation is explicit. A stale offer is refreshed only after the owning provider rechecks the values and sends `confirmed_unchanged=true`, or submits new values through the normal update endpoint.
+- Provider resources are organization/branch scoped when tenancy metadata exists. Moving to another branch does not grant access to old-branch resources.
+- Prescription ambiguity, medicine substitution, dose/frequency/form changes, prescribing, and autonomous order submission are blocked.
+- Diagnostic booking requires an exact test, a verified fresh provider offer, explicit user confirmation, a future date, and a concrete collection address.
+- Consequential actions remain human/provider gated. Partner integrations must not interpret a staged or requested object as externally accepted, dispatched, paid, dispensed, or completed.
+- `LIVE` and `DEMO` data are isolated and must not be mixed implicitly.
+
+### Connected Care
+
+- `GET /api/v1/connected-care/context`
+- `GET /api/v1/connected-care/pharmacy-offers`
+- `POST /api/v1/connected-care/fulfilment`
+- `POST /api/v1/connected-care/orders/confirm`
+- `POST /api/v1/connected-care/prescriptions`
+- `GET /api/v1/connected-care/prescriptions`
+- `POST /api/v1/connected-care/prescriptions/<prescription_id>/status`
+- `GET /api/v1/connected-care/next-safe-actions`
+- `POST /api/v1/connected-care/consent`
+- `DELETE /api/v1/connected-care/consent/<grant_id>`
+- `POST /api/v1/connected-care/diagnostics/book`
+- `GET /api/v1/connected-care/orders/<order_id>`
+- `GET /api/v1/connected-care/care-graph`
+- `GET /api/v1/connected-care/trust/<provider_id>`
+- `GET /api/v1/connected-care/trust-center`
+- `POST /api/v1/connected-care/trust-center/revoke`
+- `POST /api/v1/connected-care/orchestrate`
+- `POST /api/v1/connected-care/orchestrate/confirm`
+
+### Provider inventory freshness
+
+Authenticated pharmacy only:
+
+- `POST /api/v1/connected-care/inventory` — submit new stock/price observation.
+- `GET /api/v1/connected-care/provider/inventory-refresh` — list only the authenticated pharmacy's observations with effective freshness and `needs_refresh`.
+- `POST /api/v1/connected-care/provider/inventory/<observation_id>/reconfirm` — renew freshness only after explicit provider recheck.
+
+Reconfirmation body:
+
+```json
+{
+  "confirmed_unchanged": true
+}
+```
+
+A false/missing confirmation is rejected. Cross-pharmacy and cross-branch reconfirmation is rejected.
+
+### Diagnostic offer freshness
+
+Verified diagnostic provider only:
+
+- `POST /api/v1/connected-care/diagnostic-offers` — create/update an offer and record a fresh observation.
+- `GET /api/v1/connected-care/provider/diagnostic-refresh` — list the authenticated provider's diagnostic offers and freshness state.
+- `POST /api/v1/connected-care/provider/diagnostic-offers/<offer_id>/reconfirm` — renew freshness only after explicit provider recheck.
+
+Reconfirmation body:
+
+```json
+{
+  "confirmed_unchanged": true
+}
+```
+
+Stale or unknown offers remain non-bookable until a valid provider refresh occurs.
+
+### Provider onboarding and evidence
+
+Provider account:
+
+- `GET /api/v1/provider/onboarding`
+- `POST /api/v1/provider/evidence`
+
+Owner only:
+
+- `GET /api/v1/admin/provider-evidence`
+- `POST /api/v1/admin/provider-evidence/<evidence_id>/review`
+
+Evidence review and provider verification are separate states. Reviewing one evidence item must not be interpreted by a partner as automatic provider approval.
+
+### CareFin and Care Journey
+
+- `POST /api/v1/carefin/discover`
+- `POST /api/v1/care-journeys`
+- `GET /api/v1/care-journeys`
+- `GET /api/v1/care-journeys/<journey_id>`
+- `POST /api/v1/care-journeys/<journey_id>/transition`
+
+CareFin discovery returns possible pathways and verification requirements. It does not confirm eligibility, approval, payment, insurer coverage, or government benefit entitlement without an authoritative partner workflow.
+
+### Geography and official/public ingestion
+
+Authenticated:
+
+- `GET /api/v1/geography/search`
+- `GET /api/v1/geography/<node_id>/entities`
+
+Owner only:
+
+- `POST /api/v1/admin/geography/nodes`
+- `POST /api/v1/admin/geography/links`
+- `GET /api/v1/admin/ingestion/sources`
+- `GET /api/v1/admin/ingestion/batches`
+- `POST /api/v1/admin/ingestion/adapt`
+- `POST /api/v1/admin/ingestion/preview`
+- `POST /api/v1/admin/ingestion/apply`
+- `GET /api/v1/admin/ingestion/data-gaps`
+
+Public/official directory records retain source, freshness, and verification state. Imported records do not automatically become ZENDOC-verified or bookable.
+
+### Integration state vocabulary
+
+Partners should preserve these distinctions:
+
+- `WORKING` — implemented software path in ZENDOC.
+- `BETA` — implemented but not yet production-validated for the external dependency/use case.
+- `INTEGRATION_REQUIRED` — software boundary exists but an external provider, credential, partner, approval, or infrastructure dependency is missing.
+- `CONFIRMED` — a fresh provider observation exists for that specific inventory/diagnostic fact.
+- `STALE` — a prior observation exists but is too old to be represented as currently confirmed.
+- `UNKNOWN` — ZENDOC has no reliable current observation.
+- `UNAVAILABLE` — the provider explicitly reported zero/unavailable state.
+
+### Idempotency and retries
+
+Partner clients should retry only idempotent reads or endpoints whose documented request fingerprint/idempotency semantics apply. Do not blindly retry order confirmation, evidence submission, care-journey transitions, or other state-changing calls unless the endpoint explicitly supports safe replay.
+
+The API intentionally prefers a truthful pending/requested state over inventing an external acknowledgement. Partner-side acceptance, fulfilment, dispatch, payment, clinical completion, or regulatory confirmation must be recorded only from the responsible authority/provider.
+
+See also [Partner API Specification](PARTNER_API_SPEC.md) for integration requirements and pilot onboarding guidance.
+

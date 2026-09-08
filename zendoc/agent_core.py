@@ -23,6 +23,7 @@ from .connect import (
     unread_count,
 )
 from .db import get_db, now_iso
+from .audit_privacy import redact_operational_text, summarize_user_content
 from .telehealth import get_doctor_availability, request_consultation
 from .agent_executor import execute_plan
 from .agent_planner import build_plan
@@ -93,7 +94,7 @@ def log_platform_event(actor, action, entity_type, entity_id=None, status="info"
         (actor_id, agent_name, action, entity_type, entity_id, status, error, approval_state, duration_ms, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (_user_id(actor) or None, agent_name, action, entity_type, entity_id, status, error, approval_state, duration_ms, now_iso()),
+        (_user_id(actor) or None, agent_name, action, entity_type, entity_id, status, redact_operational_text(error, 300), approval_state, duration_ms, now_iso()),
     )
 
 
@@ -104,7 +105,17 @@ def create_agent_run(actor, command_text, intent, status="completed", urgency="r
         (actor_id, agent_name, command_text, intent, status, urgency, result_summary, approval_state, duration_ms, created_at)
         VALUES (?, 'ZENDOC Core Agent', ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (_user_id(actor) or None, command_text[:1000], intent, status, urgency, result_summary[:1200], approval_state, duration_ms, now_iso()),
+        (
+            _user_id(actor) or None,
+            summarize_user_content(command_text, label="agent_command"),
+            intent,
+            status,
+            urgency,
+            redact_operational_text(result_summary, 300),
+            approval_state,
+            duration_ms,
+            now_iso(),
+        ),
     )
     return cursor.lastrowid
 
@@ -116,7 +127,7 @@ def log_agent_action(run_id, actor, action_type, tool_name=None, entity_type=Non
         (run_id, actor_id, agent_name, action_type, tool_name, entity_type, entity_id, status, approval_state, message, created_at)
         VALUES (?, ?, 'ZENDOC Core Agent', ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (run_id, _user_id(actor) or None, action_type, tool_name, entity_type, entity_id, status, approval_state, message, now_iso()),
+        (run_id, _user_id(actor) or None, action_type, tool_name, entity_type, entity_id, status, approval_state, redact_operational_text(message, 240), now_iso()),
     )
 
 
@@ -200,6 +211,24 @@ def respond_with_core_agent(actor, command_text):
         safety = plan.safety
         task = execute_safe_task(task["id"], actor, handler_fn=lambda _task: safety["guidance"])
         duration = int((time.perf_counter() - started) * 1000)
+        if task.get("status") == "failed":
+            try:
+                from .event_bus import publish_event
+                publish_event(
+                    "safety.emergency.failed",
+                    actor=actor,
+                    entity_type="agent_task",
+                    entity_id=str(task["id"]),
+                    status="failed",
+                    agent_name="Safety Agent",
+                    duration_ms=duration,
+                    correlation_id=plan.plan_id,
+                    payload={"intent": "emergency", "task_id": task["id"]},
+                    error=task.get("result_summary") or "Emergency safety task failed.",
+                )
+            except Exception:
+                pass
+            raise ValueError(task.get("result_summary") or "Emergency safety escalation failed.")
         run_id = create_agent_run(actor, command, "emergency", "completed", "emergency", safety["guidance"], duration_ms=duration)
         log_agent_action(run_id, actor, "emergency_escalation", "SafetyAgent.assess", "safety_alert", str(run_id), message=safety["guidance"])
         log_platform_event(actor, "emergency_escalation", "agent_run", str(run_id), "info", "Safety Agent", duration_ms=duration)
@@ -249,6 +278,60 @@ def respond_with_core_agent(actor, command_text):
         message = f"Found {len(payload)} failed or errored platform events."
         intent = "failed_operations"
         actions = [{"type": "failed_operations", "label": "Show failed operations", "data": payload}]
+    elif plan.intent == "operations_automation":
+        payload = tool_output or {}
+        message = (
+            f"Safe operations automation re-queued {payload.get('requeued_count', 0)} retriable task(s), "
+            f"created {len(payload.get('new_alerts', []))} new alert(s), and executed no arbitrary tasks."
+        )
+        intent = "operations_automation"
+        actions = [{"type": "operations_automation", "label": "Review safe maintenance results", "data": payload}]
+    elif plan.intent == "carefin":
+        payload = tool_output or {}
+        count = int(payload.get("candidate_count", 0))
+        message = (
+            f"CareFin found {count} possible support pathway(s). "
+            "These are discovery candidates only; eligibility, approval, and payment are not confirmed."
+        )
+        intent = "carefin"
+        actions = [{"type": "carefin_results", "label": "Review possible benefits and verification steps", "data": payload}]
+    elif plan.intent == "prescription":
+        payload = tool_output or {}
+        state = payload.get("status", "NO_PRESCRIPTION")
+        message = (
+            f"Prescription review state: {state}. "
+            "Unclear medicine names, strength, form, dose, or frequency require human review; no substitution or medicine change is automatic."
+        )
+        intent = "prescription"
+        actions = [{"type": "prescription_review", "label": "Review prescription safety state", "data": payload, "url": "/records"}]
+    elif plan.intent == "diagnostics":
+        payload = tool_output or {}
+        offers = payload.get("offers", []) if isinstance(payload, dict) else []
+        confirmed = sum(1 for item in offers if item.get("availability_state") == "CONFIRMED")
+        stale = sum(1 for item in offers if item.get("availability_state") == "STALE")
+        message = (
+            f"Diagnostics found {len(offers)} provider offer(s): {confirmed} confirmed-fresh and {stale} stale. "
+            "UNKNOWN or STALE availability is never promoted to confirmed, and booking requires explicit user confirmation."
+        )
+        intent = "diagnostics"
+        actions = [{"type": "diagnostics", "label": "Review diagnostic options", "data": payload, "url": "/connected-care/diagnostics"}]
+    elif plan.intent == "provider_discovery":
+        payload = tool_output or {}
+        registered = payload.get("registered_providers", []) if isinstance(payload, dict) else []
+        external = (payload.get("external_places") or {}).get("results", []) if isinstance(payload, dict) else []
+        message = (
+            f"Provider Discovery found {len(registered)} ZENDOC-verified provider(s) and {len(external)} external place result(s). "
+            "External discovery does not imply credentials, live slots, emergency readiness, or ZENDOC booking connectivity."
+        )
+        intent = "provider_discovery"
+        actions = [{"type": "provider_discovery", "label": "Review provider options", "data": payload, "url": "/finder"}]
+    elif plan.intent == "nutrition":
+        message = (
+            "Nutrition guidance is general wellness support. ZENDOC can compare labels, price, sugar, sodium, protein, fibre and hydration context, "
+            "but medical diets require clinician or dietitian review and sponsored ranking cannot override health suitability."
+        )
+        intent = "nutrition"
+        actions = [{"type": "nutrition", "label": "Open Fitness & Nutrition", "url": "/fitness"}]
     elif plan.intent == "contact_discovery":
         contacts = tool_output or []
         message = f"Found {len(contacts)} permitted contact(s) for your account."
@@ -272,6 +355,23 @@ def respond_with_core_agent(actor, command_text):
         message = payload.get("reason") or f"Found {len(payload.get('results', []))} educational video results."
         intent = "video_intelligence"
         actions = [{"type": "video_results", "label": "Review educational videos", "data": payload}]
+    elif plan.intent == "health_records":
+        payload = tool_output or {}
+        memory = payload.get("health_memory") or {}
+        total = int(memory.get("total_events", 0) or 0)
+        actions_count = len(payload.get("next_safe_actions") or [])
+        message = (
+            f"Health Memory returned {total} authorized recent timeline event(s) and "
+            f"{actions_count} non-clinical next-safe action(s). "
+            "Only minimum-necessary authorized context was used; no diagnosis or treatment change was made."
+        )
+        intent = "health_records"
+        actions = [{
+            "type": "health_memory",
+            "label": "Open Health Memory",
+            "data": payload,
+            "url": "/records",
+        }]
     elif plan.intent == "iot_status":
         payload = tool_output or []
         message = f"I found {len(payload)} connected device records available to this account."
@@ -356,6 +456,7 @@ def admin_command_center_data():
     from .agent_task_engine import list_agent_tasks
     from .capability_registry import get_capability_registry
     from .infrastructure import infrastructure_status
+    from .observability import incident_summary, list_runbooks
     from .model_router import get_model_router
     from .tool_registry import TOOL_REGISTRY
 
@@ -378,6 +479,8 @@ def admin_command_center_data():
         "model_router": get_model_router().status(check_health=True),
         "capabilities": get_capability_registry(),
         "infrastructure": infrastructure_status(),
+        "incident_summary": incident_summary(60),
+        "incident_runbooks": list_runbooks(),
         "tool_registry": [tool.to_dict() for tool in TOOL_REGISTRY.values()],
         "schema_migrations": [dict(row) for row in db.execute("SELECT * FROM schema_migrations ORDER BY applied_at DESC").fetchall()],
     }

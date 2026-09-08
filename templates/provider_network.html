@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block title %}Provider Network — ZENDOC{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Provider growth operations</p>
+    <h1>Provider Network</h1>
+    <p class="section-copy">Track real provider outreach from discovery through verified activation. No inferred invitation or activation counts.</p>
+  </div>
+  <a class="secondary-action" href="{{ url_for('main.startup_command_center') }}">Back to Startup Command Center</a>
+</section>
+
+<section class="grid two">
+  <form class="panel" method="post" action="{{ url_for('main.startup_provider_prospect_create_web') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <p class="eyebrow">Network supply</p>
+    <h2>Add provider prospect</h2>
+
+    <div class="form-grid">
+      <label>Provider type
+        <select name="provider_type" required>
+          <option value="doctor">Doctor</option>
+          <option value="hospital">Hospital</option>
+          <option value="pharmacy">Pharmacy</option>
+        </select>
+      </label>
+      <label>Source
+        <select name="source_type" required>
+          <option value="public_directory">Public directory</option>
+          <option value="referral">Referral</option>
+          <option value="college_network">College network</option>
+          <option value="institution_pilot">Institution pilot</option>
+          <option value="manual_outreach">Manual outreach</option>
+          <option value="inbound">Inbound</option>
+          <option value="other">Other</option>
+        </select>
+      </label>
+    </div>
+
+    <label>Linked institution pilot
+      <select name="linked_pilot_id">
+        <option value="">No linked pilot</option>
+        {% for pilot in pilots %}
+        <option value="{{ pilot.id }}">{{ pilot.organization_name }} · {{ pilot.status }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Organization / provider name <input name="organization_name" maxlength="300"></label>
+    <div class="form-grid">
+      <label>Contact name <input name="contact_name" maxlength="200"></label>
+      <label>Contact email <input name="contact_email" type="email" maxlength="320"></label>
+    </div>
+    <div class="form-grid">
+      <label>Contact phone <input name="contact_phone" maxlength="80"></label>
+      <label>Source reference <input name="source_reference" maxlength="500" placeholder="Registry URL/referral/pilot reference"></label>
+    </div>
+
+    <div class="form-grid">
+      <label>State <input name="state" maxlength="120"></label>
+      <label>District <input name="district" maxlength="120"></label>
+    </div>
+    <label>City <input name="city" maxlength="120"></label>
+
+    <label>Status
+      <select name="status">
+        {% for status in ['discovered','contacted','interested','registered','profile_created','evidence_submitted','verified','activated','paused','declined'] %}
+        <option value="{{ status }}">{{ status|replace('_',' ')|title }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <div class="form-grid">
+      <label>First contact <input name="first_contact_at" type="datetime-local"></label>
+      <label>Last contact <input name="last_contact_at" type="datetime-local"></label>
+    </div>
+    <label>Next action <input name="next_action" maxlength="500"></label>
+    <label>Next action due <input name="next_action_due" type="date"></label>
+
+    <div class="form-grid">
+      <label>Linked user ID <input name="linked_user_id" type="number" min="1"></label>
+      <label>Linked provider profile ID <input name="linked_provider_profile_id" type="number" min="1"></label>
+    </div>
+    <label>Owner note <textarea name="owner_note" maxlength="1600" rows="3"></textarea></label>
+
+    <button type="submit">Add provider prospect</button>
+    <p class="form-note">If source is Institution pilot, select the real linked pilot. Registered/verified/activated stages require real linked provider records. Activation cannot be entered as a standalone claim.</p>
+  </form>
+
+  <article class="panel">
+    <div class="panel-head"><h2>Network metrics</h2><span class="status-badge working">{{ metrics.prospect_count }} prospects</span></div>
+    <div class="summary-row"><span>Linked provider profiles</span><strong>{{ metrics.linked_profile_count }}</strong></div>
+    <div class="summary-row"><span>Linked verified profiles</span><strong>{{ metrics.linked_verified_profile_count }}</strong></div>
+    <div class="summary-row"><span>Activated</span><strong>{{ metrics.activated_count }}</strong></div>
+    <div class="summary-row"><span>Activation rate</span><strong>{% if metrics.activation_rate is not none %}{{ (metrics.activation_rate * 100)|round(1) }}%{% else %}—{% endif %}</strong></div>
+    <h3>By provider type</h3>
+    {% for key, value in metrics.provider_type_counts.items() %}
+    <div class="summary-row"><span>{{ key|title }}</span><strong>{{ value }}</strong></div>
+    {% endfor %}
+    <p class="form-note">{{ metrics.truth_notice }}</p>
+  </article>
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head"><h2>Provider prospect pipeline</h2></div>
+  {% if prospects %}
+  <table>
+    <thead>
+      <tr>
+        <th>Provider</th><th>Location</th><th>Status</th><th>Contact</th><th>Observed onboarding</th><th>Next action</th><th>Update</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for prospect in prospects %}
+      <tr>
+        <td>
+          <strong>{{ prospect.organization_name or prospect.contact_name or prospect.contact_email or ('Prospect #' ~ prospect.id) }}</strong>
+          <br><small>{{ prospect.provider_type|title }} · {{ prospect.source_type|replace('_',' ')|title }}</small>
+          {% if prospect.linked_pilot_id %}<br><small>Pilot: {{ prospect.linked_pilot_name or ('#' ~ prospect.linked_pilot_id) }}</small>{% endif %}
+        </td>
+        <td>{{ prospect.city or '—' }}{% if prospect.district %}, {{ prospect.district }}{% endif %}{% if prospect.state %}, {{ prospect.state }}{% endif %}</td>
+        <td>{{ prospect.status|replace('_',' ')|title }}</td>
+        <td>
+          {{ prospect.contact_name or '—' }}
+          {% if prospect.contact_email %}<br><small>{{ prospect.contact_email }}</small>{% endif %}
+          {% if prospect.contact_phone %}<br><small>{{ prospect.contact_phone }}</small>{% endif %}
+        </td>
+        <td>
+          {% if prospect.observed_onboarding %}
+            Verification: {{ prospect.observed_onboarding.verification_status }}<br>
+            <small>Completeness {{ prospect.observed_onboarding.completeness_score }}% · Evidence {{ prospect.observed_onboarding.evidence_count }} · Schedules {{ prospect.observed_onboarding.active_schedule_count }}</small>
+          {% else %}
+            —
+          {% endif %}
+        </td>
+        <td>{{ prospect.next_action or '—' }}{% if prospect.next_action_due %}<br><small>Due {{ prospect.next_action_due }}</small>{% endif %}</td>
+        <td>
+          <form class="inline-form" method="post" action="{{ url_for('main.startup_provider_prospect_update_web', prospect_id=prospect.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="provider_type" value="{{ prospect.provider_type }}">
+            <input type="hidden" name="source_type" value="{{ prospect.source_type }}">
+            <input type="hidden" name="organization_name" value="{{ prospect.organization_name or '' }}">
+            <input type="hidden" name="contact_name" value="{{ prospect.contact_name or '' }}">
+            <input type="hidden" name="contact_email" value="{{ prospect.contact_email or '' }}">
+            <input type="hidden" name="contact_phone" value="{{ prospect.contact_phone or '' }}">
+            <input type="hidden" name="state" value="{{ prospect.state or '' }}">
+            <input type="hidden" name="district" value="{{ prospect.district or '' }}">
+            <input type="hidden" name="city" value="{{ prospect.city or '' }}">
+            <input type="hidden" name="source_reference" value="{{ prospect.source_reference or '' }}">
+            <select name="linked_pilot_id">
+              <option value="">No pilot</option>
+              {% for pilot in pilots %}
+              <option value="{{ pilot.id }}" {% if prospect.linked_pilot_id == pilot.id %}selected{% endif %}>{{ pilot.organization_name }}</option>
+              {% endfor %}
+            </select>
+            <select name="status">
+              {% for status in ['discovered','contacted','interested','registered','profile_created','evidence_submitted','verified','activated','paused','declined'] %}
+              <option value="{{ status }}" {% if prospect.status == status %}selected{% endif %}>{{ status }}</option>
+              {% endfor %}
+            </select>
+            <input name="linked_user_id" type="number" min="1" value="{{ prospect.linked_user_id or '' }}" placeholder="User ID">
+            <input name="linked_provider_profile_id" type="number" min="1" value="{{ prospect.linked_provider_profile_id or '' }}" placeholder="Profile ID">
+            <input name="next_action" maxlength="500" value="{{ prospect.next_action or '' }}" placeholder="Next action">
+            <input name="next_action_due" type="date" value="{{ prospect.next_action_due or '' }}">
+            <input name="owner_note" maxlength="1600" value="{{ prospect.owner_note or '' }}" placeholder="Owner note">
+            <button type="submit">Save</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="form-note">No provider prospects recorded yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

@@ -1,10 +1,22 @@
-from .db import get_db, now_iso
+import hashlib
+
+from .db import get_db, is_integrity_error, now_iso
+from .organization_service import provider_resource_context, assert_resource_tenant
+from .security import is_owner
 from .telehealth_provider import get_telehealth_provider
 
 
 DOCTOR_STATUSES = ("available", "busy", "offline", "consultation_only")
 CONSULTATION_TYPES = ("chat", "voice", "video")
 CONSULTATION_STATUSES = ("requested", "accepted", "rejected", "scheduled", "ended", "cancelled")
+CONSULTATION_TRANSITIONS = {
+    "requested": {"accepted", "rejected", "scheduled", "cancelled"},
+    "accepted": {"scheduled", "ended", "cancelled"},
+    "scheduled": {"accepted", "ended", "cancelled"},
+    "rejected": set(),
+    "ended": set(),
+    "cancelled": set(),
+}
 PATIENT_MESSAGE_POLICIES = ("nobody", "existing_patient", "appointment", "accepted_consultation", "anyone")
 
 
@@ -120,24 +132,68 @@ def request_consultation(actor, data):
     if not reason:
         raise ValueError("Consultation reason is required.")
     now = now_iso()
-    cursor = get_db().execute(
-        """
-        INSERT INTO consultation_requests
-        (patient_id, doctor_id, appointment_id, consultation_type, status, reason, scheduled_for, created_at, updated_at)
-        VALUES (?, ?, ?, ?, 'requested', ?, ?, ?, ?)
-        """,
-        (
-            _user_id(actor),
-            doctor_id,
-            data.get("appointment_id"),
+    tenant = provider_resource_context(doctor_id)
+    db = get_db()
+    fingerprint_source = "|".join(
+        [
+            str(_user_id(actor)),
+            str(doctor_id),
             consultation_type,
             reason[:500],
-            data.get("scheduled_for"),
-            now,
-            now,
-        ),
+            str(data.get("scheduled_for") or ""),
+            str(data.get("appointment_id") or ""),
+        ]
     )
-    get_db().commit()
+    request_fingerprint = hashlib.sha256(fingerprint_source.encode("utf-8")).hexdigest()
+    existing = db.execute(
+        """
+        SELECT id FROM consultation_requests
+        WHERE request_fingerprint=?
+          AND status IN ('requested','accepted','scheduled')
+        ORDER BY id DESC LIMIT 1
+        """,
+        (request_fingerprint,),
+    ).fetchone()
+    if existing:
+        replay = get_consultation(actor, existing["id"])
+        replay["idempotent_replay"] = True
+        return replay
+
+    try:
+        cursor = db.execute(
+            """
+            INSERT INTO consultation_requests
+            (patient_id, doctor_id, appointment_id, consultation_type, status, reason, scheduled_for,
+             organization_id, organization_location_id, request_fingerprint, created_at, updated_at)
+            VALUES (?, ?, ?, ?, 'requested', ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                _user_id(actor),
+                doctor_id,
+                data.get("appointment_id"),
+                consultation_type,
+                reason[:500],
+                data.get("scheduled_for"),
+                tenant["organization_id"],
+                tenant["organization_location_id"],
+                request_fingerprint,
+                now,
+                now,
+            ),
+        )
+    except Exception as error:
+        db.rollback()
+        if is_integrity_error(error):
+            existing = db.execute(
+                "SELECT id FROM consultation_requests WHERE request_fingerprint=?",
+                (request_fingerprint,),
+            ).fetchone()
+            if existing:
+                replay = get_consultation(actor, existing["id"])
+                replay["idempotent_replay"] = True
+                return replay
+        raise
+    db.commit()
     return get_consultation(actor, cursor.lastrowid)
 
 
@@ -145,6 +201,8 @@ def list_consultations(actor):
     uid = _user_id(actor)
     role = _value(actor, "role")
     if role == "admin":
+        if not is_owner(actor):
+            raise PermissionError("Only the configured ZENDOC owner may view all consultations.")
         where = "1=1"
         params = ()
     elif role in {"doctor", "hospital"}:
@@ -184,8 +242,13 @@ def get_consultation(actor, consultation_id):
     ).fetchone()
     if not row:
         raise LookupError("Consultation not found.")
-    if role != "admin" and uid not in {row["patient_id"], row["doctor_id"]}:
+    if role == "admin":
+        if not is_owner(actor):
+            raise PermissionError("Only the configured ZENDOC owner may access arbitrary consultations.")
+    elif uid not in {row["patient_id"], row["doctor_id"]}:
         raise PermissionError("You cannot access another consultation.")
+    if role in {"doctor", "hospital"}:
+        assert_resource_tenant(actor, dict(row))
     return dict(row)
 
 
@@ -201,25 +264,44 @@ def update_consultation_status(actor, consultation_id, status, scheduled_for=Non
     if role == "admin":
         from .security import assert_owner
         assert_owner(actor)
+
+    current_status = str(consultation.get("status") or "requested").strip().lower()
+    if status == current_status:
+        return consultation
+    if status not in CONSULTATION_TRANSITIONS.get(current_status, set()):
+        raise ValueError(f"Consultation cannot transition from {current_status} to {status}.")
     now = now_iso()
+    db = get_db()
+    updated = db.execute(
+        """
+        UPDATE consultation_requests
+        SET status=?, scheduled_for=COALESCE(?, scheduled_for), updated_at=?
+        WHERE id=? AND status=?
+        """,
+        (status, scheduled_for, now, consultation_id, current_status),
+    )
+    if updated.rowcount != 1:
+        db.rollback()
+        raise ValueError("Consultation changed concurrently; refresh before retrying.")
+
     room = None
     if status in {"accepted", "scheduled"} and not consultation.get("room_id"):
         room = get_telehealth_provider().create_room(consultation_id)
-    get_db().execute(
-        "UPDATE consultation_requests SET status=?, scheduled_for=COALESCE(?, scheduled_for), updated_at=? WHERE id=?",
-        (status, scheduled_for, now, consultation_id),
-    )
     if room:
         get_db().execute(
             """
-            INSERT INTO consultation_rooms (consultation_id, room_token_hash, provider, status, created_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO consultation_rooms
+            (consultation_id, room_token_hash, provider, status, organization_id, organization_location_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (consultation_id, room["room_token_hash"], room["provider"], room["status"], now),
+            (
+                consultation_id, room["room_token_hash"], room["provider"], room["status"],
+                consultation.get("organization_id"), consultation.get("organization_location_id"), now
+            ),
         )
     if status == "ended":
         get_db().execute("UPDATE consultation_rooms SET status='ended', ended_at=? WHERE consultation_id=?", (now, consultation_id))
-    get_db().commit()
+    db.commit()
     return get_consultation(actor, consultation_id)
 
 

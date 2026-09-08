@@ -1,3 +1,4 @@
+import hashlib
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -22,6 +23,20 @@ from .db import ROLES, get_db, is_integrity_error, now_iso
 from .health_analytics import METRIC_TYPES, create_measurement, get_health_trend
 from .healthcare_finder import HealthcareFinder, normalize_query
 from .intelligence import ZendocIntelligence
+from .provider_operations import provider_operational_metrics
+from .provider_network import (
+    create_provider_prospect,
+    list_provider_prospects,
+    provider_network_metrics,
+    update_provider_prospect,
+)
+from .provider_onboarding import (
+    EVIDENCE_TYPES,
+    list_provider_evidence,
+    provider_onboarding_status,
+    review_provider_evidence,
+    submit_provider_evidence,
+)
 from .provider_service import (
     PROVIDER_ROLES,
     SPECIALTIES,
@@ -31,17 +46,67 @@ from .provider_service import (
     create_schedule,
     get_provider_profile_for_user,
     get_public_provider_profile,
+    search_registered_providers,
     upsert_provider_profile,
 )
 from .report_intelligence import REPORT_TYPES, store_report_upload
 from .record_storage import get_record_storage
+from .organization_service import assert_resource_tenant
+from .database_reliability import backup_readiness, readiness_report
+from .data_freshness import ingestion_freshness_report
+from .data_refresh import (
+    create_data_refresh_task,
+    data_refresh_operations,
+    update_data_refresh_task,
+)
 from .security import csrf_token, hash_token, is_owner, load_user_and_check_csrf, login_required, new_token, owner_required, role_required, start_user_session
+from .startup_analytics import care_journey_conversion, india_coverage_quality, provider_onboarding_funnel, record_finder_search, record_product_activity, retention_metrics, startup_metrics, submit_finder_feedback, user_activation_funnel
+from .startup_finance import create_financial_entry, create_financial_snapshot, financial_kpis, list_financial_entries
+from .investor_dashboard import investor_traction_snapshot
+from .business_api import (
+    BusinessApiRateLimitError,
+    authenticate_business_api_key,
+    business_api_integration_status,
+    business_api_metrics,
+    business_api_self_usage,
+    create_business_api_client,
+    issue_business_api_key,
+    list_business_api_clients,
+    revoke_business_api_key,
+    update_business_api_client,
+)
+from .partner_audit import list_partner_audit_events, partner_audit_metrics
+from .partner_handoffs import create_partner_booking_handoff, get_partner_booking_handoff, list_all_partner_booking_handoffs, list_partner_booking_handoffs, list_provider_booking_handoffs, owner_update_partner_booking_handoff, partner_operations_metrics, provider_update_partner_booking_handoff
+from .institution_pilots import (
+    create_institution_pilot,
+    create_pilot_milestone,
+    institution_pilot_metrics,
+    list_institution_pilots,
+    pilot_execution_summary,
+    record_pilot_usage_snapshot,
+    update_institution_pilot,
+    update_pilot_milestone,
+)
+from .public_data_ingestion import search_public_healthcare_entities
+from .public_entity_claims import (
+    list_my_public_entity_claims,
+    list_public_entity_claims,
+    review_public_entity_claim,
+    submit_public_entity_claim,
+)
 
 
 bp = Blueprint("main", __name__)
 ALLOWED_UPLOADS = {"pdf", "png", "jpg", "jpeg", "txt", "doc", "docx"}
 ALLOWED_MIME_PREFIXES = ("application/pdf", "image/", "text/plain")
-RATE_BUCKETS = {}
+RATE_BUCKETS = {}  # test/development fallback only
+
+APPOINTMENT_TRANSITIONS = {
+    "requested": {"confirmed", "cancelled"},
+    "confirmed": {"completed", "cancelled"},
+    "completed": set(),
+    "cancelled": set(),
+}
 
 
 @bp.before_app_request
@@ -96,17 +161,71 @@ def render_error(error, status, message):
 def check_rate_limit():
     if not request.path.startswith("/api/"):
         return
-    limit = current_app.config.get("RATE_LIMIT_PER_MINUTE", 120)
-    bucket_key = f"{request.remote_addr}:{request.path}"
-    now = int(time.time())
-    window = now // 60
-    bucket = RATE_BUCKETS.get(bucket_key)
-    if not bucket or bucket["window"] != window:
-        RATE_BUCKETS[bucket_key] = {"window": window, "count": 1}
+    limit = int(current_app.config.get("RATE_LIMIT_PER_MINUTE", 120))
+    remote = request.headers.get("X-Forwarded-For", request.remote_addr or "unknown")
+    remote = str(remote).split(",", 1)[0].strip()
+    client_hash = hashlib.sha256(remote.encode("utf-8")).hexdigest()[:32]
+    bucket_key = f"{client_hash}:{request.path}"
+    window = int(time.time()) // 60
+
+    # Tests intentionally keep an in-memory limiter so isolated test databases
+    # are not polluted by rate-limit bookkeeping and deterministic fixtures
+    # remain fast. Production/development use the shared database bucket so
+    # multiple workers/instances enforce one limit.
+    if current_app.config.get("TESTING"):
+        bucket = RATE_BUCKETS.get(bucket_key)
+        if not bucket or bucket["window"] != window:
+            RATE_BUCKETS[bucket_key] = {"window": window, "count": 1}
+            return
+        bucket["count"] += 1
+        if bucket["count"] > limit:
+            abort(429)
         return
-    bucket["count"] += 1
-    if bucket["count"] > limit:
-        abort(429)
+
+    db = get_db()
+    now = now_iso()
+    try:
+        row = db.execute(
+            "SELECT count FROM api_rate_limit_buckets WHERE bucket_key=? AND window_id=?",
+            (bucket_key, window),
+        ).fetchone()
+        if row:
+            db.execute(
+                "UPDATE api_rate_limit_buckets SET count=count+1, updated_at=? WHERE bucket_key=? AND window_id=?",
+                (now, bucket_key, window),
+            )
+        else:
+            try:
+                db.execute(
+                    "INSERT INTO api_rate_limit_buckets (bucket_key,window_id,count,updated_at) VALUES (?,?,1,?)",
+                    (bucket_key, window, now),
+                )
+            except Exception as error:
+                # A concurrent worker may have created the same bucket after
+                # our SELECT. Roll back only this transaction and retry the
+                # atomic increment.
+                if not is_integrity_error(error):
+                    raise
+                db.rollback()
+                db.execute(
+                    "UPDATE api_rate_limit_buckets SET count=count+1, updated_at=? WHERE bucket_key=? AND window_id=?",
+                    (now, bucket_key, window),
+                )
+        db.commit()
+        current = db.execute(
+            "SELECT count FROM api_rate_limit_buckets WHERE bucket_key=? AND window_id=?",
+            (bucket_key, window),
+        ).fetchone()
+        if current and int(current["count"]) > limit:
+            abort(429)
+
+        # Opportunistic cleanup avoids an unbounded bookkeeping table.
+        if window % 10 == 0:
+            db.execute("DELETE FROM api_rate_limit_buckets WHERE window_id<?", (window - 120,))
+            db.commit()
+    except Exception:
+        db.rollback()
+        raise
 
 
 @bp.app_context_processor
@@ -218,6 +337,8 @@ def audit(action, entity_type, entity_id=None, actor=None):
 def stats_for(user):
     db = get_db()
     if user["role"] == "admin":
+        if not is_owner(user):
+            raise PermissionError("Only the configured ZENDOC owner may view global platform statistics.")
         return {
             "Users": db.execute("SELECT COUNT(*) c FROM users").fetchone()["c"],
             "Appointments": db.execute("SELECT COUNT(*) c FROM appointments").fetchone()["c"],
@@ -265,7 +386,7 @@ def register(role):
             return render_template("register.html", role=role), 400
         try:
             now = now_iso()
-            get_db().execute(
+            cursor = get_db().execute(
                 """
                 INSERT INTO users
                 (name,email,email_normalized,password_hash,role,phone,age,gender,city,emergency_contact,created_at,updated_at)
@@ -286,6 +407,8 @@ def register(role):
                     now,
                 ),
             )
+            created_user = get_db().execute("SELECT * FROM users WHERE id=?", (int(cursor.lastrowid),)).fetchone()
+            record_product_activity(created_user, event_type="account_registered")
             get_db().commit()
             flash("Registration complete. Please log in.", "success")
             return redirect(url_for("main.login", role=role))
@@ -314,6 +437,7 @@ def login(role=None):
             user = None
         if user and check_password_hash(user["password_hash"], request.form.get("password", "")):
             start_user_session(user, remember=bool(request.form.get("remember_me")))
+            record_product_activity(user, event_type="session_login")
             audit("login", "user", str(user["id"]))
             get_db().commit()
             return redirect(url_for("main.dashboard"))
@@ -396,14 +520,14 @@ def dashboard():
         """
         SELECT a.*, p.name patient_name
         FROM appointments a JOIN users p ON p.id=a.patient_id
-        WHERE a.patient_id=? OR a.provider_id=? OR ?='admin'
+        WHERE a.patient_id=? OR a.provider_id=? OR ?=1
         ORDER BY
           CASE WHEN a.scheduled_for>=? AND a.status NOT IN ('completed','cancelled') THEN 0 ELSE 1 END,
           CASE WHEN a.scheduled_for>=? THEN a.scheduled_for END ASC,
           a.created_at DESC
         LIMIT 6
         """,
-        (g.user["id"], g.user["id"], g.user["role"], now_value, now_value),
+        (g.user["id"], g.user["id"], 1 if is_owner(g.user) else 0, now_value, now_value),
     ).fetchall()
     next_appointment = next(
         (
@@ -478,6 +602,7 @@ def profile():
                 g.user["id"],
             ),
         )
+        record_product_activity(g.user, event_type="profile_updated")
         audit("update", "profile", str(g.user["id"]))
         get_db().commit()
         flash("Profile updated.", "success")
@@ -496,6 +621,7 @@ def appointments():
             try:
                 book_provider_slot(g.user, int(provider_profile_id), request.form.get("scheduled_for"), request.form.get("reason", "").strip())
                 create_notification(g.user["id"], "Appointment requested", "Your connected appointment request was saved.")
+                record_product_activity(g.user, event_type="appointment_requested")
                 audit("create", "connected_appointment")
                 db.commit()
                 flash("Appointment requested. The provider can now review it.", "success")
@@ -524,6 +650,7 @@ def appointments():
             ),
         )
         create_notification(g.user["id"], "Appointment requested", "Your appointment request was saved.")
+        record_product_activity(g.user, event_type="appointment_requested")
         audit("create", "appointment")
         db.commit()
         flash("Appointment saved.", "success")
@@ -532,10 +659,10 @@ def appointments():
         """
         SELECT a.*, p.name patient_name
         FROM appointments a JOIN users p ON p.id=a.patient_id
-        WHERE a.patient_id=? OR a.provider_id=? OR ?='admin'
+        WHERE a.patient_id=? OR a.provider_id=? OR ?=1
         ORDER BY a.scheduled_for DESC
         """,
-        (g.user["id"], g.user["id"], g.user["role"]),
+        (g.user["id"], g.user["id"], 1 if is_owner(g.user) else 0),
     ).fetchall()
     providers = db.execute(
         """
@@ -563,14 +690,43 @@ def appointments():
 @role_required("doctor", "hospital", "admin")
 def appointment_status(appointment_id):
     status = request.form.get("status", "requested")
-    if status not in {"requested", "confirmed", "completed", "cancelled"}:
+    if status not in APPOINTMENT_TRANSITIONS:
         abort(400)
-    row = get_db().execute("SELECT patient_id, provider_id FROM appointments WHERE id=?", (appointment_id,)).fetchone()
+    row = get_db().execute(
+        "SELECT patient_id, provider_id, status, organization_id, organization_location_id FROM appointments WHERE id=?",
+        (appointment_id,),
+    ).fetchone()
     if not row:
         abort(404)
-    if g.user["role"] != "admin" and row["provider_id"] != g.user["id"]:
+    if g.user["role"] == "admin":
+        if not is_owner(g.user):
+            abort(403)
+    elif row["provider_id"] != g.user["id"]:
         abort(403)
-    get_db().execute("UPDATE appointments SET status=?, updated_at=? WHERE id=?", (status, now_iso(), appointment_id))
+    else:
+        try:
+            assert_resource_tenant(g.user, dict(row))
+        except PermissionError:
+            abort(403)
+
+    current_status = str(row["status"] or "requested").strip().lower()
+    if status == current_status:
+        flash("Appointment status is already up to date.", "info")
+        return redirect(url_for("main.appointments"))
+    if status not in APPOINTMENT_TRANSITIONS.get(current_status, set()):
+        abort(409)
+    updated = get_db().execute(
+        "UPDATE appointments SET status=?, updated_at=? WHERE id=? AND status=?",
+        (status, now_iso(), appointment_id, current_status),
+    )
+    if updated.rowcount != 1:
+        get_db().rollback()
+        abort(409)
+    if status == "cancelled":
+        get_db().execute(
+            "DELETE FROM appointment_slot_claims WHERE appointment_id=?",
+            (appointment_id,),
+        )
     create_notification(row["patient_id"], "Appointment updated", f"Appointment status changed to {status}.")
     audit("update_status", "appointment", str(appointment_id))
     get_db().commit()
@@ -600,9 +756,9 @@ def records():
         """
         SELECT mr.*, rm.report_uid, rm.report_type, rm.document_date, rm.extraction_status
         FROM medical_records mr LEFT JOIN report_metadata rm ON rm.record_id=mr.id
-        WHERE mr.owner_id=? OR ?='admin' ORDER BY mr.created_at DESC
+        WHERE mr.owner_id=? OR ?=1 ORDER BY mr.created_at DESC
         """,
-        (g.user["id"], g.user["role"]),
+        (g.user["id"], 1 if is_owner(g.user) else 0),
     ).fetchall()
     return render_template("records.html", records=rows, report_types=REPORT_TYPES)
 
@@ -740,11 +896,50 @@ def finder():
         request.values.get("longitude"),
         request.values.get("radius_km", 10),
     )
+    search_event_id = None
     if request.method == "POST" or request.args:
         result = HealthcareFinder().search(query)
+        search_event_id = record_finder_search(
+            g.user,
+            category=query["category"],
+            location=query["location"],
+            result_count=len(result.get("results") or []),
+            source_tiers=result.get("source_tiers") or {},
+        )
         audit("search", "healthcare_finder", query["category"])
         get_db().commit()
-    return render_template("finder.html", result=result, query=query)
+    return render_template("finder.html", result=result, query=query, search_event_id=search_event_id)
+
+
+@bp.post("/finder/feedback")
+@login_required
+def finder_feedback():
+    try:
+        submit_finder_feedback(
+            g.user,
+            analytics_event_id=int(request.form.get("analytics_event_id")),
+            helpful=request.form.get("helpful") == "yes",
+            reason_code=request.form.get("reason_code"),
+        )
+        flash("Thanks — your feedback will help improve ZENDOC search quality.", "success")
+    except (TypeError, ValueError, LookupError, PermissionError) as error:
+        flash(str(error), "error")
+    return redirect(url_for("main.finder"))
+
+
+@bp.post("/provider/public-entity-claims")
+@login_required
+def provider_public_entity_claim_submit_web():
+    try:
+        submit_public_entity_claim(
+            g.user,
+            public_entity_id=int(request.form.get("public_entity_id")),
+            claimant_note=request.form.get("claimant_note"),
+        )
+        flash("Listing claim submitted for owner review.", "success")
+    except (TypeError, ValueError, LookupError, PermissionError) as error:
+        flash(str(error), "error")
+    return redirect(url_for("main.finder"))
 
 
 @bp.get("/providers/<int:profile_id>")
@@ -777,6 +972,9 @@ def provider_detail(profile_id):
         """,
         (profile_id,),
     ).fetchall()
+    if g.user["role"] == "patient":
+        record_product_activity(g.user, event_type="provider_view")
+        get_db().commit()
     return render_template(
         "provider_detail.html",
         profile=profile,
@@ -802,12 +1000,71 @@ def provider_profile():
             flash(str(error), "error")
     profile_row = get_provider_profile_for_user(g.user["id"])
     schedules = []
+    onboarding = None
+    evidence = []
+    listing_claims = []
+    partner_handoffs = []
+    provider_operations = provider_operational_metrics(g.user)
     if profile_row:
         schedules = get_db().execute(
             "SELECT * FROM provider_schedules WHERE provider_profile_id=? ORDER BY weekday,start_time",
             (profile_row["id"],),
         ).fetchall()
-    return render_template("provider_profile.html", profile=profile_row, schedules=schedules)
+        onboarding = provider_onboarding_status(profile_row["id"])
+        evidence = list_provider_evidence(profile_row["id"])
+        listing_claims = list_my_public_entity_claims(g.user)
+        partner_handoffs = list_provider_booking_handoffs(g.user)
+    return render_template(
+        "provider_profile.html",
+        profile=profile_row,
+        schedules=schedules,
+        onboarding=onboarding,
+        evidence=evidence,
+        evidence_types=sorted(EVIDENCE_TYPES),
+        listing_claims=listing_claims,
+        partner_handoffs=partner_handoffs,
+        provider_operations=provider_operations,
+    )
+
+
+@bp.post("/provider/evidence")
+@login_required
+def provider_evidence_submit_web():
+    if g.user["role"] not in PROVIDER_ROLES:
+        abort(403)
+    try:
+        submit_provider_evidence(
+            g.user,
+            evidence_type=request.form.get("evidence_type"),
+            identifier=request.form.get("identifier"),
+            source_name=request.form.get("source_name"),
+            source_url=request.form.get("source_url"),
+            notes=request.form.get("notes"),
+        )
+        audit("provider_evidence_submit", "provider_profile", str(g.user["id"]))
+        get_db().commit()
+        flash("Verification evidence submitted for owner review.", "success")
+    except (LookupError, ValueError) as error:
+        flash(str(error), "error")
+    return redirect(url_for("main.provider_profile"))
+
+
+@bp.post("/provider/booking-handoffs/<int:handoff_id>")
+@login_required
+def provider_booking_handoff_review_web(handoff_id):
+    if g.user["role"] not in PROVIDER_ROLES:
+        abort(403)
+    try:
+        provider_update_partner_booking_handoff(
+            g.user,
+            handoff_id,
+            status=request.form.get("status"),
+            status_note=request.form.get("status_note"),
+        )
+        flash("Partner booking handoff updated.", "success")
+    except (LookupError, ValueError, PermissionError) as error:
+        flash(str(error), "error")
+    return redirect(url_for("main.provider_profile"))
 
 
 @bp.post("/provider/schedules")
@@ -825,6 +1082,335 @@ def provider_schedule():
     return redirect(url_for("main.provider_profile"))
 
 
+@bp.get("/admin/startup/provider-network")
+@owner_required
+def startup_provider_network():
+    return render_template(
+        "provider_network.html",
+        metrics=provider_network_metrics(g.user),
+        pilots=list_institution_pilots(g.user, limit=200),
+        prospects=list_provider_prospects(
+            g.user,
+            status=request.args.get("status"),
+            provider_type=request.args.get("provider_type"),
+            limit=request.args.get("limit", 200),
+        ),
+    )
+
+
+@bp.post("/admin/startup/provider-network")
+@owner_required
+def startup_provider_prospect_create_web():
+    try:
+        create_provider_prospect(g.user, request.form)
+        flash("Provider prospect added.", "success")
+    except (TypeError, ValueError, PermissionError) as error:
+        flash(str(error), "error")
+    return redirect(url_for("main.startup_provider_network"))
+
+
+@bp.post("/admin/startup/provider-network/<int:prospect_id>")
+@owner_required
+def startup_provider_prospect_update_web(prospect_id):
+    try:
+        update_provider_prospect(g.user, prospect_id, request.form)
+        flash("Provider prospect updated.", "success")
+    except (LookupError, TypeError, ValueError, PermissionError) as error:
+        flash(str(error), "error")
+    return redirect(url_for("main.startup_provider_network"))
+
+
+@bp.get("/admin/startup/data-freshness")
+@owner_required
+def startup_data_freshness():
+    report = ingestion_freshness_report(
+        g.user,
+        recent_batch_limit=request.args.get("limit", 50),
+    )
+    operations = data_refresh_operations(g.user)
+    return render_template("data_freshness.html", report=report, operations=operations)
+
+
+@bp.post("/admin/startup/data-refresh")
+@owner_required
+def startup_data_refresh_create_web():
+    try:
+        create_data_refresh_task(
+            g.user,
+            source_id=request.form.get("source_id"),
+            ingestion_type=request.form.get("ingestion_type"),
+            owner_note=request.form.get("owner_note"),
+        )
+        flash("Data refresh task queued.", "success")
+    except (LookupError, TypeError, ValueError, PermissionError) as error:
+        flash(str(error), "error")
+    return redirect(url_for("main.startup_data_freshness"))
+
+
+@bp.post("/admin/startup/data-refresh/<int:task_id>")
+@owner_required
+def startup_data_refresh_update_web(task_id):
+    try:
+        update_data_refresh_task(
+            g.user,
+            task_id,
+            status=request.form.get("status"),
+            linked_batch_id=request.form.get("linked_batch_id") or None,
+            owner_note=request.form.get("owner_note"),
+            blocked_reason=request.form.get("blocked_reason"),
+        )
+        flash("Data refresh task updated.", "success")
+    except (LookupError, TypeError, ValueError, PermissionError) as error:
+        flash(str(error), "error")
+    return redirect(url_for("main.startup_data_freshness"))
+
+
+@bp.get("/admin/startup/b2b-operations")
+@owner_required
+def startup_b2b_operations():
+    return render_template(
+        "b2b_operations.html",
+        business_metrics=business_api_metrics(g.user),
+        business_clients=list_business_api_clients(g.user),
+        handoff_metrics=partner_operations_metrics(g.user),
+        handoffs=list_all_partner_booking_handoffs(g.user, limit=200),
+        audit_metrics=partner_audit_metrics(g.user, days=request.args.get("days", 30)),
+        audit_events=list_partner_audit_events(g.user, limit=200),
+    )
+
+
+@bp.get("/admin/startup")
+@owner_required
+def startup_command_center():
+    days = request.args.get("days", 30)
+    metrics = startup_metrics(g.user, days=days)
+    activation_funnel = user_activation_funnel(g.user, days=days)
+    coverage = india_coverage_quality(g.user)
+    retention = retention_metrics(g.user)
+    care_funnel = care_journey_conversion(g.user, days=days)
+    provider_funnel = provider_onboarding_funnel(g.user, days=request.args.get("provider_days", 90))
+    pilot_metrics = institution_pilot_metrics(g.user)
+    pilots = list_institution_pilots(g.user, status=request.args.get("pilot_status"), limit=100)
+    business_metrics = business_api_metrics(g.user)
+    business_clients = list_business_api_clients(g.user)
+    booking_handoffs = list_all_partner_booking_handoffs(g.user, limit=200)
+    finance = financial_kpis(g.user, month=request.args.get("finance_month"))
+    finance_entries = list_financial_entries(g.user, limit=100)
+    investor_snapshot = investor_traction_snapshot(
+        g.user,
+        days=int(days),
+        finance_month=request.args.get("finance_month"),
+    )
+    claims = list_public_entity_claims(g.user, status=request.args.get("claim_status"), limit=50)
+    return render_template(
+        "startup_command_center.html",
+        metrics=metrics,
+        activation_funnel=activation_funnel,
+        coverage=coverage,
+        retention=retention,
+        care_funnel=care_funnel,
+        provider_funnel=provider_funnel,
+        pilot_metrics=pilot_metrics,
+        pilots=pilots,
+        business_metrics=business_metrics,
+        business_clients=business_clients,
+        booking_handoffs=booking_handoffs,
+        finance=finance,
+        finance_entries=finance_entries,
+        investor_snapshot=investor_snapshot,
+        claims=claims,
+    )
+
+
+@bp.post("/admin/startup/booking-handoffs/<int:handoff_id>")
+@owner_required
+def startup_booking_handoff_review_web(handoff_id):
+    try:
+        owner_update_partner_booking_handoff(
+            g.user,
+            handoff_id,
+            status=request.form.get("status"),
+            status_note=request.form.get("status_note"),
+        )
+        flash("Partner booking handoff updated.", "success")
+    except (LookupError, ValueError, PermissionError) as error:
+        flash(str(error), "error")
+    return redirect(url_for("main.startup_command_center"))
+
+
+@bp.post("/admin/startup/business-api-clients")
+@owner_required
+def startup_business_client_create_web():
+    try:
+        client = create_business_api_client(
+            g.user,
+            {
+                "name": request.form.get("name"),
+                "client_type": request.form.get("client_type"),
+                "pilot_id": request.form.get("pilot_id"),
+                "allowed_scopes": request.form.getlist("allowed_scopes"),
+                "rate_limit_per_minute": request.form.get("rate_limit_per_minute", 60),
+            },
+        )
+        flash(f"Business API client created: {client['name']}.", "success")
+    except (TypeError, ValueError, LookupError, PermissionError) as error:
+        flash(str(error), "error")
+    return redirect(url_for("main.startup_command_center"))
+
+
+@bp.post("/admin/startup/business-api-clients/<int:client_id>")
+@owner_required
+def startup_business_client_update_web(client_id):
+    try:
+        update_business_api_client(
+            g.user,
+            client_id,
+            {
+                "status": request.form.get("status"),
+                "pilot_id": request.form.get("pilot_id"),
+                "allowed_scopes": request.form.getlist("allowed_scopes"),
+                "rate_limit_per_minute": request.form.get("rate_limit_per_minute", 60),
+            },
+        )
+        flash("Business API client updated.", "success")
+    except (TypeError, ValueError, LookupError, PermissionError) as error:
+        flash(str(error), "error")
+    return redirect(url_for("main.startup_command_center"))
+
+
+@bp.post("/admin/startup/business-api-clients/<int:client_id>/keys")
+@owner_required
+def startup_business_key_issue_web(client_id):
+    try:
+        key = issue_business_api_key(
+            g.user,
+            client_id,
+            expires_in_days=request.form.get("expires_in_days", 90),
+        )
+        client = next((item for item in list_business_api_clients(g.user) if int(item["id"]) == int(client_id)), None)
+        return render_template("business_api_key_issued.html", key=key, client=client)
+    except (TypeError, ValueError, LookupError, PermissionError) as error:
+        flash(str(error), "error")
+        return redirect(url_for("main.startup_command_center"))
+
+
+@bp.post("/admin/startup/business-api-keys/<int:key_id>/revoke")
+@owner_required
+def startup_business_key_revoke_web(key_id):
+    try:
+        revoke_business_api_key(g.user, key_id)
+        flash("Business API key revoked.", "success")
+    except (LookupError, PermissionError) as error:
+        flash(str(error), "error")
+    return redirect(url_for("main.startup_command_center"))
+
+
+@bp.post("/admin/startup/finance/entries")
+@owner_required
+def startup_finance_entry_create_web():
+    try:
+        create_financial_entry(g.user, request.form)
+        flash("Financial entry recorded.", "success")
+    except (TypeError, ValueError, PermissionError) as error:
+        flash(str(error), "error")
+    return redirect(url_for("main.startup_command_center"))
+
+
+@bp.post("/admin/startup/finance/snapshot")
+@owner_required
+def startup_finance_snapshot_web():
+    try:
+        create_financial_snapshot(g.user, request.form)
+        flash("Cash snapshot recorded.", "success")
+    except (TypeError, ValueError, PermissionError) as error:
+        flash(str(error), "error")
+    return redirect(url_for("main.startup_command_center"))
+
+
+@bp.get("/admin/startup/pilots/<int:pilot_id>")
+@owner_required
+def startup_pilot_execution(pilot_id):
+    try:
+        execution = pilot_execution_summary(g.user, pilot_id)
+    except LookupError:
+        abort(404)
+    return render_template("pilot_execution.html", execution=execution)
+
+
+@bp.post("/admin/startup/pilots/<int:pilot_id>/milestones")
+@owner_required
+def startup_pilot_milestone_create_web(pilot_id):
+    try:
+        create_pilot_milestone(g.user, pilot_id, request.form)
+        flash("Pilot milestone added.", "success")
+    except (LookupError, ValueError, PermissionError) as error:
+        flash(str(error), "error")
+    return redirect(url_for("main.startup_pilot_execution", pilot_id=pilot_id))
+
+
+@bp.post("/admin/startup/pilot-milestones/<int:milestone_id>")
+@owner_required
+def startup_pilot_milestone_update_web(milestone_id):
+    pilot_id = request.form.get("pilot_id")
+    try:
+        update_pilot_milestone(g.user, milestone_id, request.form)
+        flash("Pilot milestone updated.", "success")
+    except (LookupError, ValueError, PermissionError) as error:
+        flash(str(error), "error")
+    if pilot_id:
+        return redirect(url_for("main.startup_pilot_execution", pilot_id=int(pilot_id)))
+    return redirect(url_for("main.startup_command_center"))
+
+
+@bp.post("/admin/startup/pilots/<int:pilot_id>/usage")
+@owner_required
+def startup_pilot_usage_create_web(pilot_id):
+    try:
+        record_pilot_usage_snapshot(g.user, pilot_id, request.form)
+        flash("Observed pilot usage recorded.", "success")
+    except (LookupError, ValueError, PermissionError) as error:
+        flash(str(error), "error")
+    return redirect(url_for("main.startup_pilot_execution", pilot_id=pilot_id))
+
+
+@bp.post("/admin/startup/pilots")
+@owner_required
+def startup_pilot_create_web():
+    try:
+        create_institution_pilot(g.user, request.form)
+        flash("Institution pilot added.", "success")
+    except (TypeError, ValueError, PermissionError) as error:
+        flash(str(error), "error")
+    return redirect(url_for("main.startup_command_center"))
+
+
+@bp.post("/admin/startup/pilots/<int:pilot_id>")
+@owner_required
+def startup_pilot_update_web(pilot_id):
+    try:
+        update_institution_pilot(g.user, pilot_id, request.form)
+        flash("Institution pilot updated.", "success")
+    except (LookupError, TypeError, ValueError, PermissionError) as error:
+        flash(str(error), "error")
+    return redirect(url_for("main.startup_command_center"))
+
+
+@bp.post("/admin/public-entity-claims/<int:claim_id>/review")
+@owner_required
+def public_entity_claim_review_web(claim_id):
+    try:
+        review_public_entity_claim(
+            g.user,
+            claim_id,
+            status=request.form.get("status"),
+            review_note=request.form.get("review_note"),
+        )
+        flash("Public listing claim review updated.", "success")
+    except (LookupError, ValueError, PermissionError) as error:
+        flash(str(error), "error")
+    return redirect(url_for("main.startup_command_center"))
+
+
 @bp.get("/admin")
 @owner_required
 def admin():
@@ -838,7 +1424,24 @@ def admin():
         """
     ).fetchall()
     audits = db.execute("SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 25").fetchall()
-    return render_template("admin.html", stats=stats_for(g.user), users=users, providers=providers, audits=audits)
+    provider_evidence = db.execute(
+        """
+        SELECT e.*, p.organization, p.provider_type, u.name provider_name, u.email provider_email
+        FROM provider_verification_evidence e
+        JOIN provider_profiles p ON p.id=e.provider_profile_id
+        JOIN users u ON u.id=p.user_id
+        ORDER BY CASE e.status WHEN 'pending' THEN 0 ELSE 1 END, e.created_at DESC
+        LIMIT 50
+        """
+    ).fetchall()
+    return render_template(
+        "admin.html",
+        stats=stats_for(g.user),
+        users=users,
+        providers=providers,
+        audits=audits,
+        provider_evidence=provider_evidence,
+    )
 
 
 @bp.post("/admin/users/<int:user_id>/verify")
@@ -848,6 +1451,21 @@ def verify_user(user_id):
     audit("verify", "user", str(user_id))
     get_db().commit()
     flash("User verified.", "success")
+    return redirect(url_for("main.admin"))
+
+
+@bp.post("/admin/provider-evidence/<int:evidence_id>/review")
+@owner_required
+def provider_evidence_review_web(evidence_id):
+    status = str(request.form.get("status") or "").strip().lower()
+    notes = str(request.form.get("notes") or "").strip()
+    try:
+        review_provider_evidence(g.user, evidence_id, status=status, notes=notes)
+        audit("provider_evidence_review", "provider_verification_evidence", f"{evidence_id}:{status}")
+        get_db().commit()
+        flash("Provider evidence review updated.", "success")
+    except (LookupError, ValueError, PermissionError) as error:
+        flash(str(error), "error")
     return redirect(url_for("main.admin"))
 
 
@@ -903,12 +1521,466 @@ def require_api_user():
         return None, (jsonify({"error": "Unauthorized"}), 401)
     if user["role"] == "admin" and not is_owner(user):
         return None, (jsonify({"error": {"code": 403, "message": "Only the ZENDOC owner may access Admin operations."}}), 403)
+    g.observability_actor = user
     return user, None
+
+
+@bp.post("/api/v1/provider/public-entity-claims")
+def api_provider_public_entity_claim_submit():
+    user, error = require_api_user()
+    if error:
+        return error
+    data = request.get_json(silent=True) or {}
+    try:
+        claim = submit_public_entity_claim(
+            user,
+            public_entity_id=int(data.get("public_entity_id")),
+            claimant_note=data.get("claimant_note"),
+        )
+        return jsonify({"claim": claim}), 201
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+    except LookupError as exc:
+        return jsonify({"error": {"code": 404, "message": str(exc)}}), 404
+    except PermissionError as exc:
+        return jsonify({"error": {"code": 403, "message": str(exc)}}), 403
+
+
+@bp.get("/api/v1/provider/public-entity-claims")
+def api_provider_public_entity_claims_list():
+    user, error = require_api_user()
+    if error:
+        return error
+    return jsonify({"claims": list_my_public_entity_claims(user)})
+
+
+@bp.get("/api/v1/admin/public-entity-claims")
+def api_admin_public_entity_claims_list():
+    user, error = require_api_user()
+    if error:
+        return error
+    if not is_owner(user):
+        return jsonify({"error": {"code": 403, "message": "Owner access required."}}), 403
+    try:
+        claims = list_public_entity_claims(
+            user,
+            status=request.args.get("status"),
+            limit=request.args.get("limit", 100),
+        )
+        return jsonify({"claims": claims})
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+
+
+@bp.post("/api/v1/admin/public-entity-claims/<int:claim_id>/review")
+def api_admin_public_entity_claim_review(claim_id):
+    user, error = require_api_user()
+    if error:
+        return error
+    if not is_owner(user):
+        return jsonify({"error": {"code": 403, "message": "Owner access required."}}), 403
+    data = request.get_json(silent=True) or {}
+    try:
+        claim = review_public_entity_claim(
+            user,
+            claim_id,
+            status=data.get("status"),
+            review_note=data.get("review_note"),
+        )
+        return jsonify({"claim": claim})
+    except LookupError as exc:
+        return jsonify({"error": {"code": 404, "message": str(exc)}}), 404
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+
+
+@bp.get("/api/v1/business/public-directory")
+def api_business_public_directory():
+    raw_key = request.headers.get("X-ZENDOC-Partner-Key", "")
+    try:
+        identity = authenticate_business_api_key(
+            raw_key,
+            required_scope="public_directory.read",
+            endpoint="/api/v1/business/public-directory",
+            method="GET",
+        )
+        category = request.args.get("category")
+        specialty = request.args.get("specialty")
+        location = request.args.get("location")
+        try:
+            limit = int(request.args.get("limit", 25))
+        except (TypeError, ValueError):
+            limit = 25
+        records = search_public_healthcare_entities(
+            category=category,
+            specialty=specialty,
+            location=location,
+            limit=limit,
+        )
+        safe_records = [
+            {
+                "id": item.get("id"),
+                "source_id": item.get("source_id"),
+                "source_record_id": item.get("source_record_id"),
+                "category": item.get("category"),
+                "name": item.get("name"),
+                "specialty": item.get("specialty"),
+                "address": item.get("address"),
+                "city": item.get("city"),
+                "district": item.get("district"),
+                "state": item.get("state"),
+                "postal_code": item.get("postal_code"),
+                "latitude": item.get("latitude"),
+                "longitude": item.get("longitude"),
+                "public_phone": item.get("public_phone"),
+                "public_email": item.get("public_email"),
+                "website": item.get("website"),
+                "source_trust": item.get("source_trust"),
+                "verification_status": item.get("verification_status"),
+                "bookable_in_zendoc": item.get("bookable_in_zendoc"),
+                "freshness_at": item.get("freshness_at"),
+                "source_disclaimer": item.get("source_disclaimer"),
+            }
+            for item in records
+        ]
+        return jsonify({
+            "client_uid": identity["client_uid"],
+            "count": len(safe_records),
+            "results": safe_records,
+            "patient_data_access": False,
+            "truth_notice": (
+                "Public-directory records only. Directory presence does not prove live availability, "
+                "booking connectivity, stock, beds, or ZENDOC verification."
+            ),
+        })
+    except BusinessApiRateLimitError as exc:
+        return jsonify({"error": {"code": 429, "message": str(exc)}}), 429
+    except PermissionError as exc:
+        return jsonify({"error": {"code": 401, "message": str(exc)}}), 401
+
+
+@bp.get("/api/v1/business/providers")
+def api_business_provider_search():
+    raw_key = request.headers.get("X-ZENDOC-Partner-Key", "")
+    try:
+        identity = authenticate_business_api_key(
+            raw_key,
+            required_scope="provider_profile.read",
+            endpoint="/api/v1/business/providers",
+            method="GET",
+        )
+        category = request.args.get("category")
+        specialty = request.args.get("specialty")
+        location = request.args.get("location")
+        results = search_registered_providers(
+            category=category,
+            specialty=specialty,
+            location=location,
+        )
+        safe = [
+            {
+                "id": item.get("id"),
+                "name": item.get("name"),
+                "provider_name": item.get("provider_name"),
+                "category": item.get("category"),
+                "specialty": item.get("specialty"),
+                "address": item.get("address"),
+                "city": item.get("city"),
+                "state": item.get("state"),
+                "postal_code": item.get("postal_code"),
+                "latitude": item.get("latitude"),
+                "longitude": item.get("longitude"),
+                "phone": item.get("phone"),
+                "verification_status": item.get("verification_status"),
+                "source": item.get("source"),
+            }
+            for item in results
+        ]
+        return jsonify({
+            "client_uid": identity["client_uid"],
+            "count": len(safe),
+            "results": safe,
+            "patient_data_access": False,
+            "truth_notice": "Verified ZENDOC provider profiles only. No patient or clinical data is exposed.",
+        })
+    except BusinessApiRateLimitError as exc:
+        return jsonify({"error": {"code": 429, "message": str(exc)}}), 429
+    except PermissionError as exc:
+        return jsonify({"error": {"code": 401, "message": str(exc)}}), 401
+
+
+@bp.post("/api/v1/business/booking-handoffs")
+def api_business_booking_handoff_create():
+    raw_key = request.headers.get("X-ZENDOC-Partner-Key", "")
+    try:
+        identity = authenticate_business_api_key(
+            raw_key,
+            required_scope="booking_handoff.write",
+            endpoint="/api/v1/business/booking-handoffs",
+            method="POST",
+        )
+        data = request.get_json(silent=True) or {}
+        handoff = create_partner_booking_handoff(
+            identity,
+            provider_profile_id=int(data.get("provider_profile_id")),
+            partner_reference=data.get("partner_reference"),
+            requested_for=data.get("requested_for"),
+            contact_reference=data.get("contact_reference"),
+        )
+        return jsonify({"handoff": handoff}), 202
+    except BusinessApiRateLimitError as exc:
+        return jsonify({"error": {"code": 429, "message": str(exc)}}), 429
+    except LookupError as exc:
+        return jsonify({"error": {"code": 404, "message": str(exc)}}), 404
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+    except PermissionError as exc:
+        return jsonify({"error": {"code": 401, "message": str(exc)}}), 401
+
+
+@bp.get("/api/v1/business/booking-handoffs")
+def api_business_booking_handoffs_list():
+    raw_key = request.headers.get("X-ZENDOC-Partner-Key", "")
+    try:
+        identity = authenticate_business_api_key(
+            raw_key,
+            required_scope="booking_handoff.write",
+            endpoint="/api/v1/business/booking-handoffs",
+            method="GET",
+        )
+        return jsonify({"handoffs": list_partner_booking_handoffs(identity, limit=request.args.get("limit", 100))})
+    except BusinessApiRateLimitError as exc:
+        return jsonify({"error": {"code": 429, "message": str(exc)}}), 429
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+    except PermissionError as exc:
+        return jsonify({"error": {"code": 401, "message": str(exc)}}), 401
+
+
+@bp.get("/api/v1/business/booking-handoffs/<int:handoff_id>")
+def api_business_booking_handoff_get(handoff_id):
+    raw_key = request.headers.get("X-ZENDOC-Partner-Key", "")
+    try:
+        identity = authenticate_business_api_key(
+            raw_key,
+            required_scope="booking_handoff.write",
+            endpoint=f"/api/v1/business/booking-handoffs/{handoff_id}",
+            method="GET",
+        )
+        return jsonify({"handoff": get_partner_booking_handoff(identity, handoff_id)})
+    except BusinessApiRateLimitError as exc:
+        return jsonify({"error": {"code": 429, "message": str(exc)}}), 429
+    except LookupError as exc:
+        return jsonify({"error": {"code": 404, "message": str(exc)}}), 404
+    except PermissionError as exc:
+        return jsonify({"error": {"code": 401, "message": str(exc)}}), 401
+
+
+@bp.get("/api/v1/business/integration-status")
+def api_business_integration_status():
+    raw_key = request.headers.get("X-ZENDOC-Partner-Key", "")
+    try:
+        identity = authenticate_business_api_key(
+            raw_key,
+            endpoint="/api/v1/business/integration-status",
+            method="GET",
+        )
+        return jsonify({"integration": business_api_integration_status(identity)})
+    except BusinessApiRateLimitError as exc:
+        return jsonify({"error": {"code": 429, "message": str(exc)}}), 429
+    except PermissionError as exc:
+        return jsonify({"error": {"code": 401, "message": str(exc)}}), 401
+
+
+@bp.get("/api/v1/business/usage")
+def api_business_usage():
+    raw_key = request.headers.get("X-ZENDOC-Partner-Key", "")
+    try:
+        identity = authenticate_business_api_key(
+            raw_key,
+            endpoint="/api/v1/business/usage",
+            method="GET",
+        )
+        try:
+            days = int(request.args.get("days", 30))
+        except (TypeError, ValueError):
+            days = 30
+        return jsonify({"usage": business_api_self_usage(identity, days=days)})
+    except BusinessApiRateLimitError as exc:
+        return jsonify({"error": {"code": 429, "message": str(exc)}}), 429
+    except PermissionError as exc:
+        return jsonify({"error": {"code": 401, "message": str(exc)}}), 401
+
+
+@bp.get("/api/v1/business/providers/<int:profile_id>")
+def api_business_provider_profile(profile_id):
+    raw_key = request.headers.get("X-ZENDOC-Partner-Key", "")
+    try:
+        identity = authenticate_business_api_key(
+            raw_key,
+            required_scope="provider_profile.read",
+            endpoint=f"/api/v1/business/providers/{profile_id}",
+            method="GET",
+        )
+        profile = get_public_provider_profile(profile_id)
+        if not profile:
+            return jsonify({"error": {"code": 404, "message": "Verified public provider not found."}}), 404
+        return jsonify({
+            "client_uid": identity["client_uid"],
+            "provider": {
+                "id": profile["id"],
+                "provider_type": profile["provider_type"],
+                "provider_name": profile["provider_name"],
+                "organization": profile["organization"],
+                "specialty": profile["specialty"],
+                "qualifications": profile["qualifications"],
+                "city": profile["city"],
+                "state": profile["state"],
+                "postal_code": profile["postal_code"],
+                "public_phone": profile["public_phone"],
+                "verification_status": profile["verification_status"],
+            },
+            "patient_data_access": False,
+            "truth_notice": "Verified public provider profile only. No patient or clinical data is exposed.",
+        })
+    except BusinessApiRateLimitError as exc:
+        return jsonify({"error": {"code": 429, "message": str(exc)}}), 429
+    except PermissionError as exc:
+        return jsonify({"error": {"code": 401, "message": str(exc)}}), 401
+
+
+@bp.get("/api/v1/business/pilot")
+def api_business_linked_pilot():
+    raw_key = request.headers.get("X-ZENDOC-Partner-Key", "")
+    try:
+        identity = authenticate_business_api_key(
+            raw_key,
+            required_scope="pilot_metrics.read",
+            endpoint="/api/v1/business/pilot",
+            method="GET",
+        )
+        if identity["pilot_id"] is None:
+            return jsonify({"error": {"code": 404, "message": "No institution pilot is linked to this API client."}}), 404
+        pilot = get_db().execute(
+            """
+            SELECT id,pilot_uid,organization_name,organization_type,state,district,status,commercial_status,
+                   start_date,end_date,target_users,target_provider_seats,success_metrics_json,next_action,
+                   next_action_due,updated_at
+            FROM institution_pilots
+            WHERE id=?
+            """,
+            (int(identity["pilot_id"]),),
+        ).fetchone()
+        if not pilot:
+            return jsonify({"error": {"code": 404, "message": "Linked institution pilot not found."}}), 404
+        import json as _json
+        result = dict(pilot)
+        try:
+            result["success_metrics"] = _json.loads(result.pop("success_metrics_json") or "[]")
+        except (TypeError, ValueError):
+            result["success_metrics"] = []
+        return jsonify({
+            "client_uid": identity["client_uid"],
+            "pilot": result,
+            "patient_data_access": False,
+            "truth_notice": (
+                "This API client can read only the institution pilot explicitly linked to its own client record. "
+                "It cannot enumerate or access other organizations' pilots."
+            ),
+        })
+    except BusinessApiRateLimitError as exc:
+        return jsonify({"error": {"code": 429, "message": str(exc)}}), 429
+    except PermissionError as exc:
+        return jsonify({"error": {"code": 401, "message": str(exc)}}), 401
+
+
+@bp.get("/api/v1/business/providers/<int:profile_id>/availability")
+def api_business_provider_availability(profile_id):
+    raw_key = request.headers.get("X-ZENDOC-Partner-Key", "")
+    try:
+        identity = authenticate_business_api_key(
+            raw_key,
+            required_scope="provider_availability.read",
+            endpoint=f"/api/v1/business/providers/{profile_id}/availability",
+            method="GET",
+        )
+        profile = get_public_provider_profile(profile_id)
+        if not profile:
+            return jsonify({"error": {"code": 404, "message": "Verified public provider not found."}}), 404
+        date_text = str(request.args.get("date") or "").strip()
+        if not date_text:
+            return jsonify({"error": {"code": 400, "message": "date is required in YYYY-MM-DD format."}}), 400
+        slots = available_slots(profile_id, date_text)
+        return jsonify({
+            "client_uid": identity["client_uid"],
+            "provider": {
+                "id": profile["id"],
+                "provider_type": profile["provider_type"],
+                "provider_name": profile["provider_name"],
+                "organization": profile["organization"],
+                "specialty": profile["specialty"],
+                "city": profile["city"],
+                "state": profile["state"],
+                "postal_code": profile["postal_code"],
+                "public_phone": profile["public_phone"],
+                "verification_status": profile["verification_status"],
+            },
+            "date": date_text,
+            "available_slots": slots,
+            "patient_data_access": False,
+            "truth_notice": (
+                "Slots are derived from ZENDOC-connected provider schedules and current ZENDOC bookings. "
+                "This does not expose patient identity or clinical information."
+            ),
+        })
+    except BusinessApiRateLimitError as exc:
+        return jsonify({"error": {"code": 429, "message": str(exc)}}), 429
+    except PermissionError as exc:
+        return jsonify({"error": {"code": 401, "message": str(exc)}}), 401
+
+
+@bp.get("/api/v1/business/ping")
+def api_business_ping():
+    raw_key = request.headers.get("X-ZENDOC-Partner-Key", "")
+    try:
+        identity = authenticate_business_api_key(
+            raw_key,
+            endpoint="/api/v1/business/ping",
+            method="GET",
+        )
+        return jsonify({
+            "status": "ok",
+            "client": {
+                "client_uid": identity["client_uid"],
+                "client_name": identity["client_name"],
+                "client_type": identity["client_type"],
+                "scopes": identity["scopes"],
+            },
+            "patient_data_access": False,
+            "truth_notice": "This endpoint proves partner authentication only. It exposes no patient or clinical data.",
+        })
+    except BusinessApiRateLimitError as exc:
+        return jsonify({"error": {"code": 429, "message": str(exc)}}), 429
+    except PermissionError as exc:
+        return jsonify({"error": {"code": 401, "message": str(exc)}}), 401
 
 
 @bp.get("/api/v1/health")
 def api_health():
-    return jsonify({"status": "ok", "service": "zendoc", "time": now_iso()})
+    # Liveness only: process is alive. Do not imply database readiness here.
+    return jsonify({"status": "ok", "service": "zendoc", "time": now_iso(), "check": "liveness"})
+
+
+@bp.get("/api/v1/ready")
+def api_ready():
+    report = readiness_report()
+    return jsonify(report), (200 if report.get("status") == "ready" else 503)
+
+
+@bp.get("/api/v1/readiness")
+def api_readiness_alias():
+    report = readiness_report()
+    return jsonify(report), (200 if report.get("status") == "ready" else 503)
 
 
 @bp.post("/api/v1/auth/register")
@@ -930,7 +2002,7 @@ def api_register():
         return jsonify({"error": "Password must be at least 8 characters"}), 400
     try:
         now = now_iso()
-        get_db().execute(
+        cursor = get_db().execute(
             """
             INSERT INTO users (name,email,email_normalized,password_hash,role,phone,age,city,created_at,updated_at)
             VALUES (?,?,?,?,?,?,?,?,?,?)
@@ -948,6 +2020,8 @@ def api_register():
                 now,
             ),
         )
+        created_user = get_db().execute("SELECT * FROM users WHERE id=?", (int(cursor.lastrowid),)).fetchone()
+        record_product_activity(created_user, event_type="account_registered")
         get_db().commit()
         return jsonify({"status": "created"}), 201
     except Exception as error:
@@ -980,6 +2054,7 @@ def api_login():
         "INSERT INTO api_tokens (user_id,token_hash,token_type,created_at) VALUES (?,?,'access',?)",
         (user["id"], hash_token(token), now_iso()),
     )
+    record_product_activity(user, event_type="session_login")
     get_db().commit()
     return jsonify({"token": token, "user": {"id": user["id"], "name": user["name"], "role": user["role"]}})
 
@@ -1064,8 +2139,8 @@ def api_appointments():
     if error:
         return error
     rows = get_db().execute(
-        "SELECT * FROM appointments WHERE patient_id=? OR provider_id=? OR ?='admin' ORDER BY scheduled_for DESC",
-        (user["id"], user["id"], user["role"]),
+        "SELECT * FROM appointments WHERE patient_id=? OR provider_id=? OR ?=1 ORDER BY scheduled_for DESC",
+        (user["id"], user["id"], 1 if is_owner(user) else 0),
     ).fetchall()
     return jsonify({"appointments": [dict(row) for row in rows]})
 
@@ -1075,6 +2150,8 @@ def api_create_appointment():
     user, error = require_api_user()
     if error:
         return error
+    if user["role"] != "patient":
+        return jsonify({"error": {"code": 403, "message": "Only patient accounts may create appointments."}}), 403
     data = request.get_json(silent=True) or {}
     if data.get("provider_profile_id"):
         validation_error = require_json_fields(data, "provider_profile_id", "scheduled_for", "reason")
@@ -1082,6 +2159,7 @@ def api_create_appointment():
             return validation_error
         try:
             book_provider_slot(user, int(data["provider_profile_id"]), data["scheduled_for"], data["reason"])
+            record_product_activity(user, event_type="appointment_requested")
             get_db().commit()
             return jsonify({"status": "created"}), 201
         except PermissionError as error:
@@ -1098,6 +2176,7 @@ def api_create_appointment():
         """,
         (user["id"], data.get("provider_name", "Provider"), data.get("scheduled_for"), data.get("reason", ""), now_iso(), now_iso()),
     )
+    record_product_activity(user, event_type="appointment_requested")
     get_db().commit()
     return jsonify({"status": "created"}), 201
 
@@ -1115,7 +2194,16 @@ def api_healthcare_search():
         request.args.get("longitude"),
         request.args.get("radius_km", 10),
     )
-    return jsonify(HealthcareFinder().search(query))
+    result = HealthcareFinder().search(query)
+    record_finder_search(
+        user,
+        category=query["category"],
+        location=query["location"],
+        result_count=len(result.get("results") or []),
+        source_tiers=result.get("source_tiers") or {},
+    )
+    get_db().commit()
+    return jsonify(result)
 
 
 @bp.get("/api/v1/providers")
@@ -1131,7 +2219,13 @@ def api_provider_slots(profile_id):
     user, error = require_api_user()
     if error:
         return error
+    profile = get_public_provider_profile(profile_id)
+    if not profile:
+        return jsonify({"error": {"code": 404, "message": "Verified provider profile not found"}}), 404
     date_text = request.args.get("date", "")
+    if user["role"] == "patient":
+        record_product_activity(user, event_type="provider_view")
+        get_db().commit()
     return jsonify({"provider_profile_id": profile_id, "date": date_text, "slots": available_slots(profile_id, date_text)})
 
 

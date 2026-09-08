@@ -7,8 +7,9 @@ URL prefix: /connected-care  (pages)
 
 Architecture invariants enforced here:
   1. Zero autonomous consequential actions — AI stages, user explicitly confirms.
-  2. Clinical boundary — AI never prescribes; prescription creation blocked for
-     agent roles, only doctors / patients with warning.
+  2. Clinical boundary — AI never prescribes; patients may only record
+     user-reported prescription information, while doctor-created records are
+     provider-recorded and bound to the authenticated doctor identity.
   3. Inventory truth — UNKNOWN inventory never shown as available.
   4. All state-changing API endpoints are CSRF-protected via require_api_user().
 """
@@ -32,6 +33,8 @@ from flask import (
 )
 
 from .care_graph import get_patient_care_graph, record_care_continuity_event
+from .carefin_engine import discover_benefits
+from .care_journey_store import create_persisted_journey, list_patient_journeys, advance_persisted_journey
 from .context_engine import (
     build_minimum_context_bundle,
     create_or_update_consent_grant,
@@ -42,14 +45,22 @@ from .context_engine import (
 from .db import get_db, now_iso
 from .diagnostic_service import (
     book_diagnostic_test,
+    list_diagnostic_refresh_queue,
+    reconfirm_diagnostic_offer,
     search_lab_offers,
+    upsert_diagnostic_offer,
 )
 from .fulfilment_optimizer import optimize_prescription_fulfilment
 from .health_memory_continuity import (
     determine_next_safe_actions,
     get_health_memory_provenance_summary,
 )
-from .inventory_service import search_pharmacy_offers, update_inventory_observation
+from .inventory_service import (
+    list_inventory_refresh_queue,
+    reconfirm_inventory_observation,
+    search_pharmacy_offers,
+    update_inventory_observation,
+)
 from .order_service import (
     get_order_details,
     submit_order_from_plan,
@@ -58,6 +69,7 @@ from .prescription_service import (
     create_prescription,
     get_prescription,
     is_autonomous_prescription_request,
+    transition_prescription_status,
 )
 from .family_care import revoke_family_access_grant
 from .orchestrator import HealthcareOrchestrator
@@ -200,6 +212,99 @@ def connected_care_home():
         data_mode=data_mode,
         demo_mode=data_mode == "DEMO",
     )
+
+
+@bp.route("/connected-care/carefin", methods=("GET", "POST"))
+def carefin_page():
+    uid = _current_user_id()
+    if not uid:
+        return redirect(url_for("main.login", role="patient"))
+    db = get_db()
+    user = dict(db.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone() or abort(401))
+    result = None
+    form_data = {
+        "state": request.values.get("state", ""),
+        "district": request.values.get("district", user.get("city") or ""),
+        "age": request.values.get("age", user.get("age") or ""),
+        "occupation": request.values.get("occupation", ""),
+        "income_band": request.values.get("income_band", ""),
+        "existing_insurer": request.values.get("existing_insurer", ""),
+        "needs_charitable_support": request.values.get("needs_charitable_support") == "yes",
+    }
+    if request.method == "POST":
+        result = discover_benefits({
+            "geography": form_data["state"] or "INDIA",
+            "state": form_data["state"],
+            "district": form_data["district"],
+            "age": form_data["age"],
+            "occupation": form_data["occupation"],
+            "income_band": form_data["income_band"],
+            "existing_insurer": form_data["existing_insurer"],
+            "needs_charitable_support": form_data["needs_charitable_support"],
+            "desired_categories": [
+                "government_scheme",
+                "government_health_assurance",
+                "state_health_scheme",
+                "charitable_support",
+                "csr",
+                "life_insurance",
+            ],
+        })
+        audit("carefin.discovery", "carefin", str(uid), user)
+        db.commit()
+    return render_template("carefin.html", user=user, result=result, form_data=form_data)
+
+
+@bp.get("/connected-care/journey")
+def care_journey_page():
+    uid = _current_user_id()
+    if not uid:
+        return redirect(url_for("main.login", role="patient"))
+    db = get_db()
+    user = dict(db.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone() or abort(401))
+    journeys = list_patient_journeys(user, patient_id=uid, limit=25)
+    return render_template("care_journey.html", user=user, journeys=journeys)
+
+
+@bp.post("/connected-care/journey/create")
+def care_journey_create_page():
+    uid = _current_user_id()
+    if not uid:
+        return redirect(url_for("main.login", role="patient"))
+    db = get_db()
+    user = dict(db.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone() or abort(401))
+    journey = create_persisted_journey(
+        user,
+        patient_id=uid,
+        provenance={"source": "patient_web", "goal": str(request.form.get("goal") or "general_care")[:200]},
+    )
+    audit("care_journey.create", "care_journey", str(journey["id"]), user)
+    db.commit()
+    return redirect(url_for("connected_care.care_journey_page"))
+
+
+@bp.post("/connected-care/journey/<int:journey_id>/transition")
+def care_journey_transition_page(journey_id):
+    uid = _current_user_id()
+    if not uid:
+        return redirect(url_for("main.login", role="patient"))
+    db = get_db()
+    user = dict(db.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone() or abort(401))
+    try:
+        advance_persisted_journey(
+            user,
+            journey_id,
+            target_state=str(request.form.get("target_state") or "").strip(),
+            reason=str(request.form.get("reason") or "").strip(),
+            actor_type="user",
+            required_actor=str(request.form.get("required_actor") or "").strip() or None,
+            required_consent=str(request.form.get("required_consent") or "").strip() or None,
+        )
+        audit("care_journey.transition", "care_journey", str(journey_id), user)
+        db.commit()
+    except (LookupError, PermissionError, ValueError) as exc:
+        current_app.logger.info("Care journey transition rejected: %s", exc)
+    return redirect(url_for("connected_care.care_journey_page"))
 
 
 @bp.get("/connected-care/prescriptions")
@@ -442,7 +547,7 @@ def api_pharmacy_offers():
 @bp.post("/api/v1/connected-care/fulfilment")
 def api_optimize_fulfilment():
     """Stage a multi-pharmacy fulfilment plan. Does NOT place an order."""
-    user, err = _api_user()
+    user, err = _api_user(mutation=True)
     if err:
         return err
     try:
@@ -476,7 +581,7 @@ def api_confirm_order():
     REQUIRES explicit user confirmation (user_confirmed=True in body).
     This is the only route that places orders — all others are read/stage only.
     """
-    user, err = _api_user()
+    user, err = _api_user(mutation=True)
     if err:
         return err
     try:
@@ -511,21 +616,50 @@ def api_confirm_order():
 
 @bp.post("/api/v1/connected-care/prescriptions")
 def api_create_prescription():
-    user, err = _api_user()
+    user, err = _api_user(mutation=True)
     if err:
         return err
     try:
         body = request.get_json(force=True) or {}
         patient_id = int(body.get("patient_id") or user["id"])
         _get_patient_id(user, {"patient_id": patient_id, "purpose": "prescriptions"})
-        # Prescriptions are only created from doctor uploads / record extraction, not AI autonomy
-        prescriber_name = str(body.get("prescriber_name") or "Unknown Prescriber")
+
+        # Preserve clinical provenance instead of trusting client-supplied
+        # prescriber identity. Patients can record an existing prescription as
+        # USER_REPORTED data; authenticated doctors create PROVIDER_RECORDED
+        # entries bound to their own account. The owner may support document
+        # ingestion, but cannot impersonate a doctor through request fields.
+        role = str(user.get("role") or "").lower()
+        if role not in {"patient", "doctor", "admin"}:
+            return _api_error(
+                PermissionError("Only patients, doctors, or the ZENDOC owner may record prescription information."),
+                403,
+            )
+
+        prescriber_name = str(body.get("prescriber_name") or "").strip()
+        if role == "doctor":
+            prescriber_id = int(user["id"])
+            prescriber_name = str(user.get("name") or prescriber_name).strip()
+            source = "PROVIDER_RECORDED"
+        elif role == "patient":
+            if patient_id != int(user["id"]):
+                return _api_error(
+                    PermissionError("Patients may only record prescription information for their own account."),
+                    403,
+                )
+            prescriber_id = None
+            source = "USER_REPORTED"
+        else:
+            prescriber_id = None
+            source = "DOCUMENT_EXTRACTED"
+
         prescription = create_prescription(
             patient_id=patient_id,
             prescriber_name=prescriber_name,
             items=body.get("items", []),
-            prescriber_id=body.get("prescribing_doctor_id"),
+            prescriber_id=prescriber_id,
             diagnosis_notes=body.get("notes", ""),
+            source=source,
         )
         audit("connected_care.prescription.create", "prescription", prescription.get("id"), user)
         return jsonify({"prescription": prescription}), 201
@@ -557,14 +691,41 @@ def api_list_prescriptions():
         return _api_error(e)
 
 
+@bp.post("/api/v1/connected-care/prescriptions/<int:prescription_id>/status")
+def api_update_prescription_status(prescription_id):
+    user, err = _api_user(mutation=True)
+    if err:
+        return err
+    body = request.get_json(silent=True) or {}
+    try:
+        prescription = transition_prescription_status(
+            prescription_id=prescription_id,
+            actor=user,
+            new_status=body.get("status"),
+        )
+        audit(
+            "connected_care.prescription.status",
+            "prescriptions",
+            prescription_id,
+            user,
+        )
+        return jsonify({"prescription": prescription})
+    except PermissionError as e:
+        return _api_error(e, 403)
+    except LookupError as e:
+        return _api_error(e, 404)
+    except ValueError as e:
+        return _api_error(e, 409)
+
+
 @bp.post("/api/v1/connected-care/inventory")
 def api_update_inventory():
     """Pharmacy-only: report current inventory observation for a SKU."""
-    user, err = _api_user()
+    user, err = _api_user(mutation=True)
     if err:
         return err
-    if user.get("role") not in ("pharmacy", "admin"):
-        return _api_error(PermissionError("Only pharmacy accounts may update inventory."), 403)
+    if user.get("role") != "pharmacy":
+        return _api_error(PermissionError("Only the authenticated pharmacy may update its own inventory."), 403)
     try:
         body = request.get_json(force=True) or {}
         quantity = int(body.get("quantity") or body.get("quantity_available", 0))
@@ -584,6 +745,43 @@ def api_update_inventory():
         return _api_error(ValueError(f"Invalid request: {e}"), 400)
     except Exception as e:
         return _api_error(e)
+
+
+@bp.get("/api/v1/connected-care/provider/inventory-refresh")
+def api_inventory_refresh_queue():
+    user, err = _api_user()
+    if err:
+        return err
+    try:
+        queue = list_inventory_refresh_queue(user, data_mode=request.args.get("data_mode"))
+        return jsonify({"refresh_queue": queue})
+    except PermissionError as e:
+        return _api_error(e, 403)
+    except ValueError as e:
+        return _api_error(e, 400)
+
+
+@bp.post("/api/v1/connected-care/provider/inventory/<int:observation_id>/reconfirm")
+def api_inventory_reconfirm(observation_id):
+    user, err = _api_user(mutation=True)
+    if err:
+        return err
+    body = request.get_json(silent=True) or {}
+    try:
+        observation = reconfirm_inventory_observation(
+            user,
+            observation_id,
+            confirmed_unchanged=body.get("confirmed_unchanged") is True,
+        )
+        audit("connected_care.inventory.reconfirm", "inventory_observations", observation_id, user)
+        get_db().commit()
+        return jsonify({"observation": observation})
+    except PermissionError as e:
+        return _api_error(e, 403)
+    except LookupError as e:
+        return _api_error(e, 404)
+    except ValueError as e:
+        return _api_error(e, 400)
 
 
 @bp.get("/api/v1/connected-care/next-safe-actions")
@@ -608,7 +806,7 @@ def api_next_safe_actions():
 
 @bp.post("/api/v1/connected-care/consent")
 def api_create_consent():
-    user, err = _api_user()
+    user, err = _api_user(mutation=True)
     if err:
         return err
     try:
@@ -643,28 +841,102 @@ def api_revoke_consent(grant_id):
         return _api_error(e)
 
 
+@bp.post("/api/v1/connected-care/diagnostic-offers")
+def api_upsert_diagnostic_offer():
+    user, err = _api_user(mutation=True)
+    if err:
+        return err
+    try:
+        body = request.get_json(force=True) or {}
+        offer = upsert_diagnostic_offer(
+            actor=user,
+            test_id=int(body.get("test_id") or 0),
+            price_inr=body.get("price_inr"),
+            home_collection_available=bool(body.get("home_collection_available", True)),
+            home_collection_fee_inr=body.get("home_collection_fee_inr", 0),
+            data_mode=body.get("data_mode"),
+        )
+        audit("connected_care.diagnostic_offer.upsert", "diagnostic_offers", offer.get("id"), user)
+        return jsonify({"offer": offer}), 201
+    except PermissionError as e:
+        return _api_error(e, 403)
+    except LookupError as e:
+        return _api_error(e, 404)
+    except (TypeError, ValueError) as e:
+        return _api_error(e, 400)
+
+
+@bp.get("/api/v1/connected-care/provider/diagnostic-refresh")
+def api_diagnostic_refresh_queue():
+    user, err = _api_user()
+    if err:
+        return err
+    try:
+        queue = list_diagnostic_refresh_queue(user, data_mode=request.args.get("data_mode"))
+        return jsonify({"refresh_queue": queue})
+    except PermissionError as e:
+        return _api_error(e, 403)
+    except ValueError as e:
+        return _api_error(e, 400)
+
+
+@bp.post("/api/v1/connected-care/provider/diagnostic-offers/<int:offer_id>/reconfirm")
+def api_diagnostic_offer_reconfirm(offer_id):
+    user, err = _api_user(mutation=True)
+    if err:
+        return err
+    body = request.get_json(silent=True) or {}
+    try:
+        offer = reconfirm_diagnostic_offer(
+            user,
+            offer_id,
+            confirmed_unchanged=body.get("confirmed_unchanged") is True,
+        )
+        audit("connected_care.diagnostic_offer.reconfirm", "diagnostic_offers", offer_id, user)
+        get_db().commit()
+        return jsonify({"offer": offer})
+    except PermissionError as e:
+        return _api_error(e, 403)
+    except LookupError as e:
+        return _api_error(e, 404)
+    except ValueError as e:
+        return _api_error(e, 400)
+
+
 @bp.post("/api/v1/connected-care/diagnostics/book")
 def api_book_diagnostic():
-    user, err = _api_user()
+    user, err = _api_user(mutation=True)
     if err:
         return err
     try:
         body = request.get_json(force=True) or {}
         patient_id = int(body.get("patient_id") or user["id"])
         _get_patient_id(user, {"patient_id": patient_id, "purpose": "diagnostics"})
-        test_id = int(body.get("test_id") or body.get("offer_id", 0))
+        if body.get("user_confirmed") is not True:
+            raise ValueError("Explicit user confirmation is required before requesting a diagnostic booking.")
+        test_id = int(body.get("test_id") or 0)
         lab_id = body.get("lab_id")
-        scheduled_date = str(body.get("scheduled_date") or body.get("scheduled_at") or now_iso()[:10])
-        address = str(body.get("address") or user.get("city") or "Patient Address")
+        if not test_id:
+            raise ValueError("test_id is required.")
+        if not lab_id:
+            raise ValueError("lab_id for a verified provider offer is required.")
+        scheduled_date = str(body.get("scheduled_date") or body.get("scheduled_at") or "").strip()
+        if not scheduled_date:
+            raise ValueError("scheduled_date is required.")
+        address = str(body.get("address") or "").strip()
+        if not address:
+            raise ValueError("A concrete collection address is required.")
+        slot_time = str(body.get("slot_time") or "").strip() or None
         booking = book_diagnostic_test(
             actor=user,
             patient_id=patient_id,
             test_id=test_id,
-            lab_id=int(lab_id) if lab_id else None,
+            lab_id=int(lab_id),
             scheduled_date=scheduled_date,
             address=address,
             collection_type=str(body.get("collection_type", "home_collection")),
-            slot_time=str(body.get("slot_time", "08:00 - 10:00")),
+            slot_time=slot_time,
+            user_confirmed=True,
         )
         audit("connected_care.diagnostic.book", "diagnostic_bookings", booking.get("id"), user)
         return jsonify({"booking": booking}), 201
@@ -808,7 +1080,7 @@ def api_trust_center_revoke():
 
 @bp.post("/api/v1/connected-care/orchestrate")
 def api_orchestrate():
-    user, err = _api_user()
+    user, err = _api_user(mutation=True)
     if err:
         return err
     try:

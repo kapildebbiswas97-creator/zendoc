@@ -71,17 +71,17 @@ Complete in this codebase: security and authentication hardening, central AI saf
 - Add restart/data/role persistence, legacy migration, configuration, security, and demo-route verification.
 - Keep external tester readiness blocked until production persistence is configured and manually redeploy-verified.
 
-## Selection Beta Hardening — COMPLETE (post-M8.3, pre-M9)
+## Historical Pre-Launch Hardening — COMPLETE (post-M8.3)
 
-Final pre-selection release-hardening phase. No new features. Scope: fix P0/P1 issues, verify all critical journeys, classify features truthfully.
+Historical release-hardening phase completed before the startup-product transition. Scope: fix P0/P1 issues, verify critical journeys, and classify features truthfully.
 
 - **AUD-01 (FIXED)**: CSRF tokens added to 18 POST forms across 10 templates. Re-scan: 0 forms missing protection.
 - **AUD-02 (FIXED)**: Missing `get_db().commit()` in `create_measurement()` — IoT measurements now persist correctly.
 - **AUD-03/04 (CONFIRMED)**: Ambulance endpoint and doctor status values confirmed; `docs/API.md` verified accurate.
 - **Tests**: 10-suite functional E2E regression added to `tests/test_final_release_hardening.py`. Full suite: **192 passed** in 206.76 seconds.
 - **Docs**: `docs/FEATURE_TRUTH_MATRIX.md`, `docs/FINAL_RELEASE_AUDIT.md`, `docs/EXTERNAL_BETA_CHECKLIST.md`, `docs/SELECTION_DEMO_RUNBOOK.md` produced.
-- **Persistence**: Intentionally not configured for production before selection round. Disclosed truthfully. Does not block Selection Beta.
-- **Launch recommendation**: SELECTION BETA READY — PERSISTENCE LIMITATION DISCLOSED.
+- **Persistence**: Historical limitation at that checkpoint; later production work added managed PostgreSQL readiness and production persistence paths.
+- **Historical recommendation**: This checkpoint is retained only as engineering history and is no longer the current product positioning.
 
 ## Milestone 9: Mental Wellness
 
@@ -115,3 +115,115 @@ Final pre-selection release-hardening phase. No new features. Scope: fix P0/P1 i
 - Data retention and deletion policy.
 - Security review and threat modeling.
 - Region-specific HIPAA/GDPR/DPDP alignment.
+
+
+## Startup Scale Roadmap
+
+### Stage A — Production Pilot Foundation
+
+- Keep Production Gate fully green.
+- Maintain PostgreSQL production readiness and migration safety.
+- Complete India-wide LGD geography ingestion architecture.
+- Measure imported coverage separately from supported architecture.
+- Add canonical geography resolution for public healthcare facilities.
+- Maintain strict authorization, IDOR, audit privacy, emergency precedence, and truth-state invariants.
+- Add product analytics that do not leak private clinical content.
+
+### Stage B — India-Wide Healthcare Data Layer
+
+Coverage target:
+India -> State/UT -> District -> Sub-district/Tehsil -> Block -> Village/Town/Locality -> Healthcare entities.
+
+- All 28 States and 8 Union Territories are first-class targets.
+- Nadia and Dibrugarh remain validation-first geographies only.
+- Import official LGD geography for every State/UT.
+- Add national provider/facility sources.
+- Add state-specific sources where national data is incomplete.
+- Track source freshness, mapping confidence, unresolved records, duplicate conflicts, and stale entities.
+- Never infer live operational data from directory presence.
+
+### Stage C — User Utility and Retention
+
+- Make healthcare discovery location-aware and trustworthy.
+- Improve search-to-useful-result rate.
+- Add saved care locations and family-oriented discovery.
+- Connect longitudinal health context to next-safe-actions.
+- Reduce repeated form filling while preserving consent and authorization.
+- Add follow-up workflows after appointments, reports, prescriptions, and diagnostic events.
+- Build referral loops based on genuine usefulness rather than artificial growth prompts.
+
+### Stage D — Provider and Institution Network
+
+- Self-service provider/institution onboarding.
+- Verification workflow.
+- Organization locations.
+- Schedules and availability integrations.
+- Secure authorized record access.
+- Messaging/follow-up.
+- Diagnostics/pharmacy/hospital operational connectors.
+- Provider analytics with privacy boundaries.
+- Institution SaaS plans.
+
+### Stage E — Revenue Readiness
+
+- Define pricing experiments.
+- Provider SaaS.
+- Institution SaaS.
+- Enterprise care-navigation pilots.
+- Marketplace/integration fees only where transparent and appropriate.
+- Track contribution margin by workflow.
+- Avoid monetization that changes emergency, safety, trust, or clinical relevance ranking.
+
+### Stage F — Investor Readiness
+
+- Real early users.
+- D7/D30 retention.
+- Useful-result rate.
+- Completed care journeys.
+- Provider/institution pilot pipeline.
+- Data coverage metrics.
+- Security/privacy evidence.
+- 18-24 month financial model.
+- Fundraising data room.
+- Specific use-of-funds plan.
+
+### Stage G — India Scale
+
+- Expand user and provider operations across all States/UTs.
+- Add local-language UX and support progressively.
+- Add source-specific refresh jobs.
+- Add source-health monitoring and stale-data alerts.
+- Add regional operations playbooks.
+- Establish clinical-governance and regulatory processes appropriate to scale.
+
+### Stage H — International Architecture
+
+Do not clone India-specific assumptions into new countries.
+
+Create a reusable country adapter:
+- country identity;
+- administrative hierarchy;
+- provider/facility registry adapters;
+- accreditation/licensing sources;
+- local privacy/regulatory requirements;
+- emergency-service boundaries;
+- terminology/localization;
+- country-specific integration status.
+
+International expansion should occur market-by-market after India proves repeatable product value.
+
+## Startup Success Criteria
+
+ZENDOC should be judged by:
+- user trust;
+- repeat usage;
+- useful healthcare journeys;
+- data quality;
+- provider participation;
+- safe workflow completion;
+- retention;
+- revenue quality;
+- operating reliability;
+- expansion repeatability.
+
+Hackathon selection, awards, demo views, and pitch scores may help distribution but are not core success metrics.

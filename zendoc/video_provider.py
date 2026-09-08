@@ -29,7 +29,7 @@ _CACHE_LOCK = Lock()
 
 
 def _cache_key(query, max_results):
-    return hashlib.md5(f"{query}:{max_results}".encode()).hexdigest()
+    return hashlib.sha256(f"{query}:{max_results}".encode()).hexdigest()
 
 
 def _cache_get(key):

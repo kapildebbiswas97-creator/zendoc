@@ -13,7 +13,6 @@ STATUS_WORKING              = "WORKING"
 STATUS_BETA                 = "BETA"
 STATUS_INTEGRATION_REQUIRED = "INTEGRATION_REQUIRED"
 STATUS_DISABLED             = "DISABLED"
-STATUS_PROTOTYPE            = "PROTOTYPE"
 STATUS_FUTURE               = "FUTURE"
 
 
@@ -57,7 +56,8 @@ def get_capability_registry() -> dict:
         and _env("ZENDOC_AI_MODEL")
         and (_env("ZENDOC_AI_BASE_URL") or _env("ZENDOC_AI_PROVIDER") == "openai")
     )
-    places = _env("ZENDOC_PLACES_PROVIDER", "none") not in {"", "none"}
+    places_provider = _env("ZENDOC_PLACES_PROVIDER", "none").lower()
+    places = places_provider == "google" and bool(_env("ZENDOC_GOOGLE_PLACES_API_KEY"))
     video_provider = _env("ZENDOC_VIDEO_PROVIDER", "none") not in {"", "none"}
     database_url = _env("DATABASE_URL")
     postgresql_configured = database_url.startswith(("postgresql://", "postgres://", "postgresql+psycopg://"))
@@ -151,6 +151,86 @@ def get_capability_registry() -> dict:
             "label": "Capability Registry",
             "description": "Central truthful status for all platform features.",
         },
+        "specialized_agent_routing": {
+            "status": STATUS_WORKING,
+            "label": "Specialized Agent Routing v2",
+            "description": "Deterministic routing exposes assigned agent, privacy class, context requirements, human gate, expected output, and fallback strategy.",
+        },
+        "carefin_engine": {
+            "status": STATUS_WORKING,
+            "label": "CareFin Benefits Discovery",
+            "description": "Deterministic public-source discovery, missing-information analysis, provenance, and coverage truth-state enforcement.",
+        },
+        "carefin_live_verification": {
+            "status": STATUS_INTEGRATION_REQUIRED,
+            "label": "CareFin Live Coverage Verification",
+            "description": "Personal eligibility, insurer approval, government approval, CSR/trust approval, and payment confirmation require authoritative partner responses.",
+        },
+        "automatic_care_journey": {
+            "status": STATUS_WORKING,
+            "label": "Automatic Care Journey Coordinator",
+            "description": "Deterministic care-workflow state machine with human gates, provenance, next-safe-action logic, and no diagnostic authority.",
+        },
+        "safe_operations_automation": {
+            "status": STATUS_WORKING,
+            "label": "Safe Operations Automation",
+            "description": "Owner-only re-queue of explicitly retriable failures plus deterministic alerts; never executes arbitrary tasks or consequential clinical/financial actions.",
+        },
+        "diagnostics_freshness_v2": {
+            "status": STATUS_WORKING,
+            "label": "Diagnostics Freshness & Alias Layer",
+            "description": "Diagnostic aliases, observation timestamps, CONFIRMED/STALE/UNKNOWN semantics, and stale-booking rejection.",
+        },
+        "nutrition_agent": {
+            "status": STATUS_WORKING,
+            "label": "Nutrition & Hydration Agent Foundation",
+            "description": "General-wellness label and normalized-price comparison with allergy flags, sponsorship separation, and medical-diet escalation.",
+        },
+        "multilingual_foundation": {
+            "status": STATUS_WORKING,
+            "label": "English/Bengali/Hindi Language Foundation",
+            "description": "Persistent language preference, script detection, and safety templates are working without a translation provider.",
+        },
+        "free_form_translation": {
+            "status": STATUS_INTEGRATION_REQUIRED,
+            "label": "Free-form Multilingual Translation",
+            "description": "Requires a configured local multilingual model or translation provider; no translation capability is fabricated.",
+        },
+        "geographic_healthcare_graph": {
+            "status": STATUS_WORKING,
+            "label": "Geographic Healthcare Graph v1",
+            "description": "Provenance-aware hierarchy and entity-link ingestion/search architecture is working; production starts empty until verified/official data is ingested.",
+        },
+        "official_public_data_ingestion": {
+            "status": STATUS_WORKING,
+            "label": "Official/Public Data Ingestion",
+            "description": "Owner-only dry-run/apply ingestion with checksums, explicit schema mapping, row-level rejection reasons, provenance, and idempotent upserts.",
+        },
+        "official_live_connectors": {
+            "status": STATUS_INTEGRATION_REQUIRED,
+            "label": "Live Official Dataset Connectors",
+            "description": "LGD/OGD/ABDM live retrieval requires dataset-specific downloads/APIs or authorized onboarding; ZENDOC does not claim live access by default.",
+        },
+        "provider_onboarding_v1": {
+            "status": STATUS_WORKING,
+            "label": "Provider Onboarding & Evidence Review",
+            "description": "Provider completeness scoring, evidence submission, owner evidence review, and verification-readiness state are working without auto-verifying providers.",
+        },
+        "carefin_pilot_ui": {
+            "status": STATUS_WORKING,
+            "label": "CareFin Pilot UI",
+            "description": "Authenticated browser workflow for possible-benefit discovery with explicit unverified/authoritative-verification boundaries.",
+        },
+        "care_journey_pilot_ui": {
+            "status": STATUS_WORKING,
+            "label": "Care Journey Pilot UI",
+            "description": "Authenticated browser workflow for durable coordination journeys and valid next-state transitions.",
+        },
+        "pilot_analytics": {
+            "status": STATUS_WORKING,
+            "label": "Pilot Analytics Scorecard",
+            "description": "Owner-only metrics computed from real ZENDOC records for onboarding, care journeys, CareFin discovery, fulfilment, diagnostics, data coverage, and operations.",
+        },
 
         # Health & Clinical
         "health_memory": {
@@ -186,7 +266,7 @@ def get_capability_registry() -> dict:
             "description": "Workout plans, session tracking, exercise library, nutrition/hydration logs.",
         },
         "pose_coach": {
-            "status": STATUS_PROTOTYPE,
+            "status": STATUS_BETA,
             "label": "Fitness Camera Preview",
             "description": "Browser-local camera preview and duration capture only. No pose model, form analysis, rep counting, or medical-device claim.",
         },
@@ -232,7 +312,7 @@ def get_capability_registry() -> dict:
         "healthcare_finder": {
             "status": STATUS_WORKING if places else STATUS_BETA,
             "label": "Healthcare Finder",
-            "description": "Provider search via places API." if places else "Local provider directory — real places API not configured.",
+            "description": "Google Places credential and provider are configured; runtime calls remain subject to quota/health." if places else "Local provider directory works; live Google Places requires provider configuration plus a server-side API key.",
         },
         "video_intelligence": {
             "status": STATUS_WORKING if video_provider else STATUS_BETA,

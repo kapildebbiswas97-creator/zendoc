@@ -10,6 +10,7 @@ CLINICAL BOUNDARIES:
 from __future__ import annotations
 
 import json
+import uuid
 import re
 from typing import Any
 
@@ -21,6 +22,13 @@ RX_RESTRICTED_TERMS = {
     "alprazolam", "clonazepam", "tramadol", "prescribe", "give me prescription",
 }
 VALID_PROVENANCE_SOURCES = {"USER_REPORTED", "DOCUMENT_EXTRACTED", "PROVIDER_RECORDED", "DEVICE_RECORDED"}
+
+PRESCRIPTION_TRANSITIONS = {
+    "active": {"completed", "cancelled", "superseded"},
+    "completed": set(),
+    "cancelled": set(),
+    "superseded": set(),
+}
 
 
 def _normalized_medicine_name(value: Any) -> str:
@@ -64,7 +72,7 @@ def create_prescription(
     if not prescriber_name:
         raise ValueError("A prescription must identify its prescriber.")
     now = now_iso()
-    uid = f"rx_{patient_id}_{int(db.execute('SELECT COUNT(*) c FROM prescriptions').fetchone()['c']) + 1}_{now[:10].replace('-', '')}"
+    uid = f"rx_{patient_id}_{uuid.uuid4().hex[:16]}"
 
     cursor = db.execute(
         """
@@ -123,6 +131,27 @@ def create_prescription(
             confidence = 0.0
         if confidence < 0.0 or confidence > 1.0:
             raise ValueError("extraction_confidence must be between 0 and 1.")
+        # Never invent clinically meaningful fields. The legacy defaults
+        # ("tablet", "daily", "30 days", quantity 30) could make incomplete
+        # extraction look authoritative. Preserve explicit unknown state using
+        # safe sentinel values required by the current schema and force human
+        # review before fulfilment.
+        dosage = str(it.get("dosage") or "").strip() or None
+        form = str(it.get("form") or "").strip() or "unspecified"
+        frequency = str(it.get("frequency") or "").strip() or None
+        duration = str(it.get("duration") or "").strip() or None
+        quantity_raw = it.get("quantity_prescribed")
+        quantity_unit = str(it.get("quantity_unit") or "").strip() or "unspecified"
+        try:
+            # Preserve the service's longstanding single-unit fallback so
+            # exact-SKU fulfilment remains backward-compatible; unlike the old
+            # hard-coded 30-unit value this does not invent a treatment course.
+            quantity_prescribed = int(quantity_raw) if quantity_raw not in (None, "") else 1
+        except (TypeError, ValueError):
+            raise ValueError("quantity_prescribed must be an integer when supplied.")
+        if quantity_prescribed <= 0:
+            raise ValueError("quantity_prescribed must be greater than zero.")
+
         review_status = "item_review_required" if confidence < 0.90 or not sku_row else "verified"
         if review_status == "item_review_required":
             has_uncertain_item = True
@@ -138,12 +167,12 @@ def create_prescription(
                 presc_id,
                 med_name,
                 it.get("salt_composition"),
-                it.get("dosage"),
-                it.get("form", "tablet"),
-                it.get("frequency", "daily"),
-                it.get("duration", "30 days"),
-                int(it.get("quantity_prescribed", 30)),
-                it.get("quantity_unit", "tablets"),
+                dosage,
+                form,
+                frequency,
+                duration,
+                quantity_prescribed,
+                quantity_unit,
                 it.get("instructions"),
                 rx_req,
                 confidence,
@@ -183,8 +212,17 @@ def get_prescription(prescription_id: int, actor: Any = None) -> dict[str, Any]:
 
     res = dict(row)
     if actor is not None:
-        from .context_engine import verify_context_authorization
-        verify_context_authorization(actor, res["patient_id"], "prescription_view")
+        actor_id = int(actor["id"])
+        actor_role = str(actor["role"] or "").lower()
+        is_patient_owner = actor_role == "patient" and actor_id == int(res["patient_id"])
+        is_recorded_prescriber = (
+            actor_role == "doctor"
+            and res.get("prescriber_id") is not None
+            and actor_id == int(res["prescriber_id"])
+        )
+        if not (is_patient_owner or is_recorded_prescriber):
+            from .context_engine import verify_context_authorization
+            verify_context_authorization(actor, res["patient_id"], "prescription_view")
 
     items = db.execute(
         """
@@ -239,3 +277,59 @@ def confirm_uncertain_prescription_item(item_id: int, actor: Any, sku_id: int | 
 
     updated = db.execute("SELECT * FROM prescription_items WHERE id=?", (item_id,)).fetchone()
     return dict(updated)
+
+
+def transition_prescription_status(prescription_id: int, actor: Any, new_status: str) -> dict[str, Any]:
+    """Advance a prescription through a terminal lifecycle with provenance."""
+    db = get_db()
+    row = db.execute("SELECT * FROM prescriptions WHERE id=?", (int(prescription_id),)).fetchone()
+    if not row:
+        raise LookupError(f"Prescription #{prescription_id} not found.")
+
+    try:
+        actor_id = int(actor["id"])
+        actor_role = str(actor["role"] or "").lower()
+    except Exception as exc:
+        raise PermissionError("Authentication is required to update prescription status.") from exc
+
+    target = str(new_status or "").strip().lower()
+    if target not in PRESCRIPTION_TRANSITIONS:
+        raise ValueError("Invalid prescription status.")
+
+    current = str(row["status"] or "active").strip().lower()
+    if target == current:
+        return get_prescription(int(prescription_id), actor=actor)
+    if target not in PRESCRIPTION_TRANSITIONS.get(current, set()):
+        raise ValueError(f"Prescription cannot transition from {current} to {target}.")
+
+    is_patient = actor_role == "patient" and actor_id == int(row["patient_id"])
+    is_prescriber = (
+        actor_role == "doctor"
+        and row["prescriber_id"] is not None
+        and actor_id == int(row["prescriber_id"])
+    )
+    if not (is_patient or is_prescriber):
+        raise PermissionError("Only the patient or prescribing doctor may update this prescription lifecycle.")
+
+    source = "PROVIDER_RECORDED" if is_prescriber else "USER_REPORTED"
+    now = now_iso()
+    updated = db.execute(
+        "UPDATE prescriptions SET status=?, updated_at=? WHERE id=? AND status=?",
+        (target, now, int(prescription_id), current),
+    )
+    if updated.rowcount != 1:
+        db.rollback()
+        raise ValueError("Prescription changed concurrently; refresh before retrying.")
+    from .care_graph import record_care_continuity_event
+    record_care_continuity_event(
+        patient_id=int(row["patient_id"]),
+        event_type="PRESCRIPTION_STATUS_CHANGED",
+        title=f"Prescription marked {target}",
+        summary=f"Prescription #{prescription_id} lifecycle changed from {current} to {target}.",
+        source=source,
+        source_ref=f"prescription:{prescription_id}",
+        actor_id=actor_id,
+        metadata={"prescription_id": int(prescription_id), "from": current, "to": target},
+    )
+    db.commit()
+    return get_prescription(int(prescription_id), actor=actor)

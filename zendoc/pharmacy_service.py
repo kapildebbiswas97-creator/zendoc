@@ -84,6 +84,19 @@ def create_medicine_order(user, data):
 
     now = now_iso()
     db = get_db()
+    if prescription_record_id not in (None, ""):
+        try:
+            prescription_record_id = int(prescription_record_id)
+        except (TypeError, ValueError) as error:
+            raise ValueError("prescription_record_id must be a valid record id.") from error
+        record = db.execute(
+            "SELECT id, owner_id FROM medical_records WHERE id=?",
+            (prescription_record_id,),
+        ).fetchone()
+        if not record:
+            raise LookupError("Prescription medical record not found.")
+        if int(record["owner_id"]) != int(patient_id):
+            raise PermissionError("Prescription medical record does not belong to the authorized patient.")
     cursor = db.execute(
         """INSERT INTO medicine_orders
         (patient_id, ordered_by, pharmacy_id, items_json, delivery_address, status, prescription_record_id, created_at)

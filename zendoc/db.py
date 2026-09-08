@@ -20,15 +20,25 @@ def now_iso():
 
 def get_db():
     if "db" not in g:
-        if current_app.config.get("DATABASE_ENGINE") == "postgresql":
-            from .postgres_backend import connect_postgresql
+        try:
+            if current_app.config.get("DATABASE_ENGINE") == "postgresql":
+                from .postgres_backend import connect_postgresql
 
-            g.db = connect_postgresql(current_app.config["DATABASE_URL"])
-        else:
-            g.db = sqlite3.connect(current_app.config["DATABASE"], timeout=15)
-            g.db.row_factory = sqlite3.Row
-            g.db.execute("PRAGMA foreign_keys = ON")
-            g.db.execute("PRAGMA busy_timeout = 5000")
+                g.db = connect_postgresql(current_app.config["DATABASE_URL"])
+            else:
+                g.db = sqlite3.connect(current_app.config["DATABASE"], timeout=15)
+                g.db.row_factory = sqlite3.Row
+                g.db.execute("PRAGMA foreign_keys = ON")
+                g.db.execute("PRAGMA busy_timeout = 5000")
+                if current_app.config.get("ZENDOC_ENV") != "testing":
+                    g.db.execute("PRAGMA journal_mode = WAL")
+                    g.db.execute("PRAGMA synchronous = NORMAL")
+        except Exception:
+            current_app.logger.exception(
+                "Database connection failed (engine=%s).",
+                current_app.config.get("DATABASE_ENGINE", "sqlite"),
+            )
+            raise
     return g.db
 
 
@@ -311,6 +321,16 @@ def init_db():
             created_at TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_audit_actor ON audit_logs(actor_id);
+
+        CREATE TABLE IF NOT EXISTS api_rate_limit_buckets (
+            bucket_key TEXT NOT NULL,
+            window_id INTEGER NOT NULL,
+            count INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (bucket_key, window_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_api_rate_limit_window
+            ON api_rate_limit_buckets(window_id);
 
         CREATE TABLE IF NOT EXISTS fitness_profiles (
             user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
@@ -1044,8 +1064,14 @@ def init_db():
             title TEXT NOT NULL,
             message TEXT NOT NULL,
             provider_response TEXT,
+            provider_message_id TEXT,
+            failure_reason TEXT,
             created_at TEXT NOT NULL,
-            sent_at TEXT
+            queued_at TEXT,
+            sent_at TEXT,
+            delivered_at TEXT,
+            failed_at TEXT,
+            updated_at TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_notif_deliveries_user ON notification_deliveries(user_id, status);
 
@@ -1201,6 +1227,8 @@ def init_db():
             name TEXT NOT NULL,
             category TEXT,
             description TEXT,
+            aliases_json TEXT NOT NULL DEFAULT '[]',
+            panel_name TEXT,
             fasting_required INTEGER NOT NULL DEFAULT 0,
             sample_type TEXT NOT NULL DEFAULT 'blood',
             tat_hours INTEGER NOT NULL DEFAULT 24,
@@ -1217,6 +1245,7 @@ def init_db():
             home_collection_fee_inr REAL NOT NULL DEFAULT 0.0,
             verified INTEGER NOT NULL DEFAULT 1,
             data_mode TEXT NOT NULL DEFAULT 'LIVE',
+            observed_at TEXT,
             created_at TEXT NOT NULL,
             UNIQUE(lab_id, test_id, data_mode)
         );
@@ -1343,6 +1372,7 @@ def migrate_schema(db):
         "gender": "ALTER TABLE users ADD COLUMN gender TEXT",
         "city": "ALTER TABLE users ADD COLUMN city TEXT",
         "emergency_contact": "ALTER TABLE users ADD COLUMN emergency_contact TEXT",
+        "language_preference": "ALTER TABLE users ADD COLUMN language_preference TEXT NOT NULL DEFAULT 'en'",
         "verified": "ALTER TABLE users ADD COLUMN verified INTEGER NOT NULL DEFAULT 0",
         "active": "ALTER TABLE users ADD COLUMN active INTEGER NOT NULL DEFAULT 1",
     }.items():
@@ -1393,6 +1423,51 @@ def migrate_schema(db):
         """
     )
     db.execute("CREATE INDEX IF NOT EXISTS idx_ai_conversations_user ON ai_conversations(user_id, updated_at)")
+
+    provider_network_columns = table_columns(db, "provider_network_prospects")
+    if provider_network_columns:
+        if "linked_pilot_id" not in provider_network_columns:
+            db.execute("ALTER TABLE provider_network_prospects ADD COLUMN linked_pilot_id INTEGER")
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_provider_network_prospects_pilot "
+            "ON provider_network_prospects(linked_pilot_id, status, updated_at)"
+        )
+
+    notification_delivery_columns = table_columns(db, "notification_deliveries")
+    for column, ddl in {
+        "provider_message_id": "ALTER TABLE notification_deliveries ADD COLUMN provider_message_id TEXT",
+        "failure_reason": "ALTER TABLE notification_deliveries ADD COLUMN failure_reason TEXT",
+        "queued_at": "ALTER TABLE notification_deliveries ADD COLUMN queued_at TEXT",
+        "delivered_at": "ALTER TABLE notification_deliveries ADD COLUMN delivered_at TEXT",
+        "failed_at": "ALTER TABLE notification_deliveries ADD COLUMN failed_at TEXT",
+        "updated_at": "ALTER TABLE notification_deliveries ADD COLUMN updated_at TEXT",
+    }.items():
+        if column not in notification_delivery_columns:
+            db.execute(ddl)
+    db.execute(
+        """
+        UPDATE notification_deliveries
+        SET queued_at=COALESCE(queued_at,created_at),
+            updated_at=COALESCE(updated_at,created_at)
+        """
+    )
+    db.execute(
+        """
+        UPDATE notification_deliveries
+        SET status='queued',
+            failure_reason=COALESCE(failure_reason,provider_response)
+        WHERE status='integration_required'
+        """
+    )
+    db.execute(
+        """
+        UPDATE notification_deliveries
+        SET status='delivered',
+            sent_at=COALESCE(sent_at,created_at),
+            delivered_at=COALESCE(delivered_at,sent_at,created_at)
+        WHERE channel='in_app' AND status='sent'
+        """
+    )
 
     metric_columns = table_columns(db, "health_metrics")
     for column, ddl in {
@@ -1735,6 +1810,11 @@ def migrate_schema(db):
         },
         "diagnostic_offers": {
             "data_mode": "TEXT NOT NULL DEFAULT 'LIVE'",
+            "observed_at": "TEXT",
+        },
+        "diagnostic_catalog": {
+            "aliases_json": "TEXT NOT NULL DEFAULT '[]'",
+            "panel_name": "TEXT",
         },
         "medicine_orders": {
             "plan_id": "INTEGER REFERENCES fulfilment_plans(id) ON DELETE SET NULL",
@@ -1754,6 +1834,8 @@ def migrate_schema(db):
         for column, ddl in additions.items():
             if column not in existing_columns:
                 db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+
+    db.execute("UPDATE diagnostic_offers SET observed_at=created_at WHERE observed_at IS NULL OR observed_at=''")
 
     db.executescript(
         """
@@ -1962,6 +2044,751 @@ def migrate_schema(db):
         CREATE INDEX IF NOT EXISTS idx_verified_reviews_provider ON verified_reviews(provider_id);
         """
     )
+    db.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS provider_verification_evidence (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            provider_profile_id INTEGER NOT NULL REFERENCES provider_profiles(id) ON DELETE CASCADE,
+            evidence_type TEXT NOT NULL,
+            identifier TEXT,
+            source_name TEXT NOT NULL,
+            source_url TEXT,
+            status TEXT NOT NULL DEFAULT 'pending',
+            notes TEXT,
+            submitted_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL,
+            reviewed_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_provider_evidence_profile ON provider_verification_evidence(provider_profile_id, status);
+
+        CREATE TABLE IF NOT EXISTS provider_onboarding_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            provider_profile_id INTEGER NOT NULL REFERENCES provider_profiles(id) ON DELETE CASCADE,
+            event_type TEXT NOT NULL,
+            status TEXT NOT NULL,
+            message TEXT NOT NULL,
+            actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_provider_onboarding_events_profile ON provider_onboarding_events(provider_profile_id, created_at);
+
+        CREATE TABLE IF NOT EXISTS provider_network_prospects (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            prospect_uid TEXT NOT NULL UNIQUE,
+            provider_type TEXT NOT NULL,
+            organization_name TEXT,
+            contact_name TEXT,
+            contact_email TEXT,
+            contact_phone TEXT,
+            state TEXT,
+            district TEXT,
+            city TEXT,
+            source_type TEXT NOT NULL,
+            source_reference TEXT,
+            linked_pilot_id INTEGER,
+            status TEXT NOT NULL DEFAULT 'discovered',
+            first_contact_at TEXT,
+            last_contact_at TEXT,
+            next_action TEXT,
+            next_action_due TEXT,
+            owner_note TEXT,
+            linked_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            linked_provider_profile_id INTEGER REFERENCES provider_profiles(id) ON DELETE SET NULL,
+            activated_at TEXT,
+            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_provider_network_prospects_status
+            ON provider_network_prospects(status, provider_type, updated_at);
+        CREATE INDEX IF NOT EXISTS idx_provider_network_prospects_location
+            ON provider_network_prospects(state, district, city);
+        CREATE INDEX IF NOT EXISTS idx_provider_network_prospects_pilot
+            ON provider_network_prospects(linked_pilot_id, status, updated_at);
+
+        CREATE TABLE IF NOT EXISTS data_ingestion_batches (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            batch_uid TEXT NOT NULL UNIQUE,
+            source_id TEXT NOT NULL,
+            ingestion_type TEXT NOT NULL,
+            checksum_sha256 TEXT NOT NULL,
+            record_count INTEGER NOT NULL DEFAULT 0,
+            accepted_count INTEGER NOT NULL DEFAULT 0,
+            rejected_count INTEGER NOT NULL DEFAULT 0,
+            dry_run INTEGER NOT NULL DEFAULT 1,
+            status TEXT NOT NULL DEFAULT 'previewed',
+            requested_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            summary_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            completed_at TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS public_healthcare_entities (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_id TEXT NOT NULL,
+            source_record_id TEXT NOT NULL,
+            category TEXT NOT NULL,
+            name TEXT NOT NULL,
+            specialty TEXT,
+            address TEXT,
+            city TEXT,
+            district TEXT,
+            state TEXT,
+            postal_code TEXT,
+            latitude REAL,
+            longitude REAL,
+            public_phone TEXT,
+            public_email TEXT,
+            website TEXT,
+            source_trust TEXT NOT NULL DEFAULT 'OFFICIAL_PUBLIC_DATA',
+            zendoc_verification_status TEXT NOT NULL DEFAULT 'not_verified',
+            booking_connectivity TEXT NOT NULL DEFAULT 'not_connected',
+            freshness_at TEXT,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(source_id, source_record_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS public_entity_claims (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            public_entity_id INTEGER NOT NULL REFERENCES public_healthcare_entities(id) ON DELETE CASCADE,
+            provider_profile_id INTEGER NOT NULL REFERENCES provider_profiles(id) ON DELETE CASCADE,
+            claimed_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            status TEXT NOT NULL DEFAULT 'pending',
+            claimant_note TEXT,
+            review_note TEXT,
+            reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            reviewed_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(public_entity_id, provider_profile_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_public_entity_claims_status
+            ON public_entity_claims(status, created_at);
+        CREATE INDEX IF NOT EXISTS idx_public_entity_claims_profile
+            ON public_entity_claims(provider_profile_id, status);
+
+        CREATE TABLE IF NOT EXISTS institution_pilots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pilot_uid TEXT NOT NULL UNIQUE,
+            organization_name TEXT NOT NULL,
+            organization_type TEXT NOT NULL,
+            contact_name TEXT,
+            contact_email TEXT,
+            contact_phone TEXT,
+            state TEXT,
+            district TEXT,
+            status TEXT NOT NULL DEFAULT 'lead',
+            commercial_status TEXT NOT NULL DEFAULT 'none',
+            start_date TEXT,
+            end_date TEXT,
+            target_users INTEGER,
+            target_provider_seats INTEGER,
+            agreed_features_json TEXT NOT NULL DEFAULT '[]',
+            success_metrics_json TEXT NOT NULL DEFAULT '[]',
+            next_action TEXT,
+            next_action_due TEXT,
+            monthly_value_inr REAL,
+            notes TEXT,
+            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_institution_pilots_status
+            ON institution_pilots(status, commercial_status, updated_at);
+
+        CREATE TABLE IF NOT EXISTS institution_pilot_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pilot_id INTEGER NOT NULL REFERENCES institution_pilots(id) ON DELETE CASCADE,
+            event_type TEXT NOT NULL,
+            status TEXT,
+            message TEXT,
+            actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_institution_pilot_events
+            ON institution_pilot_events(pilot_id, created_at);
+
+        CREATE TABLE IF NOT EXISTS institution_pilot_milestones (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pilot_id INTEGER NOT NULL REFERENCES institution_pilots(id) ON DELETE CASCADE,
+            title TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'planned',
+            due_date TEXT,
+            completed_at TEXT,
+            notes TEXT,
+            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_institution_pilot_milestones
+            ON institution_pilot_milestones(pilot_id, status, due_date);
+
+        CREATE TABLE IF NOT EXISTS institution_pilot_usage_snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pilot_id INTEGER NOT NULL REFERENCES institution_pilots(id) ON DELETE CASCADE,
+            observed_at TEXT NOT NULL,
+            active_users INTEGER,
+            active_providers INTEGER,
+            healthcare_searches INTEGER,
+            completed_handoffs INTEGER,
+            api_requests INTEGER,
+            source_type TEXT NOT NULL DEFAULT 'owner_entered_observed',
+            notes TEXT,
+            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_institution_pilot_usage
+            ON institution_pilot_usage_snapshots(pilot_id, observed_at);
+
+        CREATE TABLE IF NOT EXISTS business_api_clients (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            client_uid TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            client_type TEXT NOT NULL,
+            pilot_id INTEGER REFERENCES institution_pilots(id) ON DELETE SET NULL,
+            status TEXT NOT NULL DEFAULT 'active',
+            allowed_scopes_json TEXT NOT NULL DEFAULT '[]',
+            rate_limit_per_minute INTEGER NOT NULL DEFAULT 60,
+            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_business_api_clients_status
+            ON business_api_clients(status, updated_at);
+
+        CREATE TABLE IF NOT EXISTS business_api_keys (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            client_id INTEGER NOT NULL REFERENCES business_api_clients(id) ON DELETE CASCADE,
+            key_prefix TEXT NOT NULL,
+            key_hash TEXT NOT NULL UNIQUE,
+            status TEXT NOT NULL DEFAULT 'active',
+            expires_at TEXT,
+            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL,
+            revoked_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_business_api_keys_client
+            ON business_api_keys(client_id, status);
+
+        CREATE TABLE IF NOT EXISTS business_api_usage (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            client_id INTEGER NOT NULL REFERENCES business_api_clients(id) ON DELETE CASCADE,
+            key_id INTEGER REFERENCES business_api_keys(id) ON DELETE SET NULL,
+            endpoint TEXT NOT NULL,
+            method TEXT NOT NULL,
+            status_code INTEGER NOT NULL,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_business_api_usage_client_time
+            ON business_api_usage(client_id, created_at);
+
+        CREATE TABLE IF NOT EXISTS partner_booking_handoffs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            handoff_uid TEXT NOT NULL UNIQUE,
+            client_id INTEGER NOT NULL REFERENCES business_api_clients(id) ON DELETE CASCADE,
+            provider_profile_id INTEGER NOT NULL REFERENCES provider_profiles(id) ON DELETE CASCADE,
+            partner_reference TEXT NOT NULL,
+            requested_for TEXT NOT NULL,
+            contact_reference TEXT,
+            status TEXT NOT NULL DEFAULT 'received',
+            status_note TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(client_id, partner_reference)
+        );
+        CREATE INDEX IF NOT EXISTS idx_partner_booking_handoffs_client
+            ON partner_booking_handoffs(client_id, status, created_at);
+        CREATE INDEX IF NOT EXISTS idx_partner_booking_handoffs_provider
+            ON partner_booking_handoffs(provider_profile_id, requested_for, status);
+
+        CREATE TABLE IF NOT EXISTS partner_slot_holds (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            client_id INTEGER NOT NULL REFERENCES business_api_clients(id) ON DELETE CASCADE,
+            provider_profile_id INTEGER NOT NULL REFERENCES provider_profiles(id) ON DELETE CASCADE,
+            slot_key TEXT NOT NULL,
+            handoff_id INTEGER REFERENCES partner_booking_handoffs(id) ON DELETE CASCADE,
+            status TEXT NOT NULL DEFAULT 'active',
+            expires_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(provider_profile_id, slot_key)
+        );
+        CREATE INDEX IF NOT EXISTS idx_partner_slot_holds_active
+            ON partner_slot_holds(provider_profile_id, status, expires_at);
+
+        CREATE TABLE IF NOT EXISTS partner_api_audit_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            client_id INTEGER REFERENCES business_api_clients(id) ON DELETE SET NULL,
+            key_id INTEGER REFERENCES business_api_keys(id) ON DELETE SET NULL,
+            actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            actor_type TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            entity_type TEXT,
+            entity_id TEXT,
+            endpoint TEXT,
+            outcome TEXT NOT NULL DEFAULT 'success',
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_partner_api_audit_client
+            ON partner_api_audit_events(client_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_partner_api_audit_event
+            ON partner_api_audit_events(event_type, created_at);
+
+        CREATE TABLE IF NOT EXISTS data_refresh_tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_id TEXT NOT NULL,
+            priority TEXT NOT NULL,
+            reason_code TEXT NOT NULL,
+            ingestion_type TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'queued',
+            linked_batch_id INTEGER REFERENCES data_ingestion_batches(id) ON DELETE SET NULL,
+            owner_note TEXT,
+            blocked_reason TEXT,
+            requested_at TEXT NOT NULL,
+            started_at TEXT,
+            completed_at TEXT,
+            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_data_refresh_tasks_source
+            ON data_refresh_tasks(source_id, status, updated_at);
+        CREATE INDEX IF NOT EXISTS idx_data_refresh_tasks_priority
+            ON data_refresh_tasks(priority, status, requested_at);
+
+        CREATE TABLE IF NOT EXISTS startup_financial_entries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            entry_uid TEXT NOT NULL UNIQUE,
+            entry_date TEXT NOT NULL,
+            entry_type TEXT NOT NULL,
+            category TEXT NOT NULL,
+            amount_inr REAL NOT NULL,
+            recurring INTEGER NOT NULL DEFAULT 0,
+            description TEXT,
+            source_ref TEXT,
+            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_startup_financial_entries_date
+            ON startup_financial_entries(entry_date, entry_type, recurring);
+
+        CREATE TABLE IF NOT EXISTS startup_financial_snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            snapshot_month TEXT NOT NULL UNIQUE,
+            cash_balance_inr REAL,
+            notes TEXT,
+            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS care_journeys (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            journey_uid TEXT NOT NULL UNIQUE,
+            patient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            state TEXT NOT NULL DEFAULT 'NEW',
+            next_safe_action TEXT NOT NULL,
+            blocked_reason TEXT,
+            required_actor TEXT,
+            required_consent TEXT,
+            provenance_json TEXT NOT NULL DEFAULT '{}',
+            status TEXT NOT NULL DEFAULT 'active',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_care_journeys_patient ON care_journeys(patient_id, status, updated_at);
+
+        CREATE TABLE IF NOT EXISTS care_journey_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            journey_id INTEGER NOT NULL REFERENCES care_journeys(id) ON DELETE CASCADE,
+            previous_state TEXT NOT NULL,
+            state TEXT NOT NULL,
+            reason TEXT NOT NULL,
+            actor_type TEXT NOT NULL,
+            actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            provenance_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_care_journey_events_journey ON care_journey_events(journey_id, id);
+
+        CREATE TABLE IF NOT EXISTS geography_nodes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            node_uid TEXT NOT NULL UNIQUE,
+            node_type TEXT NOT NULL,
+            name TEXT NOT NULL,
+            normalized_name TEXT NOT NULL,
+            parent_id INTEGER REFERENCES geography_nodes(id) ON DELETE CASCADE,
+            latitude REAL,
+            longitude REAL,
+            source TEXT NOT NULL,
+            source_ref TEXT,
+            verified INTEGER NOT NULL DEFAULT 0,
+            freshness_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(node_type, normalized_name, parent_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_geography_nodes_parent ON geography_nodes(parent_id, node_type);
+        CREATE INDEX IF NOT EXISTS idx_geography_nodes_name ON geography_nodes(normalized_name, node_type);
+
+        CREATE TABLE IF NOT EXISTS product_analytics_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            event_type TEXT NOT NULL,
+            category TEXT,
+            geography_node_id INTEGER REFERENCES geography_nodes(id) ON DELETE SET NULL,
+            location_hash TEXT,
+            result_count INTEGER NOT NULL DEFAULT 0,
+            useful_result INTEGER NOT NULL DEFAULT 0,
+            source_tiers_json TEXT NOT NULL DEFAULT '{}',
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_product_analytics_event_time
+            ON product_analytics_events(event_type, created_at);
+        CREATE INDEX IF NOT EXISTS idx_product_analytics_user_time
+            ON product_analytics_events(user_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_product_analytics_geography_time
+            ON product_analytics_events(geography_node_id, created_at);
+
+        CREATE TABLE IF NOT EXISTS product_feedback (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            analytics_event_id INTEGER NOT NULL REFERENCES product_analytics_events(id) ON DELETE CASCADE,
+            user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            helpful INTEGER NOT NULL,
+            reason_code TEXT,
+            created_at TEXT NOT NULL,
+            UNIQUE(analytics_event_id, user_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_product_feedback_event
+            ON product_feedback(analytics_event_id);
+        CREATE INDEX IF NOT EXISTS idx_product_feedback_created
+            ON product_feedback(created_at);
+
+        CREATE TABLE IF NOT EXISTS geography_import_regions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            country_code TEXT NOT NULL,
+            region_level TEXT NOT NULL,
+            region_code TEXT NOT NULL,
+            slug TEXT NOT NULL,
+            name TEXT NOT NULL,
+            aliases_json TEXT NOT NULL DEFAULT '[]',
+            source TEXT NOT NULL,
+            source_ref TEXT,
+            active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(country_code, region_level, region_code),
+            UNIQUE(country_code, region_level, slug)
+        );
+        CREATE INDEX IF NOT EXISTS idx_geography_import_regions_country
+            ON geography_import_regions(country_code, region_level, active);
+
+        CREATE TABLE IF NOT EXISTS geography_entity_links (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            geography_node_id INTEGER NOT NULL REFERENCES geography_nodes(id) ON DELETE CASCADE,
+            entity_type TEXT NOT NULL,
+            entity_id TEXT NOT NULL,
+            source TEXT NOT NULL,
+            verification_state TEXT NOT NULL DEFAULT 'EXTERNAL_UNVERIFIED',
+            freshness_at TEXT,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(geography_node_id, entity_type, entity_id, source)
+        );
+        CREATE INDEX IF NOT EXISTS idx_geography_entity_node ON geography_entity_links(geography_node_id, entity_type);
+        CREATE INDEX IF NOT EXISTS idx_geography_entity_entity ON geography_entity_links(entity_type, entity_id);
+
+        CREATE TABLE IF NOT EXISTS geography_relationships (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            from_node_id INTEGER NOT NULL REFERENCES geography_nodes(id) ON DELETE CASCADE,
+            to_node_id INTEGER NOT NULL REFERENCES geography_nodes(id) ON DELETE CASCADE,
+            relationship_type TEXT NOT NULL,
+            source TEXT NOT NULL,
+            source_ref TEXT,
+            freshness_at TEXT,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(from_node_id, to_node_id, relationship_type, source)
+        );
+        CREATE INDEX IF NOT EXISTS idx_geography_relationship_from
+            ON geography_relationships(from_node_id, relationship_type);
+        CREATE INDEX IF NOT EXISTS idx_geography_relationship_to
+            ON geography_relationships(to_node_id, relationship_type);
+        """
+    )
+    # Compatibility for the brief pre-release shared-rate-limit schema that
+    # used the SQL keyword "window". SQLite may contain that local table even
+    # though PostgreSQL rejected it. Rename it additively before application
+    # queries use the portable window_id column.
+    rate_columns = table_columns(db, "api_rate_limit_buckets")
+    if "window" in rate_columns and "window_id" not in rate_columns:
+        db.execute("ALTER TABLE api_rate_limit_buckets RENAME COLUMN window TO window_id")
+        db.commit()
+
+    # Post-submission provider organization / multi-tenant security.
+    # Existing free-text provider_profiles.organization values are intentionally
+    # NOT auto-promoted into trusted organization memberships.
+    db.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS provider_organizations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            organization_uid TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            organization_type TEXT NOT NULL,
+            owner_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+            verification_status TEXT NOT NULL DEFAULT 'pending',
+            active INTEGER NOT NULL DEFAULT 1,
+            address TEXT,
+            city TEXT,
+            state TEXT,
+            postal_code TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_provider_org_owner
+            ON provider_organizations(owner_user_id, active);
+        CREATE INDEX IF NOT EXISTS idx_provider_org_verification
+            ON provider_organizations(verification_status, active);
+
+        CREATE TABLE IF NOT EXISTS organization_memberships (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            organization_id INTEGER NOT NULL REFERENCES provider_organizations(id) ON DELETE CASCADE,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            membership_role TEXT NOT NULL DEFAULT 'member',
+            status TEXT NOT NULL DEFAULT 'pending',
+            requested_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            approved_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(organization_id, user_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_org_memberships_user
+            ON organization_memberships(user_id, status);
+        CREATE INDEX IF NOT EXISTS idx_org_memberships_org
+            ON organization_memberships(organization_id, status, membership_role);
+
+        CREATE TABLE IF NOT EXISTS organization_locations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            organization_id INTEGER NOT NULL REFERENCES provider_organizations(id) ON DELETE CASCADE,
+            location_uid TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            location_type TEXT NOT NULL DEFAULT 'branch',
+            address TEXT,
+            city TEXT,
+            state TEXT,
+            postal_code TEXT,
+            latitude REAL,
+            longitude REAL,
+            active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_org_locations_org
+            ON organization_locations(organization_id, active);
+        """
+    )
+    for table, additions in {
+        "provider_profiles": {
+            "organization_id": "INTEGER REFERENCES provider_organizations(id) ON DELETE SET NULL",
+            "organization_location_id": "INTEGER REFERENCES organization_locations(id) ON DELETE SET NULL",
+        },
+        "staff_profiles": {
+            "organization_id": "INTEGER REFERENCES provider_organizations(id) ON DELETE SET NULL",
+            "organization_location_id": "INTEGER REFERENCES organization_locations(id) ON DELETE SET NULL",
+        },
+        "staff_tasks": {
+            "organization_id": "INTEGER REFERENCES provider_organizations(id) ON DELETE SET NULL",
+        },
+    }.items():
+        existing_columns = table_columns(db, table)
+        for column, ddl in additions.items():
+            if column not in existing_columns:
+                db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_provider_profiles_org ON provider_profiles(organization_id)"
+    )
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_staff_profiles_org ON staff_profiles(organization_id)"
+    )
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_staff_tasks_org ON staff_tasks(organization_id, status)"
+    )
+    db.execute(
+        "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+        ("post_submission_provider_tenancy_v1", now_iso()),
+    )
+
+    # Provider resource tenancy. Operational resources retain legacy NULL
+    # tenant fields when they predate verified organization binding.
+    for table, additions in {
+        "appointments": {
+            "organization_id": "INTEGER REFERENCES provider_organizations(id) ON DELETE SET NULL",
+            "organization_location_id": "INTEGER REFERENCES organization_locations(id) ON DELETE SET NULL",
+        },
+        "provider_schedules": {
+            "organization_id": "INTEGER REFERENCES provider_organizations(id) ON DELETE SET NULL",
+            "organization_location_id": "INTEGER REFERENCES organization_locations(id) ON DELETE SET NULL",
+        },
+        "inventory_observations": {
+            "organization_id": "INTEGER REFERENCES provider_organizations(id) ON DELETE SET NULL",
+            "organization_location_id": "INTEGER REFERENCES organization_locations(id) ON DELETE SET NULL",
+        },
+        "medicine_orders": {
+            "organization_id": "INTEGER REFERENCES provider_organizations(id) ON DELETE SET NULL",
+            "organization_location_id": "INTEGER REFERENCES organization_locations(id) ON DELETE SET NULL",
+        },
+        "diagnostic_offers": {
+            "organization_id": "INTEGER REFERENCES provider_organizations(id) ON DELETE SET NULL",
+            "organization_location_id": "INTEGER REFERENCES organization_locations(id) ON DELETE SET NULL",
+        },
+        "diagnostic_bookings": {
+            "organization_id": "INTEGER REFERENCES provider_organizations(id) ON DELETE SET NULL",
+            "organization_location_id": "INTEGER REFERENCES organization_locations(id) ON DELETE SET NULL",
+        },
+        "consultation_requests": {
+            "organization_id": "INTEGER REFERENCES provider_organizations(id) ON DELETE SET NULL",
+            "organization_location_id": "INTEGER REFERENCES organization_locations(id) ON DELETE SET NULL",
+        },
+        "consultation_rooms": {
+            "organization_id": "INTEGER REFERENCES provider_organizations(id) ON DELETE SET NULL",
+            "organization_location_id": "INTEGER REFERENCES organization_locations(id) ON DELETE SET NULL",
+        },
+    }.items():
+        existing_columns = table_columns(db, table)
+        for column, ddl in additions.items():
+            if column not in existing_columns:
+                db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+
+    for table in (
+        "appointments",
+        "provider_schedules",
+        "inventory_observations",
+        "medicine_orders",
+        "diagnostic_offers",
+        "diagnostic_bookings",
+        "consultation_requests",
+        "consultation_rooms",
+    ):
+        db.execute(f"CREATE INDEX IF NOT EXISTS idx_{table}_org ON {table}(organization_id)")
+    db.execute(
+        "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+        ("post_submission_provider_resource_tenancy_v1", now_iso()),
+    )
+
+    # Concurrency-safe slot claims. This is additive and does not require
+    # historical appointment rows to be unique.
+    db.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS appointment_slot_claims (
+            provider_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            slot_key TEXT NOT NULL,
+            appointment_id INTEGER UNIQUE REFERENCES appointments(id) ON DELETE CASCADE,
+            created_at TEXT NOT NULL,
+            PRIMARY KEY (provider_id, slot_key)
+        );
+        CREATE INDEX IF NOT EXISTS idx_appointment_slot_claims_appointment
+            ON appointment_slot_claims(appointment_id);
+        """
+    )
+    db.execute(
+        "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+        ("post_submission_concurrency_v1", now_iso()),
+    )
+
+    # Nullable request fingerprints protect new retry-sensitive writes
+    # without requiring historical rows to be deduplicated.
+    for table, additions in {
+        "consultation_requests": {
+            "request_fingerprint": "TEXT",
+        },
+        "diagnostic_bookings": {
+            "request_fingerprint": "TEXT",
+        },
+    }.items():
+        existing_columns = table_columns(db, table)
+        for column, ddl in additions.items():
+            if column not in existing_columns:
+                db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+    db.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_consultation_request_fingerprint "
+        "ON consultation_requests(request_fingerprint) WHERE request_fingerprint IS NOT NULL"
+    )
+    db.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_diagnostic_booking_fingerprint "
+        "ON diagnostic_bookings(request_fingerprint) WHERE request_fingerprint IS NOT NULL"
+    )
+    db.execute(
+        "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+        ("post_submission_request_fingerprints_v1", now_iso()),
+    )
+
+    # Production observability: metadata-only request and integration health.
+    db.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS request_observations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            correlation_id TEXT NOT NULL,
+            actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            actor_role TEXT,
+            method TEXT NOT NULL,
+            route_pattern TEXT NOT NULL,
+            status_code INTEGER NOT NULL,
+            duration_ms INTEGER NOT NULL,
+            error_class TEXT,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_request_observations_created
+            ON request_observations(created_at);
+        CREATE INDEX IF NOT EXISTS idx_request_observations_status
+            ON request_observations(status_code, created_at);
+        CREATE INDEX IF NOT EXISTS idx_request_observations_route
+            ON request_observations(route_pattern, created_at);
+
+        CREATE TABLE IF NOT EXISTS integration_health_checks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            integration_key TEXT NOT NULL,
+            status TEXT NOT NULL,
+            latency_ms INTEGER,
+            detail TEXT,
+            checked_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_integration_health_key
+            ON integration_health_checks(integration_key, checked_at);
+        """
+    )
+    db.execute(
+        "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+        ("post_submission_observability_v1", now_iso()),
+    )
+
+    db.execute(
+        "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+        ("post_submission_geography_v1", now_iso()),
+    )
+    db.execute(
+        "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+        ("post_submission_care_journey_v1", now_iso()),
+    )
+    db.execute(
+        "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+        ("post_submission_official_ingestion_v1", now_iso()),
+    )
+    db.execute(
+        "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+        ("post_submission_provider_onboarding_v1", now_iso()),
+    )
+
     db.execute(
         "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)",
         (MILESTONE83_MIGRATION_VERSION, now_iso()),

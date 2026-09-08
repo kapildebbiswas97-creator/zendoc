@@ -1,0 +1,594 @@
+{% extends "base.html" %}
+{% block title %}Startup Command Center — ZENDOC{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Startup operations</p>
+    <h1>Startup Command Center</h1>
+    <p class="section-copy">Measure real product utility, India data quality, and provider-network growth without overstating coverage or collecting clinical analytics.</p>
+  </div>
+  <div class="form-actions">
+    <a class="secondary-action" href="{{ url_for('main.admin') }}">Admin Dashboard</a>
+    <a class="secondary-action" href="{{ url_for('main.startup_command_center', days=7) }}">7 days</a>
+    <a class="secondary-action" href="{{ url_for('main.startup_command_center', days=30) }}">30 days</a>
+  </div>
+<div class="panel-actions"><a class="secondary-action" href="{{ url_for('main.startup_b2b_operations') }}">B2B Operations</a><a class="secondary-action" href="{{ url_for('main.startup_data_freshness') }}">Data Freshness</a><a class="secondary-action" href="{{ url_for('main.startup_provider_network') }}">Provider Network</a></div></section>
+
+<section class="stats startup-stats">
+  <article><span>Healthcare searches</span><strong>{{ metrics.healthcare_searches }}</strong></article>
+  <article><span>Useful-result rate</span><strong>{% if metrics.useful_result_rate is not none %}{{ (metrics.useful_result_rate * 100)|round(1) }}%{% else %}—{% endif %}</strong></article>
+  <article><span>Repeat search users</span><strong>{{ metrics.repeat_search_users }}</strong></article>
+  <article><span>Helpful feedback</span><strong>{% if metrics.helpful_feedback_rate is not none %}{{ (metrics.helpful_feedback_rate * 100)|round(1) }}%{% else %}—{% endif %}</strong></article>
+</section>
+
+<section class="grid two">
+  <article class="panel">
+    <div class="panel-head"><h2>Patient retention</h2><span class="status-badge working">Exact-day cohorts</span></div>
+    <div class="summary-row"><span>D7 eligible users</span><strong>{{ retention.d7.eligible_users }}</strong></div>
+    <div class="summary-row"><span>D7 retained</span><strong>{{ retention.d7.retained_users }}</strong></div>
+    <div class="summary-row"><span>D7 retention</span><strong>{% if retention.d7.retention_rate is not none %}{{ (retention.d7.retention_rate * 100)|round(1) }}%{% else %}—{% endif %}</strong></div>
+    <div class="summary-row"><span>D30 eligible users</span><strong>{{ retention.d30.eligible_users }}</strong></div>
+    <div class="summary-row"><span>D30 retained</span><strong>{{ retention.d30.retained_users }}</strong></div>
+    <div class="summary-row"><span>D30 retention</span><strong>{% if retention.d30.retention_rate is not none %}{{ (retention.d30.retention_rate * 100)|round(1) }}%{% else %}—{% endif %}</strong></div>
+    <p class="form-note">{{ retention.truth_notice }}</p>
+  </article>
+
+  <article class="panel">
+    <div class="panel-head"><h2>Care-journey conversion</h2><span class="status-badge working">{{ care_funnel.window_days }} days</span></div>
+    {% for stage in care_funnel.stages %}
+      <div class="summary-row">
+        <span>{{ stage.stage|replace('_',' ')|title }}</span>
+        <strong>{{ stage.journey_count }}{% if stage.conversion_from_started is not none %} · {{ (stage.conversion_from_started * 100)|round(1) }}%{% endif %}</strong>
+      </div>
+    {% endfor %}
+    <div class="summary-row"><span>Blocked journeys</span><strong>{{ care_funnel.blocked_journeys }}</strong></div>
+    <div class="summary-row"><span>Waiting for human</span><strong>{{ care_funnel.waiting_human_journeys }}</strong></div>
+    <p class="form-note">{{ care_funnel.truth_notice }}</p>
+  </article>
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head">
+    <div>
+      <h2>Patient activation funnel</h2>
+      <p class="form-note">Observed patient accounts and privacy-safe product events over the last {{ activation_funnel.window_days }} days.</p>
+    </div>
+    <span class="status-badge working">{{ activation_funnel.registered_patient_accounts }} registered</span>
+  </div>
+  <table>
+    <thead><tr><th>Stage</th><th>Patients</th><th>From registered</th><th>From previous</th></tr></thead>
+    <tbody>
+    {% for stage in activation_funnel.stages %}
+      <tr>
+        <td>{{ stage.stage|replace('_',' ')|title }}</td>
+        <td>{{ stage.patient_count }}</td>
+        <td>{% if stage.conversion_from_registered is not none %}{{ (stage.conversion_from_registered * 100)|round(1) }}%{% else %}—{% endif %}</td>
+        <td>{% if stage.conversion_from_previous_stage is not none %}{{ (stage.conversion_from_previous_stage * 100)|round(1) }}%{% else %}—{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <div class="summary-row"><span>Finder feedback patients · independent</span><strong>{{ activation_funnel.finder_feedback_patient_count }}</strong></div>
+  <p class="form-note">{{ activation_funnel.truth_notice }}</p>
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head">
+    <div><h2>Provider onboarding funnel</h2><p class="form-note">Independent real milestones over the last {{ provider_funnel.window_days }} days.</p></div>
+    <span class="status-badge working">{{ provider_funnel.provider_profiles_created }} profiles</span>
+  </div>
+  <table>
+    <thead><tr><th>Milestone</th><th>Providers</th><th>Conversion from created</th></tr></thead>
+    <tbody>
+      {% for stage in provider_funnel.stages %}
+      <tr>
+        <td>{{ stage.stage|replace('_',' ')|title }}</td>
+        <td>{{ stage.provider_count }}</td>
+        <td>{% if stage.conversion_from_created is not none %}{{ (stage.conversion_from_created * 100)|round(1) }}%{% else %}—{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="form-note">{{ provider_funnel.truth_notice }}</p>
+</section>
+
+<section class="grid two">
+  <article class="panel">
+    <div class="panel-head"><h2>Product utility</h2><span class="status-badge working">{{ metrics.window_days }} days</span></div>
+    <div class="summary-row"><span>Useful searches</span><strong>{{ metrics.useful_searches }}</strong></div>
+    <div class="summary-row"><span>No-result searches</span><strong>{{ metrics.no_result_searches }}</strong></div>
+    <div class="summary-row"><span>Active search users</span><strong>{{ metrics.active_search_users }}</strong></div>
+    <div class="summary-row"><span>Feedback responses</span><strong>{{ metrics.feedback_response_count }}</strong></div>
+    <p class="form-note">{{ metrics.metric_notice }}</p>
+  </article>
+
+  <article class="panel">
+    <div class="panel-head"><h2>India data quality</h2><span class="status-badge beta">Observed data only</span></div>
+    <div class="summary-row"><span>State/UT targets</span><strong>{{ coverage.region_target_count }}</strong></div>
+    <div class="summary-row"><span>Canonical State/UT nodes loaded</span><strong>{{ coverage.canonical_state_nodes_loaded }}</strong></div>
+    <div class="summary-row"><span>Public healthcare entities</span><strong>{{ coverage.public_healthcare_entity_count }}</strong></div>
+    <div class="summary-row"><span>Linked to canonical geography</span><strong>{{ coverage.public_healthcare_entities_linked_to_canonical_geography }}</strong></div>
+    <div class="summary-row"><span>Still unlinked</span><strong>{{ coverage.public_healthcare_entities_unlinked }}</strong></div>
+    <div class="summary-row"><span>Historical unresolved mappings</span><strong>{{ coverage.historical_unresolved_geography_imports }}</strong></div>
+    <p class="form-note">{{ coverage.truth_notice }}</p>
+  </article>
+</section>
+
+<section class="grid two spaced-panel">
+  <article class="panel">
+    <h2>Top search categories</h2>
+    {% if metrics.top_categories %}
+      {% for item in metrics.top_categories %}
+        <div class="summary-row"><span>{{ item.category|replace('_',' ')|title }}</span><strong>{{ item.search_count }}</strong></div>
+      {% endfor %}
+    {% else %}<p class="form-note">No search activity in this window yet.</p>{% endif %}
+  </article>
+  <article class="panel">
+    <h2>Top canonical search geographies</h2>
+    {% if metrics.top_canonical_geographies %}
+      {% for item in metrics.top_canonical_geographies %}
+        <div class="summary-row"><span>{{ item.name }} · {{ item.node_type|replace('_',' ')|title }}</span><strong>{{ item.search_count }}</strong></div>
+      {% endfor %}
+    {% else %}<p class="form-note">No uniquely resolved search geography in this window yet.</p>{% endif %}
+  </article>
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head"><div><h2>India State/UT coverage status</h2><p class="form-note">Priority districts are validation order only. They do not limit national scope.</p></div></div>
+  <table>
+    <thead><tr><th>Region</th><th>Status</th><th>Districts</th><th>Sub-districts</th><th>Blocks</th><th>Villages</th><th>Linked facilities</th></tr></thead>
+    <tbody>
+    {% for item in coverage.regions %}
+      {% set gc = item.geography_counts %}
+      {% set fc = item.linked_public_facility_counts %}
+      <tr>
+        <td><strong>{{ item.name }}</strong><br><small>{{ item.region_type|replace('_',' ')|title }}</small></td>
+        <td>{{ item.status|replace('_',' ')|title }}</td>
+        <td>{{ gc.get('district', 0) }}</td>
+        <td>{{ gc.get('subdivision', 0) }}</td>
+        <td>{{ gc.get('block', 0) }}</td>
+        <td>{{ gc.get('village', 0) }}</td>
+        <td>{{ fc.values()|sum }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="grid two spaced-panel">
+  <form class="panel" method="post" action="{{ url_for('main.startup_pilot_create_web') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <p class="eyebrow">B2B growth</p>
+    <h2>Add institution pilot</h2>
+    <label>Organization name <input name="organization_name" required maxlength="300"></label>
+    <label>Organization type
+      <select name="organization_type" required>
+        <option value="hospital">Hospital</option>
+        <option value="diagnostic_centre">Diagnostic centre / lab</option>
+        <option value="pharmacy">Pharmacy</option>
+        <option value="college">College / university</option>
+        <option value="ngo">NGO</option>
+        <option value="employer">Employer</option>
+        <option value="clinic">Clinic</option>
+        <option value="other">Other institution</option>
+      </select>
+    </label>
+    <div class="form-grid">
+      <label>State <input name="state" maxlength="120"></label>
+      <label>District <input name="district" maxlength="120"></label>
+    </div>
+    <div class="form-grid">
+      <label>Contact name <input name="contact_name" maxlength="200"></label>
+      <label>Contact email <input name="contact_email" type="email" maxlength="320"></label>
+    </div>
+    <div class="form-grid">
+      <label>Status
+        <select name="status">
+          {% for status in ['lead','proposed','active','paused','completed','converted','declined'] %}
+          <option value="{{ status }}">{{ status|title }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Commercial stage
+        <select name="commercial_status">
+          {% for status in ['none','loi','contract','paid'] %}
+          <option value="{{ status }}">{{ status|upper }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+    <div class="form-grid">
+      <label>Start date <input name="start_date" type="date"></label>
+      <label>End date <input name="end_date" type="date"></label>
+    </div>
+    <div class="form-grid">
+      <label>Target users <input name="target_users" type="number" min="0"></label>
+      <label>Provider seats <input name="target_provider_seats" type="number" min="0"></label>
+    </div>
+    <label>Agreed features <input name="agreed_features" placeholder="Appointments, discovery, provider dashboard"></label>
+    <label>Success metrics <input name="success_metrics" placeholder="Active users, useful-result rate, completed journeys"></label>
+    <label>Next action <input name="next_action" maxlength="500"></label>
+    <label>Next action due <input name="next_action_due" type="date"></label>
+    <label>Entered monthly value (₹) <input name="monthly_value_inr" type="number" min="0" step="0.01"></label>
+    <label>Internal notes <textarea name="notes" rows="3" maxlength="2000"></textarea></label>
+    <button type="submit">Add pilot</button>
+    <p class="form-note">Only enter real organizations and real commercial values. Proposal/LOI is not revenue.</p>
+  </form>
+
+  <article class="panel">
+    <div class="panel-head"><h2>Pilot pipeline</h2><span class="status-badge working">{{ pilot_metrics.pilot_count }} total</span></div>
+    <div class="summary-row"><span>Active pilots</span><strong>{{ pilot_metrics.active_pilots }}</strong></div>
+    <div class="summary-row"><span>Completed pilots</span><strong>{{ pilot_metrics.completed_pilots }}</strong></div>
+    <div class="summary-row"><span>Converted pilots</span><strong>{{ pilot_metrics.converted_pilots }}</strong></div>
+    <div class="summary-row"><span>Paid pilots</span><strong>{{ pilot_metrics.paid_pilots }}</strong></div>
+    <div class="summary-row"><span>Pilot conversion</span><strong>{% if pilot_metrics.conversion_rate is not none %}{{ (pilot_metrics.conversion_rate * 100)|round(1) }}%{% else %}—{% endif %}</strong></div>
+    <div class="summary-row"><span>Entered contract/paid monthly value</span><strong>₹{{ pilot_metrics.entered_monthly_value_inr|round(2) }}</strong></div>
+    <p class="form-note">{{ pilot_metrics.truth_notice }}</p>
+  </article>
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head"><div><h2>Institution pilots</h2><p class="form-note">Track real partner movement from lead to pilot to commercial conversion.</p></div></div>
+  {% if pilots %}
+  <table>
+    <thead><tr><th>Organization</th><th>Location</th><th>Status</th><th>Commercial</th><th>Next action</th><th>Update</th></tr></thead>
+    <tbody>
+    {% for pilot in pilots %}
+      <tr>
+        <td><strong><a href="{{ url_for('main.startup_pilot_execution', pilot_id=pilot.id) }}">{{ pilot.organization_name }}</a></strong><br><small>{{ pilot.organization_type|replace('_',' ')|title }}</small></td>
+        <td>{{ pilot.district or '—' }}{% if pilot.state %}, {{ pilot.state }}{% endif %}</td>
+        <td>{{ pilot.status }}</td>
+        <td>{{ pilot.commercial_status }}</td>
+        <td>{{ pilot.next_action or '—' }}{% if pilot.next_action_due %}<br><small>Due {{ pilot.next_action_due }}</small>{% endif %}</td>
+        <td>
+          <form class="inline-form" method="post" action="{{ url_for('main.startup_pilot_update_web', pilot_id=pilot.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <select name="status">
+              {% for status in ['lead','proposed','active','paused','completed','converted','declined'] %}
+              <option value="{{ status }}" {% if pilot.status == status %}selected{% endif %}>{{ status }}</option>
+              {% endfor %}
+            </select>
+            <select name="commercial_status">
+              {% for status in ['none','loi','contract','paid'] %}
+              <option value="{{ status }}" {% if pilot.commercial_status == status %}selected{% endif %}>{{ status }}</option>
+              {% endfor %}
+            </select>
+            <input name="next_action" value="{{ pilot.next_action or '' }}" maxlength="500" placeholder="Next action">
+            <input name="next_action_due" value="{{ pilot.next_action_due or '' }}" type="date">
+            <button type="submit">Save</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="form-note">No institution pilots recorded yet.</p>
+  {% endif %}
+</section>
+
+<section class="grid two spaced-panel">
+  <form class="panel" method="post" action="{{ url_for('main.startup_finance_entry_create_web') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <p class="eyebrow">Finance</p>
+    <h2>Record financial entry</h2>
+    <div class="form-grid">
+      <label>Date <input type="date" name="entry_date" required></label>
+      <label>Type
+        <select name="entry_type" required>
+          <option value="revenue">Revenue</option>
+          <option value="cost">Cost</option>
+        </select>
+      </label>
+    </div>
+    <label>Category
+      <select name="category" required>
+        <option value="pilot">Pilot revenue</option>
+        <option value="subscription">Subscription revenue</option>
+        <option value="enterprise_contract">Enterprise contract</option>
+        <option value="api">API revenue</option>
+        <option value="marketplace">Marketplace revenue</option>
+        <option value="grant">Grant</option>
+        <option value="other_revenue">Other revenue</option>
+        <option value="cloud">Cloud cost</option>
+        <option value="software">Software cost</option>
+        <option value="data">Data cost</option>
+        <option value="legal_compliance">Legal / compliance</option>
+        <option value="marketing">Marketing</option>
+        <option value="operations">Operations</option>
+        <option value="contractor">Contractor</option>
+        <option value="salary">Salary</option>
+        <option value="travel">Travel</option>
+        <option value="other_cost">Other cost</option>
+      </select>
+    </label>
+    <label>Amount (₹) <input type="number" name="amount_inr" min="0" step="0.01" required></label>
+    <label><input type="checkbox" name="recurring"> Recurring monthly entry</label>
+    <label>Description <input name="description" maxlength="1000"></label>
+    <label>Source/reference <input name="source_ref" maxlength="500" placeholder="Invoice, contract, bank reference, etc."></label>
+    <button type="submit">Record entry</button>
+    <p class="form-note">Only record real financial activity. These are management records, not audited accounts.</p>
+  </form>
+
+  <article class="panel">
+    <div class="panel-head"><h2>Financial KPIs</h2><span class="status-badge working">{{ finance.month }}</span></div>
+    <div class="summary-row"><span>Revenue</span><strong>₹{{ finance.revenue_inr|round(2) }}</strong></div>
+    <div class="summary-row"><span>Recurring revenue</span><strong>₹{{ finance.recurring_revenue_inr|round(2) }}</strong></div>
+    <div class="summary-row"><span>Costs</span><strong>₹{{ finance.costs_inr|round(2) }}</strong></div>
+    <div class="summary-row"><span>Net cash flow</span><strong>₹{{ finance.net_cash_flow_inr|round(2) }}</strong></div>
+    <div class="summary-row"><span>Net burn</span><strong>₹{{ finance.net_burn_inr|round(2) }}</strong></div>
+    <div class="summary-row"><span>Cash balance</span><strong>{% if finance.cash_balance_inr is not none %}₹{{ finance.cash_balance_inr|round(2) }}{% else %}—{% endif %}</strong></div>
+    <div class="summary-row"><span>Runway</span><strong>{% if finance.runway_months is not none %}{{ finance.runway_months }} months{% else %}—{% endif %}</strong></div>
+    <p class="form-note">{{ finance.truth_notice }}</p>
+
+    <form method="post" action="{{ url_for('main.startup_finance_snapshot_web') }}" class="spaced-panel">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <h3>Cash snapshot</h3>
+      <div class="form-grid">
+        <label>Month <input type="month" name="snapshot_month" required></label>
+        <label>Cash balance (₹) <input type="number" name="cash_balance_inr" min="0" step="0.01"></label>
+      </div>
+      <label>Notes <input name="notes" maxlength="1000"></label>
+      <button type="submit">Save cash snapshot</button>
+    </form>
+  </article>
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head">
+    <div><p class="eyebrow">Investor evidence</p><h2>Investor Traction Snapshot</h2></div>
+    <span class="status-badge beta">Observed evidence only</span>
+  </div>
+  <div class="grid two">
+    <div>
+      <h3>Readiness signals</h3>
+      {% for key, value in investor_snapshot.readiness.items() %}
+        <div class="summary-row">
+          <span>{{ key|replace('_',' ')|title }}</span>
+          <strong>{{ 'Yes' if value else 'Not yet' }}</strong>
+        </div>
+      {% endfor %}
+    </div>
+    <div>
+      <h3>Headline evidence</h3>
+      <div class="summary-row"><span>Healthcare searches</span><strong>{{ investor_snapshot.evidence.product.healthcare_searches }}</strong></div>
+      <div class="summary-row"><span>Registered patient accounts</span><strong>{{ investor_snapshot.evidence.activation.registered_patient_accounts }}</strong></div>
+      <div class="summary-row"><span>Useful-search patients</span><strong>{{ investor_snapshot.evidence.activation.useful_search_patients }}</strong></div>
+      <div class="summary-row"><span>Provider-view patients</span><strong>{{ investor_snapshot.evidence.activation.provider_view_patients }}</strong></div>
+      <div class="summary-row"><span>Appointment-request patients</span><strong>{{ investor_snapshot.evidence.activation.appointment_request_patients }}</strong></div>
+      <div class="summary-row"><span>D7 eligible users</span><strong>{{ investor_snapshot.evidence.retention.d7_eligible_users }}</strong></div>
+      <div class="summary-row"><span>D30 eligible users</span><strong>{{ investor_snapshot.evidence.retention.d30_eligible_users }}</strong></div>
+      <div class="summary-row"><span>Verified providers</span><strong>{{ investor_snapshot.evidence.providers.provider_verified }}</strong></div>
+      <div class="summary-row"><span>Active pilots</span><strong>{{ investor_snapshot.evidence.pilots.active_pilots }}</strong></div>
+      <div class="summary-row"><span>Paid pilots</span><strong>{{ investor_snapshot.evidence.pilots.paid_pilots }}</strong></div>
+      <div class="summary-row"><span>Business API clients</span><strong>{{ investor_snapshot.evidence.business_api.client_count }}</strong></div>
+    </div>
+  </div>
+
+  <div class="spaced-panel">
+    <h3>Operational data risks</h3>
+    <div class="summary-row"><span>Urgent refresh sources</span><strong>{{ investor_snapshot.operational_risks.urgent_data_refresh_sources }}</strong></div>
+    <div class="summary-row"><span>P0 sources</span><strong>{{ investor_snapshot.operational_risks.p0_data_sources }}</strong></div>
+    <div class="summary-row"><span>P1 sources</span><strong>{{ investor_snapshot.operational_risks.p1_data_sources }}</strong></div>
+    <div class="summary-row"><span>Queued refresh tasks</span><strong>{{ investor_snapshot.operational_risks.queued_refresh_tasks }}</strong></div>
+    <div class="summary-row"><span>Blocked refresh tasks</span><strong>{{ investor_snapshot.operational_risks.blocked_refresh_tasks }}</strong></div>
+    <div class="summary-row"><span>Unlinked public entities</span><strong>{{ investor_snapshot.operational_risks.unlinked_public_healthcare_entities }}</strong></div>
+    <p class="form-note">{{ investor_snapshot.operational_risks.truth_notice }}</p>
+  </div>
+
+  <p class="form-note">{{ investor_snapshot.truth_notice }}</p>
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head"><h2>Recent financial entries</h2></div>
+  {% if finance_entries %}
+  <table>
+    <thead><tr><th>Date</th><th>Type</th><th>Category</th><th>Amount</th><th>Recurring</th><th>Description</th></tr></thead>
+    <tbody>
+      {% for item in finance_entries %}
+      <tr>
+        <td>{{ item.entry_date }}</td>
+        <td>{{ item.entry_type }}</td>
+        <td>{{ item.category|replace('_',' ')|title }}</td>
+        <td>₹{{ item.amount_inr|round(2) }}</td>
+        <td>{{ 'Yes' if item.recurring else 'No' }}</td>
+        <td>{{ item.description or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="form-note">No financial entries recorded yet.</p>
+  {% endif %}
+</section>
+
+<section class="grid two spaced-panel">
+  <form class="panel" method="post" action="{{ url_for('main.startup_business_client_create_web') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <p class="eyebrow">Partner API</p>
+    <h2>Create Business API client</h2>
+    <label>Partner name <input name="name" required maxlength="200"></label>
+    <label>Client type
+      <select name="client_type" required>
+        <option value="hospital">Hospital</option>
+        <option value="diagnostic_centre">Diagnostic centre / lab</option>
+        <option value="pharmacy">Pharmacy</option>
+        <option value="employer">Employer</option>
+        <option value="ngo">NGO</option>
+        <option value="college">College / university</option>
+        <option value="other">Other partner</option>
+      </select>
+    </label>
+    <label>Linked institution pilot
+      <select name="pilot_id">
+        <option value="">No linked pilot</option>
+        {% for pilot in pilots %}
+        <option value="{{ pilot.id }}">{{ pilot.organization_name }} · {{ pilot.status }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <fieldset>
+      <legend>Allowed scopes</legend>
+      <label><input type="checkbox" name="allowed_scopes" value="public_directory.read" checked> Public directory</label>
+      <label><input type="checkbox" name="allowed_scopes" value="provider_profile.read"> Verified provider profiles</label>
+      <label><input type="checkbox" name="allowed_scopes" value="provider_availability.read"> Connected provider availability</label>
+      <label><input type="checkbox" name="allowed_scopes" value="pilot_metrics.read"> Own linked pilot metrics</label>
+      <label><input type="checkbox" name="allowed_scopes" value="booking_handoff.write"> Booking handoff requests</label>
+    </fieldset>
+    <label>Rate limit / minute <input type="number" name="rate_limit_per_minute" min="1" max="1000" value="60"></label>
+    <button type="submit">Create partner client</button>
+    <p class="form-note">There is no patient-record, prescription, medical-history, or clinical-data scope.</p>
+  </form>
+
+  <article class="panel">
+    <div class="panel-head"><h2>Business API foundation</h2><span class="status-badge working">{{ business_metrics.active_clients }} active clients</span></div>
+    <div class="summary-row"><span>Total partner clients</span><strong>{{ business_metrics.client_count }}</strong></div>
+    <div class="summary-row"><span>Active API keys</span><strong>{{ business_metrics.active_keys }}</strong></div>
+    <div class="summary-row"><span>Authenticated requests · 30 days</span><strong>{{ business_metrics.requests_last_30_days }}</strong></div>
+    <p class="form-note">{{ business_metrics.truth_notice }}</p>
+  </article>
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head"><div><h2>Partner API clients</h2><p class="form-note">Manage scopes, pilot linkage, rate limits and key lifecycle. Suspending or revoking a client revokes its active keys.</p></div></div>
+  {% if business_clients %}
+  <table>
+    <thead><tr><th>Partner</th><th>Status</th><th>Scopes</th><th>Pilot</th><th>Rate</th><th>Key lifecycle</th></tr></thead>
+    <tbody>
+    {% for client in business_clients %}
+      <tr>
+        <td><strong>{{ client.name }}</strong><br><small>{{ client.client_type|replace('_',' ')|title }} · {{ client.client_uid }}</small></td>
+        <td>{{ client.status }}</td>
+        <td>{{ client.allowed_scopes|join(', ') }}</td>
+        <td>{{ client.pilot_id or '—' }}</td>
+        <td>{{ client.rate_limit_per_minute }}/min</td>
+        <td>
+          <form class="inline-form" method="post" action="{{ url_for('main.startup_business_client_update_web', client_id=client.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <select name="status">
+              {% for status in ['active','suspended','revoked'] %}
+              <option value="{{ status }}" {% if client.status == status %}selected{% endif %}>{{ status }}</option>
+              {% endfor %}
+            </select>
+            <select name="pilot_id">
+              <option value="">No pilot</option>
+              {% for pilot in pilots %}
+              <option value="{{ pilot.id }}" {% if client.pilot_id == pilot.id %}selected{% endif %}>{{ pilot.organization_name }}</option>
+              {% endfor %}
+            </select>
+            <input type="number" name="rate_limit_per_minute" min="1" max="1000" value="{{ client.rate_limit_per_minute }}">
+            {% for scope in ['public_directory.read','provider_profile.read','provider_availability.read','pilot_metrics.read','booking_handoff.write'] %}
+            <label><input type="checkbox" name="allowed_scopes" value="{{ scope }}" {% if scope in client.allowed_scopes %}checked{% endif %}> {{ scope }}</label>
+            {% endfor %}
+            <button type="submit">Save client</button>
+          </form>
+
+          {% if client.status == 'active' %}
+          <form class="inline-form" method="post" action="{{ url_for('main.startup_business_key_issue_web', client_id=client.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <label>Key expiry days <input type="number" name="expires_in_days" min="1" max="3650" value="90"></label>
+            <button type="submit">Issue new key</button>
+          </form>
+          {% endif %}
+
+          {% for key in client.keys %}
+            <div class="form-note">
+              Key {{ key.key_prefix }} · {{ key.status }}{% if key.expires_at %} · expires {{ key.expires_at }}{% endif %}
+              {% if key.status == 'active' %}
+              <form class="inline-form" method="post" action="{{ url_for('main.startup_business_key_revoke_web', key_id=key.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button type="submit" class="secondary-action">Revoke key</button>
+              </form>
+              {% endif %}
+            </div>
+          {% endfor %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <p class="form-note">No partner API clients yet.</p>
+  {% endif %}
+</section>
+
+<span class="status-badge working">{{ business_metrics.active_clients }} active clients</span></div>
+    <div class="summary-row"><span>Total partner clients</span><strong>{{ business_metrics.client_count }}</strong></div>
+    <div class="summary-row"><span>Active API keys</span><strong>{{ business_metrics.active_keys }}</strong></div>
+    <div class="summary-row"><span>Authenticated requests · 30 days</span><strong>{{ business_metrics.requests_last_30_days }}</strong></div>
+    <p class="form-note">{{ business_metrics.truth_notice }}</p>
+  </article>
+
+<section class="panel spaced-panel">
+  <div class="panel-head">
+    <div>
+      <h2>Partner booking handoffs</h2>
+      <p class="form-note">Operational requests only. A handoff is not a confirmed appointment until its status is accepted.</p>
+    </div>
+  </div>
+  {% if booking_handoffs %}
+  <table>
+    <thead><tr><th>Partner</th><th>Provider</th><th>Requested slot</th><th>Status</th><th>Reference</th><th>Review</th></tr></thead>
+    <tbody>
+      {% for handoff in booking_handoffs %}
+      <tr>
+        <td>{{ handoff.client_name }}</td>
+        <td>{{ handoff.provider_name }}{% if handoff.organization %}<br><small>{{ handoff.organization }}</small>{% endif %}</td>
+        <td>{{ handoff.requested_for }}</td>
+        <td>{{ handoff.status }}</td>
+        <td>{{ handoff.partner_reference }}{% if handoff.contact_reference %}<br><small>{{ handoff.contact_reference }}</small>{% endif %}</td>
+        <td>
+          <form class="inline-form" method="post" action="{{ url_for('main.startup_booking_handoff_review_web', handoff_id=handoff.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <select name="status">
+              {% for status in ['pending','accepted','rejected','cancelled'] %}
+              <option value="{{ status }}" {% if handoff.status == status %}selected{% endif %}>{{ status }}</option>
+              {% endfor %}
+            </select>
+            <input name="status_note" maxlength="1000" value="{{ handoff.status_note or '' }}" placeholder="Operational review note">
+            <button type="submit">Update</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="form-note">No partner booking handoffs yet.</p>
+  {% endif %}
+  <aside class="trust-note"><strong>Privacy boundary</strong><br>Do not enter symptoms, diagnoses, prescriptions, medical history, or clinical notes into booking handoff fields.</aside>
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head"><div><h2>Public listing claims</h2><p class="form-note">Approved claims link a provider profile to a directory record; they do not automatically verify the provider or connect booking.</p></div></div>
+  {% if claims %}
+  <table>
+    <thead><tr><th>Listing</th><th>Provider</th><th>Status</th><th>Provider verification</th><th>Review</th></tr></thead>
+    <tbody>
+    {% for claim in claims %}
+      <tr>
+        <td>{{ claim.public_entity_name }}<br><small>{{ claim.public_entity_category|replace('_',' ')|title }} · {{ claim.public_entity_source_id }}</small></td>
+        <td>{{ claim.organization or claim.provider_type|title }}</td>
+        <td>{{ claim.status }}</td>
+        <td>{{ claim.provider_verification_status }}</td>
+        <td>
+          {% if claim.status == 'pending' %}
+          <form class="inline-form" method="post" action="{{ url_for('main.public_entity_claim_review_web', claim_id=claim.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <select name="status"><option value="approved">Approve association</option><option value="rejected">Reject</option></select>
+            <input name="review_note" maxlength="300" placeholder="Evidence/review note">
+            <button type="submit">Review</button>
+          </form>
+          {% else %}<span>Reviewed</span>{% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="form-note">No public listing claims yet.</p>
+  {% endif %}
+</section>
+
+<aside class="trust-note"><strong>Investor-readiness rule</strong><br>Use these numbers as observed product evidence only. Do not convert incomplete source data into invented national coverage, traction, or provider-connectivity claims.</aside>
+{% endblock %}

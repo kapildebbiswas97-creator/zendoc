@@ -36,7 +36,11 @@ def doctor_prediction(symptoms):
 
 
 def assistant_answer(message):
-    text = (message or "").lower()
+    text = (message or "")
+    safety = SafetyEngine().assess(text)
+    if safety["emergency"]:
+        return f"{safety['reason']} {safety['guidance']}"
+    text = text.lower()
     if "appointment" in text:
         return "Open Appointments to request a visit, then track status from your dashboard."
     if "report" in text or "record" in text:
@@ -49,6 +53,14 @@ def assistant_answer(message):
 
 
 def mental_health_support(age_group, context, stress_level):
+    safety = SafetyEngine().assess(context or "")
+    if safety["emergency"]:
+        return {
+            "summary": safety["reason"],
+            "risk_level": "high",
+            "next_steps": safety["guidance"],
+            "emergency": True,
+        }
     try:
         stress = max(0, min(10, int(stress_level)))
     except (TypeError, ValueError):

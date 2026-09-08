@@ -383,7 +383,9 @@ def api_sync_device(device_id):
 
 @bp.get("/api/v1/search")
 def api_universal_search():
-    user = g.get("user")
+    user, error = require_api_user()
+    if error:
+        return error
     q = request.args.get("q", "")
     results = search_all(user, q)
     return jsonify(results)

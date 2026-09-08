@@ -80,6 +80,10 @@
               <a href="{{ url_for('milestone7.telehealth_page') }}">Telehealth <span class="menu-status">Beta</span></a>
               <a href="{{ url_for('ecosystem.marketplace_page') }}">All services</a>
               {% if current_user.role == 'patient' %}
+                <a href="{{ url_for('connected_care.connected_care_home') }}">Connected Care</a>
+                <a href="{{ url_for('connected_care.carefin_page') }}">CareFin benefits</a>
+                <a href="{{ url_for('connected_care.care_journey_page') }}">Care Journey</a>
+                <a href="{{ url_for('connected_care.diagnostics_page') }}">Diagnostics</a>
                 <a href="{{ url_for('ecosystem.home_health_page') }}">Home healthcare</a>
                 <a href="{{ url_for('ecosystem.ambulance_page') }}">Medical transport</a>
                 <a href="{{ url_for('ecosystem.pharmacy_page') }}">Pharmacy</a>

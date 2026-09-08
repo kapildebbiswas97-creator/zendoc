@@ -57,6 +57,19 @@
               <a class="primary-action" href="{{ url_for('main.provider_detail', profile_id=item.id) }}">View profile &amp; availability</a>
             {% else %}
               <p class="form-note">Booking is not connected for this external listing. Verify details directly before visiting.</p>
+              {% if current_user and current_user.role in ['doctor','hospital','pharmacy'] and item.id and item.claimable_public_listing %}
+              <details class="claim-listing">
+                <summary>Is this your listing?</summary>
+                <form method="post" action="{{ url_for('main.provider_public_entity_claim_submit_web') }}">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <input type="hidden" name="public_entity_id" value="{{ item.id }}">
+                  <label>Optional note
+                    <input name="claimant_note" maxlength="300" placeholder="How you are connected to this provider">
+                  </label>
+                  <button type="submit">Request listing claim</button>
+                </form>
+              </details>
+              {% endif %}
             {% endif %}
           </article>
         {% endfor %}
@@ -65,6 +78,39 @@
       <div class="empty-state panel"><h3>No matching care options yet</h3><p>{{ result.message or 'Try a broader specialty or nearby city. External search may require an integration.' }}</p><a href="{{ url_for('main.finder') }}" class="secondary-action">Clear search</a></div>
     {% else %}
       <div class="empty-state panel"><h3>Tell us what kind of care you need</h3><p>Select a care type and enter a location. Specialty is optional, so you can start broad.</p></div>
+    {% endif %}
+
+    {% if result and search_event_id %}
+    <section class="panel finder-feedback">
+      <div>
+        <p class="eyebrow">Help improve ZENDOC</p>
+        <h3>Was this search useful?</h3>
+        <p class="form-note">Your answer is linked only to this search event. Do not include medical details.</p>
+      </div>
+      <div class="feedback-actions">
+        <form method="post" action="{{ url_for('main.finder_feedback') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="analytics_event_id" value="{{ search_event_id }}">
+          <input type="hidden" name="helpful" value="yes">
+          <button type="submit">Yes, useful</button>
+        </form>
+        <form method="post" action="{{ url_for('main.finder_feedback') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="analytics_event_id" value="{{ search_event_id }}">
+          <input type="hidden" name="helpful" value="no">
+          <label>What was missing?
+            <select name="reason_code">
+              <option value="no_correct_result">No correct result</option>
+              <option value="too_far">Results too far away</option>
+              <option value="details_incomplete">Provider details incomplete</option>
+              <option value="availability_missing">Availability not connected</option>
+              <option value="other">Other</option>
+            </select>
+          </label>
+          <button type="submit" class="secondary-action">Not useful</button>
+        </form>
+      </div>
+    </section>
     {% endif %}
   </section>
 </section>

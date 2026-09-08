@@ -5,18 +5,28 @@ and seamless integration with Health Memory report intelligence.
 """
 from __future__ import annotations
 
+import hashlib
+
+import json
 import math
 import os
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from .db import get_db, now_iso
+from .db import get_db, is_integrity_error, now_iso
+from .organization_service import provider_resource_context, assert_resource_tenant
 from .inventory_service import calculate_distance_km
 
 
 VALID_DATA_MODES = {"LIVE", "DEMO"}
 VALID_COLLECTION_TYPES = {"home_collection", "lab_visit"}
+AVAILABILITY_UNKNOWN = "UNKNOWN"
+AVAILABILITY_OBSERVED = "OBSERVED"
+AVAILABILITY_CONFIRMED = "CONFIRMED"
+AVAILABILITY_STALE = "STALE"
+AVAILABILITY_UNAVAILABLE = "UNAVAILABLE"
+
 
 
 def _explicit_confirmation(value: Any) -> bool:
@@ -76,6 +86,78 @@ def _parse_future_date(value: str) -> str:
     return parsed.isoformat()
 
 
+def normalize_diagnostic_test(test_query: str | int) -> dict[str, Any] | None:
+    """Resolve a diagnostic test by id, code, canonical name, or explicit alias."""
+    db = get_db()
+    if isinstance(test_query, int) or str(test_query).strip().isdigit():
+        row = db.execute("SELECT * FROM diagnostic_catalog WHERE id=?", (int(test_query),)).fetchone()
+        return dict(row) if row else None
+
+    raw = str(test_query or "").strip()
+    if not raw:
+        return None
+    rows = db.execute("SELECT * FROM diagnostic_catalog ORDER BY id").fetchall()
+    normalized = _normalize_text(raw)
+    exact_matches = []
+    contained_matches = []
+    for row in rows:
+        item = dict(row)
+        candidates = [item.get("code"), item.get("name")]
+        try:
+            aliases = json.loads(item.get("aliases_json") or "[]")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            aliases = []
+        if isinstance(aliases, list):
+            candidates.extend(aliases)
+
+        normalized_candidates = [_normalize_text(candidate) for candidate in candidates if candidate]
+        if any(candidate == normalized for candidate in normalized_candidates):
+            exact_matches.append(item)
+            continue
+        # A longer natural-language request may contain one explicit canonical
+        # test name/alias. Only accept this if exactly one catalog item matches;
+        # ambiguous substring matches return None rather than guessing.
+        if any(len(candidate) >= 3 and candidate in normalized for candidate in normalized_candidates):
+            contained_matches.append(item)
+
+    if len(exact_matches) == 1:
+        return exact_matches[0]
+    if exact_matches:
+        return None
+    return contained_matches[0] if len(contained_matches) == 1 else None
+
+
+def diagnostic_availability_state(offer: dict[str, Any], *, now: datetime | None = None) -> str:
+    """Classify provider observation freshness without promoting missing data."""
+    if not offer:
+        return AVAILABILITY_UNKNOWN
+    if not bool(offer.get("verified")):
+        return AVAILABILITY_OBSERVED
+
+    observed = offer.get("observed_at") or offer.get("created_at")
+    if not observed:
+        return AVAILABILITY_UNKNOWN
+    try:
+        observed_at = datetime.fromisoformat(str(observed).replace("Z", "+00:00"))
+        if observed_at.tzinfo is None:
+            observed_at = observed_at.replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        return AVAILABILITY_UNKNOWN
+
+    try:
+        ttl_hours = int(os.environ.get("ZENDOC_DIAGNOSTIC_FRESH_HOURS", "24"))
+    except (TypeError, ValueError):
+        ttl_hours = 24
+    ttl_hours = max(1, min(ttl_hours, 168))
+    current = now or datetime.now(timezone.utc)
+    age_seconds = max(0.0, (current - observed_at.astimezone(timezone.utc)).total_seconds())
+    return AVAILABILITY_CONFIRMED if age_seconds <= ttl_hours * 3600 else AVAILABILITY_STALE
+
+
+def _normalize_text(value: Any) -> str:
+    return " ".join(str(value or "").strip().lower().replace("-", " ").replace("_", " ").split())
+
+
 def list_diagnostic_catalog(category: str | None = None) -> list[dict[str, Any]]:
     """Return available diagnostic tests."""
     db = get_db()
@@ -84,6 +166,82 @@ def list_diagnostic_catalog(category: str | None = None) -> list[dict[str, Any]]
     else:
         rows = db.execute("SELECT * FROM diagnostic_catalog ORDER BY category, name").fetchall()
     return [dict(r) for r in rows]
+
+
+
+def upsert_diagnostic_offer(
+    actor: Any,
+    test_id: int,
+    price_inr: float,
+    home_collection_available: bool = True,
+    home_collection_fee_inr: float = 0.0,
+    data_mode: str | None = None,
+) -> dict[str, Any]:
+    """Create/update a truthful provider-backed diagnostic offer."""
+    lab_id = _user_id(actor)
+    if not lab_id:
+        raise PermissionError("Authentication required to manage diagnostic offers.")
+    db = get_db()
+    profile = db.execute(
+        """
+        SELECT * FROM provider_profiles
+        WHERE user_id=? AND verification_status='verified'
+        """,
+        (lab_id,),
+    ).fetchone()
+    if not profile or str(profile["provider_type"] or "").lower() not in {
+        "diagnostic_centre", "diagnostic_center", "lab", "hospital"
+    }:
+        raise PermissionError("Only a verified diagnostic provider may publish diagnostic offers.")
+    test = db.execute("SELECT id FROM diagnostic_catalog WHERE id=?", (int(test_id),)).fetchone()
+    if not test:
+        raise LookupError("Diagnostic test not found.")
+    try:
+        price = float(price_inr)
+        collection_fee = float(home_collection_fee_inr or 0)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Diagnostic offer prices must be valid numbers.") from exc
+    if not math.isfinite(price) or price < 0 or not math.isfinite(collection_fee) or collection_fee < 0:
+        raise ValueError("Diagnostic offer prices must be non-negative finite values.")
+
+    mode = _data_mode(data_mode)
+    tenant = provider_resource_context(lab_id)
+    now = now_iso()
+    existing = db.execute(
+        "SELECT id FROM diagnostic_offers WHERE lab_id=? AND test_id=? AND data_mode=?",
+        (lab_id, int(test_id), mode),
+    ).fetchone()
+    if existing:
+        db.execute(
+            """
+            UPDATE diagnostic_offers
+            SET price_inr=?, home_collection_available=?, home_collection_fee_inr=?,
+                verified=1, observed_at=?, organization_id=?, organization_location_id=?
+            WHERE id=?
+            """,
+            (
+                price, 1 if home_collection_available else 0, collection_fee, now,
+                tenant["organization_id"], tenant["organization_location_id"], existing["id"],
+            ),
+        )
+        offer_id = int(existing["id"])
+    else:
+        cursor = db.execute(
+            """
+            INSERT INTO diagnostic_offers
+            (lab_id,test_id,price_inr,home_collection_available,home_collection_fee_inr,verified,
+             data_mode,observed_at,organization_id,organization_location_id,created_at)
+            VALUES (?,?,?,?,?,1,?,?,?,?,?)
+            """,
+            (
+                lab_id, int(test_id), price, 1 if home_collection_available else 0,
+                collection_fee, mode, now, tenant["organization_id"],
+                tenant["organization_location_id"], now,
+            ),
+        )
+        offer_id = int(cursor.lastrowid)
+    db.commit()
+    return dict(db.execute("SELECT * FROM diagnostic_offers WHERE id=?", (offer_id,)).fetchone())
 
 
 def search_lab_offers(
@@ -102,10 +260,7 @@ def search_lab_offers(
     """
     mode = _data_mode(data_mode)
     db = get_db()
-    test_row = db.execute(
-        "SELECT * FROM diagnostic_catalog WHERE id=? OR UPPER(code)=UPPER(?)",
-        (test_code_or_id, str(test_code_or_id)),
-    ).fetchone()
+    test_row = normalize_diagnostic_test(test_code_or_id)
     if not test_row:
         return []
 
@@ -155,6 +310,9 @@ def search_lab_offers(
         item["data_mode"] = mode
         item["is_demo"] = mode == "DEMO"
         item["provider_status"] = str(item.get("verification_status") or "UNVERIFIED").upper()
+        item["availability_state"] = diagnostic_availability_state(item)
+        item["availability_confirmed"] = item["availability_state"] == AVAILABILITY_CONFIRMED
+        item["freshness_observed_at"] = item.get("observed_at") or item.get("created_at")
         dist = calculate_distance_km(user_lat, user_lon, item.get("latitude"), item.get("longitude"))
         item["distance_km"] = dist
         item["distance_text"] = f"{dist} km" if dist is not None else "Distance unavailable"
@@ -237,6 +395,11 @@ def book_diagnostic_test(
     ).fetchone()
     if not offer:
         raise LookupError("The selected lab offer is not available as a verified offer in the current data mode.")
+    availability_state = diagnostic_availability_state(dict(offer))
+    if availability_state != AVAILABILITY_CONFIRMED:
+        raise ValueError(
+            f"The selected lab offer is {availability_state}; refresh/verify provider availability before booking."
+        )
     if collection_type == "home_collection" and not bool(offer["home_collection_available"]):
         raise ValueError("The selected verified lab does not advertise home collection for this test.")
     try:
@@ -254,17 +417,92 @@ def book_diagnostic_test(
         raise ValueError("The selected lab offer has no usable collection fee.")
 
     now = now_iso()
-    uid = f"diag_{patient_id}_{test_id}_{uuid.uuid4().hex[:12]}"
-    cursor = db.execute(
-        """
-        INSERT INTO diagnostic_bookings
-        (booking_uid, patient_id, booked_by, lab_id, test_id, collection_type, scheduled_date,
-         slot_time, address, status, price_inr, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'requested', ?, ?, ?)
-        """,
-        (uid, patient_id, aid, lab_id, test_id, collection_type, scheduled_date, slot_time, address, round(price + fee, 2), now, now),
+    tenant = provider_resource_context(lab_id)
+    fingerprint_source = "|".join(
+        [
+            str(patient_id),
+            str(lab_id),
+            str(test_id),
+            collection_type,
+            scheduled_date,
+            str(slot_time or ""),
+            address,
+            mode,
+        ]
     )
-    booking_id = cursor.lastrowid
+    request_fingerprint = hashlib.sha256(fingerprint_source.encode("utf-8")).hexdigest()
+    existing = db.execute(
+        """
+        SELECT * FROM diagnostic_bookings
+        WHERE request_fingerprint=?
+          AND status IN ('requested','accepted')
+        ORDER BY id DESC LIMIT 1
+        """,
+        (request_fingerprint,),
+    ).fetchone()
+    if existing:
+        return {
+            "success": True,
+            "booking_id": int(existing["id"]),
+            "booking_uid": existing["booking_uid"],
+            "test_name": test_row["name"],
+            "lab_id": lab_id,
+            "lab_name": offer["lab_name"],
+            "status": existing["status"],
+            "price_inr": price,
+            "collection_fee_inr": fee,
+            "total_price_inr": float(existing["price_inr"]),
+            "data_mode": mode,
+            "is_demo": mode == "DEMO",
+            "requires_provider_acknowledgement": True,
+            "provider_acknowledgement_status": "pending",
+            "availability_state_at_request": AVAILABILITY_CONFIRMED,
+            "idempotent_replay": True,
+        }
+
+    uid = f"diag_{patient_id}_{test_id}_{uuid.uuid4().hex[:12]}"
+    try:
+        cursor = db.execute(
+            """
+            INSERT INTO diagnostic_bookings
+            (booking_uid, patient_id, booked_by, lab_id, test_id, collection_type, scheduled_date,
+             slot_time, address, status, price_inr, organization_id, organization_location_id, request_fingerprint, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'requested', ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                uid, patient_id, aid, lab_id, test_id, collection_type, scheduled_date, slot_time, address,
+                round(price + fee, 2), tenant["organization_id"], tenant["organization_location_id"],
+                request_fingerprint, now, now
+            ),
+        )
+        booking_id = cursor.lastrowid
+    except Exception as error:
+        db.rollback()
+        if is_integrity_error(error):
+            existing = db.execute(
+                "SELECT * FROM diagnostic_bookings WHERE request_fingerprint=?",
+                (request_fingerprint,),
+            ).fetchone()
+            if existing:
+                return {
+                    "success": True,
+                    "booking_id": int(existing["id"]),
+                    "booking_uid": existing["booking_uid"],
+                    "test_name": test_row["name"],
+                    "lab_id": lab_id,
+                    "lab_name": offer["lab_name"],
+                    "status": existing["status"],
+                    "price_inr": price,
+                    "collection_fee_inr": fee,
+                    "total_price_inr": float(existing["price_inr"]),
+                    "data_mode": mode,
+                    "is_demo": mode == "DEMO",
+                    "requires_provider_acknowledgement": True,
+                    "provider_acknowledgement_status": "pending",
+                    "availability_state_at_request": AVAILABILITY_CONFIRMED,
+                    "idempotent_replay": True,
+                }
+        raise
 
     from .care_graph import record_care_continuity_event
 
@@ -304,6 +542,7 @@ def book_diagnostic_test(
         "is_demo": mode == "DEMO",
         "requires_provider_acknowledgement": True,
         "provider_acknowledgement_status": "pending",
+        "availability_state_at_request": AVAILABILITY_CONFIRMED,
     }
 
 
@@ -327,10 +566,6 @@ def complete_diagnostic_test(
         raise LookupError(f"Diagnostic booking #{booking_id} not found.")
 
     status = str(booking_row["status"] or "").lower()
-    if status == "completed":
-        raise ValueError("Diagnostic booking is already completed.")
-    if status not in {"requested", "accepted"}:
-        raise ValueError(f"Diagnostic booking cannot be completed from status '{booking_row['status']}'.")
 
     lab_id = int(booking_row["lab_id"] or 0)
     if not lab_id:
@@ -347,9 +582,25 @@ def complete_diagnostic_test(
     if not lab_row or not lab_row["active"]:
         raise PermissionError("The assigned lab is not active.")
     is_assigned_lab = aid == lab_id and str(lab_row["verification_status"] or "").lower() == "verified"
+    if is_assigned_lab:
+        assert_resource_tenant(actor, dict(booking_row))
     is_owner = aid == int(booking_row["patient_id"])
     if not (is_assigned_lab or is_owner):
         raise PermissionError("Only the assigned verified lab or the booking owner may record completion.")
+
+    if status == "completed":
+        completion_source = "PROVIDER_RECORDED" if is_assigned_lab else "USER_REPORTED"
+        return {
+            "success": True,
+            "booking_id": int(booking_id),
+            "status": "completed",
+            "completion_source": completion_source,
+            "review_eligible": completion_source == "PROVIDER_RECORDED",
+            "report_available": bool(booking_row["report_record_id"]),
+            "idempotent_replay": True,
+        }
+    if status not in {"requested", "accepted"}:
+        raise ValueError(f"Diagnostic booking cannot be completed from status '{booking_row['status']}'.")
 
     summary = str(results_summary or "").strip() or "Completion recorded; report details were not supplied."
     summary = summary[:2000]
@@ -392,3 +643,112 @@ def complete_diagnostic_test(
         "review_eligible": completion_source == "PROVIDER_RECORDED",
         "report_available": False,
     }
+
+def list_diagnostic_refresh_queue(actor: Any, data_mode: str | None = None) -> dict[str, Any]:
+    """Return only the authenticated diagnostic provider's offer freshness workload."""
+    lab_id = _user_id(actor)
+    if not lab_id:
+        raise PermissionError("Authentication required to review diagnostic offer freshness.")
+    role = str(actor.get("role") if isinstance(actor, dict) else getattr(actor, "role", "") or "").lower()
+    if role not in {"hospital", "doctor"}:
+        raise PermissionError("Only diagnostic provider accounts may review diagnostic offer freshness.")
+
+    db = get_db()
+    profile = db.execute(
+        """
+        SELECT * FROM provider_profiles
+        WHERE user_id=? AND verification_status='verified'
+        """,
+        (lab_id,),
+    ).fetchone()
+    if not profile or str(profile["provider_type"] or "").lower() not in {
+        "diagnostic_centre", "diagnostic_center", "lab", "hospital"
+    }:
+        raise PermissionError("Only a verified diagnostic provider may review diagnostic offer freshness.")
+
+    mode = _data_mode(data_mode)
+    rows = db.execute(
+        """
+        SELECT do.*, dc.code test_code, dc.name test_name
+        FROM diagnostic_offers do
+        JOIN diagnostic_catalog dc ON dc.id=do.test_id
+        WHERE do.lab_id=? AND UPPER(do.data_mode)=?
+        ORDER BY do.observed_at ASC, do.id ASC
+        """,
+        (lab_id, mode),
+    ).fetchall()
+
+    items = []
+    counts = {
+        AVAILABILITY_CONFIRMED: 0,
+        AVAILABILITY_STALE: 0,
+        AVAILABILITY_UNKNOWN: 0,
+        AVAILABILITY_OBSERVED: 0,
+    }
+    for row in rows:
+        item = dict(row)
+        assert_resource_tenant(actor, item)
+        state = diagnostic_availability_state(item)
+        item["availability_state"] = state
+        item["needs_refresh"] = state in {AVAILABILITY_STALE, AVAILABILITY_UNKNOWN, AVAILABILITY_OBSERVED}
+        counts[state] = counts.get(state, 0) + 1
+        items.append(item)
+
+    return {
+        "provider_id": lab_id,
+        "provider_type": str(profile["provider_type"]),
+        "data_mode": mode,
+        "counts": counts,
+        "needs_refresh_count": sum(1 for item in items if item["needs_refresh"]),
+        "items": items,
+    }
+
+
+def reconfirm_diagnostic_offer(
+    actor: Any,
+    offer_id: int,
+    *,
+    confirmed_unchanged: bool = False,
+) -> dict[str, Any]:
+    """Renew diagnostic-offer freshness only after explicit provider reconfirmation."""
+    lab_id = _user_id(actor)
+    if not lab_id:
+        raise PermissionError("Authentication required to reconfirm diagnostic offers.")
+    if confirmed_unchanged is not True:
+        raise ValueError("Set confirmed_unchanged=true only after rechecking the diagnostic offer values.")
+
+    db = get_db()
+    row = db.execute(
+        "SELECT * FROM diagnostic_offers WHERE id=?",
+        (int(offer_id),),
+    ).fetchone()
+    if not row:
+        raise LookupError("Diagnostic offer not found.")
+    item = dict(row)
+    if int(item["lab_id"]) != lab_id:
+        raise PermissionError("A diagnostic provider may only reconfirm its own offers.")
+    assert_resource_tenant(actor, item)
+
+    profile = db.execute(
+        """
+        SELECT * FROM provider_profiles
+        WHERE user_id=? AND verification_status='verified'
+        """,
+        (lab_id,),
+    ).fetchone()
+    if not profile or str(profile["provider_type"] or "").lower() not in {
+        "diagnostic_centre", "diagnostic_center", "lab", "hospital"
+    }:
+        raise PermissionError("Only a verified diagnostic provider may reconfirm diagnostic offers.")
+
+    now = now_iso()
+    db.execute(
+        "UPDATE diagnostic_offers SET observed_at=?, verified=1 WHERE id=? AND lab_id=?",
+        (now, int(offer_id), lab_id),
+    )
+    db.commit()
+    refreshed = dict(db.execute("SELECT * FROM diagnostic_offers WHERE id=?", (int(offer_id),)).fetchone())
+    refreshed["availability_state"] = diagnostic_availability_state(refreshed)
+    refreshed["reconfirmed_unchanged"] = True
+    return refreshed
+

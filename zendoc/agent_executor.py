@@ -104,6 +104,16 @@ def _alert_check(actor, arguments):
     return {"created_alerts": run_proactive_alert_check()}
 
 
+def _safe_operations_automation(actor, arguments):
+    from .operations_automation import run_safe_operations_automation
+    return run_safe_operations_automation(
+        actor,
+        retry_limit=int(arguments.get("retry_limit") or 10),
+    )
+
+
+
+
 def _patient_target(actor, arguments, purpose):
     """Resolve and authorize a patient target for a read/stage tool."""
     from .context_engine import verify_context_authorization
@@ -113,6 +123,122 @@ def _patient_target(actor, arguments, purpose):
     verify_context_authorization(actor, patient_id, purpose)
     return patient_id
 
+
+
+def _provider_discovery(actor, arguments):
+    from .healthcare_finder import HealthcareFinder, normalize_query
+    from .provider_service import SPECIALTIES
+
+    query = str(arguments.get("query") or "")[:500]
+    lower = query.lower()
+    if "pharmacy" in lower:
+        category = "pharmacy"
+    elif any(term in lower for term in ("diagnostic", "laboratory", " lab ")):
+        category = "diagnostic_centre"
+    elif "clinic" in lower:
+        category = "clinic"
+    elif "hospital" in lower:
+        category = "hospital"
+    else:
+        category = "doctor"
+
+    specialty = ""
+    for item in SPECIALTIES:
+        if item.lower() in lower:
+            specialty = item
+            break
+
+    location = str(arguments.get("location") or _value(actor, "city", "") or "").strip()
+    if not location and " in " in lower:
+        location = query.rsplit(" in ", 1)[-1].strip()[:100]
+
+    normalized = normalize_query(
+        category=category,
+        specialty=specialty,
+        location=location,
+        latitude=arguments.get("latitude"),
+        longitude=arguments.get("longitude"),
+        radius_km=arguments.get("radius_km", 10),
+    )
+    result = HealthcareFinder().search(normalized)
+    result["source_state_notice"] = (
+        "ZENDOC provider verification and external place discovery are separate. "
+        "External results do not imply credentials, live appointments, emergency readiness, or ZENDOC booking connectivity."
+    )
+    return result
+
+
+def _latest_prescription_review(actor, arguments):
+    from .db import get_db
+    from .prescription_intelligence import prescription_intelligence_state
+
+    patient_id = _patient_target(actor, arguments, "prescription_view")
+    row = get_db().execute(
+        "SELECT id FROM prescriptions WHERE patient_id=? ORDER BY issue_date DESC, id DESC LIMIT 1",
+        (patient_id,),
+    ).fetchone()
+    if not row:
+        return {
+            "status": "NO_PRESCRIPTION",
+            "patient_id": patient_id,
+            "needs_review": False,
+            "fulfilment_ready": False,
+            "items": [],
+        }
+
+    projected = prescription_intelligence_state(int(row["id"]), actor=actor)
+    return {
+        "status": projected["overall_stage"],
+        "patient_id": patient_id,
+        **projected,
+        "safety_notice": "Read-only review. No medicine substitution, dose/frequency/form change, prescribing, or order submission occurred.",
+    }
+
+
+def _nutrition_compare(actor, arguments):
+    from .nutrition_agent import compare_products
+
+    products = arguments.get("products") or []
+    if not isinstance(products, list):
+        raise ValueError("products must be a list.")
+    return compare_products(
+        products,
+        goal=str(arguments.get("goal") or "general_wellness")[:100],
+        allergens=arguments.get("allergens") or [],
+    )
+
+
+def _carefin_discovery(actor, arguments):
+    from .carefin_engine import discover_benefits
+
+    query = str(arguments.get("query") or "")[:1000]
+    lower = query.lower()
+    actor_city = str(_value(actor, "city", "") or "").strip()
+    actor_age = _value(actor, "age", None)
+
+    state = None
+    if "west bengal" in lower or " westbengal" in lower or " wb " in f" {lower} ":
+        state = "West Bengal"
+
+    desired_categories = []
+    if "insurance" in lower or "policy" in lower:
+        desired_categories.extend(["life_insurance", "government_health_assurance"])
+    if any(term in lower for term in ("csr", "charity", "trust", "ngo", "financial help", "medical funding")):
+        desired_categories.extend(["csr", "charitable_support", "health_welfare"])
+    if "government" in lower or "scheme" in lower:
+        desired_categories.extend(["government_scheme", "government_health_assurance", "state_health_scheme"])
+
+    return discover_benefits({
+        "geography": state or "INDIA",
+        "state": state,
+        "district": actor_city or None,
+        "age": actor_age,
+        "existing_insurer": "LIC" if "lic" in lower else None,
+        "needs_charitable_support": any(
+            term in lower for term in ("csr", "charity", "trust", "ngo", "financial help", "medical funding")
+        ),
+        "desired_categories": desired_categories,
+    })
 
 def _pharmacy_search(actor, arguments):
     from .inventory_service import search_pharmacy_offers
@@ -202,9 +328,19 @@ def _diagnostic_options(actor, arguments):
         user_lat=arguments.get("patient_lat"),
         user_lon=arguments.get("patient_lon"),
     )
+    confirmed = [item for item in offers if item.get("availability_state") == "CONFIRMED"]
+    if confirmed:
+        status = "OK"
+        message = "Confirmed-fresh diagnostic offers found."
+    elif offers:
+        status = "STALE_ONLY"
+        message = "Only stale diagnostic offers were found; refresh provider availability before booking."
+    else:
+        status = "UNKNOWN"
+        message = "No current verified diagnostic offer is known for this test; availability is unknown, not confirmed unavailable."
     return {
-        "status": "OK" if offers else "NO_RESULTS",
-        "message": ("Verified diagnostic offers found." if offers else "No verified lab offer is currently available for this test."),
+        "status": status,
+        "message": message,
         "patient_id": patient_id,
         "offers": offers,
     }
@@ -217,6 +353,51 @@ def _unified_inbox(actor, arguments):
     return {"status": "OK", "patient_id": patient_id, "care_graph": get_patient_care_graph(patient_id, actor=actor)}
 
 
+def _health_memory_context(actor, arguments):
+    from .context_engine import build_minimum_context_bundle, verify_context_authorization
+    from .health_memory_continuity import determine_next_safe_actions, get_health_memory_provenance_summary
+
+    patient_id = _patient_target(actor, arguments, "health_memory_view")
+    bundle = build_minimum_context_bundle(
+        actor=actor,
+        patient_id=patient_id,
+        purpose="health_memory_view",
+        action="core_agent_health_memory_review",
+        requested_fields=["patient_name", "city", "allergies"],
+    )
+
+    next_safe_actions = []
+    next_safe_actions_authorized = False
+    try:
+        verify_context_authorization(actor, patient_id, "next_safe_action")
+        next_safe_actions = determine_next_safe_actions(patient_id, actor=actor)
+        next_safe_actions_authorized = True
+    except PermissionError:
+        # Purpose separation is intentional: timeline/Health Memory consent
+        # does not automatically grant proactive continuity/action context.
+        pass
+
+    return {
+        "status": "OK",
+        "patient_id": patient_id,
+        "context_contract": {
+            "consent_status": bundle.consent_status,
+            "included_fields": bundle.included_fields,
+            "excluded_fields": bundle.excluded_fields,
+            "data": bundle.data,
+            "provenance": bundle.provenance,
+            "created_at": bundle.created_at,
+        },
+        "health_memory": get_health_memory_provenance_summary(patient_id, actor=actor),
+        "next_safe_actions": next_safe_actions,
+        "next_safe_actions_authorized": next_safe_actions_authorized,
+        "safety_notice": (
+            "Read-only continuity support. This does not diagnose, prescribe, change treatment, "
+            "or bypass patient consent. Proactive next-safe actions are included only when separately authorized."
+        ),
+    }
+
+
 TOOL_HANDLERS = {
     "get_platform_summary": _platform_summary,
     "get_failed_operations": _failed_operations,
@@ -225,10 +406,16 @@ TOOL_HANDLERS = {
     "search_educational_video": _educational_video,
     "get_iot_devices": _iot_devices,
     "run_proactive_alert_check": _alert_check,
+    "run_safe_operations_automation": _safe_operations_automation,
+    "search_healthcare_providers": _provider_discovery,
+    "get_latest_prescription_review": _latest_prescription_review,
+    "compare_nutrition_products": _nutrition_compare,
+    "discover_carefin_benefits": _carefin_discovery,
     "search_nearby_pharmacy_inventory": _pharmacy_search,
     "compare_prescription_fulfilment": _pharmacy_compare,
     "stage_fulfilment_plan": _pharmacy_stage,
     "confirm_and_execute_order": _confirm_order,
     "get_diagnostic_options": _diagnostic_options,
     "get_unified_healthcare_inbox": _unified_inbox,
+    "get_health_memory_context": _health_memory_context,
 }

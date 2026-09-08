@@ -78,6 +78,10 @@ def _prescription_items(prescription_id: int, patient_id: int | None) -> tuple[d
 
     prescription = get_prescription(int(prescription_id))
     owner_id = int(prescription["patient_id"])
+    if str(prescription.get("status") or "active").lower() != "active":
+        raise ValueError(
+            f"Prescription #{prescription_id} is {prescription.get('status')} and is not eligible for fulfilment."
+        )
     if patient_id is not None and int(patient_id) != owner_id:
         raise PermissionError("Prescription does not belong to the requested patient.")
     return prescription, list(prescription.get("items", []))

@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
-from .db import get_db, now_iso
+from .db import get_db, is_integrity_error, now_iso
+from .organization_service import provider_resource_context
 
 
 PROVIDER_ROLES = {"doctor", "hospital", "pharmacy"}
@@ -160,13 +161,19 @@ def create_schedule(user, data):
     end_time = data.get("end_time")
     if not start_time or not end_time or start_time >= end_time:
         raise ValueError("Schedule end time must be after start time.")
+    tenant = provider_resource_context(user["id"])
     get_db().execute(
         """
         INSERT INTO provider_schedules
-        (provider_profile_id, weekday, start_time, end_time, slot_minutes, active, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+        (provider_profile_id, weekday, start_time, end_time, slot_minutes, active,
+         organization_id, organization_location_id, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
         """,
-        (profile["id"], weekday, start_time, end_time, slot_minutes, now_iso(), now_iso()),
+        (
+            profile["id"], weekday, start_time, end_time, slot_minutes,
+            tenant["organization_id"], tenant["organization_location_id"],
+            now_iso(), now_iso(),
+        ),
     )
 
 
@@ -181,15 +188,57 @@ def available_slots(provider_profile_id, date_text):
     if date_value < datetime.now(timezone.utc).date():
         return []
     weekday = date_value.weekday()
-    schedules = get_db().execute(
-        "SELECT * FROM provider_schedules WHERE provider_profile_id=? AND weekday=? AND active=1",
-        (provider_profile_id, weekday),
-    ).fetchall()
+    tenant = provider_resource_context(profile["user_id"])
+    if tenant["organization_id"]:
+        if tenant["organization_location_id"]:
+            schedules = get_db().execute(
+                """
+                SELECT * FROM provider_schedules
+                WHERE provider_profile_id=? AND weekday=? AND active=1
+                  AND organization_id=? AND organization_location_id=?
+                """,
+                (
+                    provider_profile_id,
+                    weekday,
+                    tenant["organization_id"],
+                    tenant["organization_location_id"],
+                ),
+            ).fetchall()
+        else:
+            schedules = get_db().execute(
+                """
+                SELECT * FROM provider_schedules
+                WHERE provider_profile_id=? AND weekday=? AND active=1
+                  AND organization_id=? AND organization_location_id IS NULL
+                """,
+                (provider_profile_id, weekday, tenant["organization_id"]),
+            ).fetchall()
+    else:
+        schedules = get_db().execute(
+            """
+            SELECT * FROM provider_schedules
+            WHERE provider_profile_id=? AND weekday=? AND active=1
+              AND organization_id IS NULL
+            """,
+            (provider_profile_id, weekday),
+        ).fetchall()
+    db = get_db()
     booked = {
         row["scheduled_for"][:16]
-        for row in get_db().execute(
+        for row in db.execute(
             "SELECT scheduled_for FROM appointments WHERE provider_id=? AND status IN ('requested','confirmed')",
             (profile["user_id"],),
+        ).fetchall()
+    }
+    now_text = now_iso()
+    held = {
+        row["slot_key"][:16]
+        for row in db.execute(
+            """
+            SELECT slot_key FROM partner_slot_holds
+            WHERE provider_profile_id=? AND status='active' AND expires_at>?
+            """,
+            (int(provider_profile_id), now_text),
         ).fetchall()
     }
     slots = []
@@ -199,13 +248,15 @@ def available_slots(provider_profile_id, date_text):
         cursor = start
         while cursor + timedelta(minutes=schedule["slot_minutes"]) <= end:
             value = cursor.strftime("%Y-%m-%dT%H:%M")
-            if value not in booked and cursor.replace(tzinfo=timezone.utc) > datetime.now(timezone.utc):
+            if value not in booked and value not in held and cursor.replace(tzinfo=timezone.utc) > datetime.now(timezone.utc):
                 slots.append(value)
             cursor += timedelta(minutes=schedule["slot_minutes"])
     return slots
 
 
 def book_provider_slot(patient, provider_profile_id, scheduled_for, reason):
+    if not patient or patient["role"] != "patient" or not bool(patient["active"]):
+        raise PermissionError("Only an active patient account may book a provider appointment.")
     profile = get_db().execute("SELECT * FROM provider_profiles WHERE id=?", (provider_profile_id,)).fetchone()
     if not profile:
         raise ValueError("Provider not found.")
@@ -214,32 +265,57 @@ def book_provider_slot(patient, provider_profile_id, scheduled_for, reason):
     slot_key = scheduled_for[:16]
     if slot_key not in available_slots(provider_profile_id, scheduled_for[:10]):
         raise ValueError("Selected slot is unavailable.")
-    existing = get_db().execute(
-        """
-        SELECT id FROM appointments
-        WHERE provider_id=? AND substr(scheduled_for, 1, 16)=? AND status IN ('requested','confirmed')
-        """,
-        (profile["user_id"], slot_key),
-    ).fetchone()
-    if existing:
-        raise ValueError("Selected slot is already booked.")
-    get_db().execute(
-        """
-        INSERT INTO appointments
-        (patient_id, provider_id, provider_profile_id, provider_name, specialty, scheduled_for, reason, status, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'requested', ?, ?)
-        """,
-        (
-            patient["id"],
-            profile["user_id"],
-            profile["id"],
-            profile["organization"] or get_db().execute(
-                "SELECT name FROM users WHERE id=?", (profile["user_id"],)
-            ).fetchone()["name"],
-            profile["specialty"],
-            scheduled_for,
-            reason,
-            now_iso(),
-            now_iso(),
-        ),
-    )
+
+    db = get_db()
+    tenant = provider_resource_context(profile["user_id"])
+    now = now_iso()
+    try:
+        db.execute(
+            """
+            INSERT INTO appointment_slot_claims
+            (provider_id, slot_key, appointment_id, created_at)
+            VALUES (?, ?, NULL, ?)
+            """,
+            (profile["user_id"], slot_key, now),
+        )
+        cursor = db.execute(
+            """
+            INSERT INTO appointments
+            (patient_id, provider_id, provider_profile_id, provider_name, specialty, scheduled_for, reason, status,
+             organization_id, organization_location_id, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'requested', ?, ?, ?, ?)
+            """,
+            (
+                patient["id"],
+                profile["user_id"],
+                profile["id"],
+                profile["organization"] or db.execute(
+                    "SELECT name FROM users WHERE id=?", (profile["user_id"],)
+                ).fetchone()["name"],
+                profile["specialty"],
+                scheduled_for,
+                reason,
+                tenant["organization_id"],
+                tenant["organization_location_id"],
+                now,
+                now,
+            ),
+        )
+        appointment_id = int(cursor.lastrowid)
+        claimed = db.execute(
+            """
+            UPDATE appointment_slot_claims
+            SET appointment_id=?
+            WHERE provider_id=? AND slot_key=? AND appointment_id IS NULL
+            """,
+            (appointment_id, profile["user_id"], slot_key),
+        )
+        if claimed.rowcount != 1:
+            raise ValueError("Selected slot could not be claimed atomically.")
+        db.commit()
+        return appointment_id
+    except Exception as error:
+        db.rollback()
+        if is_integrity_error(error):
+            raise ValueError("Selected slot was booked by another request; please choose a different slot.") from error
+        raise

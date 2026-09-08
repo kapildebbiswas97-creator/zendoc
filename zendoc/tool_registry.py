@@ -266,6 +266,50 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
         allowed_roles=ADMIN_ONLY,
         risk_class=LOW_RISK,
     ),
+    "run_safe_operations_automation": ToolDefinition(
+        name="run_safe_operations_automation",
+        description="Owner-only bounded automation: re-queue retriable failures and create deterministic operational alerts without executing arbitrary tasks.",
+        allowed_agents=["OperationsAgent"],
+        allowed_roles=ADMIN_ONLY,
+        risk_class=LOW_RISK,
+    ),
+
+    # ── Specialist read tools ─────────────────────────────────────────────────
+    "search_healthcare_providers": ToolDefinition(
+        name="search_healthcare_providers",
+        description="Search ZENDOC-verified providers plus configured external healthcare locations while preserving source/verification state.",
+        allowed_agents=["ProviderDiscoveryAgent", "SearchAgent"],
+        allowed_roles=ALL_ROLES,
+        risk_class=READ_ONLY,
+    ),
+    "get_latest_prescription_review": ToolDefinition(
+        name="get_latest_prescription_review",
+        description="Read the latest authorized prescription review state; never changes medicine, dose, frequency, form, or order state.",
+        allowed_agents=["MedicationSafetyAgent"],
+        allowed_roles=["patient", "doctor", "pharmacy", "admin"],
+        risk_class=READ_ONLY,
+    ),
+
+    "compare_nutrition_products": ToolDefinition(
+        name="compare_nutrition_products",
+        description="Compare user-supplied nutrition labels and normalized prices for general wellness; sponsorship never changes health suitability ranking.",
+        allowed_agents=["NutritionAgent"],
+        allowed_roles=["patient", "admin"],
+        risk_class=READ_ONLY,
+    ),
+
+    # ── CareFin / benefits tools ──────────────────────────────────────────────
+    "discover_carefin_benefits": ToolDefinition(
+        name="discover_carefin_benefits",
+        description=(
+            "Discover possible healthcare support pathways from official/public source metadata. "
+            "Returns candidates, missing information, provenance, and verification next steps. "
+            "Never confirms personal eligibility, approval, or payment."
+        ),
+        allowed_agents=["CareFinAgent"],
+        allowed_roles=ALL_ROLES,
+        risk_class=READ_ONLY,
+    ),
 
     # ── Safety / Blocked tools ─────────────────────────────────────────────────
     "autonomous_prescribe": ToolDefinition(
@@ -333,15 +377,25 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
     "get_diagnostic_options": ToolDefinition(
         name="get_diagnostic_options",
         description="Search available diagnostic tests and lab offers near a patient location.",
-        allowed_agents=["CareAgent", "SearchAgent"],
+        allowed_agents=["CareAgent", "SearchAgent", "DiagnosticsAgent"],
         allowed_roles=ALL_ROLES,
         risk_class=READ_ONLY,
     ),
     "get_unified_healthcare_inbox": ToolDefinition(
         name="get_unified_healthcare_inbox",
         description="Retrieve the unified healthcare inbox: recent orders, diagnostic bookings, and health memory events.",
-        allowed_agents=["CareAgent"],
+        allowed_agents=["CareAgent", "HealthMemoryAgent"],
         allowed_roles=["patient", "doctor", "admin"],
+        risk_class=READ_ONLY,
+    ),
+    "get_health_memory_context": ToolDefinition(
+        name="get_health_memory_context",
+        description=(
+            "Build an authorized, minimum-necessary Health Memory view with provenance and non-clinical next-safe actions. "
+            "Cross-patient access requires explicit context authorization."
+        ),
+        allowed_agents=["HealthMemoryAgent"],
+        allowed_roles=["patient", "doctor", "hospital", "admin"],
         risk_class=READ_ONLY,
     ),
 }

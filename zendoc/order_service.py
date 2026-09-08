@@ -19,6 +19,7 @@ import re
 from typing import Any
 
 from .db import get_db, now_iso
+from .organization_service import provider_resource_context, assert_resource_tenant
 
 
 ALLOWED_TRACKING_STATUSES = {
@@ -361,6 +362,15 @@ def submit_order_from_plan(
         return _order_result(existing_ids, db, replay=True)
 
     if str(plan.get("status") or "").lower() not in {"staged", "confirmed"}:
+        existing_ids = _existing_orders_for_submission(
+            db,
+            patient_id=patient_id,
+            plan_id=int(plan_id),
+            actor_id=aid,
+            idempotency_key=None,
+        )
+        if existing_ids:
+            return _order_result(existing_ids, db, replay=True)
         raise ValueError("This fulfilment plan is no longer awaiting confirmation.")
 
     plan_items = [
@@ -400,85 +410,114 @@ def submit_order_from_plan(
     if existing_ids:
         return _order_result(existing_ids, db, replay=True)
 
-    now = now_iso()
-    by_pharmacy: dict[int, list[dict[str, Any]]] = {}
-    for item in plan_items:
-        by_pharmacy.setdefault(int(item["pharmacy_id"]), []).append(item)
-    delivery_fee = round(float(plan.get("delivery_fee_inr") or 0.0), 2)
-    created_orders: list[int] = []
-    pharmacy_entries = list(by_pharmacy.items())
-    for index, (pharmacy_id, items) in enumerate(pharmacy_entries):
-        item_total = round(sum(float(item["total_price_inr"]) for item in items), 2)
-        # The staged plan's delivery fee is the sum of provider quotes. For
-        # split fulfilment, retain a deterministic equal accounting share on
-        # each order while the plan total remains authoritative.
-        provider_count = max(1, len(pharmacy_entries))
-        equal_share = round(delivery_fee / provider_count, 2)
-        fee_share = (
-            round(delivery_fee - equal_share * (provider_count - 1), 2)
-            if index == provider_count - 1
-            else equal_share
-        )
-        total_amount = round(item_total + fee_share, 2)
-        order_uid = f"ord_{patient_id}_{pharmacy_id}_{now[:10].replace('-', '')}_{len(created_orders) + 1}"
-        cursor = db.execute(
-            """
-            INSERT INTO medicine_orders
-            (patient_id, ordered_by, pharmacy_id, plan_id, prescription_id, order_uid,
-             items_json, delivery_address, total_amount_inr, payment_status,
-             acknowledgement_status, tracking_status, idempotency_key, status, data_mode, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'cash_on_delivery', 'pending', 'SUBMITTED', ?, 'pending', ?, ?, ?)
-            """,
-            (
-                patient_id,
-                aid,
-                pharmacy_id,
-                int(plan_id),
-                plan.get("prescription_id"),
-                order_uid,
-                json.dumps(items, sort_keys=True),
-                address,
-                total_amount,
-                f"{persisted_key}:{pharmacy_id}",
-                mode,
-                now,
-                now,
-            ),
-        )
-        order_id = int(cursor.lastrowid)
-        db.execute(
-            """
-            INSERT INTO order_events
-            (order_id, event_type, event_status, message, source, created_at)
-            VALUES (?, 'ORDER_SUBMITTED', 'SUBMITTED', ?, 'patient_confirmed', ?)
-            """,
-            (order_id, "Order submitted after explicit confirmation and fresh inventory recheck.", now),
-        )
-        created_orders.append(order_id)
-
-    db.execute(
+    claimed = db.execute(
         """
         UPDATE fulfilment_plans
-        SET confirmed_by_user=1, confirmed_at=?, status='ordered'
-        WHERE id=?
+        SET status='ordering'
+        WHERE id=? AND status IN ('staged','confirmed')
         """,
-        (now, int(plan_id)),
+        (int(plan_id),),
     )
+    if claimed.rowcount != 1:
+        db.rollback()
+        existing_ids = _existing_orders_for_submission(
+            db,
+            patient_id=patient_id,
+            plan_id=int(plan_id),
+            actor_id=aid,
+            idempotency_key=None,
+        )
+        if existing_ids:
+            return _order_result(existing_ids, db, replay=True)
+        raise ValueError("This fulfilment plan is already being processed by another request.")
 
-    from .care_graph import record_care_continuity_event
+    try:
+        now = now_iso()
+        by_pharmacy: dict[int, list[dict[str, Any]]] = {}
+        for item in plan_items:
+            by_pharmacy.setdefault(int(item["pharmacy_id"]), []).append(item)
+        delivery_fee = round(float(plan.get("delivery_fee_inr") or 0.0), 2)
+        created_orders: list[int] = []
+        pharmacy_entries = list(by_pharmacy.items())
+        for index, (pharmacy_id, items) in enumerate(pharmacy_entries):
+            item_total = round(sum(float(item["total_price_inr"]) for item in items), 2)
+            # The staged plan's delivery fee is the sum of provider quotes. For
+            # split fulfilment, retain a deterministic equal accounting share on
+            # each order while the plan total remains authoritative.
+            provider_count = max(1, len(pharmacy_entries))
+            equal_share = round(delivery_fee / provider_count, 2)
+            fee_share = (
+                round(delivery_fee - equal_share * (provider_count - 1), 2)
+                if index == provider_count - 1
+                else equal_share
+            )
+            total_amount = round(item_total + fee_share, 2)
+            tenant = provider_resource_context(pharmacy_id)
+            order_uid = f"ord_{patient_id}_{pharmacy_id}_{now[:10].replace('-', '')}_{len(created_orders) + 1}"
+            cursor = db.execute(
+                """
+                INSERT INTO medicine_orders
+                (patient_id, ordered_by, pharmacy_id, plan_id, prescription_id, order_uid,
+                 items_json, delivery_address, total_amount_inr, payment_status,
+                 acknowledgement_status, tracking_status, idempotency_key, status, data_mode,
+                 organization_id, organization_location_id, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'cash_on_delivery', 'pending', 'SUBMITTED', ?, 'pending', ?, ?, ?, ?, ?)
+                """,
+                (
+                    patient_id,
+                    aid,
+                    pharmacy_id,
+                    int(plan_id),
+                    plan.get("prescription_id"),
+                    order_uid,
+                    json.dumps(items, sort_keys=True),
+                    address,
+                    total_amount,
+                    f"{persisted_key}:{pharmacy_id}",
+                    mode,
+                    tenant["organization_id"],
+                    tenant["organization_location_id"],
+                    now,
+                    now,
+                ),
+            )
+            order_id = int(cursor.lastrowid)
+            db.execute(
+                """
+                INSERT INTO order_events
+                (order_id, event_type, event_status, message, source, created_at)
+                VALUES (?, 'ORDER_SUBMITTED', 'SUBMITTED', ?, 'patient_confirmed', ?)
+                """,
+                (order_id, "Order submitted after explicit confirmation and fresh inventory recheck.", now),
+            )
+            created_orders.append(order_id)
 
-    record_care_continuity_event(
-        patient_id=patient_id,
-        event_type="ORDER_PLACED",
-        title="Medicine order confirmed",
-        summary=f"Prescription fulfilment order placed across {len(by_pharmacy)} participating pharmacy provider(s).",
-        source="USER_REPORTED",
-        source_ref=f"order:{created_orders[0]}",
-        actor_id=aid,
-        metadata={"order_ids": created_orders, "plan_id": int(plan_id), "data_mode": mode},
-    )
-    db.commit()
-    return _order_result(created_orders, db)
+        db.execute(
+            """
+            UPDATE fulfilment_plans
+            SET confirmed_by_user=1, confirmed_at=?, status='ordered'
+            WHERE id=? AND status='ordering'
+            """,
+            (now, int(plan_id)),
+        )
+
+        from .care_graph import record_care_continuity_event
+
+        record_care_continuity_event(
+            patient_id=patient_id,
+            event_type="ORDER_PLACED",
+            title="Medicine order confirmed",
+            summary=f"Prescription fulfilment order placed across {len(by_pharmacy)} participating pharmacy provider(s).",
+            source="USER_REPORTED",
+            source_ref=f"order:{created_orders[0]}",
+            actor_id=aid,
+            metadata={"order_ids": created_orders, "plan_id": int(plan_id), "data_mode": mode},
+        )
+        db.commit()
+        return _order_result(created_orders, db)
+    except Exception:
+        db.rollback()
+        raise
 
 
 def _pharmacy_can_act(db, actor: Any, order: dict[str, Any]) -> tuple[Any, bool]:
@@ -504,6 +543,7 @@ def acknowledge_order(
         raise LookupError(f"Order #{order_id} not found.")
     order = dict(row)
     actor_row, _owner = _pharmacy_can_act(db, pharmacy_user, order)
+    assert_resource_tenant(actor_row, order)
     normalized_action = str(action or "").strip().lower()
     if normalized_action not in {"accept", "reject"}:
         raise ValueError("Order acknowledgement action must be 'accept' or 'reject'.")
@@ -515,11 +555,11 @@ def acknowledge_order(
         raise ValueError(f"Order cannot be {normalized_action}ed from tracking status {current}.")
 
     now = now_iso()
-    db.execute(
+    updated = db.execute(
         """
         UPDATE medicine_orders
         SET tracking_status=?, acknowledgement_status=?, acknowledged_at=?, status=?, updated_at=?
-        WHERE id=?
+        WHERE id=? AND tracking_status=?
         """,
         (
             target,
@@ -528,8 +568,12 @@ def acknowledge_order(
             "accepted" if target == "ACCEPTED" else "cancelled",
             now,
             int(order_id),
+            current,
         ),
     )
+    if updated.rowcount != 1:
+        db.rollback()
+        raise ValueError("Order changed concurrently; refresh before retrying.")
     db.execute(
         """
         INSERT INTO order_events
@@ -579,6 +623,7 @@ def update_order_tracking_status(
         raise LookupError(f"Order #{order_id} not found.")
     order = dict(row)
     actor_row, _owner = _pharmacy_can_act(db, actor, order)
+    assert_resource_tenant(actor_row, order)
     current = str(order.get("tracking_status") or "SUBMITTED").upper()
     if current == status_upper:
         return get_order_details(int(order_id), actor=actor_row)
@@ -595,10 +640,17 @@ def update_order_tracking_status(
         "OUT_FOR_DELIVERY": "out_for_delivery",
         "DELIVERED": "delivered",
     }.get(status_upper, str(order.get("status") or "pending"))
-    db.execute(
-        "UPDATE medicine_orders SET tracking_status=?, status=?, updated_at=? WHERE id=?",
-        (status_upper, status_value, now, int(order_id)),
+    updated = db.execute(
+        """
+        UPDATE medicine_orders
+        SET tracking_status=?, status=?, updated_at=?
+        WHERE id=? AND tracking_status=?
+        """,
+        (status_upper, status_value, now, int(order_id), current),
     )
+    if updated.rowcount != 1:
+        db.rollback()
+        raise ValueError("Order changed concurrently; refresh before retrying.")
     db.execute(
         """
         INSERT INTO order_events
