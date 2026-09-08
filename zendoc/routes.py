@@ -24,6 +24,12 @@ from .health_analytics import METRIC_TYPES, create_measurement, get_health_trend
 from .healthcare_finder import HealthcareFinder, normalize_query
 from .intelligence import ZendocIntelligence
 from .provider_operations import provider_operational_metrics
+from .provider_network import (
+    create_provider_prospect,
+    list_provider_prospects,
+    provider_network_metrics,
+    update_provider_prospect,
+)
 from .provider_onboarding import (
     EVIDENCE_TYPES,
     list_provider_evidence,
@@ -1061,6 +1067,43 @@ def provider_schedule():
     except (ValueError, PermissionError) as error:
         flash(str(error), "error")
     return redirect(url_for("main.provider_profile"))
+
+
+@bp.get("/admin/startup/provider-network")
+@owner_required
+def startup_provider_network():
+    return render_template(
+        "provider_network.html",
+        metrics=provider_network_metrics(g.user),
+        prospects=list_provider_prospects(
+            g.user,
+            status=request.args.get("status"),
+            provider_type=request.args.get("provider_type"),
+            limit=request.args.get("limit", 200),
+        ),
+    )
+
+
+@bp.post("/admin/startup/provider-network")
+@owner_required
+def startup_provider_prospect_create_web():
+    try:
+        create_provider_prospect(g.user, request.form)
+        flash("Provider prospect added.", "success")
+    except (TypeError, ValueError, PermissionError) as error:
+        flash(str(error), "error")
+    return redirect(url_for("main.startup_provider_network"))
+
+
+@bp.post("/admin/startup/provider-network/<int:prospect_id>")
+@owner_required
+def startup_provider_prospect_update_web(prospect_id):
+    try:
+        update_provider_prospect(g.user, prospect_id, request.form)
+        flash("Provider prospect updated.", "success")
+    except (LookupError, TypeError, ValueError, PermissionError) as error:
+        flash(str(error), "error")
+    return redirect(url_for("main.startup_provider_network"))
 
 
 @bp.get("/admin/startup/data-freshness")
