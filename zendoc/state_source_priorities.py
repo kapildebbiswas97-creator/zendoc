@@ -142,6 +142,7 @@ STATE_SOURCE_PRIORITIES = {
     "uttar_pradesh": {
         "official_directory_sources": [
             "lgd",
+            "up_nhm_health_facilities",
             "data_gov_hospitals",
             "clinical_establishments",
             "pmjay_hospitals",
