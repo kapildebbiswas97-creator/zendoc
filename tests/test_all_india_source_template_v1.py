@@ -5,11 +5,12 @@ from zendoc.state_source_priorities import (
 )
 
 
-def test_unconfigured_indian_state_gets_complete_baseline_template():
+def test_indian_state_without_state_specific_connectors_still_gets_full_national_scope():
     profile = state_source_priority("tamil_nadu")
 
-    assert profile["configured"] is False
-    assert profile["template"] == "INDIA_BASELINE_V1"
+    assert profile["configured"] is True
+    assert profile["template"] == "INDIA_NATIONAL_SCOPE_V1"
+    assert profile["coverage_scope"] == "FULL_REGION"
     for source in (
         "lgd",
         "data_gov_hospitals",
