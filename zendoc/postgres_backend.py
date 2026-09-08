@@ -50,6 +50,8 @@ LASTROWID_TABLES = {
     "home_health_requests",
     "institution_pilot_events",
     "institution_pilots",
+    "institution_pilot_usage_snapshots",
+    "institution_pilot_milestones",
     "hydration_logs",
     "medical_records",
     "medicine_orders",
