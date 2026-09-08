@@ -222,11 +222,23 @@ def available_slots(provider_profile_id, date_text):
             """,
             (provider_profile_id, weekday),
         ).fetchall()
+    db = get_db()
     booked = {
         row["scheduled_for"][:16]
-        for row in get_db().execute(
+        for row in db.execute(
             "SELECT scheduled_for FROM appointments WHERE provider_id=? AND status IN ('requested','confirmed')",
             (profile["user_id"],),
+        ).fetchall()
+    }
+    now_text = now_iso()
+    held = {
+        row["slot_key"][:16]
+        for row in db.execute(
+            """
+            SELECT slot_key FROM partner_slot_holds
+            WHERE provider_profile_id=? AND status='active' AND expires_at>?
+            """,
+            (int(provider_profile_id), now_text),
         ).fetchall()
     }
     slots = []
@@ -236,7 +248,7 @@ def available_slots(provider_profile_id, date_text):
         cursor = start
         while cursor + timedelta(minutes=schedule["slot_minutes"]) <= end:
             value = cursor.strftime("%Y-%m-%dT%H:%M")
-            if value not in booked and cursor.replace(tzinfo=timezone.utc) > datetime.now(timezone.utc):
+            if value not in booked and value not in held and cursor.replace(tzinfo=timezone.utc) > datetime.now(timezone.utc):
                 slots.append(value)
             cursor += timedelta(minutes=schedule["slot_minutes"])
     return slots
