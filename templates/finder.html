@@ -41,6 +41,12 @@
     </div>
 
     {% if result and result.results %}
+      <section class="panel finder-source-summary" aria-label="Search source summary">
+        <div class="summary-row"><span>ZENDOC verified</span><strong>{{ result.source_tiers.zendoc_verified }}</strong></div>
+        <div class="summary-row"><span>Official public directory</span><strong>{{ result.source_tiers.official_public_directory_not_zendoc_verified }}</strong></div>
+        <div class="summary-row"><span>External map listings</span><strong>{{ result.source_tiers.external_unverified }}</strong></div>
+        <p class="form-note">Verified ZENDOC profiles appear first. Official public records and external map listings are discovery references unless explicitly connected.</p>
+      </section>
       <div class="provider-results">
         {% for item in result.results %}
           <article class="provider-card">

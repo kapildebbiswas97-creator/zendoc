@@ -9,6 +9,7 @@ from pathlib import Path
 from flask import current_app
 
 from .db import get_db, now_iso
+from .places_provider import places_configuration_status
 
 
 REQUIRED_MIGRATIONS = (
@@ -155,6 +156,7 @@ def readiness_report():
         "database_durability": current_app.config.get("DATABASE_DURABILITY"),
         "persistence_verified": bool(current_app.config.get("PERSISTENCE_VERIFIED")),
         "deployment": deployment_identity(),
+        "healthcare_finder": places_configuration_status(),
     }
     try:
         probe = database_probe()

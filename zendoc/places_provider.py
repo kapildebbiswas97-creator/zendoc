@@ -337,6 +337,29 @@ class GooglePlacesProvider(PlacesProvider):
         return payload
 
 
+def places_configuration_status():
+    provider = os.environ.get("ZENDOC_PLACES_PROVIDER", "none").strip().lower()
+    has_google_key = bool(os.environ.get("ZENDOC_GOOGLE_PLACES_API_KEY"))
+    if provider == "google" and has_google_key:
+        mode = "google_with_openstreetmap_fallback"
+    elif provider == "google":
+        mode = "openstreetmap_fallback_google_key_missing"
+    elif provider in {"nominatim", "openstreetmap", "osm"}:
+        mode = "openstreetmap_nominatim"
+    else:
+        mode = "unconfigured"
+    return {
+        "configured_provider": provider,
+        "mode": mode,
+        "google_places_key_configured": has_google_key,
+        "external_discovery_available": mode != "unconfigured",
+        "truth_notice": (
+            "This status exposes provider mode only. It never exposes API credentials and does not imply "
+            "that any external listing is ZENDOC-verified or bookable."
+        ),
+    }
+
+
 def configured_places_provider():
     provider = os.environ.get("ZENDOC_PLACES_PROVIDER", "none").lower()
     timeout = os.environ.get("ZENDOC_PLACES_TIMEOUT_SECONDS", "8")
