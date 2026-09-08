@@ -14,6 +14,7 @@ from typing import Any
 
 from .db import get_db, now_iso
 from .security import assert_owner, hash_token
+from .partner_audit import record_partner_audit_event
 
 
 CLIENT_STATUSES = {"active", "suspended", "revoked"}
@@ -74,7 +75,18 @@ def create_business_api_client(actor: Any, data: dict) -> dict:
         ),
     )
     get_db().commit()
-    return get_business_api_client(int(cursor.lastrowid))
+    client = get_business_api_client(int(cursor.lastrowid))
+    record_partner_audit_event(
+        event_type="client_created",
+        actor_type="owner",
+        actor_user_id=int(actor["id"]),
+        client_id=int(client["id"]),
+        entity_type="business_api_client",
+        entity_id=client["client_uid"],
+        metadata={"client_type": client["client_type"], "scopes": client["allowed_scopes"]},
+    )
+    get_db().commit()
+    return client
 
 
 def update_business_api_client(actor: Any, client_id: int, data: dict) -> dict:
@@ -125,7 +137,18 @@ def update_business_api_client(actor: Any, client_id: int, data: dict) -> dict:
             (now, int(client_id)),
         )
     get_db().commit()
-    return get_business_api_client(int(client_id))
+    updated = get_business_api_client(int(client_id))
+    record_partner_audit_event(
+        event_type="client_updated",
+        actor_type="owner",
+        actor_user_id=int(actor["id"]),
+        client_id=int(client_id),
+        entity_type="business_api_client",
+        entity_id=updated["client_uid"],
+        metadata={"status": updated["status"], "scopes": updated["allowed_scopes"], "rate_limit_per_minute": updated["rate_limit_per_minute"]},
+    )
+    get_db().commit()
+    return updated
 
 
 def issue_business_api_key(
@@ -166,8 +189,20 @@ def issue_business_api_key(
         ),
     )
     get_db().commit()
+    key_id = int(cursor.lastrowid)
+    record_partner_audit_event(
+        event_type="key_issued",
+        actor_type="owner",
+        actor_user_id=int(actor["id"]),
+        client_id=int(client_id),
+        key_id=key_id,
+        entity_type="business_api_key",
+        entity_id=prefix,
+        metadata={"expires_at": expires_at},
+    )
+    get_db().commit()
     return {
-        "key_id": int(cursor.lastrowid),
+        "key_id": key_id,
         "client_id": int(client_id),
         "key_prefix": prefix,
         "api_key": raw_secret,
@@ -186,6 +221,17 @@ def revoke_business_api_key(actor: Any, key_id: int) -> dict:
     db.execute(
         "UPDATE business_api_keys SET status='revoked',revoked_at=? WHERE id=?",
         (now, int(key_id)),
+    )
+    db.commit()
+    record_partner_audit_event(
+        event_type="key_revoked",
+        actor_type="owner",
+        actor_user_id=int(actor["id"]),
+        client_id=int(row["client_id"]),
+        key_id=int(key_id),
+        entity_type="business_api_key",
+        entity_id=row["key_prefix"],
+        metadata={"status": "revoked"},
     )
     db.commit()
     return {"key_id": int(key_id), "status": "revoked", "revoked_at": now}
@@ -240,6 +286,17 @@ def authenticate_business_api_key(
         "rate_limit_per_minute": int(row["rate_limit_per_minute"] or 60),
     }
     _record_usage(identity, endpoint=endpoint, method=method, status_code=200)
+    record_partner_audit_event(
+        event_type="api_authenticated",
+        actor_type="partner",
+        client_id=int(row["client_id"]),
+        key_id=int(row["id"]),
+        endpoint=endpoint,
+        entity_type="business_api_client",
+        entity_id=row["client_uid"],
+        metadata={"method": str(method or "GET").upper(), "required_scope": required_scope},
+    )
+    get_db().commit()
     return identity
 
 
