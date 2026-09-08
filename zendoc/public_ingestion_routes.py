@@ -38,7 +38,8 @@ from .institution_pilots import (
     update_institution_pilot,
     update_pilot_milestone,
 )
-from .startup_analytics import care_journey_conversion, india_coverage_quality, provider_onboarding_funnel, retention_metrics, startup_metrics
+from .startup_analytics import user_activation_funnel,
+ care_journey_conversion, india_coverage_quality, provider_onboarding_funnel, retention_metrics, startup_metrics
 from .startup_finance import create_financial_entry, create_financial_snapshot, financial_kpis, list_financial_entries
 from .investor_dashboard import investor_traction_snapshot
 from .state_geography_bootstrap import (
@@ -660,5 +661,17 @@ def api_startup_provider_prospect_update(prospect_id):
         return jsonify({"prospect": prospect})
     except LookupError as exc:
         return jsonify({"error": {"code": 404, "message": str(exc)}}), 404
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+
+
+@bp.get("/api/v1/admin/startup/activation-funnel")
+def api_startup_activation_funnel():
+    user, error = _owner()
+    if error:
+        return error
+    try:
+        days = int(request.args.get("days", 30))
+        return jsonify({"activation_funnel": user_activation_funnel(user, days=days)})
     except (TypeError, ValueError) as exc:
         return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
