@@ -6,6 +6,7 @@ from zendoc.partner_handoffs import (
     create_partner_booking_handoff,
     get_partner_booking_handoff,
     owner_update_partner_booking_handoff,
+    provider_update_partner_booking_handoff,
 )
 from tests.test_milestone1 import make_app
 
@@ -92,7 +93,8 @@ def test_partner_handoff_is_idempotent_and_not_confirmed_until_accepted(tmp_path
             status_note="Operationally accepted.",
         )
         assert accepted["status"] == "accepted"
-        assert accepted["booking_confirmed"] is True
+        assert accepted["handoff_accepted"] is True
+        assert accepted["booking_confirmed"] is False
 
 
 def test_partner_handoff_is_cross_tenant_isolated(tmp_path):
@@ -161,3 +163,66 @@ def test_unavailable_slot_is_rejected_and_schema_has_no_clinical_fields(tmp_path
         }
         forbidden = {"symptoms", "diagnosis", "prescription", "medical_history", "clinical_notes", "reason"}
         assert forbidden.isdisjoint(columns)
+
+
+def test_only_target_provider_can_review_handoff(tmp_path):
+    app = make_app(tmp_path)
+    with app.app_context():
+        db = get_db()
+        profile_id, slot = create_verified_provider_with_schedule(db)
+        target_user = db.execute("SELECT user_id FROM provider_profiles WHERE id=?", (profile_id,)).fetchone()["user_id"]
+
+        now = "2026-09-08T00:00:00+00:00"
+        other_user = db.execute(
+            "INSERT INTO users (name,email,email_normalized,password_hash,role,active,created_at,updated_at) VALUES (?,?,?,?,?,1,?,?)",
+            ("Other Provider", "other-provider@example.com", "other-provider@example.com", "x", "doctor", now, now),
+        ).lastrowid
+        db.execute(
+            """
+            INSERT INTO provider_profiles
+            (user_id,provider_type,specialty,qualifications,license_identifier,organization,address,city,state,
+             postal_code,public_phone,verification_status,created_at,updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,'verified',?,?)
+            """,
+            (
+                other_user, "doctor", "General Medicine", "MBBS", "REG-OTHER", "Other Clinic",
+                "2 Road", "Kalyani", "West Bengal", "741235", "1234567890", now, now,
+            ),
+        )
+        db.commit()
+
+        partner = create_business_api_client(
+            owner_actor(),
+            {"name": "Provider Review Partner", "client_type": "employer", "allowed_scopes": ["booking_handoff.write"]},
+        )
+        key = issue_business_api_key(owner_actor(), partner["id"], expires_in_days=30)
+        from zendoc.business_api import authenticate_business_api_key
+        identity = authenticate_business_api_key(key["api_key"], required_scope="booking_handoff.write", endpoint="/test")
+        handoff = create_partner_booking_handoff(
+            identity,
+            provider_profile_id=profile_id,
+            partner_reference="PROVIDER-OWNERSHIP",
+            requested_for=slot,
+        )
+
+        target_actor = {"id": int(target_user), "role": "doctor", "active": 1}
+        accepted = provider_update_partner_booking_handoff(
+            target_actor,
+            handoff["id"],
+            status="accepted",
+            status_note="Accepted for coordination.",
+        )
+        assert accepted["handoff_accepted"] is True
+        assert accepted["booking_confirmed"] is False
+
+        other_actor = {"id": int(other_user), "role": "doctor", "active": 1}
+        blocked = False
+        try:
+            provider_update_partner_booking_handoff(
+                other_actor,
+                handoff["id"],
+                status="rejected",
+            )
+        except LookupError:
+            blocked = True
+        assert blocked is True
