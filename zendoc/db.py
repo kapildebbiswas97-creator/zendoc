@@ -1064,8 +1064,14 @@ def init_db():
             title TEXT NOT NULL,
             message TEXT NOT NULL,
             provider_response TEXT,
+            provider_message_id TEXT,
+            failure_reason TEXT,
             created_at TEXT NOT NULL,
-            sent_at TEXT
+            queued_at TEXT,
+            sent_at TEXT,
+            delivered_at TEXT,
+            failed_at TEXT,
+            updated_at TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_notif_deliveries_user ON notification_deliveries(user_id, status);
 
@@ -1417,6 +1423,42 @@ def migrate_schema(db):
         """
     )
     db.execute("CREATE INDEX IF NOT EXISTS idx_ai_conversations_user ON ai_conversations(user_id, updated_at)")
+
+    notification_delivery_columns = table_columns(db, "notification_deliveries")
+    for column, ddl in {
+        "provider_message_id": "ALTER TABLE notification_deliveries ADD COLUMN provider_message_id TEXT",
+        "failure_reason": "ALTER TABLE notification_deliveries ADD COLUMN failure_reason TEXT",
+        "queued_at": "ALTER TABLE notification_deliveries ADD COLUMN queued_at TEXT",
+        "delivered_at": "ALTER TABLE notification_deliveries ADD COLUMN delivered_at TEXT",
+        "failed_at": "ALTER TABLE notification_deliveries ADD COLUMN failed_at TEXT",
+        "updated_at": "ALTER TABLE notification_deliveries ADD COLUMN updated_at TEXT",
+    }.items():
+        if column not in notification_delivery_columns:
+            db.execute(ddl)
+    db.execute(
+        """
+        UPDATE notification_deliveries
+        SET queued_at=COALESCE(queued_at,created_at),
+            updated_at=COALESCE(updated_at,created_at)
+        """
+    )
+    db.execute(
+        """
+        UPDATE notification_deliveries
+        SET status='queued',
+            failure_reason=COALESCE(failure_reason,provider_response)
+        WHERE status='integration_required'
+        """
+    )
+    db.execute(
+        """
+        UPDATE notification_deliveries
+        SET status='delivered',
+            sent_at=COALESCE(sent_at,created_at),
+            delivered_at=COALESCE(delivered_at,sent_at,created_at)
+        WHERE channel='in_app' AND status='sent'
+        """
+    )
 
     metric_columns = table_columns(db, "health_metrics")
     for column, ddl in {
