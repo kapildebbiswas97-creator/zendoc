@@ -25,6 +25,8 @@ from .institution_pilots import (
     update_institution_pilot,
 )
 from .startup_analytics import care_journey_conversion, india_coverage_quality, provider_onboarding_funnel, retention_metrics, startup_metrics
+from .startup_finance import create_financial_entry, create_financial_snapshot, financial_kpis, list_financial_entries
+from .investor_dashboard import investor_traction_snapshot
 from .state_geography_bootstrap import (
     bootstrap_state_geography,
     list_target_states,
@@ -444,3 +446,59 @@ def api_business_key_revoke(key_id):
         return jsonify({"key": revoke_business_api_key(user, key_id)})
     except LookupError as exc:
         return jsonify({"error": {"code": 404, "message": str(exc)}}), 404
+
+
+@bp.get("/api/v1/admin/startup/finance")
+def api_startup_finance():
+    user, error = _owner()
+    if error:
+        return error
+    try:
+        return jsonify({
+            "kpis": financial_kpis(user, month=request.args.get("month")),
+            "entries": list_financial_entries(user, limit=request.args.get("limit", 200)),
+        })
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+
+
+@bp.post("/api/v1/admin/startup/finance/entries")
+def api_startup_finance_entry_create():
+    user, error = _owner()
+    if error:
+        return error
+    try:
+        entry = create_financial_entry(user, request.get_json(silent=True) or {})
+        return jsonify({"entry": entry}), 201
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+
+
+@bp.post("/api/v1/admin/startup/finance/snapshots")
+def api_startup_finance_snapshot_create():
+    user, error = _owner()
+    if error:
+        return error
+    try:
+        snapshot = create_financial_snapshot(user, request.get_json(silent=True) or {})
+        return jsonify({"snapshot": snapshot}), 201
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+
+
+@bp.get("/api/v1/admin/startup/investor-snapshot")
+def api_startup_investor_snapshot():
+    user, error = _owner()
+    if error:
+        return error
+    try:
+        days = int(request.args.get("days", 30))
+        return jsonify({
+            "snapshot": investor_traction_snapshot(
+                user,
+                days=days,
+                finance_month=request.args.get("finance_month"),
+            )
+        })
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
