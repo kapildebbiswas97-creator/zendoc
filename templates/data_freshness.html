@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Data Freshness — ZENDOC{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Public data operations</p>
+    <h1>Data Freshness & Ingestion</h1>
+    <p class="section-copy">Observed source freshness, recent imports and geography-link quality. No synthetic coverage score.</p>
+  </div>
+  <a class="secondary-action" href="{{ url_for('main.startup_command_center') }}">Back to Startup Command Center</a>
+</section>
+
+<section class="grid two">
+  <article class="panel">
+    <div class="panel-head"><h2>Freshness states</h2><span class="status-badge working">{{ report.source_count }} sources</span></div>
+    <div class="summary-row"><span>Recent</span><strong>{{ report.status_counts.recent }}</strong></div>
+    <div class="summary-row"><span>Aging</span><strong>{{ report.status_counts.aging }}</strong></div>
+    <div class="summary-row"><span>Stale</span><strong>{{ report.status_counts.stale }}</strong></div>
+    <div class="summary-row"><span>Never ingested</span><strong>{{ report.status_counts.never_ingested }}</strong></div>
+    <div class="summary-row"><span>Reference only</span><strong>{{ report.status_counts.reference_only }}</strong></div>
+    <p class="form-note">Recent ≤ {{ report.thresholds.recent_days }} days · aging ≤ {{ report.thresholds.aging_days }} days.</p>
+  </article>
+
+  <article class="panel">
+    <h2>Interpretation</h2>
+    <p class="form-note">{{ report.truth_notice }}</p>
+    <div class="summary-row"><span>P0</span><strong>Never ingested / stale</strong></div>
+    <div class="summary-row"><span>P1</span><strong>Aging or quality issue</strong></div>
+    <div class="summary-row"><span>P2</span><strong>Recent and clean</strong></div>
+    <div class="summary-row"><span>P3</span><strong>Reference-only / not scheduled for ingestion</strong></div>
+  </article>
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head"><h2>Source refresh queue</h2></div>
+  <table>
+    <thead>
+      <tr>
+        <th>Priority</th><th>Source</th><th>State</th><th>Last completed</th><th>Active entities</th>
+        <th>Linked</th><th>Unresolved</th><th>Ambiguous</th><th>Rejected</th><th>Connector</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for source in report.sources %}
+      <tr>
+        <td><strong>{{ source.refresh_priority }}</strong></td>
+        <td><strong>{{ source.name }}</strong><br><small>{{ source.source_id }} · {{ source.geography }}</small></td>
+        <td>{{ source.freshness_status|replace('_',' ')|title }}{% if source.age_days is not none %}<br><small>{{ source.age_days }} days</small>{% endif %}</td>
+        <td>{{ source.last_completed_at or '—' }}</td>
+        <td>{{ source.active_entity_count }}</td>
+        <td>{{ source.latest_geography_linked_count }}</td>
+        <td>{{ source.latest_geography_unresolved_count }}</td>
+        <td>{{ source.latest_geography_ambiguous_count }}</td>
+        <td>{{ source.last_rejected_count }}</td>
+        <td>{{ source.live_fetch_status|replace('_',' ')|title }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head"><h2>Recent completed imports</h2></div>
+  {% if report.recent_completed_batches %}
+  <table>
+    <thead><tr><th>Time</th><th>Source</th><th>Type</th><th>Records</th><th>Accepted</th><th>Rejected</th><th>Linked</th><th>Unresolved</th></tr></thead>
+    <tbody>
+    {% for batch in report.recent_completed_batches %}
+      <tr>
+        <td>{{ batch.completed_at }}</td>
+        <td>{{ batch.source_id }}</td>
+        <td>{{ batch.ingestion_type }}</td>
+        <td>{{ batch.record_count }}</td>
+        <td>{{ batch.accepted_count }}</td>
+        <td>{{ batch.rejected_count }}</td>
+        <td>{{ batch.summary.geography_linked_count or 0 }}</td>
+        <td>{{ batch.summary.geography_unresolved_count or 0 }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="form-note">No completed non-dry-run ingestion batches are recorded yet.</p>
+  {% endif %}
+</section>
+{% endblock %}
