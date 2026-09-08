@@ -17,6 +17,7 @@ from typing import Any
 
 from .db import get_db, now_iso
 from .geography_graph import geography_write_transaction, link_entity_to_geography, normalize_geography_name, upsert_geography_node
+from .geography_resolution import resolve_canonical_geography
 from .public_source_registry import get_public_ingestion_source
 from .security import assert_owner
 
@@ -279,6 +280,10 @@ def _prepare_healthcare_entities(source: dict, records: list[dict]) -> dict:
                 "city": _optional(row, "city"),
                 "district": _optional(row, "district"),
                 "state": _optional(row, "state"),
+                "subdistrict": _optional(row, "subdistrict"),
+                "block": _optional(row, "block"),
+                "village": _optional(row, "village"),
+                "locality": _optional(row, "locality"),
                 "postal_code": _optional(row, "postal_code"),
                 "latitude": _coordinate(row.get("latitude"), -90, 90, "latitude"),
                 "longitude": _coordinate(row.get("longitude"), -180, 180, "longitude"),
@@ -303,33 +308,39 @@ def _apply_healthcare_entities(source: dict, records: list[dict]) -> dict:
     now = now_iso()
     applied = []
     rejected = []
-    inserted = updated = unchanged = linked = 0
+    inserted = updated = unchanged = linked = unresolved = ambiguous = 0
 
     with geography_write_transaction():
         for row in records:
             geography_node_id = None
-            geography_source = row.get("geography_source")
+            geography_source = row.get("geography_source") or "lgd"
             geography_source_record_id = row.get("geography_source_record_id")
-            if geography_source_record_id:
-                geo = db.execute(
-                    """
-                    SELECT id FROM geography_nodes
-                    WHERE source=? AND source_ref=?
-                    ORDER BY id ASC LIMIT 1
-                    """,
-                    (geography_source or "lgd", geography_source_record_id),
-                ).fetchone()
-                if not geo:
-                    rejected.append({
-                        "row_number": row["row_number"],
-                        "reason": (
-                            f"canonical geography not found for source={geography_source or 'lgd'} "
-                            f"source_ref={geography_source_record_id}"
-                        ),
-                        "source_record_id": row["source_record_id"],
-                    })
-                    continue
-                geography_node_id = int(geo["id"])
+            resolution = resolve_canonical_geography(
+                source=geography_source,
+                source_ref=geography_source_record_id,
+                state=row.get("state"),
+                district=row.get("district"),
+                subdistrict=row.get("subdistrict"),
+                block=row.get("block"),
+                village=row.get("village"),
+                locality=row.get("locality"),
+            )
+            if geography_source_record_id and resolution["status"] != "MATCHED":
+                rejected.append({
+                    "row_number": row["row_number"],
+                    "reason": (
+                        f"canonical geography not found for source={geography_source} "
+                        f"source_ref={geography_source_record_id}"
+                    ),
+                    "source_record_id": row["source_record_id"],
+                })
+                continue
+            if resolution["status"] == "MATCHED":
+                geography_node_id = int(resolution["geography_node_id"])
+            elif resolution["status"] == "AMBIGUOUS":
+                ambiguous += 1
+            elif resolution["status"] == "NOT_FOUND":
+                unresolved += 1
 
             metadata_json = json.dumps(row["metadata"], sort_keys=True, ensure_ascii=False, separators=(",", ":"))
             existing = db.execute(
@@ -397,8 +408,10 @@ def _apply_healthcare_entities(source: dict, records: list[dict]) -> dict:
                     freshness_at=row.get("freshness_at"),
                     metadata={
                         "source_record_id": row["source_record_id"],
-                        "canonical_geography_source": geography_source or "lgd",
+                        "canonical_geography_source": geography_source,
                         "canonical_geography_source_record_id": geography_source_record_id,
+                        "resolution_method": resolution.get("resolution_method"),
+                        "matched_level": resolution.get("matched_level"),
                     },
                 )
                 linked += 1
@@ -417,6 +430,8 @@ def _apply_healthcare_entities(source: dict, records: list[dict]) -> dict:
         "updated_count": updated,
         "unchanged_count": unchanged,
         "geography_linked_count": linked,
+        "geography_unresolved_count": unresolved,
+        "geography_ambiguous_count": ambiguous,
     }
 
 
@@ -458,6 +473,8 @@ def _complete_batch(batch_id: int, preview: dict, applied: dict) -> dict:
         "updated_count": int(applied.get("updated_count", 0) or 0),
         "unchanged_count": int(applied.get("unchanged_count", 0) or 0),
         "geography_linked_count": int(applied.get("geography_linked_count", 0) or 0),
+        "geography_unresolved_count": int(applied.get("geography_unresolved_count", 0) or 0),
+        "geography_ambiguous_count": int(applied.get("geography_ambiguous_count", 0) or 0),
     }
     db = get_db()
     db.execute(
