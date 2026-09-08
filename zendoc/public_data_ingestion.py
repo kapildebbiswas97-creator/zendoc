@@ -16,7 +16,7 @@ import uuid
 from typing import Any
 
 from .db import get_db, now_iso
-from .geography_graph import normalize_geography_name, upsert_geography_node
+from .geography_graph import link_entity_to_geography, normalize_geography_name, upsert_geography_node
 from .public_source_registry import get_public_ingestion_source
 from .security import assert_owner
 
@@ -271,6 +271,8 @@ def _prepare_healthcare_entities(source: dict, records: list[dict]) -> dict:
                 "public_email": _optional(row, "public_email"),
                 "website": _optional(row, "website"),
                 "freshness_at": _optional(row, "freshness_at"),
+                "geography_source": _optional(row, "geography_source"),
+                "geography_source_record_id": _optional(row, "geography_source_record_id"),
                 "metadata": row.get("metadata") if isinstance(row.get("metadata"), dict) else {},
             })
         except (TypeError, ValueError) as exc:
@@ -282,30 +284,46 @@ def _apply_healthcare_entities(source: dict, records: list[dict]) -> dict:
     db = get_db()
     now = now_iso()
     applied = []
+    rejected = []
+    inserted = updated = unchanged = linked = 0
+
     for row in records:
         metadata_json = json.dumps(row["metadata"], sort_keys=True, ensure_ascii=False, separators=(",", ":"))
         existing = db.execute(
-            "SELECT id FROM public_healthcare_entities WHERE source_id=? AND source_record_id=?",
+            "SELECT * FROM public_healthcare_entities WHERE source_id=? AND source_record_id=?",
             (source["source_id"], row["source_record_id"]),
         ).fetchone()
         values = (
             row["category"], row["name"], row["specialty"], row["address"], row["city"],
             row["district"], row["state"], row["postal_code"], row["latitude"], row["longitude"],
             row["public_phone"], row["public_email"], row["website"], source["trust_level"],
-            row["freshness_at"], metadata_json, now,
+            row["freshness_at"], metadata_json,
         )
         if existing:
-            db.execute(
-                """
-                UPDATE public_healthcare_entities
-                SET category=?,name=?,specialty=?,address=?,city=?,district=?,state=?,postal_code=?,
-                    latitude=?,longitude=?,public_phone=?,public_email=?,website=?,source_trust=?,
-                    freshness_at=?,metadata_json=?,active=1,updated_at=?
-                WHERE id=?
-                """,
-                (*values, existing["id"]),
+            current = (
+                existing["category"], existing["name"], existing["specialty"], existing["address"],
+                existing["city"], existing["district"], existing["state"], existing["postal_code"],
+                existing["latitude"], existing["longitude"], existing["public_phone"], existing["public_email"],
+                existing["website"], existing["source_trust"], existing["freshness_at"], existing["metadata_json"],
             )
-            entity_id = existing["id"]
+            if current == values and int(existing["active"] or 0) == 1:
+                entity_id = existing["id"]
+                disposition = "unchanged"
+                unchanged += 1
+            else:
+                db.execute(
+                    """
+                    UPDATE public_healthcare_entities
+                    SET category=?,name=?,specialty=?,address=?,city=?,district=?,state=?,postal_code=?,
+                        latitude=?,longitude=?,public_phone=?,public_email=?,website=?,source_trust=?,
+                        freshness_at=?,metadata_json=?,active=1,updated_at=?
+                    WHERE id=?
+                    """,
+                    (*values, now, existing["id"]),
+                )
+                entity_id = existing["id"]
+                disposition = "updated"
+                updated += 1
         else:
             cursor = db.execute(
                 """
@@ -323,9 +341,68 @@ def _apply_healthcare_entities(source: dict, records: list[dict]) -> dict:
                 ),
             )
             entity_id = cursor.lastrowid
-        applied.append({"row_number": row["row_number"], "entity_id": entity_id, "source_record_id": row["source_record_id"]})
+            disposition = "inserted"
+            inserted += 1
+
+        geography_source = row.get("geography_source")
+        geography_source_record_id = row.get("geography_source_record_id")
+        if geography_source_record_id:
+            geo = db.execute(
+                """
+                SELECT id FROM geography_nodes
+                WHERE source=? AND source_ref=?
+                ORDER BY id ASC LIMIT 1
+                """,
+                (geography_source or "lgd", geography_source_record_id),
+            ).fetchone()
+            if geo:
+                try:
+                    link_entity_to_geography(
+                        geography_node_id=geo["id"],
+                        entity_type=row["category"],
+                        entity_id=entity_id,
+                        source=source["source_id"],
+                        verification_state="EXTERNAL_UNVERIFIED",
+                        freshness_at=row.get("freshness_at"),
+                        metadata={
+                            "source_record_id": row["source_record_id"],
+                            "canonical_geography_source": geography_source or "lgd",
+                            "canonical_geography_source_record_id": geography_source_record_id,
+                        },
+                    )
+                    linked += 1
+                except (LookupError, TypeError, ValueError) as exc:
+                    rejected.append({
+                        "row_number": row["row_number"],
+                        "reason": f"geography link failed: {exc}",
+                        "source_record_id": row["source_record_id"],
+                    })
+            else:
+                rejected.append({
+                    "row_number": row["row_number"],
+                    "reason": (
+                        f"canonical geography not found for source={geography_source or 'lgd'} "
+                        f"source_ref={geography_source_record_id}"
+                    ),
+                    "source_record_id": row["source_record_id"],
+                })
+
+        applied.append({
+            "row_number": row["row_number"],
+            "entity_id": entity_id,
+            "source_record_id": row["source_record_id"],
+            "disposition": disposition,
+        })
+
     db.commit()
-    return {"applied": applied, "rejected_during_apply": []}
+    return {
+        "applied": applied,
+        "rejected_during_apply": rejected,
+        "inserted_count": inserted,
+        "updated_count": updated,
+        "unchanged_count": unchanged,
+        "geography_linked_count": linked,
+    }
 
 
 def _create_batch(*, actor: Any, source_id: str, ingestion_type: str, checksum: str, dry_run: bool, preview: dict) -> dict:
@@ -362,6 +439,10 @@ def _complete_batch(batch_id: int, preview: dict, applied: dict) -> dict:
         "preview_rejected": preview["rejected"][:100],
         "apply_rejected": apply_rejected[:100],
         "applied": applied.get("applied", [])[:100],
+        "inserted_count": int(applied.get("inserted_count", 0) or 0),
+        "updated_count": int(applied.get("updated_count", 0) or 0),
+        "unchanged_count": int(applied.get("unchanged_count", 0) or 0),
+        "geography_linked_count": int(applied.get("geography_linked_count", 0) or 0),
     }
     db = get_db()
     db.execute(
