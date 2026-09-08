@@ -22,6 +22,7 @@ ALLOWED_SCOPES = {
     "provider_profile.read",
     "provider_availability.read",
     "pilot_metrics.read",
+    "booking_handoff.write",
 }
 DEFAULT_SCOPES = {"public_directory.read"}
 
