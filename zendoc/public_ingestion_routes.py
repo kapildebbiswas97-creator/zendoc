@@ -12,6 +12,7 @@ from .business_api import (
     issue_business_api_key,
     list_business_api_clients,
     revoke_business_api_key,
+    update_business_api_client,
 )
 from .public_source_registry import list_public_ingestion_sources, public_data_coverage_matrix
 from .official_connectors import connector_readiness, infer_mapping, list_connector_profiles
@@ -414,6 +415,20 @@ def api_business_client_create():
     try:
         client = create_business_api_client(user, request.get_json(silent=True) or {})
         return jsonify({"client": client}), 201
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+
+
+@bp.patch("/api/v1/admin/startup/business-api-clients/<int:client_id>")
+def api_business_client_update(client_id):
+    user, error = _owner()
+    if error:
+        return error
+    try:
+        client = update_business_api_client(user, client_id, request.get_json(silent=True) or {})
+        return jsonify({"client": client})
+    except LookupError as exc:
+        return jsonify({"error": {"code": 404, "message": str(exc)}}), 404
     except (TypeError, ValueError) as exc:
         return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
 
