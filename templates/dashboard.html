@@ -3,7 +3,7 @@
 {% block content %}
 {% if preview_mode %}
 <aside class="emergency-strip" aria-label="Owner QA preview">
-  <p><strong>Owner QA preview · {{ preview_role|title }}</strong> — You remain authenticated as the ZENDOC owner. This preview never impersonates another account and never grants hidden write access.</p>
+  <p><strong>Owner QA preview · {{ preview_role|title }}</strong> — You remain authenticated as the ZENDOC owner. There is no role impersonation, no private account takeover, and no hidden write access in this preview.</p>
   <a href="{{ url_for('main.admin') }}" class="secondary-action">Back to Admin</a>
 </aside>
 {% endif %}
