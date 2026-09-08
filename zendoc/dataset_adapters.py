@@ -23,9 +23,10 @@ CANONICAL_FIELDS = {
     "public_healthcare_entities": {
         "required": {"source_record_id", "category", "name"},
         "optional": {
-            "specialty", "address", "city", "district", "state", "postal_code",
-            "latitude", "longitude", "public_phone", "public_email", "website",
-            "freshness_at", "metadata", "geography_source", "geography_source_record_id",
+            "specialty", "address", "city", "district", "state", "subdistrict", "block",
+            "village", "locality", "postal_code", "latitude", "longitude", "public_phone",
+            "public_email", "website", "freshness_at", "metadata", "geography_source",
+            "geography_source_record_id",
         },
     },
 }
