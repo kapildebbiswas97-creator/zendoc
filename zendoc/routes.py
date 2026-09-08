@@ -55,7 +55,7 @@ from .organization_service import assert_resource_tenant
 from .database_reliability import backup_readiness, readiness_report
 from .data_freshness import ingestion_freshness_report
 from .security import csrf_token, hash_token, is_owner, load_user_and_check_csrf, login_required, new_token, owner_required, role_required, start_user_session
-from .startup_analytics import care_journey_conversion, india_coverage_quality, provider_onboarding_funnel, record_finder_search, record_product_activity, retention_metrics, startup_metrics, submit_finder_feedback
+from .startup_analytics import care_journey_conversion, india_coverage_quality, provider_onboarding_funnel, record_finder_search, record_product_activity, retention_metrics, startup_metrics, submit_finder_feedback, user_activation_funnel
 from .startup_finance import create_financial_entry, create_financial_snapshot, financial_kpis, list_financial_entries
 from .investor_dashboard import investor_traction_snapshot
 from .business_api import (
@@ -381,7 +381,7 @@ def register(role):
             return render_template("register.html", role=role), 400
         try:
             now = now_iso()
-            get_db().execute(
+            cursor = get_db().execute(
                 """
                 INSERT INTO users
                 (name,email,email_normalized,password_hash,role,phone,age,gender,city,emergency_contact,created_at,updated_at)
@@ -402,6 +402,8 @@ def register(role):
                     now,
                 ),
             )
+            created_user = get_db().execute("SELECT * FROM users WHERE id=?", (int(cursor.lastrowid),)).fetchone()
+            record_product_activity(created_user, event_type="account_registered")
             get_db().commit()
             flash("Registration complete. Please log in.", "success")
             return redirect(url_for("main.login", role=role))
@@ -595,6 +597,7 @@ def profile():
                 g.user["id"],
             ),
         )
+        record_product_activity(g.user, event_type="profile_updated")
         audit("update", "profile", str(g.user["id"]))
         get_db().commit()
         flash("Profile updated.", "success")
@@ -613,6 +616,7 @@ def appointments():
             try:
                 book_provider_slot(g.user, int(provider_profile_id), request.form.get("scheduled_for"), request.form.get("reason", "").strip())
                 create_notification(g.user["id"], "Appointment requested", "Your connected appointment request was saved.")
+                record_product_activity(g.user, event_type="appointment_requested")
                 audit("create", "connected_appointment")
                 db.commit()
                 flash("Appointment requested. The provider can now review it.", "success")
@@ -641,6 +645,7 @@ def appointments():
             ),
         )
         create_notification(g.user["id"], "Appointment requested", "Your appointment request was saved.")
+        record_product_activity(g.user, event_type="appointment_requested")
         audit("create", "appointment")
         db.commit()
         flash("Appointment saved.", "success")
@@ -962,6 +967,9 @@ def provider_detail(profile_id):
         """,
         (profile_id,),
     ).fetchall()
+    if g.user["role"] == "patient":
+        record_product_activity(g.user, event_type="provider_view")
+        get_db().commit()
     return render_template(
         "provider_detail.html",
         profile=profile,
