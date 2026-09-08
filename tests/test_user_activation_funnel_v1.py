@@ -100,7 +100,13 @@ def test_activation_funnel_counts_only_observed_patient_progress(tmp_path):
         assert counts["useful_search"] == 1
         assert counts["provider_view"] == 1
         assert counts["appointment_requested"] == 1
-        assert counts["finder_feedback"] == 1
+        assert funnel["finder_feedback_patient_count"] == 1
+        assert funnel["independent_milestones"]["finder_feedback"] == 1
+        assert all(
+            stage["conversion_from_previous_stage"] is None
+            or stage["conversion_from_previous_stage"] <= 1
+            for stage in funnel["stages"]
+        )
         assert "synthetic" in funnel["truth_notice"].lower()
 
 
