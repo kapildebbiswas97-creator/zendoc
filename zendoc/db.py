@@ -2128,6 +2128,48 @@ def migrate_schema(db):
         CREATE INDEX IF NOT EXISTS idx_institution_pilot_events
             ON institution_pilot_events(pilot_id, created_at);
 
+        CREATE TABLE IF NOT EXISTS business_api_clients (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            client_uid TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            client_type TEXT NOT NULL,
+            pilot_id INTEGER REFERENCES institution_pilots(id) ON DELETE SET NULL,
+            status TEXT NOT NULL DEFAULT 'active',
+            allowed_scopes_json TEXT NOT NULL DEFAULT '[]',
+            rate_limit_per_minute INTEGER NOT NULL DEFAULT 60,
+            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_business_api_clients_status
+            ON business_api_clients(status, updated_at);
+
+        CREATE TABLE IF NOT EXISTS business_api_keys (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            client_id INTEGER NOT NULL REFERENCES business_api_clients(id) ON DELETE CASCADE,
+            key_prefix TEXT NOT NULL,
+            key_hash TEXT NOT NULL UNIQUE,
+            status TEXT NOT NULL DEFAULT 'active',
+            expires_at TEXT,
+            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL,
+            revoked_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_business_api_keys_client
+            ON business_api_keys(client_id, status);
+
+        CREATE TABLE IF NOT EXISTS business_api_usage (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            client_id INTEGER NOT NULL REFERENCES business_api_clients(id) ON DELETE CASCADE,
+            key_id INTEGER REFERENCES business_api_keys(id) ON DELETE SET NULL,
+            endpoint TEXT NOT NULL,
+            method TEXT NOT NULL,
+            status_code INTEGER NOT NULL,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_business_api_usage_client_time
+            ON business_api_usage(client_id, created_at);
+
         CREATE TABLE IF NOT EXISTS care_journeys (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             journey_uid TEXT NOT NULL UNIQUE,
