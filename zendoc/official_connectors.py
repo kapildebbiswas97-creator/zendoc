@@ -14,7 +14,7 @@ import os
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from .dataset_adapters import adapt_records
+from .dataset_adapters import CANONICAL_FIELDS, adapt_records
 from .public_source_registry import get_public_ingestion_source
 
 
@@ -465,7 +465,15 @@ def infer_mapping(source_id: str, rows: list[dict[str, Any]]) -> dict:
     lower_columns = {name.lower(): name for name in columns}
 
     mapping: dict[str, str] = {}
+    schema = CANONICAL_FIELDS.get(template["ingestion_type"]) or {}
+    for canonical in sorted((schema.get("required") or set()) | (schema.get("optional") or set())):
+        exact = lower_columns.get(canonical.lower())
+        if exact:
+            mapping[canonical] = exact
+
     for canonical, aliases in template["field_aliases"].items():
+        if canonical in mapping:
+            continue
         for alias in aliases:
             if alias.lower() in lower_columns:
                 mapping[canonical] = lower_columns[alias.lower()]
