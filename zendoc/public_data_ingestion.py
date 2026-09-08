@@ -13,6 +13,8 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
+import unicodedata
+from datetime import datetime, timezone
 from typing import Any
 
 from .db import get_db, now_iso
@@ -149,18 +151,148 @@ def search_public_healthcare_entities(
             "OR LOWER(COALESCE(state,'')) LIKE LOWER(?) OR LOWER(COALESCE(address,'')) LIKE LOWER(?))"
         )
         params.extend([value, value, value, value])
-    params.append(limit)
+
+    # Pull extra candidates before conservative cross-source deduplication so
+    # duplicate official records do not reduce the requested result count.
+    candidate_limit = min(400, max(limit, limit * 4))
+    params.append(candidate_limit)
     rows = db.execute(
         f"""
         SELECT * FROM public_healthcare_entities
         WHERE {' AND '.join(clauses)}
-        ORDER BY CASE source_trust WHEN 'AUTHORITATIVE_REGISTRY' THEN 0 ELSE 1 END,
-                 updated_at DESC, name ASC
+        ORDER BY
+          CASE source_trust
+            WHEN 'AUTHORITATIVE_REGISTRY' THEN 0
+            WHEN 'OFFICIAL_PUBLIC_DATA' THEN 1
+            WHEN 'ACCREDITATION_BODY_PUBLIC_DATA' THEN 2
+            ELSE 3
+          END,
+          updated_at DESC,
+          name ASC
         LIMIT ?
         """,
         params,
     ).fetchall()
-    return [_public_entity(dict(row)) for row in rows]
+    records = [_public_entity(dict(row)) for row in rows]
+    return dedupe_public_healthcare_entities(records)[:limit]
+
+
+def dedupe_public_healthcare_entities(records: list[dict]) -> list[dict]:
+    """Collapse only high-confidence duplicates while preserving provenance.
+
+    Same-name facilities are never merged without strong matching location
+    evidence. This intentionally prefers false negatives over false merges.
+    """
+    groups: dict[tuple, list[dict]] = {}
+    passthrough: list[dict] = []
+
+    for record in records:
+        key = _public_entity_dedupe_key(record)
+        if key is None:
+            passthrough.append(_with_public_provenance(record))
+            continue
+        groups.setdefault(key, []).append(record)
+
+    merged = []
+    for items in groups.values():
+        ranked = sorted(items, key=_public_entity_rank)
+        primary = dict(ranked[0])
+        provenance = [_public_provenance(item) for item in ranked]
+        primary["provenance_sources"] = provenance
+        primary["duplicate_source_count"] = len(provenance)
+        primary["cross_source_deduplicated"] = len(provenance) > 1
+        primary["dedupe_method"] = "EXACT_NAME_AND_STRONG_LOCATION" if len(provenance) > 1 else None
+        merged.append(primary)
+
+    merged.extend(passthrough)
+    merged.sort(key=_public_entity_rank)
+    return merged
+
+
+def _with_public_provenance(record: dict) -> dict:
+    result = dict(record)
+    result["provenance_sources"] = [_public_provenance(record)]
+    result["duplicate_source_count"] = 1
+    result["cross_source_deduplicated"] = False
+    result["dedupe_method"] = None
+    return result
+
+
+def _public_provenance(record: dict) -> dict:
+    return {
+        "source_id": record.get("source_id"),
+        "source_record_id": record.get("source_record_id"),
+        "source_trust": record.get("source_trust"),
+        "freshness_at": record.get("freshness_at"),
+        "verification_status": record.get("verification_status"),
+        "bookable_in_zendoc": bool(record.get("bookable_in_zendoc")),
+    }
+
+
+def _public_entity_dedupe_key(record: dict) -> tuple | None:
+    category = str(record.get("category") or "").strip().lower()
+    if category in {"diagnostic_centre", "laboratory"}:
+        category = "diagnostic"
+    name = _normalize_entity_text(record.get("name"))
+    if not category or not name:
+        return None
+
+    postal = _normalize_entity_text(record.get("postal_code"))
+    if postal:
+        return (category, name, "postal", postal)
+
+    address = _normalize_entity_text(record.get("address"))
+    if address and len(address) >= 8:
+        return (category, name, "address", address)
+
+    lat = record.get("latitude")
+    lng = record.get("longitude")
+    try:
+        if lat is not None and lng is not None:
+            return (category, name, "coordinates", round(float(lat), 4), round(float(lng), 4))
+    except (TypeError, ValueError):
+        pass
+
+    return None
+
+
+def _normalize_entity_text(value: Any) -> str:
+    text = unicodedata.normalize("NFKD", str(value or "")).casefold()
+    return "".join(char for char in text if char.isalnum())
+
+
+def _public_entity_rank(record: dict) -> tuple:
+    verification_rank = 0 if str(record.get("verification_status") or "").lower() == "verified" else 1
+    booking_rank = 0 if bool(record.get("bookable_in_zendoc")) else 1
+    trust_rank = {
+        "AUTHORITATIVE_REGISTRY": 0,
+        "OFFICIAL_PUBLIC_DATA": 1,
+        "ACCREDITATION_BODY_PUBLIC_DATA": 2,
+    }.get(str(record.get("source_trust") or ""), 3)
+    freshness_rank = -_freshness_timestamp(record.get("freshness_at"))
+    updated_rank = -_freshness_timestamp(record.get("updated_at"))
+    return (
+        verification_rank,
+        booking_rank,
+        trust_rank,
+        freshness_rank,
+        updated_rank,
+        str(record.get("name") or "").casefold(),
+        int(record.get("id") or 0),
+    )
+
+
+def _freshness_timestamp(value: Any) -> float:
+    text = str(value or "").strip()
+    if not text:
+        return 0.0
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return 0.0
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).timestamp()
 
 
 def _prepare_geography_records(source: dict, records: list[dict]) -> dict:
