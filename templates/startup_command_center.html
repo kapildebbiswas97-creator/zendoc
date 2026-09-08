@@ -362,6 +362,42 @@
 </section>
 
 <section class="grid two spaced-panel">
+  <form class="panel" method="post" action="{{ url_for('main.startup_business_client_create_web') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <p class="eyebrow">Partner API</p>
+    <h2>Create Business API client</h2>
+    <label>Partner name <input name="name" required maxlength="200"></label>
+    <label>Client type
+      <select name="client_type" required>
+        <option value="hospital">Hospital</option>
+        <option value="diagnostic_centre">Diagnostic centre / lab</option>
+        <option value="pharmacy">Pharmacy</option>
+        <option value="employer">Employer</option>
+        <option value="ngo">NGO</option>
+        <option value="college">College / university</option>
+        <option value="other">Other partner</option>
+      </select>
+    </label>
+    <label>Linked institution pilot
+      <select name="pilot_id">
+        <option value="">No linked pilot</option>
+        {% for pilot in pilots %}
+        <option value="{{ pilot.id }}">{{ pilot.organization_name }} · {{ pilot.status }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <fieldset>
+      <legend>Allowed scopes</legend>
+      <label><input type="checkbox" name="allowed_scopes" value="public_directory.read" checked> Public directory</label>
+      <label><input type="checkbox" name="allowed_scopes" value="provider_profile.read"> Verified provider profiles</label>
+      <label><input type="checkbox" name="allowed_scopes" value="provider_availability.read"> Connected provider availability</label>
+      <label><input type="checkbox" name="allowed_scopes" value="pilot_metrics.read"> Own linked pilot metrics</label>
+    </fieldset>
+    <label>Rate limit / minute <input type="number" name="rate_limit_per_minute" min="1" max="1000" value="60"></label>
+    <button type="submit">Create partner client</button>
+    <p class="form-note">There is no patient-record, prescription, medical-history, or clinical-data scope.</p>
+  </form>
+
   <article class="panel">
     <div class="panel-head"><h2>Business API foundation</h2><span class="status-badge working">{{ business_metrics.active_clients }} active clients</span></div>
     <div class="summary-row"><span>Total partner clients</span><strong>{{ business_metrics.client_count }}</strong></div>
@@ -369,22 +405,77 @@
     <div class="summary-row"><span>Authenticated requests · 30 days</span><strong>{{ business_metrics.requests_last_30_days }}</strong></div>
     <p class="form-note">{{ business_metrics.truth_notice }}</p>
   </article>
-
-  <article class="panel">
-    <h2>Partner API clients</h2>
-    {% if business_clients %}
-      {% for client in business_clients %}
-        <div class="summary-row">
-          <span>{{ client.name }} · {{ client.client_type|replace('_',' ')|title }}</span>
-          <strong>{{ client.status }}</strong>
-          <small>{{ client.allowed_scopes|join(', ') }} · {{ client.rate_limit_per_minute }}/min</small>
-        </div>
-      {% endfor %}
-    {% else %}
-      <p class="form-note">No business API clients yet. Create clients only for real partner integrations.</p>
-    {% endif %}
-  </article>
 </section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head"><div><h2>Partner API clients</h2><p class="form-note">Manage scopes, pilot linkage, rate limits and key lifecycle. Suspending or revoking a client revokes its active keys.</p></div></div>
+  {% if business_clients %}
+  <table>
+    <thead><tr><th>Partner</th><th>Status</th><th>Scopes</th><th>Pilot</th><th>Rate</th><th>Key lifecycle</th></tr></thead>
+    <tbody>
+    {% for client in business_clients %}
+      <tr>
+        <td><strong>{{ client.name }}</strong><br><small>{{ client.client_type|replace('_',' ')|title }} · {{ client.client_uid }}</small></td>
+        <td>{{ client.status }}</td>
+        <td>{{ client.allowed_scopes|join(', ') }}</td>
+        <td>{{ client.pilot_id or '—' }}</td>
+        <td>{{ client.rate_limit_per_minute }}/min</td>
+        <td>
+          <form class="inline-form" method="post" action="{{ url_for('main.startup_business_client_update_web', client_id=client.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <select name="status">
+              {% for status in ['active','suspended','revoked'] %}
+              <option value="{{ status }}" {% if client.status == status %}selected{% endif %}>{{ status }}</option>
+              {% endfor %}
+            </select>
+            <select name="pilot_id">
+              <option value="">No pilot</option>
+              {% for pilot in pilots %}
+              <option value="{{ pilot.id }}" {% if client.pilot_id == pilot.id %}selected{% endif %}>{{ pilot.organization_name }}</option>
+              {% endfor %}
+            </select>
+            <input type="number" name="rate_limit_per_minute" min="1" max="1000" value="{{ client.rate_limit_per_minute }}">
+            {% for scope in ['public_directory.read','provider_profile.read','provider_availability.read','pilot_metrics.read'] %}
+            <label><input type="checkbox" name="allowed_scopes" value="{{ scope }}" {% if scope in client.allowed_scopes %}checked{% endif %}> {{ scope }}</label>
+            {% endfor %}
+            <button type="submit">Save client</button>
+          </form>
+
+          {% if client.status == 'active' %}
+          <form class="inline-form" method="post" action="{{ url_for('main.startup_business_key_issue_web', client_id=client.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <label>Key expiry days <input type="number" name="expires_in_days" min="1" max="3650" value="90"></label>
+            <button type="submit">Issue new key</button>
+          </form>
+          {% endif %}
+
+          {% for key in client.keys %}
+            <div class="form-note">
+              Key {{ key.key_prefix }} · {{ key.status }}{% if key.expires_at %} · expires {{ key.expires_at }}{% endif %}
+              {% if key.status == 'active' %}
+              <form class="inline-form" method="post" action="{{ url_for('main.startup_business_key_revoke_web', key_id=key.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button type="submit" class="secondary-action">Revoke key</button>
+              </form>
+              {% endif %}
+            </div>
+          {% endfor %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <p class="form-note">No partner API clients yet.</p>
+  {% endif %}
+</section>
+
+<span class="status-badge working">{{ business_metrics.active_clients }} active clients</span></div>
+    <div class="summary-row"><span>Total partner clients</span><strong>{{ business_metrics.client_count }}</strong></div>
+    <div class="summary-row"><span>Active API keys</span><strong>{{ business_metrics.active_keys }}</strong></div>
+    <div class="summary-row"><span>Authenticated requests · 30 days</span><strong>{{ business_metrics.requests_last_30_days }}</strong></div>
+    <p class="form-note">{{ business_metrics.truth_notice }}</p>
+  </article>
 
 <section class="panel spaced-panel">
   <div class="panel-head"><div><h2>Public listing claims</h2><p class="form-note">Approved claims link a provider profile to a directory record; they do not automatically verify the provider or connect booking.</p></div></div>
