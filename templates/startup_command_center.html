@@ -243,6 +243,125 @@
 </section>
 
 <section class="grid two spaced-panel">
+  <form class="panel" method="post" action="{{ url_for('main.startup_finance_entry_create_web') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <p class="eyebrow">Finance</p>
+    <h2>Record financial entry</h2>
+    <div class="form-grid">
+      <label>Date <input type="date" name="entry_date" required></label>
+      <label>Type
+        <select name="entry_type" required>
+          <option value="revenue">Revenue</option>
+          <option value="cost">Cost</option>
+        </select>
+      </label>
+    </div>
+    <label>Category
+      <select name="category" required>
+        <option value="pilot">Pilot revenue</option>
+        <option value="subscription">Subscription revenue</option>
+        <option value="enterprise_contract">Enterprise contract</option>
+        <option value="api">API revenue</option>
+        <option value="marketplace">Marketplace revenue</option>
+        <option value="grant">Grant</option>
+        <option value="other_revenue">Other revenue</option>
+        <option value="cloud">Cloud cost</option>
+        <option value="software">Software cost</option>
+        <option value="data">Data cost</option>
+        <option value="legal_compliance">Legal / compliance</option>
+        <option value="marketing">Marketing</option>
+        <option value="operations">Operations</option>
+        <option value="contractor">Contractor</option>
+        <option value="salary">Salary</option>
+        <option value="travel">Travel</option>
+        <option value="other_cost">Other cost</option>
+      </select>
+    </label>
+    <label>Amount (₹) <input type="number" name="amount_inr" min="0" step="0.01" required></label>
+    <label><input type="checkbox" name="recurring"> Recurring monthly entry</label>
+    <label>Description <input name="description" maxlength="1000"></label>
+    <label>Source/reference <input name="source_ref" maxlength="500" placeholder="Invoice, contract, bank reference, etc."></label>
+    <button type="submit">Record entry</button>
+    <p class="form-note">Only record real financial activity. These are management records, not audited accounts.</p>
+  </form>
+
+  <article class="panel">
+    <div class="panel-head"><h2>Financial KPIs</h2><span class="status-badge working">{{ finance.month }}</span></div>
+    <div class="summary-row"><span>Revenue</span><strong>₹{{ finance.revenue_inr|round(2) }}</strong></div>
+    <div class="summary-row"><span>Recurring revenue</span><strong>₹{{ finance.recurring_revenue_inr|round(2) }}</strong></div>
+    <div class="summary-row"><span>Costs</span><strong>₹{{ finance.costs_inr|round(2) }}</strong></div>
+    <div class="summary-row"><span>Net cash flow</span><strong>₹{{ finance.net_cash_flow_inr|round(2) }}</strong></div>
+    <div class="summary-row"><span>Net burn</span><strong>₹{{ finance.net_burn_inr|round(2) }}</strong></div>
+    <div class="summary-row"><span>Cash balance</span><strong>{% if finance.cash_balance_inr is not none %}₹{{ finance.cash_balance_inr|round(2) }}{% else %}—{% endif %}</strong></div>
+    <div class="summary-row"><span>Runway</span><strong>{% if finance.runway_months is not none %}{{ finance.runway_months }} months{% else %}—{% endif %}</strong></div>
+    <p class="form-note">{{ finance.truth_notice }}</p>
+
+    <form method="post" action="{{ url_for('main.startup_finance_snapshot_web') }}" class="spaced-panel">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <h3>Cash snapshot</h3>
+      <div class="form-grid">
+        <label>Month <input type="month" name="snapshot_month" required></label>
+        <label>Cash balance (₹) <input type="number" name="cash_balance_inr" min="0" step="0.01"></label>
+      </div>
+      <label>Notes <input name="notes" maxlength="1000"></label>
+      <button type="submit">Save cash snapshot</button>
+    </form>
+  </article>
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head">
+    <div><p class="eyebrow">Investor evidence</p><h2>Investor Traction Snapshot</h2></div>
+    <span class="status-badge beta">Observed evidence only</span>
+  </div>
+  <div class="grid two">
+    <div>
+      <h3>Readiness signals</h3>
+      {% for key, value in investor_snapshot.readiness.items() %}
+        <div class="summary-row">
+          <span>{{ key|replace('_',' ')|title }}</span>
+          <strong>{{ 'Yes' if value else 'Not yet' }}</strong>
+        </div>
+      {% endfor %}
+    </div>
+    <div>
+      <h3>Headline evidence</h3>
+      <div class="summary-row"><span>Healthcare searches</span><strong>{{ investor_snapshot.evidence.product.healthcare_searches }}</strong></div>
+      <div class="summary-row"><span>D7 eligible users</span><strong>{{ investor_snapshot.evidence.retention.d7_eligible_users }}</strong></div>
+      <div class="summary-row"><span>D30 eligible users</span><strong>{{ investor_snapshot.evidence.retention.d30_eligible_users }}</strong></div>
+      <div class="summary-row"><span>Verified providers</span><strong>{{ investor_snapshot.evidence.providers.provider_verified }}</strong></div>
+      <div class="summary-row"><span>Active pilots</span><strong>{{ investor_snapshot.evidence.pilots.active_pilots }}</strong></div>
+      <div class="summary-row"><span>Paid pilots</span><strong>{{ investor_snapshot.evidence.pilots.paid_pilots }}</strong></div>
+      <div class="summary-row"><span>Business API clients</span><strong>{{ investor_snapshot.evidence.business_api.client_count }}</strong></div>
+    </div>
+  </div>
+  <p class="form-note">{{ investor_snapshot.truth_notice }}</p>
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head"><h2>Recent financial entries</h2></div>
+  {% if finance_entries %}
+  <table>
+    <thead><tr><th>Date</th><th>Type</th><th>Category</th><th>Amount</th><th>Recurring</th><th>Description</th></tr></thead>
+    <tbody>
+      {% for item in finance_entries %}
+      <tr>
+        <td>{{ item.entry_date }}</td>
+        <td>{{ item.entry_type }}</td>
+        <td>{{ item.category|replace('_',' ')|title }}</td>
+        <td>₹{{ item.amount_inr|round(2) }}</td>
+        <td>{{ 'Yes' if item.recurring else 'No' }}</td>
+        <td>{{ item.description or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="form-note">No financial entries recorded yet.</p>
+  {% endif %}
+</section>
+
+<section class="grid two spaced-panel">
   <article class="panel">
     <div class="panel-head"><h2>Business API foundation</h2><span class="status-badge working">{{ business_metrics.active_clients }} active clients</span></div>
     <div class="summary-row"><span>Total partner clients</span><strong>{{ business_metrics.client_count }}</strong></div>
