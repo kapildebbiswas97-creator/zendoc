@@ -6,6 +6,7 @@ from flask import Blueprint, jsonify, request
 from .public_data_ingestion import ingest_public_records, list_ingestion_batches
 from .dataset_adapters import adapt_records, parse_csv_text
 from .data_gap_registry import build_collection_plan, list_data_gaps
+from .data_freshness import ingestion_freshness_report
 from .business_api import (
     business_api_metrics,
     create_business_api_client,
@@ -49,6 +50,22 @@ def _owner():
     if not is_owner(user):
         return None, (jsonify({"error": {"code": 403, "message": "Only the ZENDOC owner may manage public-data ingestion."}}), 403)
     return user, None
+
+
+@bp.get("/api/v1/admin/ingestion/freshness")
+def api_ingestion_freshness():
+    user, error = _owner()
+    if error:
+        return error
+    try:
+        return jsonify({
+            "freshness": ingestion_freshness_report(
+                user,
+                recent_batch_limit=request.args.get("limit", 50),
+            )
+        })
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
 
 
 @bp.get("/api/v1/admin/ingestion/coverage")
