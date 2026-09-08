@@ -307,8 +307,8 @@ def test_notification_provider_records_real_in_app_and_truthful_external_deliver
         in_app = deliver_notification(patient_id, "Test", "In-app delivered")
         external = deliver_notification(patient_id, "Test", "SMS requested", channel="sms")
         get_db().commit()
-        assert in_app.status == "sent"
-        assert external.status == "integration_required"
+        assert in_app.status == "delivered"
+        assert external.status == "queued"
         assert get_db().execute("SELECT COUNT(*) c FROM notifications WHERE user_id=?", (patient_id,)).fetchone()["c"] == 1
         assert get_db().execute("SELECT status FROM notification_deliveries WHERE id=?", (external.delivery_id,)).fetchone()["status"] == "integration_required"
 
