@@ -67,9 +67,13 @@ from .partner_audit import list_partner_audit_events, partner_audit_metrics
 from .partner_handoffs import create_partner_booking_handoff, get_partner_booking_handoff, list_all_partner_booking_handoffs, list_partner_booking_handoffs, list_provider_booking_handoffs, owner_update_partner_booking_handoff, partner_operations_metrics, provider_update_partner_booking_handoff
 from .institution_pilots import (
     create_institution_pilot,
+    create_pilot_milestone,
     institution_pilot_metrics,
     list_institution_pilots,
+    pilot_execution_summary,
+    record_pilot_usage_snapshot,
     update_institution_pilot,
+    update_pilot_milestone,
 )
 from .public_data_ingestion import search_public_healthcare_entities
 from .public_entity_claims import (
@@ -1224,6 +1228,52 @@ def startup_finance_snapshot_web():
     except (TypeError, ValueError, PermissionError) as error:
         flash(str(error), "error")
     return redirect(url_for("main.startup_command_center"))
+
+
+@bp.get("/admin/startup/pilots/<int:pilot_id>")
+@owner_required
+def startup_pilot_execution(pilot_id):
+    try:
+        execution = pilot_execution_summary(g.user, pilot_id)
+    except LookupError:
+        abort(404)
+    return render_template("pilot_execution.html", execution=execution)
+
+
+@bp.post("/admin/startup/pilots/<int:pilot_id>/milestones")
+@owner_required
+def startup_pilot_milestone_create_web(pilot_id):
+    try:
+        create_pilot_milestone(g.user, pilot_id, request.form)
+        flash("Pilot milestone added.", "success")
+    except (LookupError, ValueError, PermissionError) as error:
+        flash(str(error), "error")
+    return redirect(url_for("main.startup_pilot_execution", pilot_id=pilot_id))
+
+
+@bp.post("/admin/startup/pilot-milestones/<int:milestone_id>")
+@owner_required
+def startup_pilot_milestone_update_web(milestone_id):
+    pilot_id = request.form.get("pilot_id")
+    try:
+        update_pilot_milestone(g.user, milestone_id, request.form)
+        flash("Pilot milestone updated.", "success")
+    except (LookupError, ValueError, PermissionError) as error:
+        flash(str(error), "error")
+    if pilot_id:
+        return redirect(url_for("main.startup_pilot_execution", pilot_id=int(pilot_id)))
+    return redirect(url_for("main.startup_command_center"))
+
+
+@bp.post("/admin/startup/pilots/<int:pilot_id>/usage")
+@owner_required
+def startup_pilot_usage_create_web(pilot_id):
+    try:
+        record_pilot_usage_snapshot(g.user, pilot_id, request.form)
+        flash("Observed pilot usage recorded.", "success")
+    except (LookupError, ValueError, PermissionError) as error:
+        flash(str(error), "error")
+    return redirect(url_for("main.startup_pilot_execution", pilot_id=pilot_id))
 
 
 @bp.post("/admin/startup/pilots")
