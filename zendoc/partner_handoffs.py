@@ -255,6 +255,52 @@ def provider_update_partner_booking_handoff(
     return get_partner_booking_handoff(identity, int(handoff_id))
 
 
+def partner_operations_metrics(actor: Any) -> dict:
+    assert_owner(actor)
+    db = get_db()
+    now = datetime.now(timezone.utc)
+    now_text = now.isoformat(timespec="seconds")
+    soon_text = (now + timedelta(minutes=10)).isoformat(timespec="seconds")
+
+    status_rows = db.execute(
+        "SELECT status,COUNT(*) c FROM partner_booking_handoffs GROUP BY status"
+    ).fetchall()
+    status_counts = {str(row["status"]): int(row["c"] or 0) for row in status_rows}
+    active_holds = db.execute(
+        """
+        SELECT COUNT(*) c FROM partner_slot_holds
+        WHERE status='active' AND expires_at>?
+        """,
+        (now_text,),
+    ).fetchone()["c"]
+    expiring_soon = db.execute(
+        """
+        SELECT COUNT(*) c FROM partner_slot_holds
+        WHERE status='active' AND expires_at>? AND expires_at<=?
+        """,
+        (now_text, soon_text),
+    ).fetchone()["c"]
+    stale_active = db.execute(
+        """
+        SELECT COUNT(*) c FROM partner_slot_holds
+        WHERE status='active' AND expires_at<=?
+        """,
+        (now_text,),
+    ).fetchone()["c"]
+
+    return {
+        "handoff_total": sum(status_counts.values()),
+        "handoff_status_counts": status_counts,
+        "active_slot_holds": int(active_holds or 0),
+        "holds_expiring_within_10_minutes": int(expiring_soon or 0),
+        "expired_holds_not_yet_recycled": int(stale_active or 0),
+        "truth_notice": (
+            "Partner handoffs are coordination records, not patient appointments. Active slot holds are temporary "
+            "and do not represent confirmed bookings."
+        ),
+    }
+
+
 def list_all_partner_booking_handoffs(actor: Any, *, limit: int = 200) -> list[dict]:
     assert_owner(actor)
     limit = max(1, min(int(limit or 200), 500))
