@@ -40,6 +40,19 @@ ENTITY_CATEGORY_ALIASES = {
     "lab": "laboratory",
     "nursinghome": "nursing_home",
     "health_center": "health_centre",
+    "phc": "health_centre",
+    "primary_health_centre": "health_centre",
+    "primary_health_center": "health_centre",
+    "chc": "health_centre",
+    "community_health_centre": "health_centre",
+    "community_health_center": "health_centre",
+    "fhc": "health_centre",
+    "family_health_centre": "health_centre",
+    "family_health_center": "health_centre",
+    "sub_centre": "health_centre",
+    "sub_center": "health_centre",
+    "health_sub_centre": "health_centre",
+    "health_sub_center": "health_centre",
 }
 
 
@@ -248,8 +261,9 @@ def _prepare_healthcare_entities(source: dict, records: list[dict]) -> dict:
         try:
             source_record_id = _required(row, "source_record_id")
             name = _required(row, "name")
-            category = _required(row, "category").lower().replace("-", "_").replace(" ", "_")
-            category = ENTITY_CATEGORY_ALIASES.get(category, category)
+            source_category = _required(row, "category")
+            normalized_category = source_category.lower().replace("-", "_").replace(" ", "_")
+            category = ENTITY_CATEGORY_ALIASES.get(normalized_category, normalized_category)
             if category not in ALLOWED_ENTITY_CATEGORIES:
                 raise ValueError("unsupported healthcare category")
             if source_record_id in seen_ids:
@@ -274,7 +288,10 @@ def _prepare_healthcare_entities(source: dict, records: list[dict]) -> dict:
                 "freshness_at": _optional(row, "freshness_at"),
                 "geography_source": _optional(row, "geography_source"),
                 "geography_source_record_id": _optional(row, "geography_source_record_id"),
-                "metadata": row.get("metadata") if isinstance(row.get("metadata"), dict) else {},
+                "metadata": {
+                    **(row.get("metadata") if isinstance(row.get("metadata"), dict) else {}),
+                    **({"source_facility_category": source_category} if category != normalized_category else {}),
+                },
             })
         except (TypeError, ValueError) as exc:
             rejected.append({"row_number": index + 1, "reason": str(exc), "record": row})
