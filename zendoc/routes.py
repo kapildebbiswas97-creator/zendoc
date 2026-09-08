@@ -61,7 +61,7 @@ from .business_api import (
     revoke_business_api_key,
     update_business_api_client,
 )
-from .partner_handoffs import create_partner_booking_handoff, get_partner_booking_handoff, list_partner_booking_handoffs, owner_update_partner_booking_handoff
+from .partner_handoffs import create_partner_booking_handoff, get_partner_booking_handoff, list_all_partner_booking_handoffs, list_partner_booking_handoffs, owner_update_partner_booking_handoff
 from .institution_pilots import (
     create_institution_pilot,
     institution_pilot_metrics,
@@ -1045,6 +1045,7 @@ def startup_command_center():
     pilots = list_institution_pilots(g.user, status=request.args.get("pilot_status"), limit=100)
     business_metrics = business_api_metrics(g.user)
     business_clients = list_business_api_clients(g.user)
+    booking_handoffs = list_all_partner_booking_handoffs(g.user, limit=200)
     finance = financial_kpis(g.user, month=request.args.get("finance_month"))
     finance_entries = list_financial_entries(g.user, limit=100)
     investor_snapshot = investor_traction_snapshot(
@@ -1064,6 +1065,7 @@ def startup_command_center():
         pilots=pilots,
         business_metrics=business_metrics,
         business_clients=business_clients,
+        booking_handoffs=booking_handoffs,
         finance=finance,
         finance_entries=finance_entries,
         investor_snapshot=investor_snapshot,
