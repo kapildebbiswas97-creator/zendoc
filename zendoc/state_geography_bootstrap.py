@@ -17,7 +17,8 @@ from typing import Any
 from flask import has_app_context
 
 from .db import get_db, now_iso
-from .geography_graph import link_geography_nodes, upsert_geography_node
+from .geography_graph import geography_write_transaction, link_geography_nodes, upsert_geography_node
+from .lgd_files import normalize_lgd_state_code
 from .geography_region_registry import find_import_region, list_import_regions
 from .security import assert_owner
 
@@ -107,194 +108,195 @@ def bootstrap_state_geography(
     if preview["rejected"]:
         raise ValueError("State bootstrap contains rejected rows; preview and correct them before apply.")
 
-    country = _ensure_india(source=source, freshness_at=freshness_at)
-    state_node = upsert_geography_node(
-        node_type="state",
-        name=state.name,
-        parent_id=country["id"],
-        source=source,
-        source_ref=f"state:{state.lgd_state_code}",
-        verified=True,
-        freshness_at=freshness_at,
-    )
-
-    refs: dict[str, int] = {f"state:{state.lgd_state_code}": int(state_node["id"])}
-    applied = {
-        "districts": 0,
-        "subdistricts": 0,
-        "villages": 0,
-        "blocks": 0,
-        "panchayats": 0,
-        "local_bodies": 0,
-        "relationships": 0,
-    }
-
-    for row in collections["districts"]:
-        node = upsert_geography_node(
-            node_type="district",
-            name=_required(row, "name"),
-            parent_id=state_node["id"],
+    with geography_write_transaction():
+        country = _ensure_india(source=source, freshness_at=freshness_at)
+        state_node = upsert_geography_node(
+            node_type="state",
+            name=state.name,
+            parent_id=country["id"],
             source=source,
-            source_ref=f"district:{_required(row, 'code')}",
+            source_ref=f"state:{state.lgd_state_code}",
             verified=True,
             freshness_at=freshness_at,
         )
-        refs[f"district:{_required(row, 'code')}"] = int(node["id"])
-        applied["districts"] += 1
 
-    for row in collections["subdistricts"]:
-        parent = refs.get(f"district:{_required(row, 'district_code')}")
-        if not parent:
-            raise ValueError(f"Unknown district_code {_required(row, 'district_code')} for sub-district.")
-        node = upsert_geography_node(
-            node_type="subdivision",
-            name=_required(row, "name"),
-            parent_id=parent,
-            source=source,
-            source_ref=f"subdistrict:{_required(row, 'code')}",
-            verified=True,
-            freshness_at=freshness_at,
-        )
-        refs[f"subdistrict:{_required(row, 'code')}"] = int(node["id"])
-        applied["subdistricts"] += 1
+        refs: dict[str, int] = {f"state:{state.lgd_state_code}": int(state_node["id"])}
+        applied = {
+            "districts": 0,
+            "subdistricts": 0,
+            "villages": 0,
+            "blocks": 0,
+            "panchayats": 0,
+            "local_bodies": 0,
+            "relationships": 0,
+        }
 
-    for row in collections["blocks"]:
-        district_code = str(row.get("district_code") or "").strip()
-        subdistrict_code = str(row.get("subdistrict_code") or "").strip()
-        parent = refs.get(f"subdistrict:{subdistrict_code}") if subdistrict_code else None
-        if not parent and district_code:
-            parent = refs.get(f"district:{district_code}")
-        if not parent:
-            raise ValueError(f"Block {_required(row, 'code')} has no resolvable district/sub-district parent.")
-        node = upsert_geography_node(
-            node_type="block",
-            name=_required(row, "name"),
-            parent_id=parent,
-            source=source,
-            source_ref=f"block:{_required(row, 'code')}",
-            verified=True,
-            freshness_at=freshness_at,
-        )
-        refs[f"block:{_required(row, 'code')}"] = int(node["id"])
-        applied["blocks"] += 1
+        for row in collections["districts"]:
+            node = upsert_geography_node(
+                node_type="district",
+                name=_required(row, "name"),
+                parent_id=state_node["id"],
+                source=source,
+                source_ref=f"district:{_required(row, 'code')}",
+                verified=True,
+                freshness_at=freshness_at,
+            )
+            refs[f"district:{_required(row, 'code')}"] = int(node["id"])
+            applied["districts"] += 1
 
-    for row in collections["panchayats"]:
-        block_code = str(row.get("block_code") or "").strip()
-        district_code = str(row.get("district_code") or "").strip()
-        parent = refs.get(f"block:{block_code}") if block_code else None
-        if not parent and district_code:
-            parent = refs.get(f"district:{district_code}")
-        if not parent:
-            raise ValueError(f"Panchayat {_required(row, 'code')} has no resolvable block/district parent.")
-        node = upsert_geography_node(
-            node_type="panchayat",
-            name=_required(row, "name"),
-            parent_id=parent,
-            source=source,
-            source_ref=f"panchayat:{_required(row, 'code')}",
-            verified=True,
-            freshness_at=freshness_at,
-        )
-        refs[f"panchayat:{_required(row, 'code')}"] = int(node["id"])
-        applied["panchayats"] += 1
+        for row in collections["subdistricts"]:
+            parent = refs.get(f"district:{_required(row, 'district_code')}")
+            if not parent:
+                raise ValueError(f"Unknown district_code {_required(row, 'district_code')} for sub-district.")
+            node = upsert_geography_node(
+                node_type="subdivision",
+                name=_required(row, "name"),
+                parent_id=parent,
+                source=source,
+                source_ref=f"subdistrict:{_required(row, 'code')}",
+                verified=True,
+                freshness_at=freshness_at,
+            )
+            refs[f"subdistrict:{_required(row, 'code')}"] = int(node["id"])
+            applied["subdistricts"] += 1
 
-    for row in collections["local_bodies"]:
-        district_code = str(row.get("district_code") or "").strip()
-        subdistrict_code = str(row.get("subdistrict_code") or "").strip()
-        parent = refs.get(f"subdistrict:{subdistrict_code}") if subdistrict_code else None
-        if not parent and district_code:
-            parent = refs.get(f"district:{district_code}")
-        if not parent:
-            raise ValueError(f"Local body {_required(row, 'code')} has no resolvable district/sub-district parent.")
-        body_type = str(row.get("node_type") or "municipality").strip().lower()
-        if body_type not in {"municipality", "town", "city", "panchayat"}:
-            body_type = "municipality"
-        node = upsert_geography_node(
-            node_type=body_type,
-            name=_required(row, "name"),
-            parent_id=parent,
-            source=source,
-            source_ref=f"localbody:{_required(row, 'code')}",
-            verified=True,
-            freshness_at=freshness_at,
-        )
-        refs[f"localbody:{_required(row, 'code')}"] = int(node["id"])
-        applied["local_bodies"] += 1
+        for row in collections["blocks"]:
+            district_code = str(row.get("district_code") or "").strip()
+            subdistrict_code = str(row.get("subdistrict_code") or "").strip()
+            parent = refs.get(f"subdistrict:{subdistrict_code}") if subdistrict_code else None
+            if not parent and district_code:
+                parent = refs.get(f"district:{district_code}")
+            if not parent:
+                raise ValueError(f"Block {_required(row, 'code')} has no resolvable district/sub-district parent.")
+            node = upsert_geography_node(
+                node_type="block",
+                name=_required(row, "name"),
+                parent_id=parent,
+                source=source,
+                source_ref=f"block:{_required(row, 'code')}",
+                verified=True,
+                freshness_at=freshness_at,
+            )
+            refs[f"block:{_required(row, 'code')}"] = int(node["id"])
+            applied["blocks"] += 1
 
-    for row in collections["villages"]:
-        subdistrict_code = str(row.get("subdistrict_code") or "").strip()
-        block_code = str(row.get("block_code") or "").strip()
-        panchayat_code = str(row.get("panchayat_code") or "").strip()
-        district_code = str(row.get("district_code") or "").strip()
+        for row in collections["panchayats"]:
+            block_code = str(row.get("block_code") or "").strip()
+            district_code = str(row.get("district_code") or "").strip()
+            parent = refs.get(f"block:{block_code}") if block_code else None
+            if not parent and district_code:
+                parent = refs.get(f"district:{district_code}")
+            if not parent:
+                raise ValueError(f"Panchayat {_required(row, 'code')} has no resolvable block/district parent.")
+            node = upsert_geography_node(
+                node_type="panchayat",
+                name=_required(row, "name"),
+                parent_id=parent,
+                source=source,
+                source_ref=f"panchayat:{_required(row, 'code')}",
+                verified=True,
+                freshness_at=freshness_at,
+            )
+            refs[f"panchayat:{_required(row, 'code')}"] = int(node["id"])
+            applied["panchayats"] += 1
 
-        # Administrative parent preference: sub-district, then block, then district.
-        # Panchayat membership is modeled separately below.
-        parent = refs.get(f"subdistrict:{subdistrict_code}") if subdistrict_code else None
-        if not parent and block_code:
-            parent = refs.get(f"block:{block_code}")
-        if not parent and district_code:
-            parent = refs.get(f"district:{district_code}")
-        if not parent:
-            raise ValueError(f"Village {_required(row, 'code')} has no resolvable administrative parent.")
+        for row in collections["local_bodies"]:
+            district_code = str(row.get("district_code") or "").strip()
+            subdistrict_code = str(row.get("subdistrict_code") or "").strip()
+            parent = refs.get(f"subdistrict:{subdistrict_code}") if subdistrict_code else None
+            if not parent and district_code:
+                parent = refs.get(f"district:{district_code}")
+            if not parent:
+                raise ValueError(f"Local body {_required(row, 'code')} has no resolvable district/sub-district parent.")
+            body_type = str(row.get("node_type") or "municipality").strip().lower()
+            if body_type not in {"municipality", "town", "city", "panchayat"}:
+                body_type = "municipality"
+            node = upsert_geography_node(
+                node_type=body_type,
+                name=_required(row, "name"),
+                parent_id=parent,
+                source=source,
+                source_ref=f"localbody:{_required(row, 'code')}",
+                verified=True,
+                freshness_at=freshness_at,
+            )
+            refs[f"localbody:{_required(row, 'code')}"] = int(node["id"])
+            applied["local_bodies"] += 1
 
-        node = upsert_geography_node(
-            node_type="village",
-            name=_required(row, "name"),
-            parent_id=parent,
-            source=source,
-            source_ref=f"village:{_required(row, 'code')}",
-            verified=True,
-            freshness_at=freshness_at,
-        )
-        refs[f"village:{_required(row, 'code')}"] = int(node["id"])
-        applied["villages"] += 1
+        for row in collections["villages"]:
+            subdistrict_code = str(row.get("subdistrict_code") or "").strip()
+            block_code = str(row.get("block_code") or "").strip()
+            panchayat_code = str(row.get("panchayat_code") or "").strip()
+            district_code = str(row.get("district_code") or "").strip()
 
-        if panchayat_code and refs.get(f"panchayat:{panchayat_code}"):
+            # Administrative parent preference: sub-district, then block, then district.
+            # Panchayat membership is modeled separately below.
+            parent = refs.get(f"subdistrict:{subdistrict_code}") if subdistrict_code else None
+            if not parent and block_code:
+                parent = refs.get(f"block:{block_code}")
+            if not parent and district_code:
+                parent = refs.get(f"district:{district_code}")
+            if not parent:
+                raise ValueError(f"Village {_required(row, 'code')} has no resolvable administrative parent.")
+
+            node = upsert_geography_node(
+                node_type="village",
+                name=_required(row, "name"),
+                parent_id=parent,
+                source=source,
+                source_ref=f"village:{_required(row, 'code')}",
+                verified=True,
+                freshness_at=freshness_at,
+            )
+            refs[f"village:{_required(row, 'code')}"] = int(node["id"])
+            applied["villages"] += 1
+
+            if panchayat_code and refs.get(f"panchayat:{panchayat_code}"):
+                link_geography_nodes(
+                    from_node_id=node["id"],
+                    to_node_id=refs[f"panchayat:{panchayat_code}"],
+                    relationship_type="VILLAGE_TO_PANCHAYAT",
+                    source=source,
+                    source_ref=f"village:{_required(row, 'code')}:panchayat:{panchayat_code}",
+                    freshness_at=freshness_at,
+                )
+                applied["relationships"] += 1
+
+            if block_code and refs.get(f"block:{block_code}"):
+                link_geography_nodes(
+                    from_node_id=node["id"],
+                    to_node_id=refs[f"block:{block_code}"],
+                    relationship_type="BLOCK_MEMBERSHIP",
+                    source=source,
+                    source_ref=f"village:{_required(row, 'code')}:block:{block_code}",
+                    freshness_at=freshness_at,
+                )
+                applied["relationships"] += 1
+
+        for row in collections["village_panchayat_links"]:
+            village = refs.get(f"village:{_required(row, 'village_code')}")
+            panchayat = refs.get(f"panchayat:{_required(row, 'panchayat_code')}")
+            if not village or not panchayat:
+                raise ValueError("Village-panchayat relationship references unknown code.")
             link_geography_nodes(
-                from_node_id=node["id"],
-                to_node_id=refs[f"panchayat:{panchayat_code}"],
+                from_node_id=village,
+                to_node_id=panchayat,
                 relationship_type="VILLAGE_TO_PANCHAYAT",
                 source=source,
-                source_ref=f"village:{_required(row, 'code')}:panchayat:{panchayat_code}",
+                source_ref=str(row.get("source_ref") or "").strip() or None,
                 freshness_at=freshness_at,
             )
             applied["relationships"] += 1
 
-        if block_code and refs.get(f"block:{block_code}"):
-            link_geography_nodes(
-                from_node_id=node["id"],
-                to_node_id=refs[f"block:{block_code}"],
-                relationship_type="BLOCK_MEMBERSHIP",
-                source=source,
-                source_ref=f"village:{_required(row, 'code')}:block:{block_code}",
-                freshness_at=freshness_at,
-            )
-            applied["relationships"] += 1
-
-    for row in collections["village_panchayat_links"]:
-        village = refs.get(f"village:{_required(row, 'village_code')}")
-        panchayat = refs.get(f"panchayat:{_required(row, 'panchayat_code')}")
-        if not village or not panchayat:
-            raise ValueError("Village-panchayat relationship references unknown code.")
-        link_geography_nodes(
-            from_node_id=village,
-            to_node_id=panchayat,
-            relationship_type="VILLAGE_TO_PANCHAYAT",
-            source=source,
-            source_ref=str(row.get("source_ref") or "").strip() or None,
-            freshness_at=freshness_at,
-        )
-        applied["relationships"] += 1
-
-    return {
-        "status": "APPLIED",
-        "state": state.to_dict(),
-        "state_node_id": state_node["id"],
-        "source": source,
-        "freshness_at": freshness_at,
-        "applied": applied,
-        "truth_notice": "Only supplied official rows were created; no missing locality was synthesized.",
-    }
+        return {
+            "status": "APPLIED",
+            "state": state.to_dict(),
+            "state_node_id": state_node["id"],
+            "source": source,
+            "freshness_at": freshness_at,
+            "applied": applied,
+            "truth_notice": "Only supplied official rows were created; no missing locality was synthesized.",
+        }
 
 
 def state_coverage_summary(state_slug: str) -> dict:
@@ -385,12 +387,13 @@ def _validate_state_payload(state: TargetState, collections: dict[str, list[dict
                 duplicates.setdefault(key, []).append(code)
             seen.add(code)
 
-            row_state_code = str(row.get("state_code") or "").strip()
-            if row_state_code and row_state_code != state.lgd_state_code:
+            row_state_code = normalize_lgd_state_code(row.get("state_code"))
+            target_state_code = normalize_lgd_state_code(state.lgd_state_code)
+            if row_state_code and row_state_code != target_state_code:
                 rejected.append({
                     "collection": key,
                     "row_number": index,
-                    "reason": f"state_code {row_state_code} does not match target state code {state.lgd_state_code}",
+                    "reason": f"state_code {row_state_code} does not match target state code {target_state_code}",
                 })
 
     for key, codes in duplicates.items():
