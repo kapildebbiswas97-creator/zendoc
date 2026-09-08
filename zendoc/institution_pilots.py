@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from .db import get_db, now_iso
@@ -265,6 +266,76 @@ def record_pilot_usage_snapshot(actor: Any, pilot_id: int, data: dict) -> dict:
     ).fetchone())
 
 
+def pilot_system_telemetry(actor: Any, pilot_id: int, *, days: int = 30) -> dict:
+    assert_owner(actor)
+    get_institution_pilot(pilot_id)
+    days = max(1, min(int(days or 30), 365))
+    db = get_db()
+    clients = db.execute(
+        """
+        SELECT id,status FROM business_api_clients
+        WHERE pilot_id=?
+        """,
+        (int(pilot_id),),
+    ).fetchall()
+    client_ids = [int(row["id"]) for row in clients]
+    active_clients = sum(1 for row in clients if row["status"] == "active")
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
+
+    api_requests = 0
+    handoff_status_counts: dict[str, int] = {}
+    distinct_provider_profiles = 0
+    if client_ids:
+        placeholders = ",".join("?" for _ in client_ids)
+        api_requests = int(
+            db.execute(
+                f"""
+                SELECT COUNT(*) c FROM business_api_usage
+                WHERE client_id IN ({placeholders}) AND created_at>=?
+                """,
+                [*client_ids, cutoff],
+            ).fetchone()["c"] or 0
+        )
+        handoff_rows = db.execute(
+            f"""
+            SELECT status,COUNT(*) c
+            FROM partner_booking_handoffs
+            WHERE client_id IN ({placeholders})
+            GROUP BY status
+            """,
+            client_ids,
+        ).fetchall()
+        handoff_status_counts = {
+            str(row["status"]): int(row["c"] or 0)
+            for row in handoff_rows
+        }
+        distinct_provider_profiles = int(
+            db.execute(
+                f"""
+                SELECT COUNT(DISTINCT provider_profile_id) c
+                FROM partner_booking_handoffs
+                WHERE client_id IN ({placeholders})
+                """,
+                client_ids,
+            ).fetchone()["c"] or 0
+        )
+
+    return {
+        "window_days": days,
+        "linked_api_clients": len(client_ids),
+        "active_api_clients": active_clients,
+        "api_requests": api_requests,
+        "handoff_status_counts": handoff_status_counts,
+        "handoff_requests_total": sum(handoff_status_counts.values()),
+        "distinct_provider_profiles_touched": distinct_provider_profiles,
+        "source_type": "system_derived",
+        "truth_notice": (
+            "System telemetry is derived only from ZENDOC-linked Business API clients and partner handoff records. "
+            "It does not infer patient users, completed appointments, or provider activity beyond those recorded B2B interactions."
+        ),
+    }
+
+
 def pilot_execution_summary(actor: Any, pilot_id: int) -> dict:
     assert_owner(actor)
     pilot = get_institution_pilot(pilot_id)
@@ -302,6 +373,8 @@ def pilot_execution_summary(actor: Any, pilot_id: int) -> dict:
             "progress_rate": round(float(actual) / float(target), 4),
         }
 
+    system_telemetry = pilot_system_telemetry(actor, pilot_id, days=30)
+
     return {
         "pilot": pilot,
         "milestones": milestones,
@@ -311,6 +384,7 @@ def pilot_execution_summary(actor: Any, pilot_id: int) -> dict:
         "latest_usage": latest,
         "user_progress": _progress("active_users", "target_users"),
         "provider_progress": _progress("active_providers", "target_provider_seats"),
+        "system_telemetry": system_telemetry,
         "truth_notice": (
             "Targets are plans; usage snapshots are observed values. Owner-entered observed snapshots are not "
             "system-verified analytics and must not be presented as automated telemetry."
