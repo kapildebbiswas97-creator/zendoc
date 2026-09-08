@@ -144,3 +144,72 @@ def test_geography_graph_starts_empty_without_fabricated_preload(tmp_path):
     with app.app_context():
         assert search_geography_nodes("Kolkata") == []
         assert search_geography_nodes("Malipota") == []
+
+
+def test_geography_source_ref_is_stable_identity_across_rename(tmp_path):
+    app = make_app(tmp_path)
+    with app.app_context():
+        country = upsert_geography_node(
+            node_type="country",
+            name="India",
+            source="lgd",
+            source_ref="country:IN",
+            verified=True,
+        )
+        state = upsert_geography_node(
+            node_type="state",
+            name="Example State",
+            parent_id=country["id"],
+            source="lgd",
+            source_ref="state:99",
+            verified=True,
+        )
+        first = upsert_geography_node(
+            node_type="district",
+            name="Old Official Name",
+            parent_id=state["id"],
+            source="lgd",
+            source_ref="district:123",
+            verified=True,
+        )
+        renamed = upsert_geography_node(
+            node_type="district",
+            name="New Official Name",
+            parent_id=state["id"],
+            source="lgd",
+            source_ref="district:123",
+            verified=True,
+        )
+
+        assert renamed["id"] == first["id"]
+        assert renamed["name"] == "New Official Name"
+        assert renamed["normalized_name"] == "new official name"
+
+
+def test_same_geography_name_under_different_parents_does_not_collide(tmp_path):
+    app = make_app(tmp_path)
+    with app.app_context():
+        country = upsert_geography_node(node_type="country", name="India", source="lgd", source_ref="country:IN")
+        state = upsert_geography_node(
+            node_type="state", name="Example State", parent_id=country["id"],
+            source="lgd", source_ref="state:98",
+        )
+        d1 = upsert_geography_node(
+            node_type="district", name="District A", parent_id=state["id"],
+            source="lgd", source_ref="district:A",
+        )
+        d2 = upsert_geography_node(
+            node_type="district", name="District B", parent_id=state["id"],
+            source="lgd", source_ref="district:B",
+        )
+        v1 = upsert_geography_node(
+            node_type="village", name="Rampur", parent_id=d1["id"],
+            source="lgd", source_ref="village:1",
+        )
+        v2 = upsert_geography_node(
+            node_type="village", name="Rampur", parent_id=d2["id"],
+            source="lgd", source_ref="village:2",
+        )
+
+        assert v1["id"] != v2["id"]
+        assert v1["parent_id"] != v2["parent_id"]
