@@ -40,3 +40,29 @@ def test_dashboard_preview_rejects_unknown_role(tmp_path):
 
     response = client.get("/admin/dashboard-preview/government")
     assert response.status_code == 404
+
+
+def test_owner_admin_page_exposes_access_center_without_role_bypass(tmp_path):
+    _app, client = make_client(tmp_path)
+    login_web(client, "admin", "admin@example.com", "AdminStrong123")
+
+    response = client.get("/admin")
+    assert response.status_code == 200
+    assert b"Owner Access Center" in response.data
+    assert b"All appointments" in response.data
+    assert b"All records" in response.data
+    assert b"Find Care" in response.data
+    assert b"ZENDOC AI" in response.data
+    assert b"Provider network" in response.data
+    assert b"Data freshness" in response.data
+    assert b"B2B operations" in response.data
+    assert b"Role-specific clinical" in response.data
+
+
+def test_owner_existing_read_views_remain_available(tmp_path):
+    _app, client = make_client(tmp_path)
+    login_web(client, "admin", "admin@example.com", "AdminStrong123")
+
+    for path in ("/dashboard", "/appointments", "/records", "/finder", "/ai", "/notifications"):
+        response = client.get(path, follow_redirects=False)
+        assert response.status_code == 200, path
