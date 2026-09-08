@@ -187,6 +187,39 @@ def authenticate_business_api_key(
     return identity
 
 
+def business_api_self_usage(identity: dict, *, days: int = 30) -> dict:
+    days = max(1, min(int(days or 30), 365))
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
+    db = get_db()
+    rows = db.execute(
+        """
+        SELECT endpoint,method,status_code,created_at
+        FROM business_api_usage
+        WHERE client_id=? AND created_at>=?
+        ORDER BY created_at DESC
+        """,
+        (int(identity["client_id"]), cutoff),
+    ).fetchall()
+
+    endpoint_counts: dict[str, int] = {}
+    for row in rows:
+        endpoint = str(row["endpoint"] or "")
+        endpoint_counts[endpoint] = endpoint_counts.get(endpoint, 0) + 1
+
+    return {
+        "client_uid": identity["client_uid"],
+        "window_days": days,
+        "request_count": len(rows),
+        "rate_limit_per_minute": int(identity["rate_limit_per_minute"]),
+        "scopes": list(identity["scopes"]),
+        "endpoint_counts": endpoint_counts,
+        "recent_requests": [dict(row) for row in rows[:50]],
+        "truth_notice": (
+            "Usage is scoped to this authenticated API client only. No other partner's usage is exposed."
+        ),
+    }
+
+
 def list_business_api_clients(actor: Any) -> list[dict]:
     assert_owner(actor)
     rows = get_db().execute(
