@@ -9,7 +9,7 @@ import urllib.request
 
 GOOGLE_NEARBY_SEARCH_URL = "https://places.googleapis.com/v1/places:searchNearby"
 NOMINATIM_SEARCH_URL = "https://nominatim.openstreetmap.org/search"
-NOMINATIM_USER_AGENT = "ZENDOC/1.0 healthcare-finder (contact via configured ZENDOC admin email)"
+NOMINATIM_USER_AGENT = "ZENDOC/1.0 (+https://github.com/kapildebbiswas97-creator/zendoc)"
 _NOMINATIM_REQUEST_LOCK = threading.Lock()
 _NOMINATIM_LAST_REQUEST_AT = 0.0
 GOOGLE_TEXT_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText"
