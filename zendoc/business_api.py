@@ -243,6 +243,33 @@ def authenticate_business_api_key(
     return identity
 
 
+def business_api_integration_status(identity: dict) -> dict:
+    scopes = set(identity.get("scopes") or [])
+    return {
+        "client_uid": identity["client_uid"],
+        "client_name": identity["client_name"],
+        "client_type": identity["client_type"],
+        "authenticated": True,
+        "linked_pilot": identity.get("pilot_id") is not None,
+        "rate_limit_per_minute": int(identity["rate_limit_per_minute"]),
+        "capabilities": {
+            "public_directory": "enabled_by_scope" if "public_directory.read" in scopes else "disabled",
+            "provider_profiles": "enabled_by_scope" if "provider_profile.read" in scopes else "disabled",
+            "provider_availability": "enabled_by_scope" if "provider_availability.read" in scopes else "disabled",
+            "own_pilot_metrics": "enabled_by_scope" if "pilot_metrics.read" in scopes else "disabled",
+            "booking_handoff": "enabled_by_scope" if "booking_handoff.write" in scopes else "disabled",
+            "patient_records": "not_available",
+            "medical_history": "not_available",
+            "prescriptions": "not_available",
+            "clinical_data": "not_available",
+        },
+        "truth_notice": (
+            "Capability status reflects API scope configuration, not a claim that every provider or institution "
+            "has live operational data. Patient and clinical data are not exposed in this business API layer."
+        ),
+    }
+
+
 def business_api_self_usage(identity: dict, *, days: int = 30) -> dict:
     days = max(1, min(int(days or 30), 365))
     cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
