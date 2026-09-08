@@ -47,6 +47,12 @@ from .organization_service import assert_resource_tenant
 from .database_reliability import backup_readiness, readiness_report
 from .security import csrf_token, hash_token, is_owner, load_user_and_check_csrf, login_required, new_token, owner_required, role_required, start_user_session
 from .startup_analytics import care_journey_conversion, india_coverage_quality, provider_onboarding_funnel, record_finder_search, record_product_activity, retention_metrics, startup_metrics, submit_finder_feedback
+from .institution_pilots import (
+    create_institution_pilot,
+    institution_pilot_metrics,
+    list_institution_pilots,
+    update_institution_pilot,
+)
 from .public_entity_claims import (
     list_my_public_entity_claims,
     list_public_entity_claims,
@@ -1019,6 +1025,8 @@ def startup_command_center():
     retention = retention_metrics(g.user)
     care_funnel = care_journey_conversion(g.user, days=days)
     provider_funnel = provider_onboarding_funnel(g.user, days=request.args.get("provider_days", 90))
+    pilot_metrics = institution_pilot_metrics(g.user)
+    pilots = list_institution_pilots(g.user, status=request.args.get("pilot_status"), limit=100)
     claims = list_public_entity_claims(g.user, status=request.args.get("claim_status"), limit=50)
     return render_template(
         "startup_command_center.html",
@@ -1027,8 +1035,32 @@ def startup_command_center():
         retention=retention,
         care_funnel=care_funnel,
         provider_funnel=provider_funnel,
+        pilot_metrics=pilot_metrics,
+        pilots=pilots,
         claims=claims,
     )
+
+
+@bp.post("/admin/startup/pilots")
+@owner_required
+def startup_pilot_create_web():
+    try:
+        create_institution_pilot(g.user, request.form)
+        flash("Institution pilot added.", "success")
+    except (TypeError, ValueError, PermissionError) as error:
+        flash(str(error), "error")
+    return redirect(url_for("main.startup_command_center"))
+
+
+@bp.post("/admin/startup/pilots/<int:pilot_id>")
+@owner_required
+def startup_pilot_update_web(pilot_id):
+    try:
+        update_institution_pilot(g.user, pilot_id, request.form)
+        flash("Institution pilot updated.", "success")
+    except (LookupError, TypeError, ValueError, PermissionError) as error:
+        flash(str(error), "error")
+    return redirect(url_for("main.startup_command_center"))
 
 
 @bp.post("/admin/public-entity-claims/<int:claim_id>/review")
