@@ -25,6 +25,7 @@ LASTROWID_TABLES = {
     "business_api_usage",
     "partner_booking_handoffs",
     "partner_slot_holds",
+    "partner_api_audit_events",
     "startup_financial_snapshots",
     "startup_financial_entries",
     "business_api_keys",
