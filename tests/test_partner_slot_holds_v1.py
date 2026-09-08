@@ -169,3 +169,37 @@ def test_rejection_releases_slot_and_acceptance_extends_hold_without_confirming_
         )
         assert replacement["status"] == "received"
         assert replacement["booking_confirmed"] is False
+
+
+def test_handoff_and_hold_roll_back_when_audit_fails(tmp_path, monkeypatch):
+    app = make_app(tmp_path)
+    with app.app_context():
+        _provider_user, profile_id, _target_date, slot = create_verified_provider_with_schedule(get_db())
+        identity = partner_identity("Audit Failure Partner")
+
+        def fail_audit(**_kwargs):
+            raise RuntimeError("audit unavailable")
+
+        monkeypatch.setattr("zendoc.partner_handoffs.record_partner_audit_event", fail_audit)
+
+        failed = False
+        try:
+            create_partner_booking_handoff(
+                identity,
+                provider_profile_id=profile_id,
+                partner_reference="AUDIT-FAIL-1",
+                requested_for=slot,
+            )
+        except RuntimeError:
+            failed = True
+        assert failed is True
+
+        handoff_count = get_db().execute(
+            "SELECT COUNT(*) c FROM partner_booking_handoffs WHERE partner_reference='AUDIT-FAIL-1'"
+        ).fetchone()["c"]
+        hold_count = get_db().execute(
+            "SELECT COUNT(*) c FROM partner_slot_holds WHERE provider_profile_id=? AND slot_key=?",
+            (profile_id, slot[:16]),
+        ).fetchone()["c"]
+        assert handoff_count == 0
+        assert hold_count == 0
