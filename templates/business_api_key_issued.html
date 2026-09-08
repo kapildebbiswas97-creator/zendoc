@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Business API Key — ZENDOC{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Partner security</p>
+    <h1>Business API key issued</h1>
+    <p class="section-copy">Copy this secret now. ZENDOC stores only its hash and will not show the full key again.</p>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <h2>{{ client.name if client else 'Business API client' }}</h2>
+      <p class="form-note">Key prefix: {{ key.key_prefix }} · Expires: {{ key.expires_at or 'No expiry' }}</p>
+    </div>
+    <span class="status-badge working">Shown once</span>
+  </div>
+
+  <label>API key
+    <textarea rows="3" readonly onclick="this.select()">{{ key.api_key }}</textarea>
+  </label>
+
+  <aside class="trust-note">
+    <strong>Security rule</strong><br>
+    Store this key in the partner's secret manager. Do not place it in source code, screenshots, public documents, client-side JavaScript, or chat messages.
+  </aside>
+
+  <div class="form-actions">
+    <a class="primary-action" href="{{ url_for('main.startup_command_center') }}">Return to Startup Command Center</a>
+  </div>
+</section>
+{% endblock %}
