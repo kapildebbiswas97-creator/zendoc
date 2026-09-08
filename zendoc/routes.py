@@ -61,6 +61,7 @@ from .business_api import (
     revoke_business_api_key,
     update_business_api_client,
 )
+from .partner_handoffs import create_partner_booking_handoff, get_partner_booking_handoff, list_partner_booking_handoffs, owner_update_partner_booking_handoff
 from .institution_pilots import (
     create_institution_pilot,
     institution_pilot_metrics,
@@ -1070,6 +1071,22 @@ def startup_command_center():
     )
 
 
+@bp.post("/admin/startup/booking-handoffs/<int:handoff_id>")
+@owner_required
+def startup_booking_handoff_review_web(handoff_id):
+    try:
+        owner_update_partner_booking_handoff(
+            g.user,
+            handoff_id,
+            status=request.form.get("status"),
+            status_note=request.form.get("status_note"),
+        )
+        flash("Partner booking handoff updated.", "success")
+    except (LookupError, ValueError, PermissionError) as error:
+        flash(str(error), "error")
+    return redirect(url_for("main.startup_command_center"))
+
+
 @bp.post("/admin/startup/business-api-clients")
 @owner_required
 def startup_business_client_create_web():
@@ -1491,6 +1508,73 @@ def api_business_provider_search():
         })
     except BusinessApiRateLimitError as exc:
         return jsonify({"error": {"code": 429, "message": str(exc)}}), 429
+    except PermissionError as exc:
+        return jsonify({"error": {"code": 401, "message": str(exc)}}), 401
+
+
+@bp.post("/api/v1/business/booking-handoffs")
+def api_business_booking_handoff_create():
+    raw_key = request.headers.get("X-ZENDOC-Partner-Key", "")
+    try:
+        identity = authenticate_business_api_key(
+            raw_key,
+            required_scope="booking_handoff.write",
+            endpoint="/api/v1/business/booking-handoffs",
+            method="POST",
+        )
+        data = request.get_json(silent=True) or {}
+        handoff = create_partner_booking_handoff(
+            identity,
+            provider_profile_id=int(data.get("provider_profile_id")),
+            partner_reference=data.get("partner_reference"),
+            requested_for=data.get("requested_for"),
+            contact_reference=data.get("contact_reference"),
+        )
+        return jsonify({"handoff": handoff}), 202
+    except BusinessApiRateLimitError as exc:
+        return jsonify({"error": {"code": 429, "message": str(exc)}}), 429
+    except LookupError as exc:
+        return jsonify({"error": {"code": 404, "message": str(exc)}}), 404
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+    except PermissionError as exc:
+        return jsonify({"error": {"code": 401, "message": str(exc)}}), 401
+
+
+@bp.get("/api/v1/business/booking-handoffs")
+def api_business_booking_handoffs_list():
+    raw_key = request.headers.get("X-ZENDOC-Partner-Key", "")
+    try:
+        identity = authenticate_business_api_key(
+            raw_key,
+            required_scope="booking_handoff.write",
+            endpoint="/api/v1/business/booking-handoffs",
+            method="GET",
+        )
+        return jsonify({"handoffs": list_partner_booking_handoffs(identity, limit=request.args.get("limit", 100))})
+    except BusinessApiRateLimitError as exc:
+        return jsonify({"error": {"code": 429, "message": str(exc)}}), 429
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+    except PermissionError as exc:
+        return jsonify({"error": {"code": 401, "message": str(exc)}}), 401
+
+
+@bp.get("/api/v1/business/booking-handoffs/<int:handoff_id>")
+def api_business_booking_handoff_get(handoff_id):
+    raw_key = request.headers.get("X-ZENDOC-Partner-Key", "")
+    try:
+        identity = authenticate_business_api_key(
+            raw_key,
+            required_scope="booking_handoff.write",
+            endpoint=f"/api/v1/business/booking-handoffs/{handoff_id}",
+            method="GET",
+        )
+        return jsonify({"handoff": get_partner_booking_handoff(identity, handoff_id)})
+    except BusinessApiRateLimitError as exc:
+        return jsonify({"error": {"code": 429, "message": str(exc)}}), 429
+    except LookupError as exc:
+        return jsonify({"error": {"code": 404, "message": str(exc)}}), 404
     except PermissionError as exc:
         return jsonify({"error": {"code": 401, "message": str(exc)}}), 401
 
