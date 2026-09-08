@@ -53,6 +53,8 @@ def create_provider_prospect(actor: Any, data: dict) -> dict:
 
     linked_user_id = _optional_positive_int(data.get("linked_user_id"))
     linked_profile_id = _optional_positive_int(data.get("linked_provider_profile_id"))
+    linked_pilot_id = _optional_positive_int(data.get("linked_pilot_id"))
+    _validate_pilot_link(source_type, linked_pilot_id)
     _validate_links(linked_user_id, linked_profile_id, provider_type)
     _validate_status_against_links(
         status=status,
@@ -74,10 +76,10 @@ def create_provider_prospect(actor: Any, data: dict) -> dict:
         """
         INSERT INTO provider_network_prospects
         (prospect_uid,provider_type,organization_name,contact_name,contact_email,contact_phone,
-         state,district,city,source_type,source_reference,status,first_contact_at,last_contact_at,
+         state,district,city,source_type,source_reference,linked_pilot_id,status,first_contact_at,last_contact_at,
          next_action,next_action_due,owner_note,linked_user_id,linked_provider_profile_id,
          activated_at,created_by,created_at,updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """,
         (
             f"prospect_{uuid.uuid4().hex[:20]}",
@@ -91,6 +93,7 @@ def create_provider_prospect(actor: Any, data: dict) -> dict:
             _clean(data.get("city"), 120),
             source_type,
             _clean(data.get("source_reference"), 500),
+            linked_pilot_id,
             status,
             first_contact,
             last_contact,
@@ -126,6 +129,8 @@ def update_provider_prospect(actor: Any, prospect_id: int, data: dict) -> dict:
     linked_profile_id = _optional_positive_int(
         data.get("linked_provider_profile_id", existing["linked_provider_profile_id"])
     )
+    linked_pilot_id = _optional_positive_int(data.get("linked_pilot_id", existing.get("linked_pilot_id")))
+    _validate_pilot_link(source_type, linked_pilot_id)
     _validate_links(linked_user_id, linked_profile_id, provider_type)
     _validate_status_against_links(
         status=status,
@@ -152,7 +157,7 @@ def update_provider_prospect(actor: Any, prospect_id: int, data: dict) -> dict:
         """
         UPDATE provider_network_prospects
         SET provider_type=?,organization_name=?,contact_name=?,contact_email=?,contact_phone=?,
-            state=?,district=?,city=?,source_type=?,source_reference=?,status=?,
+            state=?,district=?,city=?,source_type=?,source_reference=?,linked_pilot_id=?,status=?,
             first_contact_at=?,last_contact_at=?,next_action=?,next_action_due=?,owner_note=?,
             linked_user_id=?,linked_provider_profile_id=?,activated_at=?,updated_at=?
         WHERE id=?
@@ -168,6 +173,7 @@ def update_provider_prospect(actor: Any, prospect_id: int, data: dict) -> dict:
             _clean(data.get("city", existing["city"]), 120),
             source_type,
             _clean(data.get("source_reference", existing["source_reference"]), 500),
+            linked_pilot_id,
             status,
             first_contact,
             last_contact,
@@ -189,10 +195,12 @@ def get_provider_prospect(prospect_id: int) -> dict:
     row = get_db().execute(
         """
         SELECT p.*,u.email linked_user_email,u.name linked_user_name,
-               pp.verification_status linked_verification_status
+               pp.verification_status linked_verification_status,
+               ip.organization_name linked_pilot_name,ip.status linked_pilot_status
         FROM provider_network_prospects p
         LEFT JOIN users u ON u.id=p.linked_user_id
         LEFT JOIN provider_profiles pp ON pp.id=p.linked_provider_profile_id
+        LEFT JOIN institution_pilots ip ON ip.id=p.linked_pilot_id
         WHERE p.id=?
         """,
         (int(prospect_id),),
@@ -209,6 +217,7 @@ def list_provider_prospects(
     *,
     status: str | None = None,
     provider_type: str | None = None,
+    linked_pilot_id: int | None = None,
     limit: int = 200,
 ) -> list[dict]:
     assert_owner(actor)
@@ -226,6 +235,9 @@ def list_provider_prospects(
             raise ValueError("Unsupported provider_type.")
         clauses.append("provider_type=?")
         params.append(clean_type)
+    if linked_pilot_id not in (None, ""):
+        clauses.append("linked_pilot_id=?")
+        params.append(int(linked_pilot_id))
     where = "WHERE " + " AND ".join(clauses) if clauses else ""
     limit = max(1, min(int(limit or 200), 1000))
     params.append(limit)
@@ -320,6 +332,20 @@ def _validate_status_against_links(
         if provider_type in {"doctor", "hospital"} and onboarding["active_schedule_count"] < 1:
             raise ValueError("Doctor/hospital activation requires at least one active published schedule.")
 
+
+
+
+def _validate_pilot_link(source_type: str, linked_pilot_id: int | None) -> None:
+    if source_type == "institution_pilot" and linked_pilot_id is None:
+        raise ValueError("institution_pilot prospects require linked_pilot_id.")
+    if linked_pilot_id is None:
+        return
+    pilot = get_db().execute(
+        "SELECT id FROM institution_pilots WHERE id=?",
+        (int(linked_pilot_id),),
+    ).fetchone()
+    if not pilot:
+        raise ValueError("linked_pilot_id must reference an existing institution pilot.")
 
 
 def _validate_links(
