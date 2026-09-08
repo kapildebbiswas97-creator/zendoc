@@ -115,7 +115,7 @@ def test_business_api_rate_limit_is_enforced(tmp_path):
         headers={"X-ZENDOC-Partner-Key": issued["api_key"]},
     )
     assert first.status_code == 200
-    assert second.status_code == 401
+    assert second.status_code == 429
 
 
 def test_business_api_management_is_owner_only(tmp_path):
@@ -150,3 +150,67 @@ def test_business_api_management_is_owner_only(tmp_path):
     )
     assert key.status_code == 201
     assert key.get_json()["key"]["api_key"].startswith("zd_biz_")
+
+
+def test_business_api_client_suspend_revokes_active_keys(tmp_path):
+    from zendoc.business_api import update_business_api_client
+
+    app = make_app(tmp_path)
+    with app.app_context():
+        partner = create_business_api_client(
+            owner_actor(),
+            {
+                "name": "Suspend Partner",
+                "client_type": "hospital",
+                "allowed_scopes": ["public_directory.read"],
+            },
+        )
+        issued = issue_business_api_key(owner_actor(), partner["id"], expires_in_days=30)
+
+        updated = update_business_api_client(
+            owner_actor(),
+            partner["id"],
+            {"status": "suspended", "allowed_scopes": ["public_directory.read"], "rate_limit_per_minute": 60},
+        )
+        assert updated["status"] == "suspended"
+
+        row = get_db().execute(
+            "SELECT status,revoked_at FROM business_api_keys WHERE id=?",
+            (issued["key_id"],),
+        ).fetchone()
+        assert row["status"] == "revoked"
+        assert row["revoked_at"] is not None
+
+        blocked = False
+        try:
+            authenticate_business_api_key(issued["api_key"], endpoint="/test")
+        except PermissionError:
+            blocked = True
+        assert blocked is True
+
+
+def test_business_api_key_cannot_be_issued_for_suspended_client(tmp_path):
+    from zendoc.business_api import update_business_api_client
+
+    app = make_app(tmp_path)
+    with app.app_context():
+        partner = create_business_api_client(
+            owner_actor(),
+            {
+                "name": "No Key Partner",
+                "client_type": "ngo",
+                "allowed_scopes": ["public_directory.read"],
+            },
+        )
+        update_business_api_client(
+            owner_actor(),
+            partner["id"],
+            {"status": "suspended", "allowed_scopes": ["public_directory.read"], "rate_limit_per_minute": 60},
+        )
+
+        failed = False
+        try:
+            issue_business_api_key(owner_actor(), partner["id"], expires_in_days=30)
+        except ValueError:
+            failed = True
+        assert failed is True
