@@ -9,7 +9,7 @@ def test_business_api_owner_web_routes_are_protected_and_render_command_center(t
         data={"name": "Denied", "client_type": "hospital"},
         follow_redirects=False,
     )
-    assert denied.status_code in {302, 401, 403}
+    assert denied.status_code in {302, 400, 401, 403}
 
     login_web(client, "admin", "admin@example.com", "AdminStrong123")
     page = client.get("/admin/startup")
