@@ -12,6 +12,7 @@ from typing import Any
 
 from .db import get_db, is_integrity_error, now_iso
 from .provider_service import available_slots, get_public_provider_profile
+from .partner_audit import record_partner_audit_event
 from .security import assert_owner
 
 
@@ -111,6 +112,16 @@ def create_partner_booking_handoff(
                 now,
                 now,
             ),
+        )
+        db.commit()
+        record_partner_audit_event(
+            event_type="handoff_created",
+            actor_type="partner",
+            client_id=int(identity["client_id"]),
+            key_id=int(identity["key_id"]) if identity.get("key_id") is not None else None,
+            entity_type="partner_booking_handoff",
+            entity_id=handoff_id,
+            metadata={"provider_profile_id": int(provider_profile_id), "slot_key": slot_key, "status": "received"},
         )
         db.commit()
     except Exception as exc:
@@ -228,6 +239,16 @@ def provider_update_partner_booking_handoff(
         (clean, _clean(status_note, 1000), now_iso(), int(handoff_id)),
     )
     _sync_slot_hold_after_status(int(handoff_id), clean)
+    db.commit()
+    record_partner_audit_event(
+        event_type="handoff_status_updated",
+        actor_type="provider",
+        actor_user_id=int(user["id"]),
+        client_id=int(row["client_id"]),
+        entity_type="partner_booking_handoff",
+        entity_id=int(handoff_id),
+        metadata={"status": clean, "provider_profile_id": int(row["provider_profile_id"])},
+    )
     db.commit()
 
     identity = {"client_id": int(row["client_id"])}
