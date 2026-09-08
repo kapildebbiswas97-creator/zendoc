@@ -90,6 +90,40 @@
 </section>
 {% endif %}
 
+{% if partner_handoffs %}
+<section class="panel spaced-panel">
+  <p class="eyebrow">Partner coordination</p>
+  <h2>Partner booking handoffs</h2>
+  <p class="form-note">These are operational coordination requests, not patient medical records. Accepting a handoff does not create a patient appointment record.</p>
+  <table>
+    <thead><tr><th>Partner</th><th>Requested slot</th><th>Reference</th><th>Status</th><th>Review</th></tr></thead>
+    <tbody>
+      {% for handoff in partner_handoffs %}
+      <tr>
+        <td>{{ handoff.client_name }}</td>
+        <td>{{ handoff.requested_for }}</td>
+        <td>{{ handoff.partner_reference }}{% if handoff.contact_reference %}<br><small>{{ handoff.contact_reference }}</small>{% endif %}</td>
+        <td>{{ handoff.status }}</td>
+        <td>
+          <form class="inline-form" method="post" action="{{ url_for('main.provider_booking_handoff_review_web', handoff_id=handoff.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <select name="status">
+              {% for status in ['pending','accepted','rejected','cancelled'] %}
+              <option value="{{ status }}" {% if handoff.status == status %}selected{% endif %}>{{ status }}</option>
+              {% endfor %}
+            </select>
+            <input name="status_note" maxlength="1000" value="{{ handoff.status_note or '' }}" placeholder="Operational note">
+            <button type="submit">Update</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <aside class="trust-note"><strong>Privacy boundary</strong><br>Do not put symptoms, diagnoses, prescriptions, medical history, or clinical notes into handoff fields.</aside>
+</section>
+{% endif %}
+
 {% if evidence %}
 <section class="panel spaced-panel">
   <p class="eyebrow">Evidence history</p>
