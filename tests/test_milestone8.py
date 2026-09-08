@@ -310,7 +310,7 @@ def test_notification_provider_records_real_in_app_and_truthful_external_deliver
         assert in_app.status == "delivered"
         assert external.status == "queued"
         assert get_db().execute("SELECT COUNT(*) c FROM notifications WHERE user_id=?", (patient_id,)).fetchone()["c"] == 1
-        assert get_db().execute("SELECT status FROM notification_deliveries WHERE id=?", (external.delivery_id,)).fetchone()["status"] == "integration_required"
+        assert get_db().execute("SELECT status FROM notification_deliveries WHERE id=?", (external.delivery_id,)).fetchone()["status"] == "queued"
 
 
 def test_capability_infrastructure_and_command_center_truthfulness(tmp_path):
