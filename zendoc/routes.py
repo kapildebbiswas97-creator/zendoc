@@ -1365,6 +1365,84 @@ def api_business_public_directory():
         return jsonify({"error": {"code": 401, "message": str(exc)}}), 401
 
 
+@bp.get("/api/v1/business/providers/<int:profile_id>")
+def api_business_provider_profile(profile_id):
+    raw_key = request.headers.get("X-ZENDOC-Partner-Key", "")
+    try:
+        identity = authenticate_business_api_key(
+            raw_key,
+            required_scope="provider_profile.read",
+            endpoint=f"/api/v1/business/providers/{profile_id}",
+            method="GET",
+        )
+        profile = get_public_provider_profile(profile_id)
+        if not profile:
+            return jsonify({"error": {"code": 404, "message": "Verified public provider not found."}}), 404
+        return jsonify({
+            "client_uid": identity["client_uid"],
+            "provider": {
+                "id": profile["id"],
+                "provider_type": profile["provider_type"],
+                "provider_name": profile["provider_name"],
+                "organization": profile["organization"],
+                "specialty": profile["specialty"],
+                "qualifications": profile["qualifications"],
+                "city": profile["city"],
+                "state": profile["state"],
+                "postal_code": profile["postal_code"],
+                "public_phone": profile["public_phone"],
+                "verification_status": profile["verification_status"],
+            },
+            "patient_data_access": False,
+            "truth_notice": "Verified public provider profile only. No patient or clinical data is exposed.",
+        })
+    except PermissionError as exc:
+        return jsonify({"error": {"code": 401, "message": str(exc)}}), 401
+
+
+@bp.get("/api/v1/business/pilot")
+def api_business_linked_pilot():
+    raw_key = request.headers.get("X-ZENDOC-Partner-Key", "")
+    try:
+        identity = authenticate_business_api_key(
+            raw_key,
+            required_scope="pilot_metrics.read",
+            endpoint="/api/v1/business/pilot",
+            method="GET",
+        )
+        if identity["pilot_id"] is None:
+            return jsonify({"error": {"code": 404, "message": "No institution pilot is linked to this API client."}}), 404
+        pilot = get_db().execute(
+            """
+            SELECT id,pilot_uid,organization_name,organization_type,state,district,status,commercial_status,
+                   start_date,end_date,target_users,target_provider_seats,success_metrics_json,next_action,
+                   next_action_due,updated_at
+            FROM institution_pilots
+            WHERE id=?
+            """,
+            (int(identity["pilot_id"]),),
+        ).fetchone()
+        if not pilot:
+            return jsonify({"error": {"code": 404, "message": "Linked institution pilot not found."}}), 404
+        import json as _json
+        result = dict(pilot)
+        try:
+            result["success_metrics"] = _json.loads(result.pop("success_metrics_json") or "[]")
+        except (TypeError, ValueError):
+            result["success_metrics"] = []
+        return jsonify({
+            "client_uid": identity["client_uid"],
+            "pilot": result,
+            "patient_data_access": False,
+            "truth_notice": (
+                "This API client can read only the institution pilot explicitly linked to its own client record. "
+                "It cannot enumerate or access other organizations' pilots."
+            ),
+        })
+    except PermissionError as exc:
+        return jsonify({"error": {"code": 401, "message": str(exc)}}), 401
+
+
 @bp.get("/api/v1/business/providers/<int:profile_id>/availability")
 def api_business_provider_availability(profile_id):
     raw_key = request.headers.get("X-ZENDOC-Partner-Key", "")
