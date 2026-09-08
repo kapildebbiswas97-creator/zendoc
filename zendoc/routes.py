@@ -50,7 +50,17 @@ from .security import csrf_token, hash_token, is_owner, load_user_and_check_csrf
 from .startup_analytics import care_journey_conversion, india_coverage_quality, provider_onboarding_funnel, record_finder_search, record_product_activity, retention_metrics, startup_metrics, submit_finder_feedback
 from .startup_finance import create_financial_entry, create_financial_snapshot, financial_kpis, list_financial_entries
 from .investor_dashboard import investor_traction_snapshot
-from .business_api import BusinessApiRateLimitError, authenticate_business_api_key, business_api_metrics, business_api_self_usage, list_business_api_clients
+from .business_api import (
+    BusinessApiRateLimitError,
+    authenticate_business_api_key,
+    business_api_metrics,
+    business_api_self_usage,
+    create_business_api_client,
+    issue_business_api_key,
+    list_business_api_clients,
+    revoke_business_api_key,
+    update_business_api_client,
+)
 from .institution_pilots import (
     create_institution_pilot,
     institution_pilot_metrics,
@@ -1058,6 +1068,73 @@ def startup_command_center():
         investor_snapshot=investor_snapshot,
         claims=claims,
     )
+
+
+@bp.post("/admin/startup/business-api-clients")
+@owner_required
+def startup_business_client_create_web():
+    try:
+        client = create_business_api_client(
+            g.user,
+            {
+                "name": request.form.get("name"),
+                "client_type": request.form.get("client_type"),
+                "pilot_id": request.form.get("pilot_id"),
+                "allowed_scopes": request.form.getlist("allowed_scopes"),
+                "rate_limit_per_minute": request.form.get("rate_limit_per_minute", 60),
+            },
+        )
+        flash(f"Business API client created: {client['name']}.", "success")
+    except (TypeError, ValueError, LookupError, PermissionError) as error:
+        flash(str(error), "error")
+    return redirect(url_for("main.startup_command_center"))
+
+
+@bp.post("/admin/startup/business-api-clients/<int:client_id>")
+@owner_required
+def startup_business_client_update_web(client_id):
+    try:
+        update_business_api_client(
+            g.user,
+            client_id,
+            {
+                "status": request.form.get("status"),
+                "pilot_id": request.form.get("pilot_id"),
+                "allowed_scopes": request.form.getlist("allowed_scopes"),
+                "rate_limit_per_minute": request.form.get("rate_limit_per_minute", 60),
+            },
+        )
+        flash("Business API client updated.", "success")
+    except (TypeError, ValueError, LookupError, PermissionError) as error:
+        flash(str(error), "error")
+    return redirect(url_for("main.startup_command_center"))
+
+
+@bp.post("/admin/startup/business-api-clients/<int:client_id>/keys")
+@owner_required
+def startup_business_key_issue_web(client_id):
+    try:
+        key = issue_business_api_key(
+            g.user,
+            client_id,
+            expires_in_days=request.form.get("expires_in_days", 90),
+        )
+        client = next((item for item in list_business_api_clients(g.user) if int(item["id"]) == int(client_id)), None)
+        return render_template("business_api_key_issued.html", key=key, client=client)
+    except (TypeError, ValueError, LookupError, PermissionError) as error:
+        flash(str(error), "error")
+        return redirect(url_for("main.startup_command_center"))
+
+
+@bp.post("/admin/startup/business-api-keys/<int:key_id>/revoke")
+@owner_required
+def startup_business_key_revoke_web(key_id):
+    try:
+        revoke_business_api_key(g.user, key_id)
+        flash("Business API key revoked.", "success")
+    except (LookupError, PermissionError) as error:
+        flash(str(error), "error")
+    return redirect(url_for("main.startup_command_center"))
 
 
 @bp.post("/admin/startup/finance/entries")
