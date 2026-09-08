@@ -24,9 +24,13 @@ from .partner_audit import list_partner_audit_events, partner_audit_metrics
 from .partner_handoffs import list_all_partner_booking_handoffs, partner_operations_metrics
 from .institution_pilots import (
     create_institution_pilot,
+    create_pilot_milestone,
     institution_pilot_metrics,
     list_institution_pilots,
+    pilot_execution_summary,
+    record_pilot_usage_snapshot,
     update_institution_pilot,
+    update_pilot_milestone,
 )
 from .startup_analytics import care_journey_conversion, india_coverage_quality, provider_onboarding_funnel, retention_metrics, startup_metrics
 from .startup_finance import create_financial_entry, create_financial_snapshot, financial_kpis, list_financial_entries
@@ -552,5 +556,58 @@ def api_startup_b2b_operations():
             "recent_handoffs": list_all_partner_booking_handoffs(user, limit=request.args.get("limit", 100)),
             "recent_audit_events": list_partner_audit_events(user, limit=request.args.get("audit_limit", 100)),
         })
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+
+
+@bp.get("/api/v1/admin/startup/pilots/<int:pilot_id>/execution")
+def api_startup_pilot_execution(pilot_id):
+    user, error = _owner()
+    if error:
+        return error
+    try:
+        return jsonify({"execution": pilot_execution_summary(user, pilot_id)})
+    except LookupError as exc:
+        return jsonify({"error": {"code": 404, "message": str(exc)}}), 404
+
+
+@bp.post("/api/v1/admin/startup/pilots/<int:pilot_id>/milestones")
+def api_startup_pilot_milestone_create(pilot_id):
+    user, error = _owner()
+    if error:
+        return error
+    try:
+        milestone = create_pilot_milestone(user, pilot_id, request.get_json(silent=True) or {})
+        return jsonify({"milestone": milestone}), 201
+    except LookupError as exc:
+        return jsonify({"error": {"code": 404, "message": str(exc)}}), 404
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+
+
+@bp.patch("/api/v1/admin/startup/pilot-milestones/<int:milestone_id>")
+def api_startup_pilot_milestone_update(milestone_id):
+    user, error = _owner()
+    if error:
+        return error
+    try:
+        milestone = update_pilot_milestone(user, milestone_id, request.get_json(silent=True) or {})
+        return jsonify({"milestone": milestone})
+    except LookupError as exc:
+        return jsonify({"error": {"code": 404, "message": str(exc)}}), 404
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+
+
+@bp.post("/api/v1/admin/startup/pilots/<int:pilot_id>/usage")
+def api_startup_pilot_usage_create(pilot_id):
+    user, error = _owner()
+    if error:
+        return error
+    try:
+        snapshot = record_pilot_usage_snapshot(user, pilot_id, request.get_json(silent=True) or {})
+        return jsonify({"snapshot": snapshot}), 201
+    except LookupError as exc:
+        return jsonify({"error": {"code": 404, "message": str(exc)}}), 404
     except (TypeError, ValueError) as exc:
         return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
