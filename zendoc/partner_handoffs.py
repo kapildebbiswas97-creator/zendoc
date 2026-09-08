@@ -114,7 +114,6 @@ def create_partner_booking_handoff(
                 now,
             ),
         )
-        db.commit()
         record_partner_audit_event(
             event_type="handoff_created",
             actor_type="partner",
@@ -240,7 +239,6 @@ def provider_update_partner_booking_handoff(
         (clean, _clean(status_note, 1000), now_iso(), int(handoff_id)),
     )
     _sync_slot_hold_after_status(int(handoff_id), clean)
-    db.commit()
     record_partner_audit_event(
         event_type="handoff_status_updated",
         actor_type="provider",
@@ -348,7 +346,6 @@ def owner_update_partner_booking_handoff(
         (clean, _clean(status_note, 1000), now_iso(), int(handoff_id)),
     )
     _sync_slot_hold_after_status(int(handoff_id), clean)
-    db.commit()
     record_partner_audit_event(
         event_type="handoff_status_updated",
         actor_type="owner",
