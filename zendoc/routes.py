@@ -46,7 +46,7 @@ from .record_storage import get_record_storage
 from .organization_service import assert_resource_tenant
 from .database_reliability import backup_readiness, readiness_report
 from .security import csrf_token, hash_token, is_owner, load_user_and_check_csrf, login_required, new_token, owner_required, role_required, start_user_session
-from .startup_analytics import india_coverage_quality, record_finder_search, startup_metrics, submit_finder_feedback
+from .startup_analytics import care_journey_conversion, india_coverage_quality, provider_onboarding_funnel, record_finder_search, record_product_activity, retention_metrics, startup_metrics, submit_finder_feedback
 from .public_entity_claims import (
     list_my_public_entity_claims,
     list_public_entity_claims,
@@ -394,6 +394,7 @@ def login(role=None):
             user = None
         if user and check_password_hash(user["password_hash"], request.form.get("password", "")):
             start_user_session(user, remember=bool(request.form.get("remember_me")))
+            record_product_activity(user, event_type="session_login")
             audit("login", "user", str(user["id"]))
             get_db().commit()
             return redirect(url_for("main.dashboard"))
@@ -1012,13 +1013,20 @@ def provider_schedule():
 @bp.get("/admin/startup")
 @owner_required
 def startup_command_center():
-    metrics = startup_metrics(g.user, days=request.args.get("days", 30))
+    days = request.args.get("days", 30)
+    metrics = startup_metrics(g.user, days=days)
     coverage = india_coverage_quality(g.user)
+    retention = retention_metrics(g.user)
+    care_funnel = care_journey_conversion(g.user, days=days)
+    provider_funnel = provider_onboarding_funnel(g.user, days=request.args.get("provider_days", 90))
     claims = list_public_entity_claims(g.user, status=request.args.get("claim_status"), limit=50)
     return render_template(
         "startup_command_center.html",
         metrics=metrics,
         coverage=coverage,
+        retention=retention,
+        care_funnel=care_funnel,
+        provider_funnel=provider_funnel,
         claims=claims,
     )
 
