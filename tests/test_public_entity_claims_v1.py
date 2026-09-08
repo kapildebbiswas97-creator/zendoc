@@ -2,7 +2,7 @@ from zendoc.db import get_db
 from zendoc.public_data_ingestion import ingest_public_records
 from zendoc.public_entity_claims import review_public_entity_claim, submit_public_entity_claim
 from zendoc.provider_service import upsert_provider_profile
-from tests.test_milestone1 import make_app, api_token
+from tests.test_milestone1 import make_app
 
 
 def owner_actor():
@@ -148,7 +148,23 @@ def test_claim_api_requires_provider_and_owner_review(tmp_path):
     with app.app_context():
         public_entity_id = create_public_hospital()
 
-    provider_token = api_token(client, "claim-api-hospital@example.com", role="hospital")
+    register = client.post(
+        "/api/v1/auth/register",
+        json={
+            "name": "Claim API Hospital",
+            "email": "claim-api-hospital@example.com",
+            "password": "StrongPass123",
+            "role": "hospital",
+        },
+    )
+    assert register.status_code in {200, 201}
+    login_provider = client.post(
+        "/api/v1/auth/login",
+        json={"email": "claim-api-hospital@example.com", "password": "StrongPass123"},
+    )
+    assert login_provider.status_code == 200
+    provider_token = login_provider.get_json()["token"]
+
     with app.app_context():
         user = get_db().execute(
             "SELECT * FROM users WHERE email='claim-api-hospital@example.com'"
