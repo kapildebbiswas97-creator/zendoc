@@ -26,6 +26,10 @@ ALLOWED_SCOPES = {
 DEFAULT_SCOPES = {"public_directory.read"}
 
 
+class BusinessApiRateLimitError(PermissionError):
+    """Raised when a partner exceeds its configured per-minute API limit."""
+
+
 def create_business_api_client(actor: Any, data: dict) -> dict:
     assert_owner(actor)
     name = str(data.get("name") or "").strip()
@@ -70,6 +74,57 @@ def create_business_api_client(actor: Any, data: dict) -> dict:
     )
     get_db().commit()
     return get_business_api_client(int(cursor.lastrowid))
+
+
+def update_business_api_client(actor: Any, client_id: int, data: dict) -> dict:
+    assert_owner(actor)
+    client = get_business_api_client(client_id)
+
+    status = str(data.get("status", client["status"]) or "").strip().lower()
+    if status not in CLIENT_STATUSES:
+        raise ValueError("Unsupported business API client status.")
+
+    scopes = _normalize_scopes(data.get("allowed_scopes", client["allowed_scopes"]))
+    rate_limit = int(data.get("rate_limit_per_minute", client["rate_limit_per_minute"]) or 60)
+    if rate_limit < 1 or rate_limit > 1000:
+        raise ValueError("rate_limit_per_minute must be between 1 and 1000.")
+
+    pilot_id = data.get("pilot_id", client["pilot_id"])
+    if pilot_id in ("", None):
+        pilot_id = None
+    else:
+        pilot_id = int(pilot_id)
+        pilot = get_db().execute("SELECT id FROM institution_pilots WHERE id=?", (pilot_id,)).fetchone()
+        if not pilot:
+            raise ValueError("pilot_id does not reference an existing institution pilot.")
+
+    now = now_iso()
+    get_db().execute(
+        """
+        UPDATE business_api_clients
+        SET status=?,allowed_scopes_json=?,rate_limit_per_minute=?,pilot_id=?,updated_at=?
+        WHERE id=?
+        """,
+        (
+            status,
+            json.dumps(sorted(scopes), separators=(",", ":")),
+            rate_limit,
+            pilot_id,
+            now,
+            int(client_id),
+        ),
+    )
+    if status in {"suspended", "revoked"}:
+        get_db().execute(
+            """
+            UPDATE business_api_keys
+            SET status='revoked',revoked_at=COALESCE(revoked_at,?)
+            WHERE client_id=? AND status='active'
+            """,
+            (now, int(client_id)),
+        )
+    get_db().commit()
+    return get_business_api_client(int(client_id))
 
 
 def issue_business_api_key(
@@ -297,7 +352,7 @@ def _enforce_rate_limit(client_id: int, limit: int):
         (int(client_id), cutoff),
     ).fetchone()["c"]
     if int(count or 0) >= int(limit):
-        raise PermissionError("Business API rate limit exceeded.")
+        raise BusinessApiRateLimitError("Business API rate limit exceeded.")
 
 
 def _record_usage(identity: dict, *, endpoint: str, method: str, status_code: int):
