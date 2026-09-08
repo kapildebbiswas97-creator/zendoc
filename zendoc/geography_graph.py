@@ -121,7 +121,7 @@ def upsert_geography_node(
     clean_source = str(source or "").strip()
     if not clean_source:
         raise ValueError("Geography provenance source is required.")
-    clean_source_ref = clean_source_ref
+    clean_source_ref = str(source_ref or "").strip() or None
 
     lat = _coordinate(latitude, -90, 90, "latitude")
     lng = _coordinate(longitude, -180, 180, "longitude")
@@ -425,6 +425,7 @@ def link_geography_nodes(
     source = str(source or "").strip()
     if not source:
         raise ValueError("Geography relationship provenance source is required.")
+    clean_source_ref = str(source_ref or "").strip() or None
 
     db = get_db()
     for node_id in (int(from_node_id), int(to_node_id)):
