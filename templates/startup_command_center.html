@@ -49,6 +49,30 @@
 
 <section class="panel spaced-panel">
   <div class="panel-head">
+    <div>
+      <h2>Patient activation funnel</h2>
+      <p class="form-note">Observed patient accounts and privacy-safe product events over the last {{ activation_funnel.window_days }} days.</p>
+    </div>
+    <span class="status-badge working">{{ activation_funnel.registered_patient_accounts }} registered</span>
+  </div>
+  <table>
+    <thead><tr><th>Stage</th><th>Patients</th><th>From registered</th><th>From previous</th></tr></thead>
+    <tbody>
+    {% for stage in activation_funnel.stages %}
+      <tr>
+        <td>{{ stage.stage|replace('_',' ')|title }}</td>
+        <td>{{ stage.patient_count }}</td>
+        <td>{% if stage.conversion_from_registered is not none %}{{ (stage.conversion_from_registered * 100)|round(1) }}%{% else %}—{% endif %}</td>
+        <td>{% if stage.conversion_from_previous_stage is not none %}{{ (stage.conversion_from_previous_stage * 100)|round(1) }}%{% else %}—{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="form-note">{{ activation_funnel.truth_notice }}</p>
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head">
     <div><h2>Provider onboarding funnel</h2><p class="form-note">Independent real milestones over the last {{ provider_funnel.window_days }} days.</p></div>
     <span class="status-badge working">{{ provider_funnel.provider_profiles_created }} profiles</span>
   </div>
