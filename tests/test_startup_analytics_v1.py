@@ -11,10 +11,19 @@ def owner_actor():
     return {"id": 1, "role": "admin", "email": "admin@example.com", "active": 1}
 
 
+def create_analytics_user(db, email):
+    now = "2026-09-08T00:00:00+00:00"
+    cursor = db.execute(
+        "INSERT INTO users (name,email,email_normalized,password_hash,role,active,created_at,updated_at) VALUES (?,?,?,?,?,1,?,?)",
+        ("Analytics User", email, email, "x", "patient", now, now),
+    )
+    return {"id": int(cursor.lastrowid)}
+
+
 def test_finder_analytics_store_no_raw_free_text_location(tmp_path):
     app = make_app(tmp_path)
     with app.app_context():
-        user = {"id": 42}
+        user = create_analytics_user(get_db(), "analytics-privacy@example.com")
         raw_location = "Some Private Free Text Location"
         record_finder_search(
             user,
@@ -35,9 +44,11 @@ def test_finder_analytics_store_no_raw_free_text_location(tmp_path):
 def test_startup_metrics_report_useful_no_result_and_repeat_search_users(tmp_path):
     app = make_app(tmp_path)
     with app.app_context():
-        record_finder_search({"id": 10}, category="hospital", location="", result_count=3, source_tiers={"zendoc_verified": 1})
-        record_finder_search({"id": 10}, category="pharmacy", location="", result_count=0, source_tiers={})
-        record_finder_search({"id": 11}, category="doctor", location="", result_count=1, source_tiers={"official_public_directory_not_zendoc_verified": 1})
+        user_a = create_analytics_user(get_db(), "analytics-a@example.com")
+        user_b = create_analytics_user(get_db(), "analytics-b@example.com")
+        record_finder_search(user_a, category="hospital", location="", result_count=3, source_tiers={"zendoc_verified": 1})
+        record_finder_search(user_a, category="pharmacy", location="", result_count=0, source_tiers={})
+        record_finder_search(user_b, category="doctor", location="", result_count=1, source_tiers={"official_public_directory_not_zendoc_verified": 1})
         get_db().commit()
 
         metrics = startup_metrics(owner_actor(), days=30)
