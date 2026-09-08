@@ -1088,6 +1088,7 @@ def startup_provider_network():
     return render_template(
         "provider_network.html",
         metrics=provider_network_metrics(g.user),
+        pilots=list_institution_pilots(g.user, limit=200),
         prospects=list_provider_prospects(
             g.user,
             status=request.args.get("status"),
