@@ -691,6 +691,26 @@ def init_db():
         );
         CREATE INDEX IF NOT EXISTS idx_agent_approvals_status ON agent_approvals(status, requested_at);
 
+        CREATE TABLE IF NOT EXISTS product_analytics_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            event_type TEXT NOT NULL,
+            category TEXT,
+            geography_node_id INTEGER REFERENCES geography_nodes(id) ON DELETE SET NULL,
+            location_hash TEXT,
+            result_count INTEGER NOT NULL DEFAULT 0,
+            useful_result INTEGER NOT NULL DEFAULT 0,
+            source_tiers_json TEXT NOT NULL DEFAULT '{}',
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_product_analytics_event_time
+            ON product_analytics_events(event_type, created_at);
+        CREATE INDEX IF NOT EXISTS idx_product_analytics_user_time
+            ON product_analytics_events(user_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_product_analytics_geography_time
+            ON product_analytics_events(geography_node_id, created_at);
+
         CREATE TABLE IF NOT EXISTS platform_events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
