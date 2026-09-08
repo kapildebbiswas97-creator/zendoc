@@ -604,6 +604,33 @@ def admin_dashboard_preview(role):
         "Unread": 0,
         "AI Uses": 0,
     }
+    common_links = [
+        ("All appointments", url_for("main.appointments")),
+        ("All medical records", url_for("main.records")),
+        ("Find Care", url_for("main.finder")),
+        ("ZENDOC AI", url_for("main.ai_center")),
+        ("Notifications", url_for("main.notifications")),
+    ]
+    role_links = {
+        "patient": common_links + [
+            ("Health vitals", url_for("main.health")),
+            ("Admin dashboard", url_for("main.admin")),
+        ],
+        "doctor": common_links + [
+            ("Provider network", url_for("main.startup_provider_network")),
+            ("Admin dashboard", url_for("main.admin")),
+        ],
+        "hospital": common_links + [
+            ("Provider network", url_for("main.startup_provider_network")),
+            ("B2B operations", url_for("main.startup_b2b_operations")),
+            ("Admin dashboard", url_for("main.admin")),
+        ],
+        "pharmacy": common_links + [
+            ("Provider network", url_for("main.startup_provider_network")),
+            ("B2B operations", url_for("main.startup_b2b_operations")),
+            ("Admin dashboard", url_for("main.admin")),
+        ],
+    }
     audit("preview_dashboard", "role_dashboard", preview_role)
     get_db().commit()
     return render_template(
@@ -616,6 +643,7 @@ def admin_dashboard_preview(role):
         health_activity=[],
         preview_mode=True,
         preview_role=preview_role,
+        preview_links=role_links[preview_role],
     )
 
 

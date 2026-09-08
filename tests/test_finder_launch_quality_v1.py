@@ -98,3 +98,23 @@ def test_finder_empty_state_explains_external_provider_unavailable(tmp_path, mon
     assert response.status_code == 200
     assert b"No matching care options yet" in response.data
     assert b"no maps/places provider is configured" in response.data
+
+
+def test_production_falls_back_to_openstreetmap_when_provider_env_is_none(tmp_path, monkeypatch):
+    monkeypatch.setenv("ZENDOC_ENV", "production")
+    monkeypatch.setenv("ZENDOC_PLACES_PROVIDER", "none")
+    monkeypatch.delenv("ZENDOC_GOOGLE_PLACES_API_KEY", raising=False)
+    monkeypatch.setenv("ZENDOC_SECRET_KEY", "production-test-secret")
+    monkeypatch.setenv("ZENDOC_ADMIN_EMAIL", "admin@example.com")
+    monkeypatch.setenv("ZENDOC_ADMIN_PASSWORD", "AdminStrong123")
+    monkeypatch.setenv("ZENDOC_REQUIRE_DURABLE_DATABASE", "false")
+
+    _app, client = make_client(tmp_path)
+    response = client.get("/api/v1/ready")
+    assert response.status_code == 200
+    finder = response.get_json()["healthcare_finder"]
+    assert finder["configured_provider"] == "none"
+    assert finder["effective_provider"] == "nominatim"
+    assert finder["production_fallback_active"] is True
+    assert finder["external_discovery_available"] is True
+    assert finder["mode"] == "production_openstreetmap_fallback"
