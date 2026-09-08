@@ -316,14 +316,20 @@ def user_activation_funnel(actor: Any, *, days: int = 30) -> dict:
             for event in events_by_user.get(uid, [])
         )
 
+    registered_members = set(user_ids)
+    logged_members = {uid for uid in registered_members if _has_event(uid, "session_login")}
+    searched_members = {uid for uid in logged_members if _has_event(uid, "healthcare_search")}
+    useful_members = {uid for uid in searched_members if _has_useful_search(uid)}
+    provider_view_members = {uid for uid in useful_members if _has_event(uid, "provider_view")}
+    appointment_members = {uid for uid in provider_view_members if _has_event(uid, "appointment_requested")}
+
     stages = [
-        ("registered", set(user_ids)),
-        ("logged_in", {uid for uid in user_ids if _has_event(uid, "session_login")}),
-        ("healthcare_search", {uid for uid in user_ids if _has_event(uid, "healthcare_search")}),
-        ("useful_search", {uid for uid in user_ids if _has_useful_search(uid)}),
-        ("provider_view", {uid for uid in user_ids if _has_event(uid, "provider_view")}),
-        ("appointment_requested", {uid for uid in user_ids if _has_event(uid, "appointment_requested")}),
-        ("finder_feedback", feedback_users),
+        ("registered", registered_members),
+        ("logged_in", logged_members),
+        ("healthcare_search", searched_members),
+        ("useful_search", useful_members),
+        ("provider_view", provider_view_members),
+        ("appointment_requested", appointment_members),
     ]
 
     registered = len(user_ids)
@@ -347,10 +353,18 @@ def user_activation_funnel(actor: Any, *, days: int = 30) -> dict:
         "window_days": days,
         "registered_patient_accounts": registered,
         "stages": stage_rows,
+        "finder_feedback_patient_count": len(feedback_users),
+        "independent_milestones": {
+            "healthcare_search": sum(1 for uid in user_ids if _has_event(uid, "healthcare_search")),
+            "provider_view": sum(1 for uid in user_ids if _has_event(uid, "provider_view")),
+            "appointment_requested": sum(1 for uid in user_ids if _has_event(uid, "appointment_requested")),
+            "finder_feedback": len(feedback_users),
+        },
         "truth_notice": (
             "Registered counts come from real patient account rows created in the window. Later stages come only "
-            "from privacy-safe product events or finder feedback actually recorded by ZENDOC. No synthetic users "
-            "or inferred activation is included."
+            "from privacy-safe product events actually recorded by ZENDOC. Funnel stages are sequential so previous-stage "
+            "conversion cannot exceed 100%. Feedback is reported separately because it is not a required step in the booking path. "
+            "No synthetic users or inferred activation is included."
         ),
     }
 
