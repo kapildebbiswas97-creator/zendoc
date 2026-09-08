@@ -18,9 +18,11 @@ def test_west_bengal_priority_stack_targets_nadia():
     assert "wbhs_empanelled_hco" in profile["official_directory_sources"]
 
 
-def test_unconfigured_state_gets_safe_default_stack():
+def test_national_scope_state_gets_safe_default_stack_until_state_specific_sources_are_added():
     profile = state_source_priority("tamil_nadu")
-    assert profile["configured"] is False
+    assert profile["configured"] is True
+    assert profile["coverage_scope"] == "FULL_REGION"
+    assert profile["state_specific_sources"] == []
     assert "lgd" in profile["official_directory_sources"]
     assert "hospital_bed_availability" in profile["live_data_gaps"]
 
