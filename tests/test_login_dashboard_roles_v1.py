@@ -33,9 +33,12 @@ def test_login_redirect_lands_on_dashboard_not_login_loop(tmp_path):
     _app, client = make_client(tmp_path)
 
     register_web(client, "patient", "loop-check@example.com", "Loop Check")
+    page = client.get("/login/patient")
+    token = page.data.decode().split('name="csrf_token" value="')[1].split('"')[0]
     response = client.post(
         "/login/patient",
         data={
+            "csrf_token": token,
             "email": "loop-check@example.com",
             "password": "StrongPass123",
         },
