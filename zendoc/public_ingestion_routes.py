@@ -19,6 +19,8 @@ from .official_connectors import connector_readiness, infer_mapping, list_connec
 from .geography_region_registry import import_lgd_state_registry, list_import_regions
 from .state_source_priorities import state_source_priority
 from .india_regions import india_region_catalog
+from .partner_audit import list_partner_audit_events, partner_audit_metrics
+from .partner_handoffs import list_all_partner_booking_handoffs, partner_operations_metrics
 from .institution_pilots import (
     create_institution_pilot,
     institution_pilot_metrics,
@@ -514,6 +516,24 @@ def api_startup_investor_snapshot():
                 days=days,
                 finance_month=request.args.get("finance_month"),
             )
+        })
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+
+
+@bp.get("/api/v1/admin/startup/b2b-operations")
+def api_startup_b2b_operations():
+    user, error = _owner()
+    if error:
+        return error
+    try:
+        days = int(request.args.get("days", 30))
+        return jsonify({
+            "business_api": business_api_metrics(user),
+            "handoffs": partner_operations_metrics(user),
+            "audit": partner_audit_metrics(user, days=days),
+            "recent_handoffs": list_all_partner_booking_handoffs(user, limit=request.args.get("limit", 100)),
+            "recent_audit_events": list_partner_audit_events(user, limit=request.args.get("audit_limit", 100)),
         })
     except (TypeError, ValueError) as exc:
         return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
