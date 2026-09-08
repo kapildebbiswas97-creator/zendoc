@@ -166,3 +166,49 @@ def test_public_facility_updates_existing_source_identity_without_duplication(tm
         assert len(rows) == 1
         assert rows[0]["name"] == "Pilot Pharmacy Updated"
         assert rows[0]["public_phone"] == "1234567890"
+
+
+def test_official_phc_chc_labels_normalize_without_losing_source_type(tmp_path):
+    app = make_app(tmp_path)
+    with app.app_context():
+        canonical_district()
+        result = ingest_public_records(
+            owner_actor(),
+            source_id="data_gov_hospitals",
+            ingestion_type="public_healthcare_entities",
+            records=[
+                {
+                    "source_record_id": "PHC-LABEL-1",
+                    "category": "PHC",
+                    "name": "Official Primary Health Centre",
+                    "geography_source": "lgd",
+                    "geography_source_record_id": "district:320",
+                },
+                {
+                    "source_record_id": "CHC-LABEL-1",
+                    "category": "Community Health Centre",
+                    "name": "Official Community Health Centre",
+                    "geography_source": "lgd",
+                    "geography_source_record_id": "district:320",
+                },
+            ],
+            dry_run=False,
+        )
+
+        assert result["applied"]["inserted_count"] == 2
+        rows = get_db().execute(
+            """
+            SELECT source_record_id,category,metadata_json
+            FROM public_healthcare_entities
+            ORDER BY source_record_id
+            """
+        ).fetchall()
+        assert [row["category"] for row in rows] == ["health_centre", "health_centre"]
+
+        import json
+        metadata = {
+            row["source_record_id"]: json.loads(row["metadata_json"])
+            for row in rows
+        }
+        assert metadata["PHC-LABEL-1"]["source_facility_category"] == "PHC"
+        assert metadata["CHC-LABEL-1"]["source_facility_category"] == "Community Health Centre"
