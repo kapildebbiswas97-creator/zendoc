@@ -66,3 +66,18 @@ def test_owner_existing_read_views_remain_available(tmp_path):
     for path in ("/dashboard", "/appointments", "/records", "/finder", "/ai", "/notifications"):
         response = client.get(path, follow_redirects=False)
         assert response.status_code == 200, path
+
+
+def test_owner_preview_contains_only_owner_safe_navigation(tmp_path):
+    _app, client = make_client(tmp_path)
+    login_web(client, "admin", "admin@example.com", "AdminStrong123")
+
+    for role in ("patient", "doctor", "hospital", "pharmacy"):
+        response = client.get(f"/admin/dashboard-preview/{role}")
+        assert response.status_code == 200
+        assert b"Owner inspection" in response.data
+        assert b"All appointments" in response.data
+        assert b"All medical records" in response.data
+        assert b"Find Care" in response.data
+        assert b"ZENDOC AI" in response.data
+        assert b"role-specific writes remain protected" in response.data
