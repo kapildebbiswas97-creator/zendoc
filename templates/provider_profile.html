@@ -69,6 +69,27 @@
   </form>
 </section>
 
+{% if listing_claims %}
+<section class="panel spaced-panel">
+  <p class="eyebrow">Public directory identity</p>
+  <h2>Your listing claims</h2>
+  <p class="form-note">A claim links your provider profile to an imported public directory record. Approval does not automatically verify your provider profile or connect booking.</p>
+  <table>
+    <thead><tr><th>Public listing</th><th>Category</th><th>Source</th><th>Claim status</th></tr></thead>
+    <tbody>
+      {% for claim in listing_claims %}
+      <tr>
+        <td>{{ claim.public_entity_name }}</td>
+        <td>{{ claim.public_entity_category|replace('_',' ')|title }}</td>
+        <td>{{ claim.public_entity_source_id }}</td>
+        <td>{{ claim.status }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
 {% if evidence %}
 <section class="panel spaced-panel">
   <p class="eyebrow">Evidence history</p>
