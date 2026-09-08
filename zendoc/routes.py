@@ -47,6 +47,8 @@ from .organization_service import assert_resource_tenant
 from .database_reliability import backup_readiness, readiness_report
 from .security import csrf_token, hash_token, is_owner, load_user_and_check_csrf, login_required, new_token, owner_required, role_required, start_user_session
 from .startup_analytics import care_journey_conversion, india_coverage_quality, provider_onboarding_funnel, record_finder_search, record_product_activity, retention_metrics, startup_metrics, submit_finder_feedback
+from .startup_finance import create_financial_entry, create_financial_snapshot, financial_kpis, list_financial_entries
+from .investor_dashboard import investor_traction_snapshot
 from .business_api import authenticate_business_api_key, business_api_metrics, list_business_api_clients
 from .institution_pilots import (
     create_institution_pilot,
@@ -1030,6 +1032,13 @@ def startup_command_center():
     pilots = list_institution_pilots(g.user, status=request.args.get("pilot_status"), limit=100)
     business_metrics = business_api_metrics(g.user)
     business_clients = list_business_api_clients(g.user)
+    finance = financial_kpis(g.user, month=request.args.get("finance_month"))
+    finance_entries = list_financial_entries(g.user, limit=100)
+    investor_snapshot = investor_traction_snapshot(
+        g.user,
+        days=int(days),
+        finance_month=request.args.get("finance_month"),
+    )
     claims = list_public_entity_claims(g.user, status=request.args.get("claim_status"), limit=50)
     return render_template(
         "startup_command_center.html",
@@ -1042,8 +1051,33 @@ def startup_command_center():
         pilots=pilots,
         business_metrics=business_metrics,
         business_clients=business_clients,
+        finance=finance,
+        finance_entries=finance_entries,
+        investor_snapshot=investor_snapshot,
         claims=claims,
     )
+
+
+@bp.post("/admin/startup/finance/entries")
+@owner_required
+def startup_finance_entry_create_web():
+    try:
+        create_financial_entry(g.user, request.form)
+        flash("Financial entry recorded.", "success")
+    except (TypeError, ValueError, PermissionError) as error:
+        flash(str(error), "error")
+    return redirect(url_for("main.startup_command_center"))
+
+
+@bp.post("/admin/startup/finance/snapshot")
+@owner_required
+def startup_finance_snapshot_web():
+    try:
+        create_financial_snapshot(g.user, request.form)
+        flash("Cash snapshot recorded.", "success")
+    except (TypeError, ValueError, PermissionError) as error:
+        flash(str(error), "error")
+    return redirect(url_for("main.startup_command_center"))
 
 
 @bp.post("/admin/startup/pilots")
