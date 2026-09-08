@@ -62,6 +62,31 @@
       {% endif %}
     </div>
   </div>
+  <div class="spaced-panel">
+    <h3>System-derived provider activation</h3>
+    <div class="summary-row"><span>Linked provider prospects</span><strong>{{ execution.system_telemetry.provider_network.prospect_count }}</strong></div>
+    <div class="summary-row"><span>Registered provider accounts</span><strong>{{ execution.system_telemetry.provider_network.linked_registered_accounts }}</strong></div>
+    <div class="summary-row"><span>Linked provider profiles</span><strong>{{ execution.system_telemetry.provider_network.linked_provider_profiles }}</strong></div>
+    <div class="summary-row"><span>Verified provider profiles</span><strong>{{ execution.system_telemetry.provider_network.linked_verified_profiles }}</strong></div>
+    <div class="summary-row"><span>Activated providers</span><strong>{{ execution.system_telemetry.provider_network.activated_providers }}</strong></div>
+    <div class="summary-row">
+      <span>Activated / provider-seat target</span>
+      <strong>
+        {{ execution.system_provider_progress.actual }}
+        /
+        {{ execution.system_provider_progress.target if execution.system_provider_progress.target is not none else '—' }}
+        {% if execution.system_provider_progress.progress_rate is not none %} · {{ (execution.system_provider_progress.progress_rate * 100)|round(1) }}%{% endif %}
+      </strong>
+    </div>
+    {% if execution.system_telemetry.provider_network.status_counts %}
+      <h4>Provider pipeline states</h4>
+      {% for status, count in execution.system_telemetry.provider_network.status_counts.items() %}
+        {% if count %}
+        <div class="summary-row"><span>{{ status|replace('_',' ')|title }}</span><strong>{{ count }}</strong></div>
+        {% endif %}
+      {% endfor %}
+    {% endif %}
+  </div>
   <p class="form-note">{{ execution.system_telemetry.truth_notice }}</p>
 </section>
 
@@ -78,7 +103,7 @@
       </strong>
     </div>
     <div class="summary-row">
-      <span>Providers</span>
+      <span>Providers · owner-entered observed</span>
       <strong>
         {{ execution.provider_progress.actual if execution.provider_progress.actual is not none else '—' }}
         /
