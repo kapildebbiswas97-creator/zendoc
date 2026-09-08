@@ -11,6 +11,8 @@ from .security import assert_owner
 
 PILOT_STATUSES = {"lead", "proposed", "active", "paused", "completed", "converted", "declined"}
 COMMERCIAL_STATUSES = {"none", "loi", "contract", "paid"}
+MILESTONE_STATUSES = {"planned", "in_progress", "completed", "blocked", "cancelled"}
+USAGE_SOURCE_TYPES = {"owner_entered_observed", "system_derived"}
 
 
 def create_institution_pilot(actor: Any, data: dict) -> dict:
@@ -138,6 +140,182 @@ def update_institution_pilot(actor: Any, pilot_id: int, data: dict) -> dict:
         )
     db.commit()
     return get_institution_pilot(pilot_id)
+
+
+def create_pilot_milestone(actor: Any, pilot_id: int, data: dict) -> dict:
+    assert_owner(actor)
+    get_institution_pilot(pilot_id)
+    title = str(data.get("title") or "").strip()
+    if not title:
+        raise ValueError("Milestone title is required.")
+    status = str(data.get("status") or "planned").strip().lower()
+    if status not in MILESTONE_STATUSES:
+        raise ValueError("Unsupported milestone status.")
+    now = now_iso()
+    completed_at = now if status == "completed" else None
+    cursor = get_db().execute(
+        """
+        INSERT INTO institution_pilot_milestones
+        (pilot_id,title,status,due_date,completed_at,notes,created_by,created_at,updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?)
+        """,
+        (
+            int(pilot_id),
+            title[:300],
+            status,
+            _clean(data.get("due_date"), 40),
+            completed_at,
+            _clean(data.get("notes"), 1200),
+            int(actor["id"]),
+            now,
+            now,
+        ),
+    )
+    _event(int(pilot_id), "milestone_created", status, f"Milestone created: {title[:200]}", int(actor["id"]))
+    get_db().commit()
+    return get_db().execute(
+        "SELECT * FROM institution_pilot_milestones WHERE id=?",
+        (int(cursor.lastrowid),),
+    ).fetchone()
+
+
+def update_pilot_milestone(actor: Any, milestone_id: int, data: dict) -> dict:
+    assert_owner(actor)
+    db = get_db()
+    row = db.execute("SELECT * FROM institution_pilot_milestones WHERE id=?", (int(milestone_id),)).fetchone()
+    if not row:
+        raise LookupError(f"Pilot milestone #{milestone_id} not found.")
+    status = str(data.get("status", row["status"]) or "").strip().lower()
+    if status not in MILESTONE_STATUSES:
+        raise ValueError("Unsupported milestone status.")
+    title = str(data.get("title", row["title"]) or "").strip()
+    if not title:
+        raise ValueError("Milestone title is required.")
+    completed_at = row["completed_at"]
+    if status == "completed" and not completed_at:
+        completed_at = now_iso()
+    if status != "completed":
+        completed_at = None
+    now = now_iso()
+    db.execute(
+        """
+        UPDATE institution_pilot_milestones
+        SET title=?,status=?,due_date=?,completed_at=?,notes=?,updated_at=?
+        WHERE id=?
+        """,
+        (
+            title[:300],
+            status,
+            _clean(data.get("due_date", row["due_date"]), 40),
+            completed_at,
+            _clean(data.get("notes", row["notes"]), 1200),
+            now,
+            int(milestone_id),
+        ),
+    )
+    _event(int(row["pilot_id"]), "milestone_updated", status, f"Milestone updated: {title[:200]}", int(actor["id"]))
+    db.commit()
+    return dict(db.execute("SELECT * FROM institution_pilot_milestones WHERE id=?", (int(milestone_id),)).fetchone())
+
+
+def record_pilot_usage_snapshot(actor: Any, pilot_id: int, data: dict) -> dict:
+    assert_owner(actor)
+    get_institution_pilot(pilot_id)
+    source_type = str(data.get("source_type") or "owner_entered_observed").strip().lower()
+    if source_type not in USAGE_SOURCE_TYPES:
+        raise ValueError("Unsupported pilot usage source type.")
+    if source_type == "system_derived":
+        raise ValueError("system_derived snapshots may not be entered manually.")
+    observed_at = str(data.get("observed_at") or now_iso()).strip()
+    metrics = {
+        "active_users": _optional_nonnegative_int(data.get("active_users")),
+        "active_providers": _optional_nonnegative_int(data.get("active_providers")),
+        "healthcare_searches": _optional_nonnegative_int(data.get("healthcare_searches")),
+        "completed_handoffs": _optional_nonnegative_int(data.get("completed_handoffs")),
+        "api_requests": _optional_nonnegative_int(data.get("api_requests")),
+    }
+    if all(value is None for value in metrics.values()):
+        raise ValueError("At least one observed usage metric is required.")
+    cursor = get_db().execute(
+        """
+        INSERT INTO institution_pilot_usage_snapshots
+        (pilot_id,observed_at,active_users,active_providers,healthcare_searches,completed_handoffs,
+         api_requests,source_type,notes,created_by,created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)
+        """,
+        (
+            int(pilot_id),
+            observed_at,
+            metrics["active_users"],
+            metrics["active_providers"],
+            metrics["healthcare_searches"],
+            metrics["completed_handoffs"],
+            metrics["api_requests"],
+            source_type,
+            _clean(data.get("notes"), 1200),
+            int(actor["id"]),
+            now_iso(),
+        ),
+    )
+    _event(int(pilot_id), "usage_snapshot_recorded", "observed", "Pilot usage snapshot recorded.", int(actor["id"]))
+    get_db().commit()
+    return dict(get_db().execute(
+        "SELECT * FROM institution_pilot_usage_snapshots WHERE id=?",
+        (int(cursor.lastrowid),),
+    ).fetchone())
+
+
+def pilot_execution_summary(actor: Any, pilot_id: int) -> dict:
+    assert_owner(actor)
+    pilot = get_institution_pilot(pilot_id)
+    db = get_db()
+    milestone_rows = db.execute(
+        "SELECT * FROM institution_pilot_milestones WHERE pilot_id=? ORDER BY due_date,id",
+        (int(pilot_id),),
+    ).fetchall()
+    milestones = [dict(row) for row in milestone_rows]
+    usage_rows = db.execute(
+        """
+        SELECT * FROM institution_pilot_usage_snapshots
+        WHERE pilot_id=?
+        ORDER BY observed_at DESC,id DESC
+        """,
+        (int(pilot_id),),
+    ).fetchall()
+    usage = [dict(row) for row in usage_rows]
+    latest = usage[0] if usage else None
+
+    milestone_counts = {status: 0 for status in MILESTONE_STATUSES}
+    for item in milestones:
+        milestone_counts[item["status"]] = milestone_counts.get(item["status"], 0) + 1
+    total_milestones = len(milestones)
+    completed = milestone_counts.get("completed", 0)
+
+    def _progress(actual_key: str, target_key: str):
+        target = pilot.get(target_key)
+        actual = latest.get(actual_key) if latest else None
+        if target in (None, 0) or actual is None:
+            return {"actual": actual, "target": target, "progress_rate": None}
+        return {
+            "actual": actual,
+            "target": target,
+            "progress_rate": round(float(actual) / float(target), 4),
+        }
+
+    return {
+        "pilot": pilot,
+        "milestones": milestones,
+        "milestone_counts": milestone_counts,
+        "milestone_completion_rate": round(completed / total_milestones, 4) if total_milestones else None,
+        "usage_snapshots": usage,
+        "latest_usage": latest,
+        "user_progress": _progress("active_users", "target_users"),
+        "provider_progress": _progress("active_providers", "target_provider_seats"),
+        "truth_notice": (
+            "Targets are plans; usage snapshots are observed values. Owner-entered observed snapshots are not "
+            "system-verified analytics and must not be presented as automated telemetry."
+        ),
+    }
 
 
 def get_institution_pilot(pilot_id: int) -> dict:
