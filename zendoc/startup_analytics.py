@@ -47,7 +47,7 @@ def record_finder_search(
     location: str | None,
     result_count: int,
     source_tiers: dict[str, Any] | None = None,
-) -> None:
+) -> int:
     user_id = None
     try:
         user_id = int(user["id"])
@@ -61,7 +61,7 @@ def record_finder_search(
         if clean_location and geography_node_id is None
         else None
     )
-    get_db().execute(
+    cursor = get_db().execute(
         """
         INSERT INTO product_analytics_events
         (user_id,event_type,category,geography_node_id,location_hash,result_count,useful_result,source_tiers_json,metadata_json,created_at)
@@ -80,6 +80,55 @@ def record_finder_search(
             now_iso(),
         ),
     )
+    return int(cursor.lastrowid)
+
+
+def submit_finder_feedback(
+    user: Any,
+    *,
+    analytics_event_id: int,
+    helpful: bool,
+    reason_code: str | None = None,
+) -> dict:
+    user_id = int(user["id"])
+    db = get_db()
+    event = db.execute(
+        """
+        SELECT id,user_id,event_type FROM product_analytics_events
+        WHERE id=? AND event_type='healthcare_search'
+        """,
+        (int(analytics_event_id),),
+    ).fetchone()
+    if not event:
+        raise LookupError("Healthcare search event not found.")
+    if event["user_id"] is not None and int(event["user_id"]) != user_id:
+        raise PermissionError("You may only rate your own healthcare search.")
+
+    clean_reason = str(reason_code or "").strip().lower()[:80] or None
+    now = now_iso()
+    existing = db.execute(
+        "SELECT id FROM product_feedback WHERE analytics_event_id=? AND user_id=?",
+        (int(analytics_event_id), user_id),
+    ).fetchone()
+    if existing:
+        db.execute(
+            "UPDATE product_feedback SET helpful=?,reason_code=?,created_at=? WHERE id=?",
+            (1 if helpful else 0, clean_reason, now, int(existing["id"])),
+        )
+        feedback_id = int(existing["id"])
+    else:
+        cursor = db.execute(
+            """
+            INSERT INTO product_feedback
+            (analytics_event_id,user_id,helpful,reason_code,created_at)
+            VALUES (?,?,?,?,?)
+            """,
+            (int(analytics_event_id), user_id, 1 if helpful else 0, clean_reason, now),
+        )
+        feedback_id = int(cursor.lastrowid)
+    db.commit()
+    row = db.execute("SELECT * FROM product_feedback WHERE id=?", (feedback_id,)).fetchone()
+    return dict(row)
 
 
 def startup_metrics(actor: Any, *, days: int = 30) -> dict:
@@ -131,6 +180,23 @@ def startup_metrics(actor: Any, *, days: int = 30) -> dict:
         if node:
             top_geographies.append({**dict(node), "search_count": count})
 
+    feedback_rows = db.execute(
+        """
+        SELECT f.helpful,f.reason_code
+        FROM product_feedback f
+        JOIN product_analytics_events e ON e.id=f.analytics_event_id
+        WHERE e.event_type='healthcare_search' AND f.created_at>=?
+        """,
+        (cutoff,),
+    ).fetchall()
+    feedback_total = len(feedback_rows)
+    helpful_feedback = sum(int(row["helpful"] or 0) for row in feedback_rows)
+    reason_counts = Counter(
+        str(row["reason_code"])
+        for row in feedback_rows
+        if row["reason_code"]
+    )
+
     active_users = len(user_events)
     repeat_users = sum(1 for count in user_events.values() if count >= 2)
     return {
@@ -143,6 +209,11 @@ def startup_metrics(actor: Any, *, days: int = 30) -> dict:
         "active_search_users": active_users,
         "repeat_search_users": repeat_users,
         "repeat_search_user_rate": round(repeat_users / active_users, 4) if active_users else None,
+        "feedback_response_count": feedback_total,
+        "helpful_feedback_count": helpful_feedback,
+        "not_helpful_feedback_count": feedback_total - helpful_feedback,
+        "helpful_feedback_rate": round(helpful_feedback / feedback_total, 4) if feedback_total else None,
+        "feedback_reason_counts": dict(reason_counts),
         "top_categories": [
             {"category": category, "search_count": count}
             for category, count in category_counts.most_common(10)
