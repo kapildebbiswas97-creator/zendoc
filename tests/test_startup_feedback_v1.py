@@ -3,11 +3,22 @@ from zendoc.startup_analytics import record_finder_search, submit_finder_feedbac
 from tests.test_milestone1 import make_app
 
 
+def create_feedback_user(db, email):
+    now = "2026-09-08T00:00:00+00:00"
+    cursor = db.execute(
+        "INSERT INTO users (name,email,email_normalized,password_hash,role,active,created_at,updated_at) VALUES (?,?,?,?,?,1,?,?)",
+        ("Feedback User", email, email, "x", "patient", now, now),
+    )
+    return {"id": int(cursor.lastrowid)}
+
+
 def test_feedback_is_bound_to_own_search_event_and_updatable(tmp_path):
     app = make_app(tmp_path)
     with app.app_context():
+        user_a = create_feedback_user(get_db(), "feedback-a@example.com")
+        user_b = create_feedback_user(get_db(), "feedback-b@example.com")
         event_id = record_finder_search(
-            {"id": 10},
+            user_a,
             category="hospital",
             location="Nadia",
             result_count=2,
@@ -16,7 +27,7 @@ def test_feedback_is_bound_to_own_search_event_and_updatable(tmp_path):
         get_db().commit()
 
         first = submit_finder_feedback(
-            {"id": 10},
+            user_a,
             analytics_event_id=event_id,
             helpful=False,
             reason_code="details_incomplete",
@@ -39,7 +50,7 @@ def test_feedback_is_bound_to_own_search_event_and_updatable(tmp_path):
         other_user_blocked = False
         try:
             submit_finder_feedback(
-                {"id": 11},
+                user_b,
                 analytics_event_id=event_id,
                 helpful=True,
             )
