@@ -138,6 +138,26 @@ def list_partner_booking_handoffs(identity: dict, *, limit: int = 100) -> list[d
     return [get_partner_booking_handoff(identity, int(row["id"])) for row in rows]
 
 
+def list_all_partner_booking_handoffs(actor: Any, *, limit: int = 200) -> list[dict]:
+    assert_owner(actor)
+    limit = max(1, min(int(limit or 200), 500))
+    rows = get_db().execute(
+        """
+        SELECT h.id,h.handoff_uid,h.client_id,c.name client_name,h.provider_profile_id,
+               h.partner_reference,h.requested_for,h.contact_reference,h.status,h.status_note,
+               h.created_at,h.updated_at,p.provider_type,p.specialty,p.organization,u.name provider_name
+        FROM partner_booking_handoffs h
+        JOIN business_api_clients c ON c.id=h.client_id
+        JOIN provider_profiles p ON p.id=h.provider_profile_id
+        JOIN users u ON u.id=p.user_id
+        ORDER BY h.created_at DESC
+        LIMIT ?
+        """,
+        (limit,),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def owner_update_partner_booking_handoff(
     actor: Any,
     handoff_id: int,
