@@ -4,7 +4,7 @@ from tests.test_milestone1 import make_client, register_web, login_web
 def test_owner_can_preview_all_role_dashboards_without_impersonation(tmp_path):
     _app, client = make_client(tmp_path)
 
-    login_web(client, "admin", "admin@example.com")
+    login_web(client, "admin", "admin@example.com", "AdminStrong123")
 
     expectations = {
         "patient": b"Health command center",
@@ -36,7 +36,7 @@ def test_dashboard_preview_is_owner_only(tmp_path):
 
 def test_dashboard_preview_rejects_unknown_role(tmp_path):
     _app, client = make_client(tmp_path)
-    login_web(client, "admin", "admin@example.com")
+    login_web(client, "admin", "admin@example.com", "AdminStrong123")
 
     response = client.get("/admin/dashboard-preview/government")
     assert response.status_code == 404
