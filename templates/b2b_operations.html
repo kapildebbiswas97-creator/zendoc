@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}B2B Operations — ZENDOC{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Founder operations</p>
+    <h1>B2B Operations</h1>
+    <p class="section-copy">Monitor partner API clients, coordination handoffs, temporary slot holds, usage and privacy-safe audit activity.</p>
+  </div>
+  <a class="secondary-action" href="{{ url_for('main.startup_command_center') }}">Back to Startup Command Center</a>
+</section>
+
+<section class="grid two">
+  <article class="panel">
+    <div class="panel-head"><h2>Partner API health</h2><span class="status-badge working">{{ business_metrics.active_clients }} active clients</span></div>
+    <div class="summary-row"><span>Total clients</span><strong>{{ business_metrics.client_count }}</strong></div>
+    <div class="summary-row"><span>Active keys</span><strong>{{ business_metrics.active_keys }}</strong></div>
+    <div class="summary-row"><span>Authenticated requests · 30 days</span><strong>{{ business_metrics.requests_last_30_days }}</strong></div>
+    <p class="form-note">{{ business_metrics.truth_notice }}</p>
+  </article>
+
+  <article class="panel">
+    <div class="panel-head"><h2>Handoff safety</h2><span class="status-badge working">{{ handoff_metrics.active_slot_holds }} active holds</span></div>
+    <div class="summary-row"><span>Total handoffs</span><strong>{{ handoff_metrics.handoff_total }}</strong></div>
+    {% for status, count in handoff_metrics.handoff_status_counts.items() %}
+    <div class="summary-row"><span>{{ status|title }}</span><strong>{{ count }}</strong></div>
+    {% endfor %}
+    <div class="summary-row"><span>Holds expiring ≤10 min</span><strong>{{ handoff_metrics.holds_expiring_within_10_minutes }}</strong></div>
+    <div class="summary-row"><span>Expired holds awaiting recycle</span><strong>{{ handoff_metrics.expired_holds_not_yet_recycled }}</strong></div>
+    <p class="form-note">{{ handoff_metrics.truth_notice }}</p>
+  </article>
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head"><h2>Partner clients</h2></div>
+  {% if business_clients %}
+  <table>
+    <thead><tr><th>Client</th><th>Status</th><th>Scopes</th><th>Pilot</th><th>Rate</th><th>Keys</th></tr></thead>
+    <tbody>
+    {% for client in business_clients %}
+      <tr>
+        <td><strong>{{ client.name }}</strong><br><small>{{ client.client_uid }}</small></td>
+        <td>{{ client.status }}</td>
+        <td>{{ client.allowed_scopes|join(', ') }}</td>
+        <td>{{ client.pilot_id or '—' }}</td>
+        <td>{{ client.rate_limit_per_minute }}/min</td>
+        <td>{{ client.keys|length }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="form-note">No partner clients yet.</p>
+  {% endif %}
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head"><h2>Partner coordination queue</h2></div>
+  {% if handoffs %}
+  <table>
+    <thead><tr><th>Partner</th><th>Provider</th><th>Slot</th><th>Status</th><th>Reference</th><th>Updated</th></tr></thead>
+    <tbody>
+    {% for item in handoffs %}
+      <tr>
+        <td>{{ item.client_name }}</td>
+        <td>{{ item.provider_name }}{% if item.organization %}<br><small>{{ item.organization }}</small>{% endif %}</td>
+        <td>{{ item.requested_for }}</td>
+        <td>{{ item.status }}</td>
+        <td>{{ item.partner_reference }}</td>
+        <td>{{ item.updated_at }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="form-note">No partner booking handoffs yet.</p>
+  {% endif %}
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head">
+    <div><h2>Partner audit trail</h2><p class="form-note">{{ audit_metrics.truth_notice }}</p></div>
+    <span class="status-badge working">{{ audit_metrics.event_count }} events</span>
+  </div>
+  {% if audit_events %}
+  <table>
+    <thead><tr><th>Time</th><th>Actor</th><th>Client</th><th>Event</th><th>Entity</th><th>Outcome</th></tr></thead>
+    <tbody>
+    {% for item in audit_events %}
+      <tr>
+        <td>{{ item.created_at }}</td>
+        <td>{{ item.actor_type }}{% if item.actor_user_id %} #{{ item.actor_user_id }}{% endif %}</td>
+        <td>{{ item.client_name or '—' }}</td>
+        <td>{{ item.event_type|replace('_',' ')|title }}</td>
+        <td>{{ item.entity_type or '—' }}{% if item.entity_id %} · {{ item.entity_id }}{% endif %}</td>
+        <td>{{ item.outcome }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="form-note">No partner audit events yet.</p>
+  {% endif %}
+  <aside class="trust-note"><strong>Privacy boundary</strong><br>Audit events contain operational metadata only and intentionally exclude patient medical content.</aside>
+</section>
+{% endblock %}
