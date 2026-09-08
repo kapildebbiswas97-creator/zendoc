@@ -110,6 +110,34 @@ def sqlite_integrity_status():
     }
 
 
+def deployment_identity():
+    """Return non-secret deployment metadata when provided by the hosting platform."""
+    commit = (
+        os.environ.get("RENDER_GIT_COMMIT")
+        or os.environ.get("GIT_COMMIT")
+        or os.environ.get("SOURCE_VERSION")
+        or ""
+    ).strip()
+    service = (
+        os.environ.get("RENDER_SERVICE_NAME")
+        or os.environ.get("SERVICE_NAME")
+        or "zendoc"
+    ).strip()
+    hostname = (os.environ.get("RENDER_EXTERNAL_HOSTNAME") or "").strip()
+    service_id = (os.environ.get("RENDER_SERVICE_ID") or "").strip()
+    return {
+        "platform": "render" if any(
+            os.environ.get(key)
+            for key in ("RENDER", "RENDER_SERVICE_ID", "RENDER_SERVICE_NAME", "RENDER_EXTERNAL_HOSTNAME")
+        ) else "unknown",
+        "service_name": service,
+        "service_id": service_id or None,
+        "external_hostname": hostname or None,
+        "git_commit": commit or None,
+        "git_commit_short": commit[:12] if commit else None,
+    }
+
+
 def readiness_report():
     report = {
         "status": "ready",
@@ -118,6 +146,7 @@ def readiness_report():
         "database_engine": current_app.config.get("DATABASE_ENGINE", "sqlite"),
         "database_durability": current_app.config.get("DATABASE_DURABILITY"),
         "persistence_verified": bool(current_app.config.get("PERSISTENCE_VERIFIED")),
+        "deployment": deployment_identity(),
     }
     try:
         probe = database_probe()
