@@ -119,3 +119,24 @@ def test_connector_profiles_have_truthful_availability_states():
         "REFERENCE_ONLY",
     }
     assert {item["availability"] for item in list_connector_profiles()} <= allowed
+
+
+def test_connector_mapping_preserves_canonical_geography_fields():
+    rows = [
+        {
+            "hospital_code": "WB-GEO-1",
+            "hospital_name": "Canonical Geography Hospital",
+            "district": "Nadia",
+            "state": "West Bengal",
+            "geography_source": "lgd",
+            "geography_source_record_id": "district:320",
+        }
+    ]
+
+    result = infer_mapping("data_gov_hospitals", rows)
+    record = result["records"][0]
+
+    assert record["geography_source"] == "lgd"
+    assert record["geography_source_record_id"] == "district:320"
+    assert result["mapping_template"]["mapping"]["geography_source"] == "geography_source"
+    assert result["mapping_template"]["mapping"]["geography_source_record_id"] == "geography_source_record_id"
