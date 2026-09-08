@@ -1,6 +1,8 @@
 from zendoc.db import get_db
+from zendoc.institution_pilots import create_institution_pilot
 from zendoc.provider_network import (
     create_provider_prospect,
+    list_provider_prospects,
     provider_network_metrics,
     update_provider_prospect,
 )
@@ -205,3 +207,61 @@ def test_provider_network_dashboard_and_api_are_owner_only(tmp_path):
     payload = listed.get_json()
     assert payload["metrics"]["prospect_count"] == 1
     assert len(payload["prospects"]) == 1
+
+
+def test_institution_pilot_source_requires_real_linked_pilot(tmp_path):
+    app = make_app(tmp_path)
+    with app.app_context():
+        missing_link_failed = False
+        try:
+            create_provider_prospect(
+                owner_actor(),
+                {
+                    "provider_type": "doctor",
+                    "source_type": "institution_pilot",
+                    "organization_name": "Pilot Doctor",
+                    "status": "discovered",
+                },
+            )
+        except ValueError:
+            missing_link_failed = True
+        assert missing_link_failed is True
+
+        bad_link_failed = False
+        try:
+            create_provider_prospect(
+                owner_actor(),
+                {
+                    "provider_type": "doctor",
+                    "source_type": "institution_pilot",
+                    "linked_pilot_id": 999999,
+                    "organization_name": "Pilot Doctor",
+                    "status": "discovered",
+                },
+            )
+        except ValueError:
+            bad_link_failed = True
+        assert bad_link_failed is True
+
+        pilot = create_institution_pilot(
+            owner_actor(),
+            {"organization_name": "Provider Pilot", "organization_type": "hospital"},
+        )
+        prospect = create_provider_prospect(
+            owner_actor(),
+            {
+                "provider_type": "doctor",
+                "source_type": "institution_pilot",
+                "linked_pilot_id": pilot["id"],
+                "organization_name": "Pilot Doctor",
+                "status": "discovered",
+            },
+        )
+        assert prospect["linked_pilot_id"] == pilot["id"]
+        assert prospect["linked_pilot_name"] == "Provider Pilot"
+
+        scoped = list_provider_prospects(owner_actor(), linked_pilot_id=pilot["id"])
+        assert [item["id"] for item in scoped] == [prospect["id"]]
+
+        metrics = provider_network_metrics(owner_actor())
+        assert metrics["pilot_linked_prospect_count"] == 1
