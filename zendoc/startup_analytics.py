@@ -40,6 +40,30 @@ def _canonical_search_geography(location: str | None) -> int | None:
     return int(rows[0]["id"])
 
 
+def record_product_activity(user: Any, *, event_type: str) -> int:
+    """Record a privacy-safe non-clinical product activity event."""
+    user_id = int(user["id"])
+    clean_event = str(event_type or "").strip().lower()
+    allowed = {
+        "session_login",
+        "healthcare_search",
+        "provider_profile_update",
+        "appointment_requested",
+        "finder_feedback",
+    }
+    if clean_event not in allowed:
+        raise ValueError("Unsupported product activity event type.")
+    cursor = get_db().execute(
+        """
+        INSERT INTO product_analytics_events
+        (user_id,event_type,category,geography_node_id,location_hash,result_count,useful_result,source_tiers_json,metadata_json,created_at)
+        VALUES (?,?,NULL,NULL,NULL,0,0,'{}','{}',?)
+        """,
+        (user_id, clean_event, now_iso()),
+    )
+    return int(cursor.lastrowid)
+
+
 def record_finder_search(
     user: Any,
     *,
@@ -369,6 +393,7 @@ def retention_metrics(actor: Any, *, as_of: str | None = None) -> dict:
         FROM product_analytics_events e
         JOIN users u ON u.id=e.user_id
         WHERE e.user_id IS NOT NULL AND u.role='patient' AND u.active=1
+          AND e.event_type IN ('session_login','healthcare_search','appointment_requested','finder_feedback')
         ORDER BY e.user_id,e.created_at
         """
     ).fetchall()
