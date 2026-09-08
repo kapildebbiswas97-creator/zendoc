@@ -35,6 +35,37 @@
   </article>
 </section>
 
+{% if provider_operations %}
+<section class="panel spaced-panel">
+  <div class="panel-head">
+    <div><p class="eyebrow">Provider operations</p><h2>Operational snapshot</h2></div>
+    {% if provider_operations.verification_status %}
+    <span class="status-badge {{ 'working' if provider_operations.verification_status == 'verified' else 'integration' }}">{{ provider_operations.verification_status }}</span>
+    {% endif %}
+  </div>
+  <div class="grid two">
+    <div>
+      <div class="summary-row"><span>Active schedules</span><strong>{{ provider_operations.active_schedules }}</strong></div>
+      <div class="summary-row"><span>Temporary partner slot holds</span><strong>{{ provider_operations.active_slot_holds }}</strong></div>
+      <div class="summary-row"><span>Partner handoffs</span><strong>{{ provider_operations.handoff_total or 0 }}</strong></div>
+    </div>
+    <div>
+      <div class="summary-row"><span>Appointments</span><strong>{{ provider_operations.appointment_total or 0 }}</strong></div>
+      {% for status, count in provider_operations.appointment_status_counts.items() %}
+      <div class="summary-row"><span>{{ status|title }}</span><strong>{{ count }}</strong></div>
+      {% endfor %}
+    </div>
+  </div>
+  {% if provider_operations.handoff_status_counts %}
+    <h3>Partner handoff states</h3>
+    {% for status, count in provider_operations.handoff_status_counts.items() %}
+    <div class="summary-row"><span>{{ status|title }}</span><strong>{{ count }}</strong></div>
+    {% endfor %}
+  {% endif %}
+  <p class="form-note">{{ provider_operations.truth_notice }}</p>
+</section>
+{% endif %}
+
 {% if profile and onboarding %}
 <section class="grid two spaced-panel">
   <article class="panel">
