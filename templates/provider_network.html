@@ -37,6 +37,14 @@
       </label>
     </div>
 
+    <label>Linked institution pilot
+      <select name="linked_pilot_id">
+        <option value="">No linked pilot</option>
+        {% for pilot in pilots %}
+        <option value="{{ pilot.id }}">{{ pilot.organization_name }} · {{ pilot.status }}</option>
+        {% endfor %}
+      </select>
+    </label>
     <label>Organization / provider name <input name="organization_name" maxlength="300"></label>
     <div class="form-grid">
       <label>Contact name <input name="contact_name" maxlength="200"></label>
@@ -75,7 +83,7 @@
     <label>Owner note <textarea name="owner_note" maxlength="1600" rows="3"></textarea></label>
 
     <button type="submit">Add provider prospect</button>
-    <p class="form-note">Registered/verified/activated stages require real linked provider records. Activation cannot be entered as a standalone claim.</p>
+    <p class="form-note">If source is Institution pilot, select the real linked pilot. Registered/verified/activated stages require real linked provider records. Activation cannot be entered as a standalone claim.</p>
   </form>
 
   <article class="panel">
@@ -107,6 +115,7 @@
         <td>
           <strong>{{ prospect.organization_name or prospect.contact_name or prospect.contact_email or ('Prospect #' ~ prospect.id) }}</strong>
           <br><small>{{ prospect.provider_type|title }} · {{ prospect.source_type|replace('_',' ')|title }}</small>
+          {% if prospect.linked_pilot_id %}<br><small>Pilot: {{ prospect.linked_pilot_name or ('#' ~ prospect.linked_pilot_id) }}</small>{% endif %}
         </td>
         <td>{{ prospect.city or '—' }}{% if prospect.district %}, {{ prospect.district }}{% endif %}{% if prospect.state %}, {{ prospect.state }}{% endif %}</td>
         <td>{{ prospect.status|replace('_',' ')|title }}</td>
@@ -137,6 +146,12 @@
             <input type="hidden" name="district" value="{{ prospect.district or '' }}">
             <input type="hidden" name="city" value="{{ prospect.city or '' }}">
             <input type="hidden" name="source_reference" value="{{ prospect.source_reference or '' }}">
+            <select name="linked_pilot_id">
+              <option value="">No pilot</option>
+              {% for pilot in pilots %}
+              <option value="{{ pilot.id }}" {% if prospect.linked_pilot_id == pilot.id %}selected{% endif %}>{{ pilot.organization_name }}</option>
+              {% endfor %}
+            </select>
             <select name="status">
               {% for status in ['discovered','contacted','interested','registered','profile_created','evidence_submitted','verified','activated','paused','declined'] %}
               <option value="{{ status }}" {% if prospect.status == status %}selected{% endif %}>{{ status }}</option>
