@@ -5,6 +5,7 @@ import pytest
 from tests.test_milestone1 import csrf, login_web, make_app, make_client, register_web
 from zendoc.db import get_db, now_iso
 from zendoc.provider_service import available_slots, create_schedule
+from zendoc.provider_onboarding import submit_provider_evidence
 
 
 def _verified_doctor(db, *, active=1):
@@ -116,4 +117,19 @@ def test_ai_page_exposes_reviewable_voice_input_fallback(tmp_path):
     assert page.status_code == 200
     assert b"voice-input-toggle" in page.data
     assert b"never sent until you press Send" in page.data
+
+
+def test_provider_evidence_requires_http_provenance_url(tmp_path):
+    app = make_app(tmp_path)
+    with app.app_context():
+        user_id, _profile_id = _verified_doctor(get_db())
+        doctor = dict(get_db().execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone())
+        with pytest.raises(ValueError, match="absolute http"):
+            submit_provider_evidence(
+                doctor,
+                evidence_type="professional_registration",
+                identifier="REG-1",
+                source_name="Trusted contact",
+                source_url="javascript:alert(1)",
+            )
 
