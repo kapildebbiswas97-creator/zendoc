@@ -43,6 +43,15 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+      - name: Trigger Render deployment when deploy hook is configured
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$RENDER_DEPLOY_HOOK_URL" ]; then
+            echo "No Render deploy hook configured; relying on Render auto-deploy."
+          else
+            python scripts/trigger_render_deploy.py "$RENDER_DEPLOY_HOOK_URL"
+          fi
       - name: Verify exact merged release on Render
         run: >-
           python scripts/verify_deployment.py "$DEPLOYMENT_URL"
