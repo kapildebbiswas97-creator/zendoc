@@ -182,7 +182,7 @@ def test_merged_release_workflow_can_trigger_render_deploy_hook():
     trigger = (root / "scripts/trigger_render_deploy.py").read_text(encoding="utf-8")
     assert "RENDER_DEPLOY_HOOK_URL" in workflow
     assert "scripts/trigger_render_deploy.py" in workflow
-    assert "No Render deploy hook configured" in workflow
+    assert "RENDER_DEPLOY_HOOK_URL is not configured" in workflow
     assert "Render deploy hook accepted." in trigger
     assert "render.com" in trigger
 
