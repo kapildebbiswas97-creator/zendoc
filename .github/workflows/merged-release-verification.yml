@@ -1,0 +1,54 @@
+name: ZENDOC Merged Release Verification
+
+on:
+  pull_request:
+    branches: [main]
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      deployment_url:
+        description: "Optional Render base URL for deployment verification"
+        required: false
+        type: string
+      expected_commit:
+        description: "Optional commit SHA to verify"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zendoc-merged-release-verification
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  verify-render-release:
+    name: Verify merged release on Render
+    if: >-
+      (github.event_name == 'pull_request' && github.event.pull_request.merged == true) ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      DEPLOYMENT_URL: ${{ inputs.deployment_url || vars.ZENDOC_DEPLOYMENT_URL || 'https://zendoc-ykax.onrender.com' }}
+      EXPECTED_COMMIT: ${{ inputs.expected_commit || github.event.pull_request.merge_commit_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Verify exact merged release on Render
+        run: >-
+          python scripts/verify_deployment.py "$DEPLOYMENT_URL"
+          --expected-commit "$EXPECTED_COMMIT"
+          --require-platform render
+          --require-engine postgresql
+          --require-persistence-verified
+          --attempts 40
+          --interval 15

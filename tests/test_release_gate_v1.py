@@ -158,3 +158,19 @@ def test_deployment_verifier_polls_for_exact_render_commit():
     assert 'parser.add_argument("--attempts"' in verifier
     assert 'parser.add_argument("--interval"' in verifier
     assert "Deployment verification attempt" in verifier
+
+
+def test_merged_release_verification_workflow_exists_and_uses_merge_commit():
+    root = Path(__file__).resolve().parents[1]
+    workflow_path = root / ".github/workflows/merged-release-verification.yml"
+    assert workflow_path.exists()
+    workflow = workflow_path.read_text(encoding="utf-8")
+    assert "types: [closed]" in workflow
+    assert "github.event.pull_request.merged == true" in workflow
+    assert "github.event.pull_request.merge_commit_sha" in workflow
+    assert "scripts/verify_deployment.py" in workflow
+    assert "--require-platform render" in workflow
+    assert "--require-engine postgresql" in workflow
+    assert "--require-persistence-verified" in workflow
+    assert "--attempts 40" in workflow
+    assert "--interval 15" in workflow
