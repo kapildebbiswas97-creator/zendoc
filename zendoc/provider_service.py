@@ -147,18 +147,36 @@ def public_provider(row):
     }
 
 
+def _normalize_schedule_time(value):
+    """Return a canonical HH:MM value or None for malformed input."""
+    value = str(value or "").strip()
+    if not value:
+        return None
+    try:
+        parsed = datetime.strptime(value, "%H:%M")
+    except ValueError:
+        return None
+    return parsed.strftime("%H:%M")
+
+
 def create_schedule(user, data):
     profile = get_provider_profile_for_user(user["id"])
     if not profile:
         raise ValueError("Create a provider profile before adding schedule.")
-    weekday = int(data.get("weekday"))
+    try:
+        weekday = int(data.get("weekday"))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Weekday must be 0-6.") from exc
     if weekday < 0 or weekday > 6:
         raise ValueError("Weekday must be 0-6.")
-    slot_minutes = int(data.get("slot_minutes") or 30)
+    try:
+        slot_minutes = int(data.get("slot_minutes") or 30)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Slot length must be between 10 and 180 minutes.") from exc
     if slot_minutes < 10 or slot_minutes > 180:
         raise ValueError("Slot length must be between 10 and 180 minutes.")
-    start_time = data.get("start_time")
-    end_time = data.get("end_time")
+    start_time = _normalize_schedule_time(data.get("start_time"))
+    end_time = _normalize_schedule_time(data.get("end_time"))
     if not start_time or not end_time or start_time >= end_time:
         raise ValueError("Schedule end time must be after start time.")
     tenant = provider_resource_context(user["id"])
@@ -180,6 +198,9 @@ def create_schedule(user, data):
 def available_slots(provider_profile_id, date_text):
     profile = get_db().execute("SELECT * FROM provider_profiles WHERE id=?", (provider_profile_id,)).fetchone()
     if not profile:
+        return []
+    account = get_db().execute("SELECT active FROM users WHERE id=?", (profile["user_id"],)).fetchone()
+    if not account or not bool(account["active"]):
         return []
     try:
         date_value = datetime.fromisoformat(date_text).date()
@@ -241,25 +262,44 @@ def available_slots(provider_profile_id, date_text):
             (int(provider_profile_id), now_text),
         ).fetchall()
     }
-    slots = []
+    slots = set()
     for schedule in schedules:
-        start = datetime.fromisoformat(f"{date_value.isoformat()}T{schedule['start_time']}")
-        end = datetime.fromisoformat(f"{date_value.isoformat()}T{schedule['end_time']}")
+        start_time = _normalize_schedule_time(schedule["start_time"])
+        end_time = _normalize_schedule_time(schedule["end_time"])
+        try:
+            slot_minutes = int(schedule["slot_minutes"])
+        except (TypeError, ValueError):
+            continue
+        if not start_time or not end_time or start_time >= end_time or slot_minutes < 1:
+            # Legacy rows can contain malformed schedule data. Ignore the
+            # row so one bad import cannot take down provider availability.
+            continue
+        start = datetime.fromisoformat(f"{date_value.isoformat()}T{start_time}")
+        end = datetime.fromisoformat(f"{date_value.isoformat()}T{end_time}")
         cursor = start
-        while cursor + timedelta(minutes=schedule["slot_minutes"]) <= end:
+        while cursor + timedelta(minutes=slot_minutes) <= end:
             value = cursor.strftime("%Y-%m-%dT%H:%M")
             if value not in booked and value not in held and cursor.replace(tzinfo=timezone.utc) > datetime.now(timezone.utc):
-                slots.append(value)
-            cursor += timedelta(minutes=schedule["slot_minutes"])
-    return slots
+                slots.add(value)
+            cursor += timedelta(minutes=slot_minutes)
+    return sorted(slots)
 
 
 def book_provider_slot(patient, provider_profile_id, scheduled_for, reason):
     if not patient or patient["role"] != "patient" or not bool(patient["active"]):
         raise PermissionError("Only an active patient account may book a provider appointment.")
-    profile = get_db().execute("SELECT * FROM provider_profiles WHERE id=?", (provider_profile_id,)).fetchone()
+    profile = get_db().execute(
+        """
+        SELECT p.*, u.active AS user_active
+        FROM provider_profiles p JOIN users u ON u.id=p.user_id
+        WHERE p.id=?
+        """,
+        (provider_profile_id,),
+    ).fetchone()
     if not profile:
         raise ValueError("Provider not found.")
+    if not bool(profile["user_active"]):
+        raise PermissionError("Provider account is not active for connected booking.")
     if profile["verification_status"] != "verified":
         raise PermissionError("Provider is not verified for connected booking.")
     slot_key = scheduled_for[:16]
@@ -319,3 +359,4 @@ def book_provider_slot(patient, provider_profile_id, scheduled_for, reason):
         if is_integrity_error(error):
             raise ValueError("Selected slot was booked by another request; please choose a different slot.") from error
         raise
+

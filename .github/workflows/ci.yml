@@ -62,7 +62,9 @@ jobs:
   full-sqlite-tests:
     name: Full SQLite Test Suite
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # The complete regression suite is intentionally broad and can exceed 20 minutes
+    # on a shared runner; keep the gate bounded while allowing it to finish.
+    timeout-minutes: 35
     env:
       ZENDOC_ENV: development
     steps:
@@ -206,3 +208,4 @@ jobs:
           --require-persistence-verified
           --attempts 40
           --interval 15
+

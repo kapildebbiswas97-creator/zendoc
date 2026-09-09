@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import urllib.parse
 from typing import Any
 
 from .db import get_db, now_iso
@@ -106,6 +107,10 @@ def submit_provider_evidence(
         raise ValueError("source_name is required.")
     identifier = str(identifier or "").strip()[:240] or None
     source_url = str(source_url or "").strip()[:1000] or None
+    if source_url:
+        parsed_url = urllib.parse.urlparse(source_url)
+        if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
+            raise ValueError("source_url must be an absolute http(s) URL.")
     notes = str(notes or "").strip()[:1000] or None
 
     db = get_db()
@@ -255,3 +260,4 @@ def _user_id(actor: Any) -> int:
         return int(actor["id"])
     except Exception:
         return 0
+

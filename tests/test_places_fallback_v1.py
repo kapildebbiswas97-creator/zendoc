@@ -148,8 +148,24 @@ def test_nominatim_search_returns_external_unverified_non_bookable_results(monke
     assert item["attribution"] == "© OpenStreetMap contributors"
 
 
-def test_nominatim_requires_manual_location_for_beta_fallback():
+def test_nominatim_accepts_gps_only_search_for_beta_fallback(monkeypatch):
     provider = NominatimPlacesProvider(timeout_seconds=1)
+    requested = []
+
+    def fake_get_json(url):
+        requested.append(url)
+        return [{
+            "place_id": 101,
+            "osm_type": "node",
+            "osm_id": 202,
+            "display_name": "Nearby Clinic, India",
+            "lat": "22.9001",
+            "lon": "88.4001",
+            "type": "clinic",
+            "address": {"city": "Kalyani"},
+        }]
+
+    monkeypatch.setattr(provider, "_get_json", fake_get_json)
 
     result = provider.search(
         {
@@ -163,5 +179,6 @@ def test_nominatim_requires_manual_location_for_beta_fallback():
     )
 
     assert result.available is True
-    assert result.results == []
-    assert "city, area, or PIN code" in result.message
+    assert result.results[0]["source"] == "openstreetmap_nominatim"
+    assert requested and "near+22.900000%2C+88.400000" in requested[0]
+

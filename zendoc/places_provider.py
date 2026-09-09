@@ -1,5 +1,6 @@
 import json
 import os
+import math
 import threading
 import time
 import urllib.error
@@ -99,7 +100,9 @@ class NominatimPlacesProvider(PlacesProvider):
     def search(self, query):
         normalized = dict(query or {})
         location = str(normalized.get("location") or "").strip()
-        if not location:
+        latitude = _number(normalized.get("latitude"))
+        longitude = _number(normalized.get("longitude"))
+        if not location and (latitude is None or longitude is None):
             return PlacesResult(
                 available=True,
                 results=[],
@@ -122,7 +125,13 @@ class NominatimPlacesProvider(PlacesProvider):
             "laboratory": "medical laboratory",
             "emergency": "hospital",
         }.get(category, category.replace("_", " "))
-        terms = [term for term in (specialty, human_category, f"in {location}, India") if term]
+        if location:
+            terms = [term for term in (specialty, human_category, f"in {location}, India") if term]
+        else:
+            # Nominatim has no nearby-search endpoint. A bounded coordinate
+            # query still lets GPS-only searches resolve a local listing while
+            # preserving the provider's external/unverified status.
+            terms = [term for term in (specialty, human_category, f"near {latitude:.6f}, {longitude:.6f}") if term]
         params = {
             "q": " ".join(terms),
             "format": "jsonv2",
@@ -164,7 +173,10 @@ class NominatimPlacesProvider(PlacesProvider):
                 source=self.source,
             )
 
-        self.cache.set(cache_key, result)
+        # Do not hold an outage for the full positive-result TTL. A transient
+        # Nominatim timeout should be retried on the next user search.
+        if result.available:
+            self.cache.set(cache_key, result)
         return result
 
     def _get_json(self, url):
@@ -486,7 +498,10 @@ def _number(value):
     if value in (None, ""):
         return None
     try:
-        return float(value)
+        number = float(value)
+        if not math.isfinite(number):
+            return None
+        return number
     except (TypeError, ValueError):
         return None
 
@@ -529,3 +544,4 @@ class ShortLivedCache:
 
     def set(self, key, value):
         self._items[key] = {"created": time.time(), "value": value}
+
