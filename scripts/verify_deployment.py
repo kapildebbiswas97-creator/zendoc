@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -46,6 +47,8 @@ def main() -> int:
     parser.add_argument("--require-platform")
     parser.add_argument("--require-engine")
     parser.add_argument("--require-persistence-verified", action="store_true")
+    parser.add_argument("--attempts", type=int, default=1)
+    parser.add_argument("--interval", type=float, default=0.0)
     args = parser.parse_args()
 
     base = args.base_url.rstrip("/")
@@ -55,13 +58,42 @@ def main() -> int:
     if parsed.scheme != "https" and parsed.hostname not in {"localhost", "127.0.0.1", "::1"}:
         fail("Remote deployment verification requires HTTPS.")
 
-    health_status, health = get_json(f"{base}/api/v1/health", args.timeout)
-    if health_status != 200 or health.get("status") != "ok" or health.get("check") != "liveness":
-        fail(f"Liveness check failed with HTTP {health_status}.")
+    attempts = max(1, int(args.attempts or 1))
+    interval = max(0.0, float(args.interval or 0.0))
+    last_error = None
+    health = {}
+    ready = {}
+    for attempt in range(1, attempts + 1):
+        try:
+            health_status, health = get_json(f"{base}/api/v1/health", args.timeout)
+            if health_status != 200 or health.get("status") != "ok" or health.get("check") != "liveness":
+                raise RuntimeError(f"Liveness check failed with HTTP {health_status}.")
 
-    ready_status, ready = get_json(f"{base}/api/v1/ready", args.timeout)
-    if ready_status != 200 or ready.get("status") != "ready":
-        fail(f"Readiness check failed with HTTP {ready_status}: {ready}")
+            ready_status, ready = get_json(f"{base}/api/v1/ready", args.timeout)
+            if ready_status != 200 or ready.get("status") != "ready":
+                raise RuntimeError(f"Readiness check failed with HTTP {ready_status}: {ready}")
+
+            deployment = ready.get("deployment") or {}
+            if args.expected_commit:
+                deployed_commit = str(deployment.get("git_commit") or "").strip()
+                expected_commit = str(args.expected_commit).strip()
+                if not deployed_commit or deployed_commit.lower() != expected_commit.lower():
+                    raise RuntimeError(
+                        f"Deployed commit not ready yet: expected {expected_commit}, got {deployed_commit or 'missing'}."
+                    )
+            last_error = None
+            break
+        except SystemExit:
+            raise
+        except Exception as error:
+            last_error = str(error)
+            if attempt >= attempts:
+                fail(last_error)
+            print(f"Deployment verification attempt {attempt}/{attempts} not ready: {last_error}")
+            time.sleep(interval)
+
+    if last_error:
+        fail(last_error)
 
     if ready.get("database") != "reachable":
         fail("Readiness did not confirm database reachability.")
