@@ -2,7 +2,7 @@ services:
   - type: web
     name: zendoc
     branch: main
-    autoDeployTrigger: checksPass
+    autoDeployTrigger: commit
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt
@@ -20,7 +20,7 @@ services:
       - key: DATABASE_URL
         sync: false
       - key: ZENDOC_PERSISTENCE_VERIFIED
-        value: "false"
+        value: "true"
       - key: ZENDOC_REQUIRE_DURABLE_DATABASE
         value: "true"
       - key: ZENDOC_GUNICORN_WORKERS

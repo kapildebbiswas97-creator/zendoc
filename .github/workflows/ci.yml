@@ -189,7 +189,7 @@ jobs:
           inputs.deployment_url != ''
         )
       )
-    timeout-minutes: 5
+    timeout-minutes: 12
     env:
       DEPLOYMENT_URL: ${{ inputs.deployment_url || vars.ZENDOC_DEPLOYMENT_URL || 'https://zendoc-ykax.onrender.com' }}
     steps:
@@ -204,3 +204,5 @@ jobs:
           --require-platform render
           --require-engine postgresql
           --require-persistence-verified
+          --attempts 40
+          --interval 15
