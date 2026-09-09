@@ -139,3 +139,22 @@ def test_deployment_verifier_is_wired_to_optional_main_cd_job():
     assert "--require-platform render" in workflow
     assert "--require-engine postgresql" in workflow
     assert "--require-persistence-verified" in workflow
+
+
+def test_render_cd_chain_deploys_on_commit_and_marks_verified_persistence():
+    root = Path(__file__).resolve().parents[1]
+    render = (root / "render.yaml").read_text(encoding="utf-8")
+    assert "autoDeployTrigger: commit" in render
+    assert 'ZENDOC_PERSISTENCE_VERIFIED' in render
+    assert 'value: "true"' in render
+
+
+def test_deployment_verifier_polls_for_exact_render_commit():
+    root = Path(__file__).resolve().parents[1]
+    workflow = (root / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    verifier = (root / "scripts/verify_deployment.py").read_text(encoding="utf-8")
+    assert "--attempts 40" in workflow
+    assert "--interval 15" in workflow
+    assert 'parser.add_argument("--attempts"' in verifier
+    assert 'parser.add_argument("--interval"' in verifier
+    assert "Deployment verification attempt" in verifier
