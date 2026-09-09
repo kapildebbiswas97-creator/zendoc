@@ -679,6 +679,8 @@ def profile():
 def appointments():
     db = get_db()
     if request.method == "POST":
+        if g.user["role"] != "patient":
+            abort(403)
         provider_profile_id = request.form.get("provider_profile_id") or None
         provider_profile = None
         if provider_profile_id:
@@ -694,7 +696,18 @@ def appointments():
                 flash(str(error), "error")
                 return redirect(url_for("main.appointments"))
         provider_email = request.form.get("provider_email", "").strip().lower()
-        provider = db.execute("SELECT id,name FROM users WHERE email=?", (provider_email,)).fetchone()
+        # Only connect a manual request to an active provider-role account. The
+        # free-text path remains available for providers outside ZENDOC, but an
+        # arbitrary patient/admin email must never gain access to a patient's appointment.
+        provider = db.execute(
+            """
+            SELECT u.id,u.name
+            FROM users u
+            WHERE u.email_normalized=? AND u.active=1
+              AND u.role IN ('doctor','hospital','pharmacy')
+            """,
+            (provider_email,),
+        ).fetchone() if provider_email else None
         provider_id = provider["id"] if provider else None
         provider_name = provider["name"] if provider else request.form.get("provider_name", "Provider").strip()
         db.execute(
@@ -2373,3 +2386,4 @@ def api_ai_message():
     log_ai_interaction(user["id"], "zendoc_ai", message, result, latency_ms, conversation["id"])
     get_db().commit()
     return jsonify(result.to_dict())
+

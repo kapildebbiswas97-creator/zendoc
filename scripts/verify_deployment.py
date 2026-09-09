@@ -15,6 +15,10 @@ def fail(message: str) -> None:
     raise SystemExit(1)
 
 
+class DeploymentProbeError(RuntimeError):
+    """A transient probe failure that should be retried by the verifier."""
+
+
 def get_json(url: str, timeout: float) -> tuple[int, dict]:
     request = urllib.request.Request(
         url,
@@ -36,7 +40,11 @@ def get_json(url: str, timeout: float) -> tuple[int, dict]:
             payload = {}
         return int(error.code), payload
     except Exception as error:
-        fail(f"Could not reach {url}: {type(error).__name__}")
+        # The caller owns retry/backoff policy. Exiting here made a temporary
+        # Render 502, DNS error, or timeout abort a 40-attempt rollout check.
+        raise DeploymentProbeError(
+            f"Could not reach {url}: {type(error).__name__}"
+        ) from error
 
 
 def safe_payload_summary(payload: dict) -> dict:
@@ -102,8 +110,6 @@ def main() -> int:
                     )
             last_error = None
             break
-        except SystemExit:
-            raise
         except Exception as error:
             last_error = str(error)
             if attempt >= attempts:
@@ -160,3 +166,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

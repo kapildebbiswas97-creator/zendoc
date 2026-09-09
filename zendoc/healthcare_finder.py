@@ -68,7 +68,11 @@ class HealthcareFinder:
         places_result = _PLACES_CACHE.get(places_cache_key)
         if places_result is None:
             places_result = self.places_provider.search(normalized)
-            _PLACES_CACHE.set(places_cache_key, places_result)
+            # Keep successful/empty searches briefly for rate protection, but
+            # never cache an external outage. This allows a later request to
+            # recover when Google/Nominatim comes back.
+            if places_result.available:
+                _PLACES_CACHE.set(places_cache_key, places_result)
 
         response = {
             "query": normalized,
@@ -155,3 +159,4 @@ def merge_registered_with_approved_public_claims(registered, public_directory):
         ordered_registered.append(registered_by_profile.get(profile_id, item))
 
     return ordered_registered, remaining_public, claimed_links
+

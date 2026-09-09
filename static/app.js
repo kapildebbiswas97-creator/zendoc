@@ -129,6 +129,68 @@ document.querySelectorAll("[data-prompt]").forEach((button) => {
   });
 });
 
+// Optional browser dictation for the assistant. Speech recognition is a
+// convenience input method only: it never submits a healthcare request or
+// starts a call, and the textarea remains the immediate fallback.
+const voiceInputToggle = document.getElementById("voice-input-toggle");
+const voiceInputStatus = document.getElementById("voice-input-status");
+if (voiceInputToggle && assistantInput) {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    voiceInputToggle.disabled = true;
+    voiceInputStatus.textContent = "Voice input is not available in this browser. Type your request below.";
+  } else {
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.lang = document.documentElement.lang || "en-IN";
+    let listening = false;
+
+    const setListening = (value) => {
+      listening = value;
+      voiceInputToggle.setAttribute("aria-pressed", String(value));
+      voiceInputToggle.textContent = value ? "Stop listening" : "Use voice input";
+      voiceInputToggle.setAttribute("aria-busy", String(value));
+    };
+
+    voiceInputToggle.addEventListener("click", () => {
+      if (listening) {
+        recognition.stop();
+        return;
+      }
+      try {
+        setListening(true);
+        voiceInputStatus.textContent = "Listening… speak your request, then review the text before sending.";
+        recognition.start();
+      } catch (_error) {
+        setListening(false);
+        voiceInputStatus.textContent = "Voice input could not start. Type your request below.";
+      }
+    });
+
+    recognition.addEventListener("result", (event) => {
+      const transcript = Array.from(event.results || [])
+        .map((item) => item[0] && item[0].transcript)
+        .filter(Boolean)
+        .join(" ")
+        .trim();
+      if (!transcript) return;
+      assistantInput.value = `${assistantInput.value.trim()}${assistantInput.value.trim() ? " " : ""}${transcript}`.slice(0, assistantInput.maxLength || 1500);
+      assistantInput.dispatchEvent(new Event("input", { bubbles: true }));
+      voiceInputStatus.textContent = "Voice text added. Review it, then press Send when ready.";
+    });
+
+    recognition.addEventListener("error", (event) => {
+      const message = event.error === "not-allowed"
+        ? "Microphone permission was denied. Type your request below."
+        : "Voice input is temporarily unavailable. Type your request below.";
+      voiceInputStatus.textContent = message;
+    });
+    recognition.addEventListener("end", () => setListening(false));
+  }
+}
+
 document.querySelectorAll("textarea[data-character-count]").forEach((textarea) => {
   const counter = document.getElementById(textarea.dataset.characterCount);
   const updateCount = () => {
@@ -187,3 +249,4 @@ if (
       revealObserver.observe(element);
     });
 }
+
