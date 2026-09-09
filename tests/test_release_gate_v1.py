@@ -174,3 +174,23 @@ def test_merged_release_verification_workflow_exists_and_uses_merge_commit():
     assert "--require-persistence-verified" in workflow
     assert "--attempts 40" in workflow
     assert "--interval 15" in workflow
+
+
+def test_merged_release_workflow_can_trigger_render_deploy_hook():
+    root = Path(__file__).resolve().parents[1]
+    workflow = (root / ".github/workflows/merged-release-verification.yml").read_text(encoding="utf-8")
+    trigger = (root / "scripts/trigger_render_deploy.py").read_text(encoding="utf-8")
+    assert "RENDER_DEPLOY_HOOK_URL" in workflow
+    assert "scripts/trigger_render_deploy.py" in workflow
+    assert "No Render deploy hook configured" in workflow
+    assert "Render deploy hook accepted." in trigger
+    assert "render.com" in trigger
+
+
+def test_deployment_verifier_reports_only_safe_health_summary():
+    root = Path(__file__).resolve().parents[1]
+    verifier = (root / "scripts/verify_deployment.py").read_text(encoding="utf-8")
+    assert "def safe_payload_summary" in verifier
+    assert "Liveness check failed with HTTP" in verifier
+    assert "Readiness check failed with HTTP" in verifier
+    assert '"git_commit_short"' in verifier

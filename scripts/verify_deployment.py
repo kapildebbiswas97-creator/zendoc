@@ -39,6 +39,21 @@ def get_json(url: str, timeout: float) -> tuple[int, dict]:
         fail(f"Could not reach {url}: {type(error).__name__}")
 
 
+def safe_payload_summary(payload: dict) -> dict:
+    if not isinstance(payload, dict):
+        return {}
+    allowed = ("status", "service", "check", "database", "database_engine", "persistence_verified")
+    summary = {key: payload.get(key) for key in allowed if key in payload}
+    deployment = payload.get("deployment")
+    if isinstance(deployment, dict):
+        summary["deployment"] = {
+            key: deployment.get(key)
+            for key in ("platform", "service_name", "git_commit", "git_commit_short")
+            if key in deployment
+        }
+    return summary
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("base_url")
@@ -67,11 +82,15 @@ def main() -> int:
         try:
             health_status, health = get_json(f"{base}/api/v1/health", args.timeout)
             if health_status != 200 or health.get("status") != "ok" or health.get("check") != "liveness":
-                raise RuntimeError(f"Liveness check failed with HTTP {health_status}.")
+                raise RuntimeError(
+                    f"Liveness check failed with HTTP {health_status}: {safe_payload_summary(health)}"
+                )
 
             ready_status, ready = get_json(f"{base}/api/v1/ready", args.timeout)
             if ready_status != 200 or ready.get("status") != "ready":
-                raise RuntimeError(f"Readiness check failed with HTTP {ready_status}: {ready}")
+                raise RuntimeError(
+                    f"Readiness check failed with HTTP {ready_status}: {safe_payload_summary(ready)}"
+                )
 
             deployment = ready.get("deployment") or {}
             if args.expected_commit:
