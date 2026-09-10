@@ -104,6 +104,33 @@
   </article>
 </div>
 
+<section class="panel spaced-panel" aria-labelledby="medicine-orders-title">
+  <div class="panel-head">
+    <div><p class="eyebrow">Requests</p><h2 id="medicine-orders-title">Medicine delivery requests</h2></div>
+    <span class="count-pill">{{ orders|length }}</span>
+  </div>
+  {% if orders %}
+    <div class="appointment-list">
+      {% for order in orders %}
+        <article class="appointment-card" style="align-items:flex-start;">
+          <div>
+            <h3>{{ order.items|map(attribute='name')|join(', ') or 'Medicine request' }}</h3>
+            <p>{{ order.status|replace('_',' ')|title }}{% if order.pharmacy_name %} · {{ order.pharmacy_name }}{% endif %}</p>
+            {% if g.user.role == 'pharmacy' %}
+              <p class="form-note">Patient: {{ order.patient_name }} · Delivery: {{ order.delivery_address }}</p>
+            {% else %}
+              <p class="form-note">Delivery: {{ order.delivery_address }}</p>
+            {% endif %}
+          </div>
+          <span class="status-badge working">{{ order.status|replace('_',' ')|title }}</span>
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="form-note">No delivery requests have been recorded yet. Stock and fulfilment remain unconfirmed until a connected pharmacy responds.</p>
+  {% endif %}
+</section>
+
 {% if pharmacies %}
 <section class="panel spaced-panel" aria-labelledby="pharmacy-network-title">
   <div class="panel-head">
@@ -123,3 +150,4 @@
 </section>
 {% endif %}
 {% endblock %}
+

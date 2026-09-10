@@ -84,6 +84,19 @@ def create_medicine_order(user, data):
 
     now = now_iso()
     db = get_db()
+    if pharmacy_id not in (None, ""):
+        try:
+            pharmacy_id = int(pharmacy_id)
+        except (TypeError, ValueError) as error:
+            raise ValueError("pharmacy_id must be a valid pharmacy account id.") from error
+        pharmacy = db.execute(
+            "SELECT id FROM users WHERE id=? AND role='pharmacy' AND active=1",
+            (pharmacy_id,),
+        ).fetchone()
+        if not pharmacy:
+            raise ValueError("Selected pharmacy is not an active pharmacy account.")
+    else:
+        pharmacy_id = None
     if prescription_record_id not in (None, ""):
         try:
             prescription_record_id = int(prescription_record_id)
@@ -116,8 +129,9 @@ def list_medicine_orders(user):
            JOIN users u ON u.id=mo.patient_id
            LEFT JOIN users pharm ON pharm.id=mo.pharmacy_id
            WHERE mo.ordered_by=? OR mo.patient_id=?
+              OR (mo.pharmacy_id=? AND pharm.role='pharmacy' AND pharm.active=1)
            ORDER BY mo.created_at DESC""",
-        (uid, uid),
+        (uid, uid, uid),
     ).fetchall()
     result = []
     for r in rows:
@@ -137,8 +151,10 @@ def get_medicine_order(user, order_id):
         """SELECT mo.*, u.name patient_name
            FROM medicine_orders mo
            JOIN users u ON u.id=mo.patient_id
-           WHERE mo.id=? AND (mo.ordered_by=? OR mo.patient_id=?)""",
-        (order_id, uid, uid),
+           LEFT JOIN users pharm ON pharm.id=mo.pharmacy_id
+           WHERE mo.id=? AND (mo.ordered_by=? OR mo.patient_id=?
+              OR (mo.pharmacy_id=? AND pharm.role='pharmacy' AND pharm.active=1))""",
+        (order_id, uid, uid, uid),
     ).fetchone()
     if not row:
         raise LookupError("Medicine order not found.")
@@ -192,3 +208,4 @@ def delete_medicine_reminder(user, reminder_id):
     get_db().execute("UPDATE medicine_reminders SET active=0 WHERE id=? AND user_id=?", (reminder_id, uid))
     get_db().commit()
     return True
+

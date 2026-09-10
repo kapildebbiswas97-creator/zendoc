@@ -131,7 +131,7 @@ def pharmacy_page():
                 })
                 audit("create", "medicine_order", str(order["id"]))
                 flash("Medicine delivery order placed!", "success")
-            except (ValueError, PermissionError) as err:
+            except (LookupError, ValueError, PermissionError) as err:
                 flash(str(err), "error")
 
         elif action == "add_reminder":
@@ -295,7 +295,7 @@ def api_create_medicine_order():
         order = create_medicine_order(user, data)
         audit("create", "medicine_order", str(order["id"]), actor=user)
         return jsonify({"medicine_order": order}), 201
-    except (ValueError, PermissionError) as err:
+    except (LookupError, ValueError, PermissionError) as err:
         return _api_error(err)
 
 
@@ -429,3 +429,4 @@ def api_delete_location(location_id):
         return jsonify({"status": "deleted"})
     except (LookupError, PermissionError) as err:
         return _api_error(err)
+

@@ -26,6 +26,10 @@ from .provider_network import (
     provider_network_metrics,
     update_provider_prospect,
 )
+from .trusted_contact_import import (
+    apply_trusted_provider_contacts,
+    preview_trusted_provider_contacts,
+)
 from .public_source_registry import list_public_ingestion_sources, public_data_coverage_matrix
 from .official_connectors import connector_readiness, infer_mapping, list_connector_profiles
 from .geography_region_registry import import_lgd_state_registry, list_import_regions
@@ -727,6 +731,45 @@ def api_startup_provider_prospect_update(prospect_id):
         return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
 
 
+@bp.post("/api/v1/admin/startup/provider-network/trusted-contacts/preview")
+def api_trusted_provider_contacts_preview():
+    user, error = _owner()
+    if error:
+        return error
+    data = request.get_json(silent=True) or {}
+    try:
+        rows = data.get("rows")
+        if rows is None and data.get("csv_text") is not None:
+            rows = parse_csv_text(data.get("csv_text"), max_rows=500)
+        result = preview_trusted_provider_contacts(user, rows or [])
+        return jsonify(result)
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+
+
+@bp.post("/api/v1/admin/startup/provider-network/trusted-contacts/apply")
+def api_trusted_provider_contacts_apply():
+    user, error = _owner()
+    if error:
+        return error
+    data = request.get_json(silent=True) or {}
+    if data.get("apply") is not True:
+        return jsonify({
+            "error": {
+                "code": 400,
+                "message": "Explicit apply=true is required after reviewing the trusted-contact preview.",
+            }
+        }), 400
+    try:
+        rows = data.get("rows")
+        if rows is None and data.get("csv_text") is not None:
+            rows = parse_csv_text(data.get("csv_text"), max_rows=500)
+        result = apply_trusted_provider_contacts(user, rows or [])
+        return jsonify(result), 201
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+
+
 @bp.get("/api/v1/admin/startup/activation-funnel")
 def api_startup_activation_funnel():
     user, error = _owner()
@@ -737,3 +780,4 @@ def api_startup_activation_funnel():
         return jsonify({"activation_funnel": user_activation_funnel(user, days=days)})
     except (TypeError, ValueError) as exc:
         return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+

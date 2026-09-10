@@ -475,6 +475,7 @@ def test_diagnostic_catalog_and_home_collection_booking(tmp_path):
         # Catalog has seeded tests
         catalog = list_diagnostic_catalog()
         assert len(catalog) >= 7  # CBC, FBS, LIPID, etc.
+        future_date = (datetime.now(timezone.utc).date() + timedelta(days=1)).isoformat()
 
         # Invariant: booking without user confirmation fails
         with pytest.raises(ValueError) as exc:
@@ -483,7 +484,7 @@ def test_diagnostic_catalog_and_home_collection_booking(tmp_path):
                 patient_id=p_id,
                 test_id=1,
                 lab_id=lab_id,
-                scheduled_date="2026-09-10",
+                scheduled_date=future_date,
                 address="A-12 Mayur Vihar, Delhi",
                 collection_type="home_collection",
                 user_confirmed=False,
@@ -497,7 +498,7 @@ def test_diagnostic_catalog_and_home_collection_booking(tmp_path):
                 patient_id=p_id,
                 test_id=1,
                 lab_id=None,
-                scheduled_date="2026-09-10",
+                scheduled_date=future_date,
                 address="A-12 Mayur Vihar, Delhi",
                 collection_type="home_collection",
                 user_confirmed=True,
@@ -510,7 +511,7 @@ def test_diagnostic_catalog_and_home_collection_booking(tmp_path):
             patient_id=p_id,
             test_id=1,
             lab_id=lab_id,
-            scheduled_date="2026-09-10",
+            scheduled_date=future_date,
             address="A-12 Mayur Vihar, Delhi",
             collection_type="home_collection",
             user_confirmed=True,
@@ -916,4 +917,5 @@ def test_patient_cannot_use_provider_refresh_endpoints(tmp_path):
         headers=headers,
     )
     assert diag.status_code == 403
+
 
