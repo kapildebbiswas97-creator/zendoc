@@ -66,6 +66,17 @@ def test_snapshot_manifest_rejects_secret_bearing_urls_and_bad_hash(tmp_path):
             )
 
 
+def test_snapshot_manifest_rejects_signed_storage_reference(tmp_path):
+    app = make_app(tmp_path)
+    with app.app_context():
+        with pytest.raises(ValueError, match="credentials|signed URL"):
+            normalize_dataset_snapshot(
+                "data_gov_hospitals",
+                snapshot(storage_ref="s3://pilot-bucket/hospitals.csv?X-Amz-Credential=temporary&X-Amz-Signature=secret"),
+            )
+
+
+
 def test_snapshot_manifest_rejects_source_mismatch_and_missing_version(tmp_path):
     app = make_app(tmp_path)
     with app.app_context():
