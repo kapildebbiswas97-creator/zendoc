@@ -5,6 +5,7 @@ from flask import Flask
 from .config import load_config, validate_startup_config
 from .carefin_routes import bp as carefin_bp
 from .care_journey_routes import bp as care_journey_bp
+from .dataset_snapshot_routes import bp as dataset_snapshot_ingestion_bp
 from .db import close_db, get_db, init_db
 from .connected_care_routes import bp as connected_care_bp
 from .ecosystem_routes import bp as ecosystem_bp
@@ -59,6 +60,7 @@ def create_app(test_config=None):
     app.register_blueprint(language_bp)
     app.register_blueprint(geography_graph_bp)
     app.register_blueprint(public_ingestion_bp)
+    app.register_blueprint(dataset_snapshot_ingestion_bp)
     app.register_blueprint(provider_onboarding_bp)
     app.register_blueprint(system_intelligence_bp)
     app.after_request(finish_request_observation)
