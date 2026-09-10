@@ -86,8 +86,8 @@ def normalize_dataset_snapshot(source_id: str, manifest: dict[str, Any]) -> dict
         license_url = _public_url(manifest.get("license_url"), "dataset_snapshot.license_url")
 
     storage_ref = _clean_optional(manifest.get("storage_ref"), 500)
-    if storage_ref and any(marker in storage_ref.casefold() for marker in ("password=", "token=", "secret=", "api_key=", "apikey=")):
-        raise ValueError("dataset_snapshot.storage_ref must not contain credentials or secret tokens.")
+    if storage_ref:
+        _assert_safe_storage_ref(storage_ref)
 
     normalized = {
         "source_id": source["source_id"],
@@ -252,6 +252,21 @@ def _persist_snapshot_on_batch(batch_id: int, *, manifest: dict, preview_batch_u
         (json.dumps(summary, sort_keys=True, ensure_ascii=False, separators=(",", ":")), int(batch_id)),
     )
     db.commit()
+
+
+def _assert_safe_storage_ref(value: str) -> None:
+    """Reject credentials and signed/private URL material in storage references."""
+    parsed = urlparse(value)
+    if parsed.username or parsed.password:
+        raise ValueError("dataset_snapshot.storage_ref must not contain embedded credentials.")
+    for key, _value in parse_qsl(parsed.query, keep_blank_values=True):
+        key_folded = key.casefold().replace("-", "_")
+        if any(marker in key_folded for marker in SENSITIVE_QUERY_MARKERS):
+            raise ValueError("dataset_snapshot.storage_ref must not contain credentials or signed URL parameters.")
+    folded = value.casefold()
+    if any(marker in folded for marker in ("password=", "token=", "secret=", "api_key=", "apikey=", "signature=", "credential=")):
+        raise ValueError("dataset_snapshot.storage_ref must not contain credentials or signed URL parameters.")
+
 
 
 def _public_url(value: Any, label: str) -> str:
