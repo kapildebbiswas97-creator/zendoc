@@ -1,13 +1,9 @@
-"""Authenticated evidence API for governed medical knowledge.
-
-The v1 endpoint retrieves evidence only. It intentionally does not synthesize a
-clinical answer. A later reasoning model may consume this evidence through a
-separate safety-reviewed layer, but retrieval failure must remain visible.
-"""
+"""Authenticated evidence and read-only Knowledge Agent APIs."""
 from __future__ import annotations
 
 from flask import Blueprint, jsonify, request
 
+from .knowledge_agent import run_knowledge_agent
 from .medical_hybrid_retrieval import hybrid_medical_retrieval
 from .routes import require_api_user
 
@@ -84,3 +80,22 @@ def api_health_knowledge_evidence():
             "requester_role": user["role"],
         }
     )
+
+
+@bp.post("/api/v1/health-knowledge/agent")
+def api_health_knowledge_agent():
+    user, error = require_api_user()
+    if error:
+        return error
+    data = request.get_json(silent=True) or {}
+    try:
+        result = run_knowledge_agent(
+            user,
+            data.get("query"),
+            limit=data.get("limit", 6),
+        )
+    except ValueError as service_error:
+        return jsonify({"error": {"code": 400, "message": str(service_error)}}), 400
+    except PermissionError as service_error:
+        return jsonify({"error": {"code": 403, "message": str(service_error)}}), 403
+    return jsonify(result)
