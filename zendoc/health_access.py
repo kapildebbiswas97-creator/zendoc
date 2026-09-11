@@ -7,6 +7,15 @@ from .security import is_owner
 
 HEALTH_SCOPES = ("profile", "reports", "appointments", "measurements", "timeline")
 PROVIDER_ACCESS_ROLES = ("doctor", "hospital")
+CONSENT_PURPOSES = (
+    "care_coordination",
+    "consultation",
+    "record_review",
+    "diagnostics",
+    "follow_up",
+    "second_opinion",
+)
+DEFAULT_CONSENT_PURPOSE = "care_coordination"
 
 
 def _value(row, key, default=None):
@@ -41,14 +50,54 @@ def normalize_scopes(values):
     return scopes
 
 
-def has_active_grant(patient_id, provider_id, scope):
+def normalize_purpose(value, *, allow_default=True):
+    purpose = str(value or "").strip().lower().replace(" ", "_").replace("-", "_")
+    if not purpose and allow_default:
+        return DEFAULT_CONSENT_PURPOSE
+    if purpose not in CONSENT_PURPOSES:
+        allowed = ", ".join(CONSENT_PURPOSES)
+        raise ValueError(f"Unsupported consent purpose. Choose one of: {allowed}")
+    return purpose
+
+
+def _ensure_consent_context_schema():
+    """Add purpose metadata without rewriting the established grants table.
+
+    Existing grants remain valid and are interpreted as care_coordination grants
+    until a purpose row is attached. The auxiliary table is intentionally
+    additive so SQLite and PostgreSQL deployments can adopt the capability
+    without destructive migration of existing patient-consent rows.
+    """
+    db = get_db()
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS health_access_grant_context (
+            grant_id INTEGER PRIMARY KEY REFERENCES health_access_grants(id) ON DELETE CASCADE,
+            purpose TEXT NOT NULL,
+            granted_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_health_grant_context_purpose "
+        "ON health_access_grant_context(purpose, grant_id)"
+    )
+
+
+def has_active_grant(patient_id, provider_id, scope, purpose=None):
     if scope not in HEALTH_SCOPES:
         return False
+    requested_purpose = normalize_purpose(purpose, allow_default=False) if purpose else None
+    _ensure_consent_context_schema()
     rows = get_db().execute(
         """
-        SELECT * FROM health_access_grants
-        WHERE patient_id=? AND provider_id=? AND revoked_at IS NULL
-        ORDER BY created_at DESC
+        SELECT hag.*, hgc.purpose AS consent_purpose
+        FROM health_access_grants hag
+        LEFT JOIN health_access_grant_context hgc ON hgc.grant_id=hag.id
+        WHERE hag.patient_id=? AND hag.provider_id=? AND hag.revoked_at IS NULL
+        ORDER BY hag.created_at DESC
         """,
         (patient_id, provider_id),
     ).fetchall()
@@ -59,12 +108,15 @@ def has_active_grant(patient_id, provider_id, scope):
         except (TypeError, json.JSONDecodeError):
             scopes = []
         expires_at = _parse_datetime(row["expires_at"]) if row["expires_at"] else None
+        grant_purpose = row["consent_purpose"] or DEFAULT_CONSENT_PURPOSE
+        if requested_purpose and grant_purpose != requested_purpose:
+            continue
         if scope in scopes and (expires_at is None or expires_at > now):
             return True
     return False
 
 
-def authorize_patient(actor, patient_id=None, scope=None):
+def authorize_patient(actor, patient_id=None, scope=None, purpose=None):
     actor_id = int(_value(actor, "id", 0) or 0)
     role = _value(actor, "role")
     target_id = int(patient_id or actor_id)
@@ -84,9 +136,9 @@ def authorize_patient(actor, patient_id=None, scope=None):
         if is_owner(actor):
             return target_id
         raise PermissionError("Only the configured ZENDOC owner may override patient health-data access.")
-    if role in PROVIDER_ACCESS_ROLES and scope and has_active_grant(target_id, actor_id, scope):
+    if role in PROVIDER_ACCESS_ROLES and scope and has_active_grant(target_id, actor_id, scope, purpose=purpose):
         return target_id
-    raise PermissionError("Patient consent is required for this health-data scope.")
+    raise PermissionError("Patient consent is required for this health-data scope and purpose.")
 
 
 def create_access_grant(patient, data):
@@ -110,10 +162,12 @@ def create_access_grant(patient, data):
     if provider["role"] not in PROVIDER_ACCESS_ROLES:
         raise ValueError("This provider type cannot receive patient health-history access.")
     scopes = normalize_scopes(data.get("scopes"))
+    purpose = normalize_purpose(data.get("purpose"))
     expires_at = _parse_datetime(data.get("expires_at"))
     if expires_at and expires_at <= datetime.now(timezone.utc):
         raise ValueError("Expiration must be in the future.")
     now = now_iso()
+    _ensure_consent_context_schema()
     cursor = get_db().execute(
         """
         INSERT INTO health_access_grants
@@ -130,16 +184,28 @@ def create_access_grant(patient, data):
             now,
         ),
     )
-    return cursor.lastrowid
+    grant_id = cursor.lastrowid
+    get_db().execute(
+        """
+        INSERT INTO health_access_grant_context
+        (grant_id,purpose,granted_by,created_at,updated_at)
+        VALUES (?,?,?,?,?)
+        """,
+        (grant_id, purpose, patient["id"], now, now),
+    )
+    return grant_id
 
 
 def list_access_grants(patient_id):
+    _ensure_consent_context_schema()
     rows = get_db().execute(
         """
-        SELECT hag.*, u.name provider_name, pp.organization, pp.specialty
+        SELECT hag.*, u.name provider_name, pp.organization, pp.specialty,
+               hgc.purpose AS consent_purpose
         FROM health_access_grants hag
         JOIN users u ON u.id=hag.provider_id
         LEFT JOIN provider_profiles pp ON pp.id=hag.provider_profile_id
+        LEFT JOIN health_access_grant_context hgc ON hgc.grant_id=hag.id
         WHERE hag.patient_id=? ORDER BY hag.created_at DESC
         """,
         (patient_id,),
@@ -152,6 +218,7 @@ def list_access_grants(patient_id):
             item["scopes"] = json.loads(item["scopes"])
         except (TypeError, json.JSONDecodeError):
             item["scopes"] = []
+        item["purpose"] = item.pop("consent_purpose", None) or DEFAULT_CONSENT_PURPOSE
         expires = _parse_datetime(item["expires_at"]) if item["expires_at"] else None
         item["active"] = item["revoked_at"] is None and (expires is None or expires > now)
         grants.append(item)
@@ -172,4 +239,3 @@ def revoke_access_grant(patient, grant_id):
         "UPDATE health_access_grants SET revoked_at=?, updated_at=? WHERE id=?",
         (now, now, grant_id),
     )
-
