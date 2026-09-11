@@ -24,6 +24,8 @@ from .milestone82_routes import bp as milestone82_bp
 from .nutrition_routes import bp as nutrition_intelligence_bp
 from .organization_routes import bp as provider_organizations_bp
 from .personal_baseline_routes import bp as personal_health_baseline_bp
+from .preventive_care import ensure_preventive_care_schema
+from .preventive_care_routes import bp as preventive_care_bp
 from .public_ingestion_routes import bp as public_ingestion_bp
 from .provider_onboarding_routes import bp as provider_onboarding_bp
 from .system_intelligence_routes import bp as system_intelligence_bp
@@ -53,6 +55,7 @@ def create_app(test_config=None):
     app.register_blueprint(health_memory_bp)
     app.register_blueprint(medical_knowledge_bp)
     app.register_blueprint(personal_health_baseline_bp)
+    app.register_blueprint(preventive_care_bp)
     app.register_blueprint(fitness_bp)
     app.register_blueprint(family_bp)
     app.register_blueprint(ecosystem_bp)
@@ -79,6 +82,7 @@ def create_app(test_config=None):
             ensure_consent_schema()
             ensure_medical_knowledge_document_schema()
             ensure_medical_rag_schema()
+            ensure_preventive_care_schema()
             get_db().commit()
             report = readiness_report()
             if report.get("status") != "ready":
