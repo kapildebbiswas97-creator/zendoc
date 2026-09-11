@@ -2,9 +2,10 @@
 
 This is deliberately NOT a general web scraper. The caller must name an
 existing source_id from ZENDOC's public registry. The requested URL and final
-redirect URL must remain on the registered official host (or its parent/subdomain
-variant), URLs with credential-like query keys are rejected by the acquisition
-layer, and downloads are bounded to the existing 50 MiB acquisition limit.
+redirect URL must remain on the registered official host (or an explicitly
+supported official host family), URLs with credential-like query keys are
+rejected by the acquisition layer, and downloads are bounded to the existing
+50 MiB acquisition limit.
 """
 from __future__ import annotations
 
@@ -31,6 +32,7 @@ from zendoc.public_source_registry import get_public_ingestion_source
 
 
 _FILENAME_RE = re.compile(r'filename\*?=(?:UTF-8\'\')?["\']?([^"\';]+)', re.IGNORECASE)
+_EXPLICIT_OFFICIAL_HOST_FAMILIES = ("data.gov.in",)
 
 
 def _host_allowed(candidate: str, official: str) -> bool:
@@ -38,11 +40,14 @@ def _host_allowed(candidate: str, official: str) -> bool:
     official = (official or "").lower().strip(".")
     if not candidate or not official:
         return False
-    return (
-        candidate == official
-        or candidate.endswith("." + official)
-        or official.endswith("." + candidate)
-    )
+    if candidate == official or candidate.endswith("." + official) or official.endswith("." + candidate):
+        return True
+    for root in _EXPLICIT_OFFICIAL_HOST_FAMILIES:
+        candidate_in_family = candidate == root or candidate.endswith("." + root)
+        official_in_family = official == root or official.endswith("." + root)
+        if candidate_in_family and official_in_family:
+            return True
+    return False
 
 
 def _filename_from_response(response, requested_url: str, override: str | None) -> str:
@@ -74,7 +79,8 @@ def download_public_artifact(
     source = get_public_ingestion_source(source_id)
     if not source:
         raise AcquisitionError("Unknown public ingestion source.")
-    if "AUTHORIZED" in str(source.get("live_fetch_status") or "").upper() or "ONBOARDING" in str(source.get("live_fetch_status") or "").upper():
+    fetch_status = str(source.get("live_fetch_status") or "").upper()
+    if "AUTHORIZED" in fetch_status or "ONBOARDING" in fetch_status:
         raise AcquisitionError("This source requires onboarding/authorized access and cannot use the public downloader.")
 
     safe_url = canonical_source_url(artifact_url)
@@ -101,6 +107,7 @@ def download_public_artifact(
                         raise AcquisitionError("Artifact exceeds the safe 50 MiB download limit.")
                 except ValueError:
                     pass
+            resolved_name = _filename_from_response(response, final_url, file_name)
             payload = response.read(MAX_ARTIFACT_BYTES + 1)
     except AcquisitionError:
         raise
@@ -109,7 +116,6 @@ def download_public_artifact(
 
     if len(payload) > MAX_ARTIFACT_BYTES:
         raise AcquisitionError("Artifact exceeds the safe 50 MiB download limit.")
-    resolved_name = _filename_from_response(response, final_url, file_name)
     result = acquire_source_bytes(
         source_id,
         final_url,
