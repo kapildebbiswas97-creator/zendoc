@@ -45,11 +45,12 @@ def test_workspace_bootstrap_creates_data_drive_layout(tmp_path):
     assert "india_public_official_v1" in catalog
 
 
-def test_official_host_matching_allows_parent_subdomain_but_not_unrelated_domain():
-    assert _host_allowed("files.data.gov.in", "www.data.gov.in") is False
+def test_official_host_matching_allows_only_registered_relations_and_explicit_ogd_family():
+    assert _host_allowed("files.data.gov.in", "www.data.gov.in") is True
     assert _host_allowed("www.data.gov.in", "data.gov.in") is True
     assert _host_allowed("data.gov.in", "www.data.gov.in") is True
     assert _host_allowed("evil.example", "data.gov.in") is False
+    assert _host_allowed("malicious-gov.in.example", "data.gov.in") is False
 
 
 def test_authorized_registry_cannot_use_public_downloader(tmp_path):
