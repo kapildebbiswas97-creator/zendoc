@@ -1,7 +1,6 @@
 """Statewide West Bengal + India public-data acquisition bundles.
 
-This module defines *scope and acquisition policy*, not scraped rows. The actual
-source metadata remains in :mod:`zendoc.public_source_registry` and raw
+This module defines *scope and acquisition policy*, not scraped rows. Raw
 artifacts are acquired through the existing immutable acquisition layer.
 
 Nadia is retained only as a regression/quality-validation district. It is not
@@ -14,6 +13,7 @@ from urllib.parse import urlsplit
 from .india_regions import INDIA_REGIONS
 from .public_source_registry import get_public_ingestion_source
 from .state_source_priorities import STATE_SOURCE_PRIORITIES
+from .west_bengal_public_sources import get_west_bengal_extra_source
 
 
 FULL_WEST_BENGAL = "FULL_WEST_BENGAL"
@@ -23,11 +23,13 @@ WEST_BENGAL_FULL_STATE_SOURCE_IDS = (
     "lgd",
     "data_gov_hospitals",
     "clinical_establishments",
+    "wb_clinical_establishments",
     "wbhs_empanelled_hco",
     "swasthya_sathi_hospitals",
     "nabl_labs",
     "nabh_directory",
     "pmbjp_kendras",
+    "wb_drug_license_verification",
     "data_gov_blood_banks",
     "eraktkosh",
     "data_gov_cghs_hospitals",
@@ -81,7 +83,7 @@ def acquisition_mode(source: dict) -> str:
 
 
 def _source_descriptor(source_id: str, *, scope: str, priority: str) -> dict:
-    source = get_public_ingestion_source(source_id)
+    source = get_public_ingestion_source(source_id) or get_west_bengal_extra_source(source_id)
     if not source:
         raise LookupError(f"Unknown public source in bundle: {source_id}")
     return {
@@ -115,7 +117,7 @@ def west_bengal_bundle() -> dict:
         ],
         "truth_notice": (
             "West Bengal acquisition is statewide. Nadia is only a regression/quality-validation subset. "
-            "Provider directories are not live availability, booking connectivity, or ZENDOC verification."
+            "Provider/licence directories are not live availability, stock, booking connectivity, or ZENDOC verification."
         ),
     }
 
@@ -130,6 +132,9 @@ def _state_enrichment_catalog() -> dict[str, list[dict]]:
                 continue
             descriptor = _source_descriptor(source_id, scope=f"STATE:{state_slug.upper()}", priority="STATE_ENRICHMENT")
             descriptors.append(descriptor)
+        if state_slug == "west_bengal":
+            for source_id in ("wb_clinical_establishments", "wb_drug_license_verification"):
+                descriptors.append(_source_descriptor(source_id, scope="STATE:WEST_BENGAL", priority="STATE_ENRICHMENT"))
         if descriptors:
             result[state_slug] = descriptors
     return result
@@ -157,7 +162,7 @@ def india_bundle() -> dict:
         "state_enrichment_sources": _state_enrichment_catalog(),
         "authorized_only_sources": authorized_sources,
         "truth_notice": (
-            "Every State/UT receives the national baseline. Verified state-specific source families are catalogued as enrichments where ZENDOC already has an official source entry. "
+            "Every State/UT receives the national baseline. Verified state-specific source families are catalogued as enrichments where ZENDOC has an official source entry. "
             "Interactive/public lookup sources require dated permitted snapshots; authorized registries remain blocked until onboarding."
         ),
     }
