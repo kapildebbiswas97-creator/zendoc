@@ -7,6 +7,7 @@ verified.  Actual counts come only from an acquisition/ingestion report.
 from __future__ import annotations
 
 from typing import Any
+import re
 
 from .data_gap_registry import get_data_gap
 from .public_source_registry import get_public_ingestion_source
@@ -23,11 +24,11 @@ NADIA_SOURCE_PLAN: tuple[dict[str, Any], ...] = (
     },
     {
         "source_id": "data_gov_hospitals",
-        "classification": "DOWNLOADABLE_SNAPSHOT",
+        "classification": "MANUAL_VERIFICATION_REQUIRED",
         "data_classes": ["public hospitals and health facilities"],
         "scope": "Filter normalized rows to West Bengal and Nadia",
         "status": "NOT_ACQUIRED",
-        "notes": "Use only a permitted dataset artifact; preserve source row identifiers and freshness.",
+        "notes": "Resource view on 2026-09-11 was empty and marked sandbox; establish the exact permitted artifact before import. See docs/NADIA_SOURCE_EVIDENCE.md.",
     },
     {
         "source_id": "wbhs_empanelled_hco",
@@ -106,9 +107,27 @@ def nadia_source_plan() -> list[dict[str, Any]]:
 def nadia_data_quality_gate(report: dict[str, Any]) -> dict[str, Any]:
     """Evaluate required pilot checks without turning missing data into green."""
     report = report if isinstance(report, dict) else {}
+    count_fields = {
+        "source": "source_record_count", "mapped": "mapped_record_count",
+        "accepted": "accepted_count", "rejected": "rejected_count", "conflicts": "conflict_count",
+    }
+    counts = {}
+    for name, field in count_fields.items():
+        value = report.get(field)
+        counts[name] = value if type(value) is int and value >= 0 else None
+    valid_counts = all(value is not None for value in counts.values())
+    complete_counts = valid_counts and (
+        counts["source"] > 0 and counts["mapped"] > 0 and counts["accepted"] > 0
+        and counts["mapped"] <= counts["source"]
+        and counts["accepted"] + counts["rejected"] == counts["mapped"]
+        and counts["conflicts"] == 0
+    )
     checks = {
         "SOURCE_VALID": report.get("source_valid") is True,
-        "SNAPSHOT_HASHED": bool(report.get("snapshot_uid") and report.get("file_sha256")),
+        "SNAPSHOT_HASHED": bool(
+            re.fullmatch(r"snapshot_[0-9a-f]{20}", str(report.get("snapshot_uid") or ""))
+            and re.fullmatch(r"[0-9a-f]{64}", str(report.get("file_sha256") or ""))
+        ),
         "LICENSE_OR_USAGE_RECORDED": bool(report.get("usage_basis") and report.get("license_or_terms")),
         "SCHEMA_MAPPED": report.get("schema_mapped") is True,
         "DRY_RUN": report.get("dry_run") is True,
@@ -119,20 +138,18 @@ def nadia_data_quality_gate(report: dict[str, Any]) -> dict[str, Any]:
         "NO_FAKE_AVAILABILITY": report.get("no_fake_availability") is True,
         "SECURITY_TESTS": report.get("security_tests") is True,
         "POSTGRESQL_TESTS": report.get("postgresql_tests") is True,
+        "RECORD_COUNTS_VALID": complete_counts,
     }
     failed = [key for key, value in checks.items() if not value]
     return {
         "status": "PASS" if not failed else "BLOCKED",
         "checks": checks,
         "failed_checks": failed,
-        "record_counts": {
-            "source": int(report.get("source_record_count") or 0),
-            "mapped": int(report.get("mapped_record_count") or 0),
-            "accepted": int(report.get("accepted_count") or 0),
-            "rejected": int(report.get("rejected_count") or 0),
-            "conflicts": int(report.get("conflict_count") or 0),
-        },
-        "notice": "A blocked or empty report is not a production-ready Nadia dataset.",
+        "record_counts": counts,
+        "notice": (
+            "This evaluates supplied review evidence; it does not independently verify source facts. "
+            "A blocked, empty, or conflicting report is not a production-ready Nadia dataset."
+        ),
     }
 
 
@@ -147,4 +164,5 @@ def nadia_known_data_gaps() -> list[dict[str, Any]]:
         "provider_accessibility",
     )
     return [gap for gap_id in gap_ids if (gap := get_data_gap(gap_id)) is not None]
+
 

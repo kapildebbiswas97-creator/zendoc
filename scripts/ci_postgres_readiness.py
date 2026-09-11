@@ -2,7 +2,11 @@
 from __future__ import annotations
 
 import os
+import csv
+import io
+import json
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -17,6 +21,60 @@ from zendoc.db import get_db
 def fail(message: str) -> None:
     print(f"CI PostgreSQL readiness FAILED: {message}", file=sys.stderr)
     raise SystemExit(1)
+
+
+def check_snapshot_round_trip(app) -> None:
+    """Exercise actual import writes on the disposable GitHub PostgreSQL DB."""
+    from zendoc.data_acquisition import acquire_source_bytes
+    from zendoc.dataset_snapshot_ingestion import ingest_public_snapshot
+
+    if os.environ.get("ZENDOC_CI_FIXTURES") != "true":
+        fail("Snapshot smoke requires ZENDOC_CI_FIXTURES=true on a disposable test database.")
+    db = get_db()
+    actor = db.execute(
+        "SELECT * FROM users WHERE email_normalized=? AND role='admin'",
+        (app.config["ADMIN_EMAIL"].lower(),),
+    ).fetchone()
+    if not actor:
+        fail("Configured CI owner account is missing.")
+    # Synthetic fixture only: no source facts or real provider counts claimed.
+    payload = (
+        b"source_record_id,category,name,district,state\n"
+        b"CI-SNAPSHOT-001,hospital,Synthetic CI Hospital,Nadia,West Bengal\n"
+    )
+    with tempfile.TemporaryDirectory(prefix="zendoc-ci-snapshot-") as raw_root:
+        acquired = acquire_source_bytes(
+            "data_gov_hospitals", "https://example.invalid/ci-snapshot.csv", payload,
+            storage_root=raw_root, usage_basis="manual_public_snapshot",
+            license_or_terms="Synthetic CI fixture; not official or real provider data.",
+            dataset_version="ci-v1", retrieved_at="2026-09-11T00:00:00+00:00",
+            file_name="ci-snapshot.csv",
+        )
+        records = list(csv.DictReader(io.StringIO(payload.decode("utf-8"))))
+        args = dict(
+            source_id="data_gov_hospitals", ingestion_type="public_healthcare_entities",
+            records=records, dataset_snapshot=acquired["dataset_snapshot"],
+        )
+        preview = ingest_public_snapshot(actor, **args, dry_run=True)
+        applied = ingest_public_snapshot(
+            actor, **args, dry_run=False, preview_batch_uid=preview["batch_uid"],
+        )
+        if applied["accepted_count"] != 1 or applied["rejected_count"] != 0:
+            fail("Snapshot smoke did not apply exactly one fixture.")
+        row = db.execute(
+            "SELECT * FROM public_healthcare_entities WHERE source_id=? AND source_record_id=?",
+            ("data_gov_hospitals", "CI-SNAPSHOT-001"),
+        ).fetchone()
+        metadata = json.loads(row["metadata_json"])
+        if metadata["_zendoc_source_snapshot"]["snapshot_uid"] != acquired["snapshot_uid"]:
+            fail("Acquisition identity changed during PostgreSQL import.")
+        if row["zendoc_verification_status"] != "not_verified" or row["booking_connectivity"] != "not_connected":
+            fail("Public import incorrectly promoted verification or connectivity.")
+        replay = ingest_public_snapshot(
+            actor, **args, dry_run=False, preview_batch_uid=preview["batch_uid"],
+        )
+        if not replay["duplicate_batch"]:
+            fail("Snapshot replay was not idempotent.")
 
 
 def main() -> int:
@@ -60,6 +118,9 @@ def main() -> int:
         if missing_tables:
             fail(f"Required tables missing: {missing_tables}")
 
+        if os.environ.get("ZENDOC_CI_FIXTURES") == "true":
+            check_snapshot_round_trip(app)
+
         marker = "ci-production-restart-marker"
         db.execute(
             """
@@ -92,3 +153,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

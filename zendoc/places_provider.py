@@ -7,6 +7,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from .geospatial import bounding_box, nearby_records
+
 
 GOOGLE_NEARBY_SEARCH_URL = "https://places.googleapis.com/v1/places:searchNearby"
 NOMINATIM_SEARCH_URL = "https://nominatim.openstreetmap.org/search"
@@ -100,8 +102,8 @@ class NominatimPlacesProvider(PlacesProvider):
     def search(self, query):
         normalized = dict(query or {})
         location = str(normalized.get("location") or "").strip()
-        latitude = _number(normalized.get("latitude"))
-        longitude = _number(normalized.get("longitude"))
+        latitude = _coordinate_number(normalized.get("latitude"), -90, 90)
+        longitude = _coordinate_number(normalized.get("longitude"), -180, 180)
         if not location and (latitude is None or longitude is None):
             return PlacesResult(
                 available=True,
@@ -142,6 +144,14 @@ class NominatimPlacesProvider(PlacesProvider):
             "layer": "poi",
             "limit": "20",
         }
+        if latitude is not None and longitude is not None:
+            south, north, west, east = bounding_box(latitude, longitude, _bounded_radius_km(normalized.get("radius_km")))
+            # Nominatim viewboxes cannot represent two disjoint dateline
+            # intervals. Keep both sides and enforce the circle on results.
+            if west > east:
+                west, east = -180.0, 180.0
+            params["viewbox"] = f"{west},{north},{east},{south}"
+            params["bounded"] = "1"
         url = f"{NOMINATIM_SEARCH_URL}?{urllib.parse.urlencode(params)}"
 
         try:
@@ -152,6 +162,8 @@ class NominatimPlacesProvider(PlacesProvider):
                 if isinstance(place, dict)
             ]
             results = [item for item in results if item]
+            if latitude is not None and longitude is not None:
+                results = nearby_records(results, latitude, longitude, _bounded_radius_km(normalized.get("radius_km")))
             result = PlacesResult(
                 available=True,
                 results=results,
@@ -245,8 +257,8 @@ class GooglePlacesProvider(PlacesProvider):
 
     def search(self, query):
         normalized = dict(query or {})
-        latitude = _number(normalized.get("latitude"))
-        longitude = _number(normalized.get("longitude"))
+        latitude = _coordinate_number(normalized.get("latitude"), -90, 90)
+        longitude = _coordinate_number(normalized.get("longitude"), -180, 180)
         location = str(normalized.get("location") or "").strip()
 
         if latitude is None or longitude is None:
@@ -511,7 +523,14 @@ def _bounded_radius_km(value):
         radius = float(value or 10)
     except (TypeError, ValueError):
         radius = 10.0
+    if not math.isfinite(radius):
+        radius = 10.0
     return max(1.0, min(radius, 50.0))
+
+
+def _coordinate_number(value, minimum, maximum):
+    number = _number(value)
+    return number if number is not None and minimum <= number <= maximum else None
 
 
 def _safe_google_error_message(exc):
@@ -544,4 +563,5 @@ class ShortLivedCache:
 
     def set(self, key, value):
         self._items[key] = {"created": time.time(), "value": value}
+
 
