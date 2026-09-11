@@ -1,26 +1,24 @@
 """Statewide West Bengal + India public-data acquisition bundles.
 
-This module defines *scope and acquisition policy*, not scraped rows.  The
-actual source metadata remains in :mod:`zendoc.public_source_registry` and raw
+This module defines *scope and acquisition policy*, not scraped rows. The actual
+source metadata remains in :mod:`zendoc.public_source_registry` and raw
 artifacts are acquired through the existing immutable acquisition layer.
 
-Nadia is retained only as a regression/quality-validation district.  It is not
+Nadia is retained only as a regression/quality-validation district. It is not
 an acquisition boundary: the West Bengal bundle is explicitly FULL_STATE.
 """
 from __future__ import annotations
 
 from urllib.parse import urlsplit
 
+from .india_regions import INDIA_REGIONS
 from .public_source_registry import get_public_ingestion_source
+from .state_source_priorities import STATE_SOURCE_PRIORITIES
 
 
 FULL_WEST_BENGAL = "FULL_WEST_BENGAL"
 ALL_INDIA = "ALL_INDIA"
 
-# Statewide acquisition stack.  These sources collectively cover official
-# geography plus public healthcare/provider directories and relevant public
-# accreditation/regulatory directories.  Directory presence never implies
-# live appointments, beds, medicine stock, prices, or ZENDOC verification.
 WEST_BENGAL_FULL_STATE_SOURCE_IDS = (
     "lgd",
     "data_gov_hospitals",
@@ -37,11 +35,6 @@ WEST_BENGAL_FULL_STATE_SOURCE_IDS = (
     "cdsco_state_drug_control",
 )
 
-# National public/official discovery layer.  These are sources from the
-# existing registry whose public metadata can contribute to nationwide
-# geography, facility, professional-verification, medicine/reference, or
-# aggregate planning coverage.  Authorized-only registries are intentionally
-# catalogued separately below rather than scraped.
 INDIA_PUBLIC_SOURCE_IDS = (
     "lgd",
     "data_gov_hospitals",
@@ -66,9 +59,6 @@ INDIA_PUBLIC_SOURCE_IDS = (
     "myscheme",
 )
 
-# These are valuable authoritative sources but must not be bulk-downloaded by
-# this zero-capital public downloader without the appropriate onboarding or
-# authorized access path.
 AUTHORIZED_ONLY_SOURCE_IDS = (
     "abdm_hfr",
     "abdm_hpr",
@@ -79,10 +69,6 @@ VALIDATION_ONLY_DISTRICTS = {
     "assam": ("Dibrugarh",),
 }
 
-# Acquisition modes describe what the software may truthfully do today.
-# `PUBLIC_ARTIFACT` means an operator may supply or download a published file.
-# `PUBLIC_LOOKUP_SNAPSHOT` means no stable verified bulk endpoint is assumed;
-# use a dated permitted export/snapshot. `AUTHORIZED_ONLY` must remain blocked.
 
 def acquisition_mode(source: dict) -> str:
     source_id = source["source_id"]
@@ -134,6 +120,21 @@ def west_bengal_bundle() -> dict:
     }
 
 
+def _state_enrichment_catalog() -> dict[str, list[dict]]:
+    result: dict[str, list[dict]] = {}
+    national = set(INDIA_PUBLIC_SOURCE_IDS)
+    for state_slug, profile in sorted(STATE_SOURCE_PRIORITIES.items()):
+        descriptors = []
+        for source_id in profile["official_directory_sources"]:
+            if source_id in national or source_id in AUTHORIZED_ONLY_SOURCE_IDS:
+                continue
+            descriptor = _source_descriptor(source_id, scope=f"STATE:{state_slug.upper()}", priority="STATE_ENRICHMENT")
+            descriptors.append(descriptor)
+        if descriptors:
+            result[state_slug] = descriptors
+    return result
+
+
 def india_bundle() -> dict:
     public_sources = [
         _source_descriptor(source_id, scope=ALL_INDIA, priority="P0" if source_id in {
@@ -150,10 +151,13 @@ def india_bundle() -> dict:
         "bundle_id": "india_public_official_v1",
         "scope": ALL_INDIA,
         "coverage_rule": "ALL_STATES_AND_UTS_FROM_CURRENT_OFFICIAL_LGD_SNAPSHOT",
+        "region_count": len(INDIA_REGIONS),
+        "regions": [dict(item) for item in INDIA_REGIONS],
         "sources": public_sources,
+        "state_enrichment_sources": _state_enrichment_catalog(),
         "authorized_only_sources": authorized_sources,
         "truth_notice": (
-            "This is a national source catalog, not a claim that every source exposes a stable bulk API. "
+            "Every State/UT receives the national baseline. Verified state-specific source families are catalogued as enrichments where ZENDOC already has an official source entry. "
             "Interactive/public lookup sources require dated permitted snapshots; authorized registries remain blocked until onboarding."
         ),
     }
