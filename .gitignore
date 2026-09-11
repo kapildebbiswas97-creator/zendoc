@@ -13,3 +13,7 @@ vendor_deps/
 deps/
 pydeps_m4/
 work/
+# Local public-data workspace: raw snapshots are content-addressed and kept
+# outside normal Git history. Commit source manifests/schemas/docs, not bulk raw data.
+data_workspace/
+ZENDOC_DATA/
