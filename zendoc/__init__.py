@@ -14,6 +14,7 @@ from .fitness_routes import bp as fitness_bp
 from .geography_routes import bp as geography_graph_bp
 from .health_access import ensure_consent_schema
 from .health_routes import bp as health_memory_bp
+from .knowledge_routes import bp as medical_knowledge_bp
 from .language_routes import bp as language_bp
 from .medical_knowledge_documents import ensure_medical_knowledge_document_schema
 from .medical_rag_ingestion import ensure_medical_rag_schema
@@ -49,6 +50,7 @@ def create_app(test_config=None):
 
     app.register_blueprint(bp)
     app.register_blueprint(health_memory_bp)
+    app.register_blueprint(medical_knowledge_bp)
     app.register_blueprint(fitness_bp)
     app.register_blueprint(family_bp)
     app.register_blueprint(ecosystem_bp)
