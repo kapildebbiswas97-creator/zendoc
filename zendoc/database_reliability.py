@@ -196,7 +196,6 @@ def readiness_report():
         "persistence_verified": bool(current_app.config.get("PERSISTENCE_VERIFIED")),
         "deployment": deployment_identity(),
         "healthcare_finder": places_configuration_status(),
-        "postgis": postgis_status(),
     }
     try:
         probe = database_probe()
@@ -206,6 +205,11 @@ def readiness_report():
         report["database"] = "unreachable"
         report["status"] = "not_ready"
         return report
+
+    # Keep optional capability probes inside the reachable-database path so a
+    # connection failure still produces the normal not_ready response rather
+    # than raising while the report is being assembled.
+    report["postgis"] = postgis_status()
 
     migration = migration_status()
     schema = schema_status()
