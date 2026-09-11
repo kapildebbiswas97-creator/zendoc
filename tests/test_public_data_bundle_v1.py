@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import pytest
 
 from scripts.bootstrap_public_data_workspace import bootstrap
@@ -23,15 +21,21 @@ def test_west_bengal_bundle_is_full_state_not_nadia_only():
     assert {"lgd", "data_gov_hospitals", "wbhs_empanelled_hco", "swasthya_sathi_hospitals"} <= source_ids
 
 
-def test_india_bundle_catalogues_public_and_authorized_sources_separately():
+def test_india_bundle_catalogues_public_authorized_and_state_enrichment_sources():
     bundle = india_bundle()
     assert bundle["scope"] == ALL_INDIA
     assert bundle["coverage_rule"] == "ALL_STATES_AND_UTS_FROM_CURRENT_OFFICIAL_LGD_SNAPSHOT"
+    assert bundle["region_count"] == len(bundle["regions"])
+    assert bundle["region_count"] >= 36
     public_ids = {item["source_id"] for item in bundle["sources"]}
     auth_ids = {item["source_id"] for item in bundle["authorized_only_sources"]}
     assert {"lgd", "data_gov_hospitals", "nabl_labs", "pmbjp_kendras"} <= public_ids
     assert {"abdm_hfr", "abdm_hpr"} <= auth_ids
     assert public_ids.isdisjoint(auth_ids)
+    enrichments = bundle["state_enrichment_sources"]
+    assert {"west_bengal", "assam", "delhi", "kerala", "karnataka", "maharashtra", "uttar_pradesh"} <= set(enrichments)
+    wb_ids = {item["source_id"] for item in enrichments["west_bengal"]}
+    assert {"wbhs_empanelled_hco", "swasthya_sathi_hospitals"} <= wb_ids
 
 
 def test_workspace_bootstrap_creates_data_drive_layout(tmp_path):
