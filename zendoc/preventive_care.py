@@ -130,7 +130,7 @@ def create_preventive_plan(actor, data, patient_id=None):
         source_ref = source_ref or guideline_document.get("document_url")
     now = now_iso()
     plan_uid = f"preventive_{uuid.uuid4().hex}"
-    cursor = get_db().execute(
+    get_db().execute(
         """
         INSERT INTO preventive_care_plans
         (plan_uid,patient_id,title,category,due_at,source_type,source_ref,guideline_document_uid,status,created_by,created_at,updated_at)
@@ -152,7 +152,10 @@ def create_preventive_plan(actor, data, patient_id=None):
         ),
     )
     get_db().commit()
-    return get_preventive_plan(actor, int(cursor.lastrowid), patient_id=target_id)
+    row = get_db().execute("SELECT * FROM preventive_care_plans WHERE plan_uid=?", (plan_uid,)).fetchone()
+    if not row:
+        raise RuntimeError("Preventive-care plan could not be reloaded after creation.")
+    return _serialize(row)
 
 
 def _due_state(item, now=None):
