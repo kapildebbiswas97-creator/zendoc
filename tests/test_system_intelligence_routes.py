@@ -20,6 +20,7 @@ def test_owner_intelligence_manifest_is_owner_only(tmp_path):
     assert payload["model_roles"]
     assert payload["benefit_sources"]
     assert payload["regulated_domains"]
+    assert payload["medical_knowledge_sources"]
 
 
 def test_capability_registry_uses_only_truthful_statuses(tmp_path):
@@ -59,6 +60,26 @@ def test_owner_manifest_exposes_public_ingestion_sources(tmp_path):
     assert sources["abdm_hfr"]["live_fetch_status"] == "ONBOARDING_OR_AUTHORIZED_ACCESS_REQUIRED"
 
 
+def test_owner_medical_knowledge_sources_are_review_only_and_owner_only(tmp_path):
+    _app, client = make_client(tmp_path)
+
+    register_web(client, "patient", "knowledge-normal@example.com")
+    login_web(client, "patient", "knowledge-normal@example.com")
+    denied = client.get("/owner/medical-knowledge-sources")
+    assert denied.status_code == 403
+
+    client.get("/logout")
+    login_web(client, "admin", "admin@example.com", "AdminStrong123")
+    allowed = client.get("/owner/medical-knowledge-sources")
+    assert allowed.status_code == 200
+    payload = allowed.get_json()
+    assert payload["status"] == "ok"
+    assert payload["sources"]
+    assert all(item["ingestion_status"] == "REVIEW_REQUIRED" for item in payload["sources"])
+    assert all(item["allowed_for_answering_without_snapshot"] is False for item in payload["sources"])
+    assert "no source is automatically approved" in payload["notice"].lower()
+
+
 def test_owner_pilot_scorecard_is_real_and_owner_only(tmp_path):
     _app, client = make_client(tmp_path)
 
@@ -95,6 +116,7 @@ def test_pilot_scorecard_zero_denominator_is_not_faked(tmp_path):
     assert payload["fulfilment"]["plan_to_order_conversion_percent"] is None
     assert payload["diagnostics"]["completion_rate_percent"] is None
 
+
 def test_owner_observability_exposes_pilot_signals(tmp_path):
     _app, client = make_client(tmp_path)
     login_web(client, "admin", "admin@example.com", "AdminStrong123")
@@ -107,4 +129,3 @@ def test_owner_observability_exposes_pilot_signals(tmp_path):
     assert "provider_responsiveness" in payload
     assert "data_freshness" in payload
     assert "engagement" in payload
-
