@@ -17,8 +17,12 @@ def test_west_bengal_bundle_is_full_state_not_nadia_only():
     assert bundle["coverage_rule"] == "ALL_DISTRICTS_FROM_CURRENT_OFFICIAL_LGD_SNAPSHOT"
     assert bundle["validation_is_not_scope_limit"] is True
     assert bundle["validation_districts"] == ["Nadia"]
-    source_ids = {item["source_id"] for item in bundle["sources"]}
-    assert {"lgd", "data_gov_hospitals", "wbhs_empanelled_hco", "swasthya_sathi_hospitals"} <= source_ids
+    sources = {item["source_id"]: item for item in bundle["sources"]}
+    assert {"lgd", "data_gov_hospitals", "wbhs_empanelled_hco", "swasthya_sathi_hospitals"} <= set(sources)
+    assert {"wb_clinical_establishments", "wb_drug_license_verification"} <= set(sources)
+    assert sources["lgd"]["ingestion_registered"] is True
+    assert sources["wb_clinical_establishments"]["ingestion_registered"] is False
+    assert sources["wb_clinical_establishments"]["ingestion_status"] == "CATALOG_ONLY_PENDING_CENTRAL_REGISTRY"
 
 
 def test_india_bundle_catalogues_public_authorized_and_state_enrichment_sources():
@@ -35,7 +39,7 @@ def test_india_bundle_catalogues_public_authorized_and_state_enrichment_sources(
     enrichments = bundle["state_enrichment_sources"]
     assert {"west_bengal", "assam", "delhi", "kerala", "karnataka", "maharashtra", "uttar_pradesh"} <= set(enrichments)
     wb_ids = {item["source_id"] for item in enrichments["west_bengal"]}
-    assert {"wbhs_empanelled_hco", "swasthya_sathi_hospitals"} <= wb_ids
+    assert {"wbhs_empanelled_hco", "swasthya_sathi_hospitals", "wb_clinical_establishments", "wb_drug_license_verification"} <= wb_ids
 
 
 def test_workspace_bootstrap_creates_data_drive_layout(tmp_path):
