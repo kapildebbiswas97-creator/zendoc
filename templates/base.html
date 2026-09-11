@@ -11,8 +11,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='ui-polish.css') }}">
 </head>
-<body class="{% block body_class %}{% endblock %}">
+<body class="{% block body_class %}{% endblock %}{% if current_user and current_user.role == 'patient' %} has-patient-dock{% endif %}">
   <a class="skip-link" href="#main-content">Skip to main content</a>
   <header class="topbar" id="site-topbar">
     <div class="topbar-inner">
@@ -100,6 +101,7 @@
           </details>
         </nav>
 
+        <span class="nav-role-chip" aria-label="Signed-in role">{{ current_user.role }}</span>
         <button id="theme-toggle-btn" class="theme-toggle-btn" type="button" aria-label="Toggle light or dark theme">
           <svg class="theme-icon sun-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
           <svg class="theme-icon moon-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
@@ -107,6 +109,7 @@
       {% else %}
         <nav class="guest-nav" aria-label="Public navigation">
           <a href="{{ url_for('ecosystem.marketplace_page') }}">Explore services</a>
+          <a href="{{ url_for('main.login', role='doctor') }}" class="provider-entry">For providers</a>
           <a href="{{ url_for('main.login') }}">Sign in</a>
           <a href="{{ url_for('main.register', role='patient') }}" class="primary-action compact-action">Get started</a>
         </nav>
@@ -118,6 +121,13 @@
       {% endif %}
     </div>
   </header>
+
+  <div class="experience-strip" role="status" aria-label="ZENDOC platform status">
+    <div class="experience-strip__inner">
+      <span class="experience-strip__dot" aria-hidden="true"></span>
+      <span>Safety-first guidance • Patient-controlled Health Memory • Real-world availability shown only when confirmed</span>
+    </div>
+  </div>
 
   <main id="main-content" class="{% block main_class %}page{% endblock %}" tabindex="-1">
     {% with messages = get_flashed_messages(with_categories=true) %}
@@ -135,6 +145,17 @@
     {% block content %}{% endblock %}
   </main>
 
+  {% if current_user and current_user.role == 'patient' %}
+    {% set endpoint = request.endpoint or '' %}
+    <nav class="patient-mobile-dock" aria-label="Patient quick navigation">
+      <a class="mobile-dock-link" href="{{ url_for('main.dashboard') }}" {% if endpoint == 'main.dashboard' %}aria-current="page"{% endif %}><span aria-hidden="true">⌂</span><span>Home</span></a>
+      <a class="mobile-dock-link mobile-dock-link--ai" href="{{ url_for('main.ai_center') }}" {% if endpoint == 'main.ai_center' %}aria-current="page"{% endif %}><span aria-hidden="true">✦</span><span>AI</span></a>
+      <a class="mobile-dock-link" href="{{ url_for('main.finder') }}" {% if endpoint in ['main.finder','main.provider_detail'] %}aria-current="page"{% endif %}><span aria-hidden="true">⌖</span><span>Find</span></a>
+      <a class="mobile-dock-link" href="{{ url_for('main.records') }}" {% if endpoint in ['main.records','health_memory.timeline_page','health_memory.health_summary_page'] %}aria-current="page"{% endif %}><span aria-hidden="true">HM</span><span>Records</span></a>
+      <a class="mobile-dock-link" href="{{ url_for('main.appointments') }}" {% if endpoint == 'main.appointments' %}aria-current="page"{% endif %}><span aria-hidden="true">Cal</span><span>Visits</span></a>
+    </nav>
+  {% endif %}
+
   <footer class="site-footer">
     <div class="footer-grid">
       <div class="footer-col brand-col">
@@ -143,7 +164,7 @@
           <span>ZENDOC</span>
         </a>
         <p class="footer-tagline">Connected healthcare, organized around you.</p>
-        <span class="status-badge beta">Selection Beta</span>
+        <span class="status-badge beta">Public Beta</span>
       </div>
 
       <div class="footer-col">
@@ -160,7 +181,7 @@
         <a href="{{ url_for('main.appointments') }}">Appointments</a>
         <a href="{{ url_for('family.family_page') }}">Family Care</a>
         <a href="{{ url_for('fitness.overview') }}">Fitness &amp; Wellness</a>
-        <a href="{{ url_for('main.ai_center') }}">Emergency Support</a>
+        <a href="{{ url_for('main.ai_center') }}">Emergency guidance</a>
       </div>
 
       <div class="footer-col">
