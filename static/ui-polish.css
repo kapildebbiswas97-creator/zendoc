@@ -1,0 +1,27 @@
+/* ZENDOC patient-first UI polish — additive, no backend behavior changes. */
+.experience-strip{border-bottom:1px solid var(--line);background:linear-gradient(90deg,var(--surface-accent),var(--surface));color:var(--ink-soft)}
+.experience-strip__inner{width:min(1320px,calc(100% - 36px));margin:0 auto;min-height:38px;display:flex;align-items:center;justify-content:center;gap:10px;font-size:.78rem;font-weight:650;text-align:center}
+.experience-strip__dot{width:8px;height:8px;border-radius:999px;background:var(--success);box-shadow:0 0 0 4px rgba(19,121,91,.1);flex:0 0 auto}
+.guest-nav .provider-entry{border-left:1px solid var(--line);padding-left:14px}
+.nav-role-chip{display:inline-flex;align-items:center;min-height:28px;padding:4px 9px;border:1px solid var(--line);border-radius:999px;background:var(--surface-soft);color:var(--muted);font-size:.7rem;font-weight:800;text-transform:capitalize;white-space:nowrap}
+.patient-mobile-dock{display:none}
+.mobile-dock-link{color:var(--muted);text-decoration:none;font-size:.67rem;font-weight:800;display:grid;justify-items:center;gap:3px;min-width:0}
+.mobile-dock-link span:first-child{display:grid;place-items:center;width:29px;height:25px;border-radius:9px;background:var(--surface-soft);font-size:.78rem}
+.mobile-dock-link[aria-current="page"]{color:var(--primary)}
+.mobile-dock-link[aria-current="page"] span:first-child{background:var(--primary-soft);color:var(--primary)}
+.mobile-dock-link--ai span:first-child{background:linear-gradient(135deg,var(--primary),#3b82f6);color:#fff;box-shadow:0 5px 14px rgba(11,107,97,.22)}
+.topbar .brand{flex:0 0 auto}
+.primary-nav>a,.guest-nav>a,.nav-menu>summary{border-radius:9px}
+.primary-nav>a:focus-visible,.guest-nav>a:focus-visible,.nav-menu>summary:focus-visible,.mobile-dock-link:focus-visible{outline:3px solid rgba(18,102,241,.22);outline-offset:2px}
+@media(max-width:900px){
+  body.has-patient-dock{padding-bottom:76px}
+  .experience-strip__inner{width:min(100% - 24px,760px);min-height:34px;font-size:.72rem}
+  .patient-mobile-dock{position:fixed;left:10px;right:10px;bottom:10px;z-index:50;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));align-items:center;gap:4px;padding:8px 7px calc(8px + env(safe-area-inset-bottom));border:1px solid rgba(216,222,233,.9);border-radius:18px;background:rgba(255,255,255,.94);backdrop-filter:blur(18px);box-shadow:0 16px 36px rgba(15,35,50,.16)}
+  [data-theme="dark"] .patient-mobile-dock{background:rgba(19,31,38,.94)}
+}
+@media(max-width:680px){
+  .guest-nav .provider-entry{display:none}
+  .experience-strip__inner{justify-content:flex-start;text-align:left;overflow:hidden}
+  .experience-strip__inner span:last-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+}
+@media(prefers-reduced-motion:reduce){.patient-mobile-dock,.mobile-dock-link,.experience-strip{scroll-behavior:auto;transition:none!important}}
