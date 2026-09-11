@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from urllib.parse import urlsplit
 
+from .india_extra_public_sources import get_india_extra_source
 from .india_regions import INDIA_REGIONS
 from .public_source_registry import get_public_ingestion_source
 from .state_source_priorities import STATE_SOURCE_PRIORITIES
@@ -22,6 +23,7 @@ ALL_INDIA = "ALL_INDIA"
 WEST_BENGAL_FULL_STATE_SOURCE_IDS = (
     "lgd",
     "data_gov_hospitals",
+    "data_gov_health_centres",
     "clinical_establishments",
     "wb_clinical_establishments",
     "wbhs_empanelled_hco",
@@ -40,6 +42,7 @@ WEST_BENGAL_FULL_STATE_SOURCE_IDS = (
 INDIA_PUBLIC_SOURCE_IDS = (
     "lgd",
     "data_gov_hospitals",
+    "data_gov_health_centres",
     "clinical_establishments",
     "nabh_directory",
     "nabl_labs",
@@ -84,7 +87,7 @@ def acquisition_mode(source: dict) -> str:
 
 def _source_descriptor(source_id: str, *, scope: str, priority: str) -> dict:
     registered_source = get_public_ingestion_source(source_id)
-    source = registered_source or get_west_bengal_extra_source(source_id)
+    source = registered_source or get_west_bengal_extra_source(source_id) or get_india_extra_source(source_id)
     if not source:
         raise LookupError(f"Unknown public source in bundle: {source_id}")
     return {
@@ -121,7 +124,7 @@ def west_bengal_bundle() -> dict:
         "truth_notice": (
             "West Bengal acquisition is statewide. Nadia is only a regression/quality-validation subset. "
             "Provider/licence directories are not live availability, stock, booking connectivity, or ZENDOC verification. "
-            "Newly catalogued state-only sources remain non-ingestable until centrally registered."
+            "Historical sources remain dated reference only; newly catalogued sources remain non-ingestable until centrally registered."
         ),
     }
 
@@ -166,7 +169,7 @@ def india_bundle() -> dict:
         "authorized_only_sources": authorized_sources,
         "truth_notice": (
             "Every State/UT receives the national baseline. Verified state-specific source families are catalogued as enrichments where ZENDOC has an official source entry. "
-            "Interactive/public lookup sources require dated permitted snapshots; authorized registries remain blocked until onboarding."
+            "Historical directories are reference-only; interactive lookups require dated permitted snapshots; authorized registries remain blocked until onboarding."
         ),
     }
 
