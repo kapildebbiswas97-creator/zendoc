@@ -1,0 +1,43 @@
+{
+  "sample_type": "PROVENANCE_MANIFEST_ONLY_NO_DATA_ROWS",
+  "generated_for": "ZENDOC West Bengal + India acquisition",
+  "examples": [
+    {
+      "source_id": "lgd",
+      "source_name": "Local Government Directory",
+      "official_catalog_url": "https://www.data.gov.in/catalog/local-government-directory-lgd",
+      "official_reference_url": "https://lgdirectory.gov.in/",
+      "scope": "ALL_INDIA_WITH_FULL_WEST_BENGAL_CURATED_VIEW",
+      "usage_basis": "official_public_download",
+      "license_or_terms": "Government Open Data License - India / NDSAP as published by OGD",
+      "dataset_version": "SET_FROM_EXACT_DOWNLOAD_DATE_OR_PUBLISHED_VERSION",
+      "file_sha256": "COMPUTED_BY_ACQUISITION_TOOL",
+      "storage_ref": "raw/lgd/<sha256>/<exact-original-file>",
+      "row_values_in_git": false
+    },
+    {
+      "source_id": "data_gov_hospitals",
+      "source_name": "Open Government Data Platform India - Hospital Directory",
+      "official_catalog_url": "https://www.data.gov.in/resource/national-hospital-directory-geo-code-and-additional-parameters-updated-till-last-month",
+      "scope": "ALL_INDIA_WITH_FULL_WEST_BENGAL_CURATED_VIEW",
+      "usage_basis": "official_public_download",
+      "license_or_terms": "Government Open Data License - India / NDSAP as published by OGD",
+      "dataset_version": "SET_FROM_EXACT_RESOURCE_UPDATE_MONTH",
+      "file_sha256": "COMPUTED_BY_ACQUISITION_TOOL",
+      "storage_ref": "raw/data_gov_hospitals/<sha256>/<exact-original-file>",
+      "row_values_in_git": false
+    },
+    {
+      "source_id": "wbhs_empanelled_hco",
+      "source_name": "West Bengal Health Scheme Empanelled Health Care Organisations",
+      "official_catalog_url": "https://healthscheme.wb.gov.in/Home/wbhs_empanelled_hco.aspx",
+      "scope": "FULL_WEST_BENGAL",
+      "usage_basis": "official_public_download",
+      "license_or_terms": "RECORD_EXACT_TERMS_SHOWN_BY_SOURCE_AT_DOWNLOAD",
+      "dataset_version": "SET_FROM_EXACT_SNAPSHOT_DATE",
+      "file_sha256": "COMPUTED_BY_ACQUISITION_TOOL",
+      "storage_ref": "raw/wbhs_empanelled_hco/<sha256>/<exact-original-file>",
+      "row_values_in_git": false
+    }
+  ]
+}
