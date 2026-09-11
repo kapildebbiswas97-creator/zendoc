@@ -1,3 +1,5 @@
+import math
+
 from .places_provider import ShortLivedCache, configured_places_provider
 from .provider_service import search_registered_providers
 from .public_data_ingestion import search_public_healthcare_entities
@@ -13,10 +15,12 @@ def normalize_query(category=None, specialty=None, location=None, latitude=None,
         category = "doctor"
     try:
         radius_km = max(1, min(50, int(radius_km or 10)))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         radius_km = 10
     lat = parse_coordinate(latitude, -90, 90)
     lng = parse_coordinate(longitude, -180, 180)
+    if lat is None or lng is None:
+        lat = lng = None
     return {
         "category": category,
         "specialty": (specialty or "").strip(),
@@ -34,7 +38,7 @@ def parse_coordinate(value, minimum, maximum):
         number = float(value)
     except (TypeError, ValueError):
         return None
-    if number < minimum or number > maximum:
+    if not math.isfinite(number) or number < minimum or number > maximum:
         return None
     return number
 
@@ -45,17 +49,28 @@ class HealthcareFinder:
 
     def search(self, query):
         normalized = normalize_query(**query)
+        invalid_gps_only = (
+            not normalized["location"]
+            and normalized["latitude"] is None
+            and any(query.get(key) not in (None, "") for key in ("latitude", "longitude"))
+        )
 
-        registered = search_registered_providers(
+        registered = [] if invalid_gps_only else search_registered_providers(
             category="doctor" if normalized["category"] in {"doctor", "clinic"} else normalized["category"],
             specialty=normalized["specialty"],
             location=normalized["location"],
+            latitude=normalized["latitude"],
+            longitude=normalized["longitude"],
+            radius_km=normalized["radius_km"],
         )
-        public_directory = search_public_healthcare_entities(
+        public_directory = [] if invalid_gps_only else search_public_healthcare_entities(
             category=normalized["category"],
             specialty=normalized["specialty"],
             location=normalized["location"],
             limit=25,
+            latitude=normalized["latitude"],
+            longitude=normalized["longitude"],
+            radius_km=normalized["radius_km"],
         )
         registered, public_directory, claimed_links = merge_registered_with_approved_public_claims(
             registered,
@@ -91,6 +106,8 @@ class HealthcareFinder:
         }
         if not response["results"]:
             response["message"] = places_result.message or "No healthcare providers were found for this search."
+        if invalid_gps_only:
+            response["message"] = "Enter a city, area, or PIN code, or allow a valid current location to search nearby care."
         return response
 
 
@@ -159,4 +176,5 @@ def merge_registered_with_approved_public_claims(registered, public_directory):
         ordered_registered.append(registered_by_profile.get(profile_id, item))
 
     return ordered_registered, remaining_public, claimed_links
+
 

@@ -10,6 +10,9 @@ import re
 
 
 LASTROWID_TABLES = {
+    "data_ingestion_batches",
+    "public_healthcare_entities",
+    "geography_nodes",
     "agent_actions",
     "agent_alerts",
     "agent_approvals",
@@ -281,3 +284,4 @@ def connect_postgresql(database_url):
 def is_postgresql_integrity_error(error):
     sqlstate = str(getattr(error, "sqlstate", "") or "")
     return sqlstate.startswith("23")
+

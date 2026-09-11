@@ -20,6 +20,7 @@ from typing import Any
 from .db import get_db, now_iso
 from .geography_graph import geography_write_transaction, link_entity_to_geography, normalize_geography_name, upsert_geography_node
 from .geography_resolution import resolve_canonical_geography
+from .geospatial import bounding_box, nearby_records
 from .public_source_registry import get_public_ingestion_source
 from .security import assert_owner
 
@@ -129,6 +130,9 @@ def search_public_healthcare_entities(
     specialty: str | None = None,
     location: str | None = None,
     limit: int = 25,
+    latitude: float | None = None,
+    longitude: float | None = None,
+    radius_km: float = 10,
 ) -> list[dict]:
     db = get_db()
     limit = max(1, min(int(limit or 25), 100))
@@ -152,10 +156,28 @@ def search_public_healthcare_entities(
         )
         params.extend([value, value, value, value])
 
+    nearby = latitude is not None and longitude is not None
+    if nearby:
+        try:
+            min_lat, max_lat, min_lon, max_lon = bounding_box(latitude, longitude, radius_km)
+        except (TypeError, ValueError):
+            return []
+        else:
+            clauses.extend([
+                "latitude IS NOT NULL",
+                "longitude IS NOT NULL",
+                "latitude BETWEEN ? AND ?",
+                "(longitude >= ? OR longitude <= ?)" if min_lon > max_lon else "longitude BETWEEN ? AND ?",
+            ])
+            params.extend([min_lat, max_lat, min_lon, max_lon])
+
     # Pull extra candidates before conservative cross-source deduplication so
     # duplicate official records do not reduce the requested result count.
     candidate_limit = min(400, max(limit, limit * 4))
-    params.append(candidate_limit)
+    # Nearby results must be filtered and sorted before any candidate limit.
+    limit_clause = "" if nearby else "LIMIT ?"
+    if not nearby:
+        params.append(candidate_limit)
     rows = db.execute(
         f"""
         SELECT * FROM public_healthcare_entities
@@ -168,14 +190,20 @@ def search_public_healthcare_entities(
             ELSE 3
           END,
           updated_at DESC,
-          name ASC
-        LIMIT ?
+          name ASC,
+          id ASC
+        {limit_clause}
         """,
         params,
     ).fetchall()
     records = [_public_entity(dict(row)) for row in rows]
+    if nearby:
+        records = nearby_records(records, latitude, longitude, radius_km)
     records = _attach_approved_claim_links(records)
-    return dedupe_public_healthcare_entities(records)[:limit]
+    records = dedupe_public_healthcare_entities(records)
+    if nearby:
+        records = nearby_records(records, latitude, longitude, radius_km)
+    return records[:limit]
 
 
 def _attach_approved_claim_links(records: list[dict]) -> list[dict]:
@@ -183,16 +211,20 @@ def _attach_approved_claim_links(records: list[dict]) -> list[dict]:
     if not ids:
         return [dict(record) for record in records]
 
-    placeholders = ",".join("?" for _ in ids)
-    rows = get_db().execute(
-        f"""
-        SELECT id,public_entity_id,provider_profile_id
-        FROM public_entity_claims
-        WHERE status='approved' AND public_entity_id IN ({placeholders})
-        ORDER BY reviewed_at DESC,id DESC
-        """,
-        ids,
-    ).fetchall()
+    rows = []
+    # Radius search may produce more IDs than a backend's parameter limit.
+    for start in range(0, len(ids), 400):
+        chunk = ids[start:start + 400]
+        placeholders = ",".join("?" for _ in chunk)
+        rows.extend(get_db().execute(
+            f"""
+            SELECT id,public_entity_id,provider_profile_id
+            FROM public_entity_claims
+            WHERE status='approved' AND public_entity_id IN ({placeholders})
+            ORDER BY reviewed_at DESC,id DESC
+            """,
+            chunk,
+        ).fetchall())
 
     claims: dict[int, dict] = {}
     for row in rows:
@@ -766,3 +798,4 @@ def _user_id(actor: Any) -> int | None:
         return int(actor["id"])
     except Exception:
         return None
+

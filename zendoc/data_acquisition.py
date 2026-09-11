@@ -25,6 +25,7 @@ from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 import xml.etree.ElementTree as ET
 
+from .dataset_snapshot_ingestion import normalize_dataset_snapshot
 from .public_source_registry import get_public_ingestion_source
 
 
@@ -45,7 +46,8 @@ _FORMAT_BY_SUFFIX = {
     ".xls": "xls",
     ".zip": "zip",
 }
-_SAFE_FILENAME = re.compile(r"^[^/\\\x00]+$")
+_SAFE_FILENAME = re.compile(r'^[^/\\\x00-\x1f\x7f<>:"|?*]+$')
+_WINDOWS_DEVICE_NAME = re.compile(r"^(CON|PRN|AUX|NUL|CONIN\$|CONOUT\$|COM[1-9¹²³]|LPT[1-9¹²³])$", re.IGNORECASE)
 
 
 class AcquisitionError(ValueError):
@@ -69,12 +71,7 @@ def acquire_source_file(
 ) -> dict[str, Any]:
     """Acquire one exact local artifact and return its safe snapshot manifest."""
     path = Path(input_path)
-    if not path.is_file():
-        raise AcquisitionError("input_path must point to a regular file.")
-    try:
-        content = path.read_bytes()
-    except OSError as exc:
-        raise AcquisitionError("The source artifact could not be read.") from exc
+    content = _read_bounded_file(path, max_bytes)
     return acquire_source_bytes(
         source_id,
         source_url,
@@ -113,18 +110,14 @@ def acquire_source_bytes(
     """
     source = get_public_ingestion_source(str(source_id or "").strip())
     if not source:
-        raise AcquisitionError(f"Unknown public ingestion source '{source_id}'.")
+        raise AcquisitionError("Unknown public ingestion source.")
     if not isinstance(content, (bytes, bytearray, memoryview)):
         raise AcquisitionError("content must be bytes from an exact downloaded artifact.")
-    payload = bytes(content)
-    try:
-        limit = int(max_bytes)
-    except (TypeError, ValueError) as exc:
-        raise AcquisitionError("max_bytes must be a positive integer.") from exc
-    if limit <= 0:
-        raise AcquisitionError("max_bytes must be a positive integer.")
-    if len(payload) > limit:
+    limit = _byte_limit(max_bytes)
+    size = content.nbytes if isinstance(content, memoryview) else len(content)
+    if size > limit:
         raise AcquisitionError(f"The source artifact exceeds the safe {limit} byte limit.")
+    payload = bytes(content)
 
     safe_name = _safe_filename(file_name)
     file_format = detect_file_format(safe_name)
@@ -145,28 +138,8 @@ def acquire_source_bytes(
 
     digest = hashlib.sha256(payload).hexdigest()
     relative_ref = Path("raw") / str(source["source_id"]) / digest / safe_name
-    root = Path(storage_root).expanduser().resolve()
-    target = (root / relative_ref).resolve()
-    try:
-        target.relative_to(root)
-    except ValueError as exc:
-        raise AcquisitionError("storage_root produced an unsafe storage reference.") from exc
-    target.parent.mkdir(parents=True, exist_ok=True)
-
-    if target.exists():
-        try:
-            existing_digest = _sha256_file(target)
-        except OSError as exc:
-            raise AcquisitionError("The existing raw snapshot could not be read.") from exc
-        if existing_digest != digest:
-            raise AcquisitionError("Refusing to overwrite a different artifact at the content-addressed path.")
-        acquisition_status = "ALREADY_PRESENT"
-    else:
-        _atomic_write(target, payload)
-        acquisition_status = "ACQUIRED"
-
     storage_ref = relative_ref.as_posix()
-    snapshot = {
+    snapshot_draft = {
         "source_id": source["source_id"],
         "source_url": canonical_url,
         "retrieved_at": retrieved,
@@ -174,7 +147,6 @@ def acquire_source_bytes(
         "dataset_version": version,
         "file_name": safe_name,
         "file_format": file_format,
-        "mime_type": mimetypes.guess_type(safe_name)[0] or "application/octet-stream",
         "file_size_bytes": len(payload),
         "file_sha256": digest,
         "usage_basis": basis,
@@ -182,20 +154,43 @@ def acquire_source_bytes(
         "license_url": safe_license_url,
         "storage_ref": storage_ref,
     }
-    manifest_sha256 = _manifest_sha256(snapshot)
-    snapshot["manifest_sha256"] = manifest_sha256
-    snapshot["snapshot_uid"] = f"snapshot_{manifest_sha256[:20]}"
+    # Use the exact same canonicalizer as the owner-only preview/apply path.
+    # This prevents an acquisition manifest from silently changing identity
+    # when it is handed to ingestion (for example by adding MIME metadata).
+    try:
+        snapshot = normalize_dataset_snapshot(source["source_id"], snapshot_draft)
+    except (LookupError, ValueError) as exc:
+        raise AcquisitionError("The source snapshot manifest is invalid.") from exc
+    manifest_sha256 = snapshot["manifest_sha256"]
+
+    # Validate all provenance before creating directories or writing artifacts.
+    try:
+        root = Path(storage_root).expanduser().resolve()
+        target = (root / relative_ref).resolve()
+        target.relative_to(root)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if target.exists():
+            if _sha256_file(target) != digest:
+                raise AcquisitionError("Refusing to overwrite a different artifact at the content-addressed path.")
+            acquisition_status = "ALREADY_PRESENT"
+        else:
+            _atomic_write(target, payload)
+            acquisition_status = "ACQUIRED"
+    except AcquisitionError:
+        raise
+    except (OSError, ValueError) as exc:
+        raise AcquisitionError("The raw snapshot could not be stored safely.") from exc
     return {
         "acquisition_status": acquisition_status,
         "source_id": source["source_id"],
-        "source_name": source["name"],
+        "source_name": snapshot["source_name"],
         "source_url": canonical_url,
         "retrieved_at": retrieved,
         "published_at": published,
         "dataset_version": version,
         "original_filename": safe_name,
         "file_format": file_format,
-        "mime_type": snapshot["mime_type"],
+        "mime_type": mimetypes.guess_type(safe_name)[0] or "application/octet-stream",
         "file_size_bytes": len(payload),
         "file_sha256": digest,
         "usage_basis": basis,
@@ -214,15 +209,13 @@ def inspect_artifact(
     *,
     file_name: str | None = None,
     max_bytes: int = MAX_ARTIFACT_BYTES,
+    expected_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Inspect schema shape without returning row values or private content."""
     path = Path(input_path)
-    if not path.is_file():
-        raise AcquisitionError("input_path must point to a regular file.")
-    try:
-        payload = path.read_bytes()
-    except OSError as exc:
-        raise AcquisitionError("The source artifact could not be read.") from exc
+    payload = _read_bounded_file(path, max_bytes)
+    if expected_sha256 is not None and hashlib.sha256(payload).hexdigest() != expected_sha256:
+        raise AcquisitionError("The stored artifact does not match its acquired SHA-256 digest.")
     return inspect_bytes(payload, file_name=file_name or path.name, max_bytes=max_bytes)
 
 
@@ -235,9 +228,11 @@ def inspect_bytes(
     """Return bounded schema metadata for a supported artifact."""
     if not isinstance(content, (bytes, bytearray, memoryview)):
         raise AcquisitionError("content must be bytes from an exact downloaded artifact.")
-    payload = bytes(content)
-    if len(payload) > int(max_bytes):
+    limit = _byte_limit(max_bytes)
+    size = content.nbytes if isinstance(content, memoryview) else len(content)
+    if size > limit:
         raise AcquisitionError("The source artifact exceeds the safe inspection limit.")
+    payload = bytes(content)
     safe_name = _safe_filename(file_name)
     file_format = detect_file_format(safe_name)
     if file_format not in SUPPORTED_FORMATS:
@@ -247,9 +242,9 @@ def inspect_bytes(
     if file_format == "json":
         return _inspect_json(payload)
     if file_format == "xlsx":
-        return _inspect_xlsx(payload)
+        return _inspect_xlsx(payload, max_bytes=limit)
     if file_format == "zip":
-        return _inspect_zip(payload)
+        return _inspect_zip(payload, max_bytes=limit)
     return {
         "file_format": "xls",
         "schema_status": "UNSUPPORTED_REQUIRES_XLS_PARSER",
@@ -268,7 +263,12 @@ def detect_file_format(file_name: str) -> str:
 def canonical_source_url(value: str) -> str:
     """Canonicalize a public URL while rejecting credentials and secret query keys."""
     text = _clean_required(value, "source_url", 2000)
-    parsed = urlsplit(text)
+    try:
+        parsed = urlsplit(text)
+        hostname = (parsed.hostname or "").casefold()
+        port = parsed.port
+    except ValueError as exc:
+        raise AcquisitionError("source_url must be a valid public HTTP(S) URL.") from exc
     if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
         raise AcquisitionError("source_url must be an absolute HTTP(S) URL.")
     if parsed.username or parsed.password:
@@ -277,10 +277,9 @@ def canonical_source_url(value: str) -> str:
         folded = key.casefold().replace("-", "_")
         if any(marker in folded for marker in SENSITIVE_QUERY_MARKERS):
             raise AcquisitionError("source_url must not contain API keys, tokens, signatures, or credentials.")
-    hostname = (parsed.hostname or "").casefold()
-    netloc = hostname
-    if parsed.port:
-        netloc = f"{hostname}:{parsed.port}"
+    netloc = f"[{hostname}]" if ":" in hostname else hostname
+    if port:
+        netloc = f"{netloc}:{port}"
     query_items = sorted(parse_qsl(parsed.query, keep_blank_values=True))
     query = urlencode(query_items, doseq=True)
     path = parsed.path or "/"
@@ -330,21 +329,15 @@ def _inspect_json(payload: bytes) -> dict[str, Any]:
     }
 
 
-def _inspect_zip(payload: bytes) -> dict[str, Any]:
+def _inspect_zip(payload: bytes, *, max_bytes: int) -> dict[str, Any]:
     try:
-        with zipfile.ZipFile(_bytes_file(payload)) as archive:
+        with _bytes_file(payload) as handle, zipfile.ZipFile(handle) as archive:
             members = []
             supported = []
-            total_uncompressed = 0
-            for info in archive.infolist():
+            infos = archive.infolist()
+            _assert_archive_expansion_safe(infos, max_bytes=max_bytes)
+            for info in infos:
                 name = info.filename.replace("\\", "/")
-                if name.startswith("/") or any(part == ".." for part in Path(name).parts):
-                    raise AcquisitionError("ZIP archive contains an unsafe member path.")
-                if info.flag_bits & 0x1:
-                    raise AcquisitionError("Encrypted ZIP archives are not supported.")
-                total_uncompressed += int(info.file_size or 0)
-                if total_uncompressed > MAX_ARTIFACT_BYTES * 4:
-                    raise AcquisitionError("ZIP archive expands beyond the safe inspection limit.")
                 if not info.is_dir():
                     members.append({"name": name, "size_bytes": int(info.file_size or 0)})
                     if _FORMAT_BY_SUFFIX.get(Path(name).suffix.casefold(), "") in INSPECTABLE_FORMATS:
@@ -361,15 +354,17 @@ def _inspect_zip(payload: bytes) -> dict[str, Any]:
     }
 
 
-def _inspect_xlsx(payload: bytes) -> dict[str, Any]:
+def _inspect_xlsx(payload: bytes, *, max_bytes: int) -> dict[str, Any]:
     try:
-        with zipfile.ZipFile(_bytes_file(payload)) as archive:
-            names = {info.filename for info in archive.infolist()}
+        with _bytes_file(payload) as handle, zipfile.ZipFile(handle) as archive:
+            infos = archive.infolist()
+            _assert_archive_expansion_safe(infos, max_bytes=max_bytes)
+            names = {info.filename for info in infos}
             if "xl/worksheets/sheet1.xml" not in names:
                 raise AcquisitionError("XLSX artifact does not contain a first worksheet.")
             shared_strings = _xlsx_shared_strings(archive.read("xl/sharedStrings.xml")) if "xl/sharedStrings.xml" in names else []
             root = ET.fromstring(archive.read("xl/worksheets/sheet1.xml"))
-    except (zipfile.BadZipFile, KeyError, ET.ParseError) as exc:
+    except (zipfile.BadZipFile, KeyError, ET.ParseError, RuntimeError, NotImplementedError) as exc:
         raise AcquisitionError("XLSX artifact could not be parsed safely.") from exc
     ns = {"main": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
     rows = root.findall(".//main:sheetData/main:row", ns)
@@ -435,14 +430,13 @@ def _normalize_columns(values: list[Any]) -> list[str]:
 def _bytes_file(payload: bytes):
     """Return a seekable temporary file-like object for ZipFile."""
     handle = tempfile.SpooledTemporaryFile(max_size=2 * 1024 * 1024)
-    handle.write(payload)
-    handle.seek(0)
+    try:
+        handle.write(payload)
+        handle.seek(0)
+    except Exception:
+        handle.close()
+        raise
     return handle
-
-
-def _manifest_sha256(snapshot: dict[str, Any]) -> str:
-    canonical = json.dumps(snapshot, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _sha256_file(path: Path) -> str:
@@ -472,10 +466,67 @@ def _atomic_write(target: Path, payload: bytes) -> None:
 
 
 def _safe_filename(value: Any) -> str:
-    text = str(value or "").strip()
-    if not text or not _SAFE_FILENAME.fullmatch(text) or text in {".", ".."}:
+    text = str(value or "")
+    if (
+        not text
+        or not _SAFE_FILENAME.fullmatch(text)
+        or text in {".", ".."}
+        or len(text) > 255
+        or text[-1] in {".", " "}
+        or _WINDOWS_DEVICE_NAME.fullmatch(text.split(".", 1)[0].rstrip(" "))
+    ):
         raise AcquisitionError("file_name must be a safe base filename without path separators.")
     return text
+
+
+def _read_bounded_file(path: Path, max_bytes: int) -> bytes:
+    """Read one local artifact without allowing an unbounded allocation."""
+    limit = _byte_limit(max_bytes)
+    try:
+        if not path.is_file():
+            raise AcquisitionError("input_path must point to a regular file.")
+        if path.stat().st_size > limit:
+            raise AcquisitionError(f"The source artifact exceeds the safe {limit} byte limit.")
+        with path.open("rb") as handle:
+            payload = handle.read(limit + 1)
+    except AcquisitionError:
+        raise
+    except OSError as exc:
+        raise AcquisitionError("The source artifact could not be read.") from exc
+    if len(payload) > limit:
+        raise AcquisitionError(f"The source artifact exceeds the safe {limit} byte limit.")
+    return payload
+
+
+def _byte_limit(value: int) -> int:
+    try:
+        limit = int(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise AcquisitionError("max_bytes must be a positive integer.") from exc
+    if limit <= 0:
+        raise AcquisitionError("max_bytes must be a positive integer.")
+    return limit
+
+
+def _assert_archive_expansion_safe(infos: list[zipfile.ZipInfo], *, max_bytes: int) -> None:
+    # Check metadata for every member before opening any compressed content.
+    if len(infos) > 5000:
+        raise AcquisitionError("ZIP archive contains too many members for safe inspection.")
+    total = 0
+    for info in infos:
+        name = info.filename.replace("\\", "/")
+        components = name[:-1].split("/") if info.is_dir() else name.split("/")
+        try:
+            for component in components:
+                _safe_filename(component)
+        except AcquisitionError as exc:
+            raise AcquisitionError("ZIP archive contains an unsafe member path.") from exc
+        if info.flag_bits & 0x1:
+            raise AcquisitionError("Encrypted ZIP archives are not supported.")
+        total += int(info.file_size or 0)
+        limit = min(max_bytes, MAX_ARTIFACT_BYTES)
+        if total > limit * 4 or int(info.file_size or 0) > limit * 2:
+            raise AcquisitionError("ZIP archive expands beyond the safe inspection limit.")
 
 
 def _clean_required(value: Any, label: str, max_length: int) -> str:
@@ -511,4 +562,5 @@ def _optional_iso(value: Any, label: str) -> str | None:
     if value in (None, ""):
         return None
     return _aware_iso(value, label)
+
 

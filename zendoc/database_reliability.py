@@ -119,6 +119,45 @@ def sqlite_integrity_status():
     }
 
 
+def postgis_status():
+    """Report PostGIS capability without claiming spatial acceleration.
+
+    ZENDOC's current schema stores latitude/longitude as scalar columns and
+    does not create geometry or GiST indexes.  This check therefore reports
+    extension presence separately from spatial-index acceleration.
+    """
+    db = get_db()
+    if _dialect(db) != "postgresql":
+        return {
+            "status": "POSTGIS_NOT_CONFIGURED",
+            "available": False,
+            "spatial_index_acceleration": False,
+            "detail": "PostGIS is only relevant to the PostgreSQL production path.",
+        }
+
+    try:
+        row = db.execute(
+            "SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname='postgis') AS available"
+        ).fetchone()
+        if hasattr(row, "keys"):
+            available = bool(row["available"])
+        else:
+            available = bool(row[0])
+    except Exception:
+        available = False
+
+    return {
+        "status": "POSTGIS_AVAILABLE" if available else "POSTGIS_NOT_CONFIGURED",
+        "available": available,
+        "spatial_index_acceleration": False,
+        "detail": (
+            "PostGIS extension is present; ZENDOC spatial geometry/GiST indexes are not configured."
+            if available
+            else "PostGIS extension is not available on the active PostgreSQL connection."
+        ),
+    }
+
+
 def deployment_identity():
     """Return non-secret deployment metadata when provided by the hosting platform."""
     commit = (
@@ -157,6 +196,7 @@ def readiness_report():
         "persistence_verified": bool(current_app.config.get("PERSISTENCE_VERIFIED")),
         "deployment": deployment_identity(),
         "healthcare_finder": places_configuration_status(),
+        "postgis": postgis_status(),
     }
     try:
         probe = database_probe()
@@ -241,3 +281,4 @@ def backup_readiness():
         "database_path_exists": path.exists(),
         "backup_directory": str(Path(current_app.config.get("DATABASE_BACKUP_DIR") or path.parent / "backups")),
     }
+

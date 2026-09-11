@@ -10,6 +10,11 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from zendoc.data_acquisition import AcquisitionError, acquire_source_file, inspect_artifact
 
@@ -43,11 +48,19 @@ def main() -> int:
             retrieved_at=args.retrieved_at,
         )
         if args.inspect:
-            result["schema_inspection"] = inspect_artifact(args.input_path)
+            result["schema_inspection"] = inspect_artifact(
+                result["stored_path"],
+                file_name=result["original_filename"],
+                expected_sha256=result["file_sha256"],
+            )
         # Keep local absolute paths out of machine-readable output by default.
         result.pop("stored_path", None)
-    except (AcquisitionError, OSError) as exc:
+    except AcquisitionError as exc:
         print(f"Dataset acquisition failed: {exc}", file=sys.stderr)
+        return 2
+    except (OSError, ValueError):
+        # OS/parser errors may contain local paths or operator-supplied secrets.
+        print("Dataset acquisition failed: the artifact or manifest could not be processed safely.", file=sys.stderr)
         return 2
 
     print(json.dumps(result, sort_keys=True, ensure_ascii=False, indent=2))
@@ -56,4 +69,5 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 

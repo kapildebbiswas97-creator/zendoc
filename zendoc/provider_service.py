@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from .db import get_db, is_integrity_error, now_iso
+from .geospatial import bounding_box, nearby_records
 from .organization_service import provider_resource_context
 
 
@@ -102,7 +103,7 @@ def upsert_provider_profile(user, data):
         )
 
 
-def search_registered_providers(category=None, specialty=None, location=None):
+def search_registered_providers(category=None, specialty=None, location=None, latitude=None, longitude=None, radius_km=10):
     params = []
     clauses = ["u.active=1", "p.verification_status='verified'"]
     if category:
@@ -114,18 +115,38 @@ def search_registered_providers(category=None, specialty=None, location=None):
     if location:
         clauses.append("(LOWER(p.city) LIKE LOWER(?) OR LOWER(p.address) LIKE LOWER(?))")
         params.extend([f"%{location}%", f"%{location}%"])
+    nearby = latitude is not None and longitude is not None
+    if nearby:
+        try:
+            min_lat, max_lat, min_lon, max_lon = bounding_box(latitude, longitude, radius_km)
+        except (TypeError, ValueError):
+            return []
+        else:
+            clauses.extend([
+                "p.latitude IS NOT NULL",
+                "p.longitude IS NOT NULL",
+                "p.latitude BETWEEN ? AND ?",
+                "(p.longitude >= ? OR p.longitude <= ?)" if min_lon > max_lon else "p.longitude BETWEEN ? AND ?",
+            ])
+            params.extend([min_lat, max_lat, min_lon, max_lon])
+    # A pre-distance row limit can discard the nearest provider. The bounded
+    # compatibility query considers every candidate before applying the limit.
+    limit_clause = "" if nearby else "LIMIT 25"
     rows = get_db().execute(
         f"""
         SELECT p.*, u.name
         FROM provider_profiles p
         JOIN users u ON u.id=p.user_id
         WHERE {' AND '.join(clauses)}
-        ORDER BY p.updated_at DESC
-        LIMIT 25
+        ORDER BY p.updated_at DESC, p.id ASC
+        {limit_clause}
         """,
         params,
     ).fetchall()
-    return [public_provider(row) for row in rows]
+    records = [public_provider(row) for row in rows]
+    if nearby:
+        records = nearby_records(records, latitude, longitude, radius_km)
+    return records[:25]
 
 
 def public_provider(row):
@@ -359,4 +380,5 @@ def book_provider_slot(patient, provider_profile_id, scheduled_for, reason):
         if is_integrity_error(error):
             raise ValueError("Selected slot was booked by another request; please choose a different slot.") from error
         raise
+
 

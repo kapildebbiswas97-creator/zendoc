@@ -109,6 +109,7 @@ jobs:
       ZENDOC_ADMIN_PASSWORD: CI-Only-Strong-Password-12345
       ZENDOC_REQUIRE_DURABLE_DATABASE: "true"
       ZENDOC_CONNECTED_CARE_DATA_MODE: LIVE
+      ZENDOC_CI_FIXTURES: "true"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -208,4 +209,5 @@ jobs:
           --require-persistence-verified
           --attempts 40
           --interval 15
+
 
