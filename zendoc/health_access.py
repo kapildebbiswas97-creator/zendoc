@@ -60,13 +60,12 @@ def normalize_purpose(value, *, allow_default=True):
     return purpose
 
 
-def _ensure_consent_context_schema():
-    """Add purpose metadata without rewriting the established grants table.
+def ensure_consent_schema():
+    """Install purpose metadata additively without rewriting established grants.
 
     Existing grants remain valid and are interpreted as care_coordination grants
-    until a purpose row is attached. The auxiliary table is intentionally
-    additive so SQLite and PostgreSQL deployments can adopt the capability
-    without destructive migration of existing patient-consent rows.
+    until a context row is attached. This auxiliary table keeps the migration
+    safe for both SQLite and PostgreSQL deployments.
     """
     db = get_db()
     db.execute(
@@ -90,7 +89,7 @@ def has_active_grant(patient_id, provider_id, scope, purpose=None):
     if scope not in HEALTH_SCOPES:
         return False
     requested_purpose = normalize_purpose(purpose, allow_default=False) if purpose else None
-    _ensure_consent_context_schema()
+    ensure_consent_schema()
     rows = get_db().execute(
         """
         SELECT hag.*, hgc.purpose AS consent_purpose
@@ -167,7 +166,7 @@ def create_access_grant(patient, data):
     if expires_at and expires_at <= datetime.now(timezone.utc):
         raise ValueError("Expiration must be in the future.")
     now = now_iso()
-    _ensure_consent_context_schema()
+    ensure_consent_schema()
     cursor = get_db().execute(
         """
         INSERT INTO health_access_grants
@@ -197,7 +196,7 @@ def create_access_grant(patient, data):
 
 
 def list_access_grants(patient_id):
-    _ensure_consent_context_schema()
+    ensure_consent_schema()
     rows = get_db().execute(
         """
         SELECT hag.*, u.name provider_name, pp.organization, pp.specialty,
