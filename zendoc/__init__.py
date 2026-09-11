@@ -15,6 +15,7 @@ from .geography_routes import bp as geography_graph_bp
 from .health_access import ensure_consent_schema
 from .health_routes import bp as health_memory_bp
 from .language_routes import bp as language_bp
+from .medical_knowledge_documents import ensure_medical_knowledge_document_schema
 from .milestone7_routes import bp as milestone7_bp
 from .milestone8_routes import bp as milestone8_bp
 from .milestone82_routes import bp as milestone82_bp
@@ -71,6 +72,7 @@ def create_app(test_config=None):
         try:
             init_db()
             ensure_consent_schema()
+            ensure_medical_knowledge_document_schema()
             get_db().commit()
             report = readiness_report()
             if report.get("status") != "ready":
