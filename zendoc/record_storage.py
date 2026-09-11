@@ -27,21 +27,35 @@ class LocalRecordStorage:
         root.mkdir(parents=True, exist_ok=True)
         return root
 
-    def save(self, upload, original_filename: str) -> StoredRecord:
-        storage_key = f"{secrets.token_hex(16)}-{original_filename}"
-        root = self._root()
-        destination = (root / storage_key).resolve()
-        if destination.parent != root:
-            raise ValueError("Upload destination is invalid.")
-        upload.save(destination)
-        return StoredRecord(self.name, storage_key, destination.stat().st_size)
-
-    def delete(self, storage_key: str):
+    def _path(self, storage_key: str) -> Path:
         root = self._root()
         target = (root / str(storage_key)).resolve()
         if target.parent != root:
             raise ValueError("Storage key is invalid.")
-        target.unlink(missing_ok=True)
+        return target
+
+    def save(self, upload, original_filename: str) -> StoredRecord:
+        storage_key = f"{secrets.token_hex(16)}-{original_filename}"
+        destination = self._path(storage_key)
+        upload.save(destination)
+        return StoredRecord(self.name, storage_key, destination.stat().st_size)
+
+    def delete(self, storage_key: str):
+        self._path(storage_key).unlink(missing_ok=True)
+
+    def read_bytes(self, storage_key: str, *, max_bytes: int = 1_048_576) -> bytes:
+        try:
+            max_bytes = int(max_bytes)
+        except (TypeError, ValueError) as error:
+            raise ValueError("max_bytes must be an integer.") from error
+        if max_bytes < 1 or max_bytes > 10_485_760:
+            raise ValueError("max_bytes must be between 1 byte and 10 MiB.")
+        target = self._path(storage_key)
+        if not target.exists() or not target.is_file():
+            raise LookupError("Stored medical record was not found.")
+        if target.stat().st_size > max_bytes:
+            raise ValueError("Stored medical record exceeds the bounded read limit.")
+        return target.read_bytes()
 
     def response(self, storage_key: str, download_name: str):
         return send_from_directory(self._root(), storage_key, as_attachment=True, download_name=download_name)
@@ -61,6 +75,9 @@ class UnavailableExternalRecordStorage:
         self._raise()
 
     def delete(self, storage_key: str):
+        self._raise()
+
+    def read_bytes(self, storage_key: str, *, max_bytes: int = 1_048_576):
         self._raise()
 
     def response(self, storage_key: str, download_name: str):
