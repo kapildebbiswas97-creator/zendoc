@@ -3,7 +3,7 @@ from pathlib import Path
 from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, url_for
 
 from .db import get_db
-from .health_access import HEALTH_SCOPES, authorize_patient, create_access_grant, list_access_grants, revoke_access_grant
+from .health_access import CONSENT_PURPOSES, HEALTH_SCOPES, authorize_patient, create_access_grant, list_access_grants, revoke_access_grant
 from .health_analytics import METRIC_TYPES, create_measurement, get_health_trend, list_measurements
 from .health_profile import BLOOD_GROUPS, SEX_OPTIONS, get_health_profile, save_health_profile
 from .health_summary import build_health_summary, export_health_data
@@ -162,7 +162,7 @@ def health_access_page():
             grant_id = create_access_grant(g.user, data)
             audit("grant", "health_access", str(grant_id))
             get_db().commit()
-            flash("Provider access granted for the selected scopes.", "success")
+            flash("Provider access granted for the selected purpose and scopes.", "success")
             return redirect(url_for("health_memory.health_access_page"))
         except (PermissionError, ValueError) as error:
             flash(str(error), "error")
@@ -175,7 +175,13 @@ def health_access_page():
         ORDER BY COALESCE(pp.organization,u.name), pp.specialty
         """
     ).fetchall()
-    return render_template("health_access.html", grants=grants, providers=providers, health_scopes=HEALTH_SCOPES)
+    return render_template(
+        "health_access.html",
+        grants=grants,
+        providers=providers,
+        health_scopes=HEALTH_SCOPES,
+        consent_purposes=CONSENT_PURPOSES,
+    )
 
 
 @bp.post("/health-access/<int:grant_id>/revoke")
