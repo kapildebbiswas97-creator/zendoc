@@ -7,6 +7,7 @@ from .agent_fleet import automation_manifest, list_fleet_agents
 from .benefit_sources import list_sources
 from .model_portfolio import list_model_roles
 from .capability_registry import get_capability_registry
+from .medical_knowledge_registry import list_medical_knowledge_sources
 from .no_capital_status import no_capital_completion_report
 from .regulated_domains import list_regulated_domains
 from .public_source_registry import list_public_ingestion_sources
@@ -32,9 +33,23 @@ def intelligence_manifest():
         "benefit_sources": list_sources(),
         "regulated_domains": list_regulated_domains(),
         "public_ingestion_sources": list_public_ingestion_sources(),
+        "medical_knowledge_sources": list_medical_knowledge_sources(),
         "pilot_scorecard": pilot_scorecard(),
         "capabilities": get_capability_registry(),
         "no_capital_progress": no_capital_completion_report(),
+    })
+
+
+@bp.get("/owner/medical-knowledge-sources")
+@owner_required
+def owner_medical_knowledge_sources():
+    return jsonify({
+        "status": "ok",
+        "sources": list_medical_knowledge_sources(),
+        "notice": (
+            "These source families are approved for discovery and document-level review only. "
+            "No source is automatically approved for bulk ingestion or patient-facing answers."
+        ),
     })
 
 
