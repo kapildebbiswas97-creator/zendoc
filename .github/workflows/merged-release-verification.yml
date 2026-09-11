@@ -37,7 +37,7 @@ jobs:
       DEPLOYMENT_URL: ${{ inputs.deployment_url || vars.ZENDOC_DEPLOYMENT_URL || 'https://zendoc-ykax.onrender.com' }}
       EXPECTED_COMMIT: ${{ inputs.expected_commit || github.event.pull_request.merge_commit_sha }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
       - uses: actions/setup-python@v5
