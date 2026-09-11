@@ -12,6 +12,7 @@ from .ecosystem_routes import bp as ecosystem_bp
 from .family_routes import bp as family_bp
 from .fitness_routes import bp as fitness_bp
 from .geography_routes import bp as geography_graph_bp
+from .health_access import ensure_consent_schema
 from .health_routes import bp as health_memory_bp
 from .language_routes import bp as language_bp
 from .milestone7_routes import bp as milestone7_bp
@@ -69,6 +70,8 @@ def create_app(test_config=None):
     with app.app_context():
         try:
             init_db()
+            ensure_consent_schema()
+            get_db().commit()
             report = readiness_report()
             if report.get("status") != "ready":
                 raise RuntimeError(f"Database readiness check failed after migration: {report}")
