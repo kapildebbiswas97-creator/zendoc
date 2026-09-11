@@ -3,8 +3,10 @@ from pathlib import Path
 from flask import Flask
 
 from .config import load_config, validate_startup_config
+from .care_action_ledger import ensure_care_action_ledger_schema
 from .carefin_routes import bp as carefin_bp
 from .care_journey_routes import bp as care_journey_bp
+from .careloop_integration import finish_careloop_request
 from .dataset_snapshot_routes import bp as dataset_snapshot_ingestion_bp
 from .db import close_db, get_db, init_db
 from .connected_care_routes import bp as connected_care_bp
@@ -75,6 +77,7 @@ def create_app(test_config=None):
     app.register_blueprint(dataset_snapshot_ingestion_bp)
     app.register_blueprint(provider_onboarding_bp)
     app.register_blueprint(system_intelligence_bp)
+    app.after_request(finish_careloop_request)
     app.after_request(finish_request_observation)
     app.teardown_appcontext(close_db)
     validate_startup_config(app)
@@ -85,6 +88,7 @@ def create_app(test_config=None):
             ensure_medical_knowledge_document_schema()
             ensure_medical_rag_schema()
             ensure_preventive_care_schema()
+            ensure_care_action_ledger_schema()
             get_db().commit()
             report = readiness_report()
             if report.get("status") != "ready":
