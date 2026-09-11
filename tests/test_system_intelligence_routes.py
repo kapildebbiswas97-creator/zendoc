@@ -77,7 +77,7 @@ def test_owner_medical_knowledge_sources_are_review_only_and_owner_only(tmp_path
     assert payload["sources"]
     assert all(item["ingestion_status"] == "REVIEW_REQUIRED" for item in payload["sources"])
     assert all(item["allowed_for_answering_without_snapshot"] is False for item in payload["sources"])
-    assert "not automatically approved" in payload["notice"].lower()
+    assert "no source is automatically approved" in payload["notice"].lower()
 
 
 def test_owner_pilot_scorecard_is_real_and_owner_only(tmp_path):
