@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from statistics import fmean, pstdev
 
 from .db import get_db, now_iso
 from .health_access import authorize_patient
@@ -14,6 +15,7 @@ DEFAULT_UNITS = {
     "temperature": "C", "sleep": "hours", "water_intake": "L", "steps": "steps",
 }
 PERIOD_DAYS = {"7d": 7, "30d": 30, "90d": 90}
+BASELINE_MIN_POINTS = 3
 
 
 def _value(actor, key, default=None):
@@ -182,6 +184,166 @@ def get_health_trend(actor, metric_type, patient_id=None, period="30d", start_da
         "series": series,
         "unit_mismatch": len(series) > 1,
         "message": "Measurements with different units are kept in separate series." if len(series) > 1 else None,
+    }
+
+
+def _validate_baseline_window(baseline_days, recent_days):
+    try:
+        baseline_days = int(baseline_days)
+        recent_days = int(recent_days)
+    except (TypeError, ValueError) as error:
+        raise ValueError("baseline_days and recent_days must be integers.") from error
+    if baseline_days < 14 or baseline_days > 3650:
+        raise ValueError("baseline_days must be between 14 and 3650.")
+    if recent_days < 1 or recent_days > 90:
+        raise ValueError("recent_days must be between 1 and 90.")
+    if recent_days >= baseline_days:
+        raise ValueError("recent_days must be smaller than baseline_days.")
+    return baseline_days, recent_days
+
+
+def _describe_personal_delta(baseline_values, recent_values):
+    if len(baseline_values) < BASELINE_MIN_POINTS:
+        return {
+            "state": "INSUFFICIENT_BASELINE",
+            "baseline_mean": None,
+            "baseline_stddev": None,
+            "recent_mean": round(fmean(recent_values), 4) if recent_values else None,
+            "absolute_delta": None,
+            "standardized_delta": None,
+        }
+    baseline_mean = fmean(baseline_values)
+    recent_mean = fmean(recent_values) if recent_values else None
+    baseline_stddev = pstdev(baseline_values)
+    if recent_mean is None:
+        state = "NO_RECENT_DATA"
+        absolute_delta = None
+        standardized_delta = None
+    else:
+        absolute_delta = recent_mean - baseline_mean
+        if baseline_stddev > 0:
+            standardized_delta = absolute_delta / baseline_stddev
+            if standardized_delta > 1:
+                state = "ABOVE_PERSONAL_BASELINE"
+            elif standardized_delta < -1:
+                state = "BELOW_PERSONAL_BASELINE"
+            else:
+                state = "NEAR_PERSONAL_BASELINE"
+        else:
+            standardized_delta = None
+            if absolute_delta > 0:
+                state = "ABOVE_PERSONAL_BASELINE"
+            elif absolute_delta < 0:
+                state = "BELOW_PERSONAL_BASELINE"
+            else:
+                state = "NEAR_PERSONAL_BASELINE"
+    return {
+        "state": state,
+        "baseline_mean": round(baseline_mean, 4),
+        "baseline_stddev": round(baseline_stddev, 4),
+        "recent_mean": round(recent_mean, 4) if recent_mean is not None else None,
+        "absolute_delta": round(absolute_delta, 4) if absolute_delta is not None else None,
+        "standardized_delta": round(standardized_delta, 4) if standardized_delta is not None else None,
+    }
+
+
+def get_personal_health_baseline(actor, metric_type, patient_id=None, baseline_days=90, recent_days=7):
+    """Compare recent measurements with the same patient's prior history.
+
+    This is descriptive longitudinal analytics only. It does not compare values
+    against clinical thresholds and must not be presented as diagnosis, disease
+    detection, treatment advice, or an emergency detector.
+    """
+    target_id = authorize_patient(actor, patient_id, "measurements")
+    metric_type = normalize_metric_type(metric_type)
+    baseline_days, recent_days = _validate_baseline_window(baseline_days, recent_days)
+
+    now = datetime.now(timezone.utc)
+    window_start = now - timedelta(days=baseline_days)
+    recent_start = now - timedelta(days=recent_days)
+    rows = get_db().execute(
+        """
+        SELECT * FROM health_metrics
+        WHERE user_id=? AND metric_type=? AND recorded_at>=? AND recorded_at<=?
+        ORDER BY recorded_at ASC, id ASC LIMIT 5000
+        """,
+        (target_id, metric_type, window_start.isoformat(timespec="seconds"), now.isoformat(timespec="seconds")),
+    ).fetchall()
+    measurements = [_measurement_dict(row) for row in rows]
+    measurements = [item for item in measurements if item.get("numeric_value") is not None]
+
+    if not measurements:
+        return {
+            "patient_id": target_id,
+            "metric_type": metric_type,
+            "status": "NO_DATA",
+            "baseline_days": baseline_days,
+            "recent_days": recent_days,
+            "series": [],
+            "medical_interpretation": False,
+            "notice": "No numeric measurements are available in the requested personal-baseline window.",
+        }
+
+    latest = measurements[-1]
+    selected_unit = latest.get("unit") or "unitless"
+    same_unit = [item for item in measurements if (item.get("unit") or "unitless") == selected_unit]
+    excluded_other_units = len(measurements) - len(same_unit)
+    baseline = [
+        item for item in same_unit
+        if datetime.fromisoformat(item["recorded_at"].replace("Z", "+00:00")) < recent_start
+    ]
+    recent = [
+        item for item in same_unit
+        if datetime.fromisoformat(item["recorded_at"].replace("Z", "+00:00")) >= recent_start
+    ]
+
+    primary = _describe_personal_delta(
+        [float(item["numeric_value"]) for item in baseline],
+        [float(item["numeric_value"]) for item in recent],
+    )
+    secondary = None
+    secondary_baseline = [float(item["secondary_value"]) for item in baseline if item.get("secondary_value") is not None]
+    secondary_recent = [float(item["secondary_value"]) for item in recent if item.get("secondary_value") is not None]
+    if secondary_baseline or secondary_recent:
+        secondary = _describe_personal_delta(secondary_baseline, secondary_recent)
+
+    sources = sorted({str(item.get("source") or "unknown") for item in same_unit})
+    return {
+        "patient_id": target_id,
+        "metric_type": metric_type,
+        "status": primary["state"],
+        "baseline_days": baseline_days,
+        "recent_days": recent_days,
+        "unit": selected_unit,
+        "baseline_window": {
+            "start": window_start.isoformat(timespec="seconds"),
+            "end_exclusive": recent_start.isoformat(timespec="seconds"),
+            "point_count": len(baseline),
+        },
+        "recent_window": {
+            "start": recent_start.isoformat(timespec="seconds"),
+            "end": now.isoformat(timespec="seconds"),
+            "point_count": len(recent),
+        },
+        "primary": primary,
+        "secondary": secondary,
+        "latest": {
+            "recorded_at": latest["recorded_at"],
+            "value": latest["numeric_value"],
+            "secondary_value": latest.get("secondary_value"),
+            "source": latest.get("source"),
+        },
+        "provenance": {
+            "measurement_sources": sources,
+            "same_unit_points": len(same_unit),
+            "excluded_other_unit_points": excluded_other_units,
+        },
+        "medical_interpretation": False,
+        "emergency_detector": False,
+        "notice": (
+            "This compares recent measurements only with this patient's own prior measurements in the same unit. "
+            "It does not use clinical reference ranges, diagnose disease, recommend treatment, or replace emergency rules."
+        ),
     }
 
 
