@@ -22,7 +22,6 @@ PREVENTIVE_CATEGORIES = (
     "lifestyle",
     "other",
 )
-SOURCE_TYPES = ("patient_entered", "provider_entered", "owner_entered", "guideline_grounded")
 ACTIVE = "ACTIVE"
 COMPLETED = "COMPLETED"
 DISMISSED = "DISMISSED"
@@ -135,7 +134,7 @@ def create_preventive_plan(actor, data, patient_id=None):
         """
         INSERT INTO preventive_care_plans
         (plan_uid,patient_id,title,category,due_at,source_type,source_ref,guideline_document_uid,status,created_by,created_at,updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
         """,
         (
             plan_uid,
