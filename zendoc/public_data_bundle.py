@@ -83,7 +83,8 @@ def acquisition_mode(source: dict) -> str:
 
 
 def _source_descriptor(source_id: str, *, scope: str, priority: str) -> dict:
-    source = get_public_ingestion_source(source_id) or get_west_bengal_extra_source(source_id)
+    registered_source = get_public_ingestion_source(source_id)
+    source = registered_source or get_west_bengal_extra_source(source_id)
     if not source:
         raise LookupError(f"Unknown public source in bundle: {source_id}")
     return {
@@ -97,6 +98,8 @@ def _source_descriptor(source_id: str, *, scope: str, priority: str) -> dict:
         "trust_level": source["trust_level"],
         "live_fetch_status": source["live_fetch_status"],
         "acquisition_mode": acquisition_mode(source),
+        "ingestion_registered": bool(registered_source),
+        "ingestion_status": "REGISTERED" if registered_source else "CATALOG_ONLY_PENDING_CENTRAL_REGISTRY",
         "priority": priority,
         "bundle_scope": scope,
         "personal_data_allowed": False,
@@ -117,7 +120,8 @@ def west_bengal_bundle() -> dict:
         ],
         "truth_notice": (
             "West Bengal acquisition is statewide. Nadia is only a regression/quality-validation subset. "
-            "Provider/licence directories are not live availability, stock, booking connectivity, or ZENDOC verification."
+            "Provider/licence directories are not live availability, stock, booking connectivity, or ZENDOC verification. "
+            "Newly catalogued state-only sources remain non-ingestable until centrally registered."
         ),
     }
 
@@ -130,8 +134,7 @@ def _state_enrichment_catalog() -> dict[str, list[dict]]:
         for source_id in profile["official_directory_sources"]:
             if source_id in national or source_id in AUTHORIZED_ONLY_SOURCE_IDS:
                 continue
-            descriptor = _source_descriptor(source_id, scope=f"STATE:{state_slug.upper()}", priority="STATE_ENRICHMENT")
-            descriptors.append(descriptor)
+            descriptors.append(_source_descriptor(source_id, scope=f"STATE:{state_slug.upper()}", priority="STATE_ENRICHMENT"))
         if state_slug == "west_bengal":
             for source_id in ("wb_clinical_establishments", "wb_drug_license_verification"):
                 descriptors.append(_source_descriptor(source_id, scope="STATE:WEST_BENGAL", priority="STATE_ENRICHMENT"))
