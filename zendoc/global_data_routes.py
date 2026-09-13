@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify
 
+from .continental_coverage import continent_coverage_summary
 from .db import get_db
 from .global_source_registry import country_coverage_manifest
 from .security import owner_required
@@ -17,4 +18,7 @@ def owner_global_coverage():
     countries = country_coverage_manifest()
     for country in countries:
         country["active_public_rows"] = counts.get(country["country_code"], 0)
-    return jsonify({"countries": countries})
+    return jsonify({
+        "continents": continent_coverage_summary(),
+        "countries": countries,
+    })
