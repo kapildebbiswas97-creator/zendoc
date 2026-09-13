@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Provider Activity — ZENDOC{% endblock %}
+{% block body_class %}app-shell-page activity-center-page{% endblock %}
+{% block content %}
+<section class="app-hero activity-hero">
+  <div>
+    <p class="eyebrow">Provider command stream</p>
+    <h1>Your care activity</h1>
+    <p class="section-copy">A single, privacy-scoped timeline of work already assigned to your ZENDOC account.</p>
+  </div>
+  <div class="app-hero-actions">
+    <a class="primary-action" href="{{ url_for('operational_fulfilment_ui.fulfilment_console') }}">Open fulfilment console</a>
+    <a class="secondary-action" href="{{ url_for('main.notifications') }}">Notifications</a>
+  </div>
+</section>
+
+<section class="activity-metrics" aria-label="Activity overview">
+  <article><span>All activity</span><strong>{{ summary.total }}</strong></article>
+  <article><span>Active work</span><strong>{{ summary.active }}</strong></article>
+  <article><span>Completed</span><strong>{{ summary.completed }}</strong></article>
+  <article><span>Updates</span><strong>{{ summary.notifications }}</strong></article>
+</section>
+
+<nav class="activity-filter-chips" aria-label="Filter provider activity">
+  {% for item in activity_types %}
+    {% if item == 'all' or (item == 'pharmacy' and current_user.role == 'pharmacy') or (item != 'pharmacy' and current_user.role in ['doctor','hospital']) or item == 'notification' %}
+      <a href="{{ url_for('activity_center.provider_activity_page', type=item) }}" {% if selected_type == item %}aria-current="page"{% endif %}>{{ item.replace('_',' ').title() }}</a>
+    {% endif %}
+  {% endfor %}
+</nav>
+
+<section class="activity-stream" aria-label="Provider activity timeline">
+  {% if events %}
+    {% for event in events %}
+      <article class="activity-card activity-card--{{ event.kind }}">
+        <div class="activity-icon" aria-hidden="true">
+          {% if event.kind == 'appointment' %}CAL{% elif event.kind == 'diagnostic' %}LAB{% elif event.kind == 'home_health' %}HOME{% elif event.kind == 'pharmacy' %}RX{% else %}NEW{% endif %}
+        </div>
+        <div class="activity-card-body">
+          <div class="activity-card-meta">
+            <span class="activity-kind">{{ event.kind.replace('_',' ').title() }}</span>
+            {% if event.status %}<span class="status-pill status-pill--{{ event.status.replace('_','-') }}">{{ event.status.replace('_',' ').title() }}</span>{% endif %}
+            {% if event.event_at %}<time datetime="{{ event.event_at }}">{{ event.event_at[:16].replace('T',' · ') }}</time>{% endif %}
+          </div>
+          <h2>{{ event.title }}</h2>
+          <p>{{ event.summary }}</p>
+          {% if event.details_url %}<a class="text-link" href="{{ event.details_url }}">Open related workflow →</a>{% endif %}
+        </div>
+      </article>
+    {% endfor %}
+  {% else %}
+    <div class="empty-state panel elevated-empty">
+      <span class="empty-state-icon" aria-hidden="true">✓</span>
+      <h2>No matching activity</h2>
+      <p>Your assigned ZENDOC work will appear here as it is created or updated.</p>
+    </div>
+  {% endif %}
+</section>
+
+<aside class="truth-banner">
+  <strong>Truthful operations</strong>
+  <p>This timeline reflects ZENDOC-internal records only. It does not independently prove external LIS processing, pharmacy stock, dispensing, courier delivery, home-care dispatch, arrival, payment, or agency execution.</p>
+</aside>
+{% endblock %}
