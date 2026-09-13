@@ -16,8 +16,7 @@ def persistence_attestation(
         return {"verified": True, "source": "explicit_operator_attestation"}
 
     runtime_postgres = (
-        str(environment or "").lower() == "production"
-        and str(engine or "").lower() == "postgresql"
+        str(engine or "").lower() == "postgresql"
         and str(durability or "").lower() == "durable_configured"
         and bool(database_reachable)
         and bool(migrations_ready)
