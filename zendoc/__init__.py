@@ -7,6 +7,7 @@ from .care_action_ledger import ensure_care_action_ledger_schema
 from .carefin_routes import bp as carefin_bp
 from .care_journey_routes import bp as care_journey_bp
 from .careloop_integration import finish_careloop_request
+from .continental_coverage import install_continental_coverage
 from .dataset_snapshot_routes import bp as dataset_snapshot_ingestion_bp
 from .db import close_db, get_db, init_db
 from .connected_care_routes import bp as connected_care_bp
@@ -55,6 +56,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 def create_app(test_config=None):
     install_global_public_sources()
+    install_continental_coverage()
     install_global_medical_authorities(MEDICAL_KNOWLEDGE_SOURCES)
 
     app = Flask(
