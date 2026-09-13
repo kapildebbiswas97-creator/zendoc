@@ -5,6 +5,10 @@ from .health_access import authorize_patient
 TIMELINE_TYPES = (
     "appointment", "consultation", "report", "medical_record", "measurement", "medication",
     "vaccination", "procedure", "ai_health_event", "mental_wellness", "fitness",
+    "diagnostic_accepted", "diagnostic_sample_collected", "diagnostic_processing",
+    "diagnostic_completed", "diagnostic_cancelled", "diagnostic_declined",
+    "home_health_accepted", "home_health_in_progress", "home_health_completed",
+    "home_health_cancelled", "home_health_declined",
 )
 FILTER_ALIASES = {"appointments": "appointment", "reports": "report", "records": "medical_record", "measurements": "measurement", "medications": "medication", "ai": "ai_health_event", "workouts": "fitness", "workout": "fitness"}
 
@@ -40,7 +44,7 @@ WITH events AS (
       ('symptoms','emergency','medical_report','report_intelligence','report_history',
        'health_records','health_timeline','health_analytics','health_monitoring')
     UNION ALL
-    SELECT hte.event_type, hte.event_at, hte.title, hte.summary, hte.provider_name,
+    SELECT LOWER(hte.event_type) event_type, hte.event_at, hte.title, hte.summary, hte.provider_name,
            hte.source, CAST(hte.id AS TEXT) source_id
     FROM health_timeline_events hte WHERE hte.patient_id=?
 )
@@ -78,6 +82,9 @@ def _details_path(item):
         return "/health"
     if item["source"] == "ai_interactions":
         return "/ai"
+    if str(item["source"]).upper() in {"PROVIDER_RECORDED", "OWNER_RECORDED", "USER_REPORTED"}:
+        if str(item["event_type"]).startswith(("diagnostic_", "home_health_")):
+            return "/operations/fulfilment"
     return None
 
 
@@ -119,4 +126,3 @@ def add_timeline_event(patient_id, event_type, title, event_at=None, summary=Non
     )
     get_db().commit()
     return cursor.lastrowid
-
