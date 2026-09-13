@@ -3,8 +3,10 @@ from pathlib import Path
 from flask import Flask
 
 from .config import load_config, validate_startup_config
+from .care_action_ledger import ensure_care_action_ledger_schema
 from .carefin_routes import bp as carefin_bp
 from .care_journey_routes import bp as care_journey_bp
+from .careloop_integration import finish_careloop_request
 from .dataset_snapshot_routes import bp as dataset_snapshot_ingestion_bp
 from .db import close_db, get_db, init_db
 from .connected_care_routes import bp as connected_care_bp
@@ -23,8 +25,14 @@ from .milestone7_routes import bp as milestone7_bp
 from .milestone8_routes import bp as milestone8_bp
 from .milestone82_routes import bp as milestone82_bp
 from .nutrition_routes import bp as nutrition_intelligence_bp
+from .operational_fulfilment import (
+    bp as operational_fulfilment_bp,
+    ensure_operational_fulfilment_schema,
+    finish_operational_careloop_request,
+)
 from .organization_routes import bp as provider_organizations_bp
 from .personal_baseline_routes import bp as personal_health_baseline_bp
+from .pharmacy_order_routes import bp as pharmacy_order_ops_bp
 from .preventive_care import ensure_preventive_care_schema
 from .preventive_care_routes import bp as preventive_care_bp
 from .public_ingestion_routes import bp as public_ingestion_bp
@@ -61,6 +69,8 @@ def create_app(test_config=None):
     app.register_blueprint(fitness_bp)
     app.register_blueprint(family_bp)
     app.register_blueprint(ecosystem_bp)
+    app.register_blueprint(pharmacy_order_ops_bp)
+    app.register_blueprint(operational_fulfilment_bp)
     app.register_blueprint(milestone7_bp)
     app.register_blueprint(milestone8_bp)
     app.register_blueprint(milestone82_bp)
@@ -75,6 +85,8 @@ def create_app(test_config=None):
     app.register_blueprint(dataset_snapshot_ingestion_bp)
     app.register_blueprint(provider_onboarding_bp)
     app.register_blueprint(system_intelligence_bp)
+    app.after_request(finish_operational_careloop_request)
+    app.after_request(finish_careloop_request)
     app.after_request(finish_request_observation)
     app.teardown_appcontext(close_db)
     validate_startup_config(app)
@@ -85,6 +97,8 @@ def create_app(test_config=None):
             ensure_medical_knowledge_document_schema()
             ensure_medical_rag_schema()
             ensure_preventive_care_schema()
+            ensure_care_action_ledger_schema()
+            ensure_operational_fulfilment_schema()
             get_db().commit()
             report = readiness_report()
             if report.get("status") != "ready":
