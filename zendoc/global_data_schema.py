@@ -4,6 +4,7 @@ from __future__ import annotations
 from flask import current_app
 
 from .db import get_db, now_iso
+from .global_source_registry import GLOBAL_SOURCES
 
 MIGRATION_VERSION = "global_country_currency_v1"
 
@@ -39,12 +40,23 @@ def ensure_global_data_schema() -> None:
             if column not in existing:
                 db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
 
-    # Existing deployments are India-first. Backfill only rows without a
-    # country/currency marker; future international rows must set their own.
-    db.execute(
-        "UPDATE public_healthcare_entities SET country_code='IN',country_name='India' "
-        "WHERE country_code IS NULL OR country_code=''"
-    )
+    # Existing deployments were India-first, but never relabel a known
+    # international source as India merely because an older code path omitted
+    # the new country columns.
+    global_ids = sorted(GLOBAL_SOURCES)
+    placeholders = ",".join("?" for _ in global_ids)
+    if global_ids:
+        db.execute(
+            f"UPDATE public_healthcare_entities SET country_code='IN',country_name='India' "
+            f"WHERE (country_code IS NULL OR country_code='') AND source_id NOT IN ({placeholders})",
+            tuple(global_ids),
+        )
+    else:
+        db.execute(
+            "UPDATE public_healthcare_entities SET country_code='IN',country_name='India' "
+            "WHERE country_code IS NULL OR country_code=''"
+        )
+
     db.execute(
         "UPDATE provider_profiles SET country_code='IN',country_name='India' "
         "WHERE country_code IS NULL OR country_code=''"
