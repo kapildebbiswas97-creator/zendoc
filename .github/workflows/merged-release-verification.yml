@@ -43,15 +43,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - name: Require and trigger Render deployment hook
+      - name: Trigger Render deployment hook when configured
         env:
           RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
         run: |
-          if [ -z "$RENDER_DEPLOY_HOOK_URL" ]; then
-            echo "::error::RENDER_DEPLOY_HOOK_URL is not configured. The live Render service cannot be forced to deploy the merged release."
-            exit 1
+          if [ -n "$RENDER_DEPLOY_HOOK_URL" ]; then
+            echo "Render deploy hook is configured; triggering an explicit deployment."
+            python scripts/trigger_render_deploy.py "$RENDER_DEPLOY_HOOK_URL"
+          else
+            echo "Render deploy hook is not configured; relying on render.yaml autoDeployTrigger=commit."
           fi
-          python scripts/trigger_render_deploy.py "$RENDER_DEPLOY_HOOK_URL"
       - name: Verify exact merged release on Render
         run: >-
           python scripts/verify_deployment.py "$DEPLOYMENT_URL"
