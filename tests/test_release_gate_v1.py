@@ -200,7 +200,6 @@ def test_merged_release_verification_uses_auto_deploy_when_hook_is_absent():
     root = Path(__file__).resolve().parents[1]
     workflow = (root / ".github/workflows/merged-release-verification.yml").read_text(encoding="utf-8")
     assert "Trigger Render deployment hook when configured" in workflow
-    assert "relying on Render auto-deploy" in workflow
-    assert "render.yaml autoDeployTrigger=commit" in workflow
+    assert "relying on render.yaml autoDeployTrigger=commit" in workflow
     assert "scripts/verify_deployment.py" in workflow
     assert "--expected-commit" in workflow
