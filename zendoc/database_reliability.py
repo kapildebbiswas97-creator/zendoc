@@ -9,6 +9,7 @@ from pathlib import Path
 from flask import current_app
 
 from .db import get_db, now_iso
+from .persistence_attestation import persistence_attestation
 from .places_provider import places_configuration_status
 
 
@@ -123,7 +124,7 @@ def postgis_status():
     """Report PostGIS capability without claiming spatial acceleration.
 
     ZENDOC's current schema stores latitude/longitude as scalar columns and
-    does not create geometry or GiST indexes.  This check therefore reports
+    does not create geometry or GiST indexes. This check therefore reports
     extension presence separately from spatial-index acceleration.
     """
     db = get_db()
@@ -193,7 +194,8 @@ def readiness_report():
         "time": now_iso(),
         "database_engine": current_app.config.get("DATABASE_ENGINE", "sqlite"),
         "database_durability": current_app.config.get("DATABASE_DURABILITY"),
-        "persistence_verified": bool(current_app.config.get("PERSISTENCE_VERIFIED")),
+        "persistence_verified": False,
+        "persistence_verification_source": "not_verified",
         "deployment": deployment_identity(),
         "healthcare_finder": places_configuration_status(),
     }
@@ -230,6 +232,19 @@ def readiness_report():
     ):
         report["status"] = "not_ready"
         report["durability_warning"] = "Production database durability is not verified."
+
+    attestation = persistence_attestation(
+        environment=current_app.config.get("ZENDOC_ENV", "development"),
+        engine=report["database_engine"],
+        durability=report.get("database_durability"),
+        explicit_verified=bool(current_app.config.get("PERSISTENCE_VERIFIED")),
+        require_durable_database=bool(current_app.config.get("REQUIRE_DURABLE_DATABASE")),
+        database_reachable=report.get("database") == "reachable",
+        migrations_ready=bool(migration.get("ready")) and not migration.get("missing_migrations"),
+        schema_ready=bool(schema.get("ready")) and not schema.get("missing_tables"),
+    )
+    report["persistence_verified"] = bool(attestation["verified"])
+    report["persistence_verification_source"] = attestation["source"]
     return report
 
 
@@ -285,4 +300,3 @@ def backup_readiness():
         "database_path_exists": path.exists(),
         "backup_directory": str(Path(current_app.config.get("DATABASE_BACKUP_DIR") or path.parent / "backups")),
     }
-
