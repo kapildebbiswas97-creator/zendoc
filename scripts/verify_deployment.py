@@ -62,6 +62,22 @@ def safe_payload_summary(payload: dict) -> dict:
     return summary
 
 
+def is_liveness_response(status_code: int, payload: dict) -> bool:
+    """Accept current and legacy liveness while a Render rollout is converging.
+
+    Older ZENDOC releases returned only ``status=ok`` and ``service=zendoc``.
+    Current releases also expose ``check=liveness``.  Accepting the legacy
+    shape here does not weaken release verification: the readiness probe below
+    still requires the exact expected Git commit, Render platform, database
+    engine, migrations/schema readiness, and verified persistence.
+    """
+    if status_code != 200 or not isinstance(payload, dict):
+        return False
+    if payload.get("status") != "ok" or payload.get("service") != "zendoc":
+        return False
+    return payload.get("check") in (None, "", "liveness")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("base_url")
@@ -89,7 +105,7 @@ def main() -> int:
     for attempt in range(1, attempts + 1):
         try:
             health_status, health = get_json(f"{base}/api/v1/health", args.timeout)
-            if health_status != 200 or health.get("status") != "ok" or health.get("check") != "liveness":
+            if not is_liveness_response(health_status, health):
                 raise RuntimeError(
                     f"Liveness check failed with HTTP {health_status}: {safe_payload_summary(health)}"
                 )
@@ -166,4 +182,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

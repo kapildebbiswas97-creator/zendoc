@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+{% block title %}Fulfilment Operations — ZENDOC{% endblock %}
+{% block content %}
+<section class="section-heading">
+  <p class="eyebrow">Connected Care Operations</p>
+  <h1>Diagnostics &amp; home-health fulfilment</h1>
+  <p>Verified ZENDOC workflow only. These statuses do not claim external LIS, courier, dispatch, payment, arrival, or agency-system execution.</p>
+</section>
+
+{% if readiness %}
+<section class="card-grid" aria-label="Owner release readiness">
+  <article class="card">
+    <h2>Diagnostics</h2>
+    <pre>{{ readiness.diagnostics | tojson(indent=2) }}</pre>
+  </article>
+  <article class="card">
+    <h2>Home health</h2>
+    <pre>{{ readiness.home_health | tojson(indent=2) }}</pre>
+  </article>
+</section>
+{% endif %}
+
+{% if current_user.role == 'patient' %}
+<section class="content-section">
+  <div class="section-heading"><h2>My diagnostic bookings</h2></div>
+  <div class="card-grid">
+    {% for item in patient_diagnostics %}
+    <article class="card">
+      <h3>{{ item.test_name }}</h3>
+      <p><strong>Lab:</strong> {{ item.lab_name }}</p>
+      <p><strong>Status:</strong> {{ item.status | replace('_',' ') | title }}</p>
+      <p><strong>Scheduled:</strong> {{ item.scheduled_date }}</p>
+      {% if item.report_record_id %}<p><strong>Report record:</strong> #{{ item.report_record_id }}</p>{% endif %}
+      <p class="muted">{{ item.truth_notice }}</p>
+      {% if item.status not in ['completed','cancelled','declined'] %}
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="action" value="diagnostic_status">
+        <input type="hidden" name="booking_id" value="{{ item.id }}">
+        <input type="hidden" name="status" value="cancelled">
+        <button class="secondary-action" type="submit">Cancel booking</button>
+      </form>
+      {% endif %}
+    </article>
+    {% else %}
+    <article class="card"><p>No diagnostic bookings yet.</p></article>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="content-section">
+  <div class="section-heading"><h2>My home-health requests</h2></div>
+  <div class="card-grid">
+    {% for item in patient_home %}
+    <article class="card">
+      <h3>{{ item.service_type | replace('_',' ') | title }}</h3>
+      <p><strong>Status:</strong> {{ item.status | replace('_',' ') | title }}</p>
+      <p><strong>Scheduled:</strong> {{ item.scheduled_date }}</p>
+      {% if item.provider_name %}<p><strong>Provider:</strong> {{ item.provider_name }}</p>{% endif %}
+      <p class="muted">{{ item.truth_notice }}</p>
+      {% if not item.provider_id %}
+        {% set choices = provider_options.get(item.id, []) %}
+        {% if choices %}
+        <form method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="action" value="home_assign">
+          <input type="hidden" name="request_id" value="{{ item.id }}">
+          <label>Verified provider
+            <select name="provider_id" required>
+              {% for provider in choices %}
+              <option value="{{ provider.id }}">{{ provider.name }}{% if provider.organization %} — {{ provider.organization }}{% endif %}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <button class="primary-action" type="submit">Assign provider</button>
+        </form>
+        {% else %}
+        <p class="muted">No verified provider has published this exact service capability in your area yet.</p>
+        {% endif %}
+      {% endif %}
+      {% if item.status not in ['completed','cancelled','declined'] %}
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="action" value="home_status">
+        <input type="hidden" name="request_id" value="{{ item.id }}">
+        <input type="hidden" name="status" value="cancelled">
+        <button class="secondary-action" type="submit">Cancel request</button>
+      </form>
+      {% endif %}
+    </article>
+    {% else %}
+    <article class="card"><p>No home-health requests yet.</p></article>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{% if current_user.role in ['doctor','hospital'] %}
+<section class="content-section">
+  <div class="section-heading"><h2>Diagnostic work queue</h2></div>
+  <div class="card-grid">
+    {% for item in provider_diagnostics %}
+    <article class="card">
+      <h3>{{ item.test_name }}</h3>
+      <p><strong>Booking:</strong> #{{ item.id }}</p>
+      <p><strong>Status:</strong> {{ item.status | replace('_',' ') | title }}</p>
+      <p><strong>Scheduled:</strong> {{ item.scheduled_date }}</p>
+      <p class="muted">Internal verified-provider workflow; external execution remains false.</p>
+      {% set transitions = {
+        'requested': [('accepted','Accept'),('declined','Decline')],
+        'accepted': [('sample_collected','Sample collected'),('processing','Processing'),('completed','Complete')],
+        'sample_collected': [('processing','Processing'),('completed','Complete')],
+        'processing': [('completed','Complete')]
+      } %}
+      {% for target,label in transitions.get(item.status, []) %}
+      <form method="post" class="inline-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="action" value="diagnostic_status">
+        <input type="hidden" name="booking_id" value="{{ item.id }}">
+        <input type="hidden" name="status" value="{{ target }}">
+        <button class="secondary-action" type="submit">{{ label }}</button>
+      </form>
+      {% endfor %}
+
+      {% if item.status == 'completed' and not item.report_record_id %}
+        {% set reports = provider_reports.get(item.id, []) %}
+        {% if reports %}
+        <form method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="action" value="diagnostic_report">
+          <input type="hidden" name="booking_id" value="{{ item.id }}">
+          <label>Provider-uploaded patient report
+            <select name="record_id" required>
+              {% for report in reports %}<option value="{{ report.id }}">#{{ report.id }} — {{ report.title }}</option>{% endfor %}
+            </select>
+          </label>
+          <button class="primary-action" type="submit">Link report</button>
+        </form>
+        {% else %}
+        <p class="muted">Upload the patient’s diagnostic report to Records first; only reports uploaded by this provider can be linked.</p>
+        {% endif %}
+      {% elif item.report_record_id %}
+      <p><strong>Linked report:</strong> #{{ item.report_record_id }}</p>
+      {% endif %}
+    </article>
+    {% else %}
+    <article class="card"><p>No diagnostic bookings assigned to this verified provider.</p></article>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="content-section">
+  <div class="section-heading"><h2>Home-health capabilities</h2></div>
+  <article class="card">
+    <form method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="action" value="home_capability">
+      <label>Service
+        <select name="service_type" required>
+          {% for service in supported_home_services %}<option value="{{ service }}">{{ service | replace('_',' ') | title }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Status
+        <select name="active"><option value="1">Active</option><option value="0">Inactive</option></select>
+      </label>
+      <button class="primary-action" type="submit">Update capability</button>
+    </form>
+    {% if capabilities %}
+    <ul>
+      {% for capability in capabilities %}
+      <li>{{ capability.service_type | replace('_',' ') | title }} — {{ 'Active' if capability.active else 'Inactive' }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </article>
+</section>
+
+<section class="content-section">
+  <div class="section-heading"><h2>Assigned home-health work</h2></div>
+  <div class="card-grid">
+    {% for item in provider_home %}
+    <article class="card">
+      <h3>{{ item.service_type | replace('_',' ') | title }}</h3>
+      <p><strong>Request:</strong> #{{ item.id }}</p>
+      <p><strong>Status:</strong> {{ item.status | replace('_',' ') | title }}</p>
+      <p><strong>Scheduled:</strong> {{ item.scheduled_date }}</p>
+      {% set transitions = {
+        'requested': [('accepted','Accept'),('declined','Decline')],
+        'accepted': [('in_progress','Start service')],
+        'in_progress': [('completed','Complete')]
+      } %}
+      {% for target,label in transitions.get(item.status, []) %}
+      <form method="post" class="inline-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="action" value="home_status">
+        <input type="hidden" name="request_id" value="{{ item.id }}">
+        <input type="hidden" name="status" value="{{ target }}">
+        <button class="secondary-action" type="submit">{{ label }}</button>
+      </form>
+      {% endfor %}
+      <p class="muted">{{ item.truth_notice }}</p>
+    </article>
+    {% else %}
+    <article class="card"><p>No assigned home-health requests.</p></article>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+{% endblock %}
