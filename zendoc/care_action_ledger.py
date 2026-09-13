@@ -3,14 +3,14 @@
 This layer tracks accountable care actions and outcomes. It never diagnoses,
 prescribes, pays, dispatches emergency care, or controls medical devices.
 ZENDOC-internal integrations may synchronize an already-authorized operational
-record (for example a registered-provider appointment) without implying that an
-external hospital/partner API was called.
+record without implying that an external hospital/partner API was called.
 """
 from __future__ import annotations
 
 import json
 import uuid
 
+from .care_action_integration_truth import linked_internal_service
 from .context_engine import verify_context_authorization
 from .db import get_db, now_iso
 
@@ -181,13 +181,7 @@ def transition_action(actor, action_id, target_status, note=None, provenance=Non
 
 
 def sync_registered_appointment_status(actor, appointment_id, target_appointment_status):
-    """Synchronize an already-authorized registered-provider appointment.
-
-    The caller must be the appointment's registered provider or ZENDOC owner.
-    This deliberately bypasses generic health-context consent because it only
-    mirrors the operational status of the exact appointment the caller is
-    already authorized to manage; it does not expose Health Memory contents.
-    """
+    """Synchronize an already-authorized registered-provider appointment."""
     ensure_care_action_ledger_schema()
     db = get_db()
     appointment = db.execute(
@@ -306,16 +300,15 @@ def get_action(actor, action_id):
     result["events"] = [_serialize_event(item) for item in events]
     result["outcomes"] = [_serialize_outcome(item) for item in outcomes]
 
-    appointment = _linked_registered_appointment(result)
-    if appointment:
+    integration = linked_internal_service(result)
+    if integration:
         result["integration_status"] = "ACTUALLY_INTEGRATED"
-        result["execution_scope"] = "zendoc_internal_registered_provider"
+        result["execution_scope"] = integration["execution_scope"]
         result["actual_execution_recorded"] = True
         result["external_execution"] = False
-        result["notice"] = (
-            "This action is linked to a real ZENDOC registered-provider appointment lifecycle. "
-            "It does not claim execution inside an external hospital/vendor system."
-        )
+        result["integration_source_type"] = integration["source_type"]
+        result["integration_source_id"] = integration["source_id"]
+        result["notice"] = integration["notice"]
     else:
         result["integration_status"] = "TRACKING_ONLY"
         result["execution_scope"] = "ledger_only"
@@ -335,6 +328,7 @@ def get_outcome(actor, outcome_id):
 
 
 def _linked_registered_appointment(action):
+    """Backward-compatible helper retained for callers outside get_action."""
     service_ref = str(action.get("service_ref") or "")
     if not service_ref.startswith("zendoc_appointment:"):
         return None
