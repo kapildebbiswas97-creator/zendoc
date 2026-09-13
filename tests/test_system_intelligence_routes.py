@@ -21,6 +21,38 @@ def test_owner_intelligence_manifest_is_owner_only(tmp_path):
     assert payload["benefit_sources"]
     assert payload["regulated_domains"]
     assert payload["medical_knowledge_sources"]
+    assert payload["ai_runtime"]["routing_policy"]["model_output_can_execute_tools"] is False
+    assert payload["tool_governance"]["registered_tools"] > 0
+    assert payload["tool_governance"]["model_output_can_execute_tools"] is False
+
+
+def test_owner_ai_runtime_is_truthful_and_owner_only(tmp_path):
+    _app, client = make_client(tmp_path)
+
+    register_web(client, "patient", "runtime-normal@example.com")
+    login_web(client, "patient", "runtime-normal@example.com")
+    denied = client.get("/owner/ai-runtime")
+    assert denied.status_code == 403
+
+    client.get("/logout")
+    login_web(client, "admin", "admin@example.com", "AdminStrong123")
+    allowed = client.get("/owner/ai-runtime")
+    assert allowed.status_code == 200
+    payload = allowed.get_json()
+    runtime = payload["ai_runtime"]
+    tools = payload["tool_governance"]
+
+    assert payload["status"] == "ok"
+    assert runtime["deterministic_safety"]["status"] == "working"
+    assert runtime["local_fallback"]["status"] == "working"
+    assert runtime["routing_mode"]
+    assert "externally reachable" in runtime["truth_boundary"]
+    assert tools["registered_tools"] >= 10
+    assert tools["risk_class_counts"]["CRITICAL_BLOCKED"] >= 1
+    assert "autonomous_prescribe" in tools["critical_blocked_tools"]
+    assert "dispatch_emergency" in tools["critical_blocked_tools"]
+    assert tools["model_output_can_execute_tools"] is False
+    assert "Server-side policy" in tools["execution_boundary"]
 
 
 def test_capability_registry_uses_only_truthful_statuses(tmp_path):
