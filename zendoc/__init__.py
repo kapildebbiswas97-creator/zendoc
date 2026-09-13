@@ -15,6 +15,7 @@ from .ecosystem_routes import bp as ecosystem_bp
 from .family_routes import bp as family_bp
 from .fitness_routes import bp as fitness_bp
 from .geography_routes import bp as geography_graph_bp
+from .global_data_routes import bp as global_data_bp
 from .global_data_schema import ensure_global_data_schema
 from .global_registry_install import install_global_public_sources
 from .health_access import ensure_consent_schema
@@ -51,8 +52,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 def create_app(test_config=None):
-    # Make international sources available to the existing governed ingestion
-    # engine before any request can resolve a source id.
     install_global_public_sources()
 
     app = Flask(
@@ -94,6 +93,7 @@ def create_app(test_config=None):
     app.register_blueprint(public_ingestion_bp)
     app.register_blueprint(dataset_snapshot_ingestion_bp)
     app.register_blueprint(provider_onboarding_bp)
+    app.register_blueprint(global_data_bp)
     app.register_blueprint(system_intelligence_bp)
     app.after_request(finish_operational_careloop_request)
     app.after_request(finish_careloop_request)
