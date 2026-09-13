@@ -46,6 +46,7 @@ from .preventive_care import ensure_preventive_care_schema
 from .preventive_care_routes import bp as preventive_care_bp
 from .public_ingestion_routes import bp as public_ingestion_bp
 from .provider_onboarding_routes import bp as provider_onboarding_bp
+from .showcase_routes import bp as showcase_bp
 from .system_intelligence_routes import bp as system_intelligence_bp
 from .database_reliability import readiness_report
 from .observability import finish_request_observation, start_request_observation
@@ -103,6 +104,7 @@ def create_app(test_config=None):
     app.register_blueprint(dataset_snapshot_ingestion_bp)
     app.register_blueprint(provider_onboarding_bp)
     app.register_blueprint(global_data_bp)
+    app.register_blueprint(showcase_bp)
     app.register_blueprint(system_intelligence_bp)
     app.after_request(finish_operational_careloop_request)
     app.after_request(finish_careloop_request)
