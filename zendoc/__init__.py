@@ -15,11 +15,16 @@ from .ecosystem_routes import bp as ecosystem_bp
 from .family_routes import bp as family_bp
 from .fitness_routes import bp as fitness_bp
 from .geography_routes import bp as geography_graph_bp
+from .global_data_routes import bp as global_data_bp
+from .global_data_schema import ensure_global_data_schema
+from .global_medical_authorities import install_global_medical_authorities
+from .global_registry_install import install_global_public_sources
 from .health_access import ensure_consent_schema
 from .health_routes import bp as health_memory_bp
 from .knowledge_routes import bp as medical_knowledge_bp
 from .language_routes import bp as language_bp
 from .medical_knowledge_documents import ensure_medical_knowledge_document_schema
+from .medical_knowledge_registry import MEDICAL_KNOWLEDGE_SOURCES
 from .medical_rag_ingestion import ensure_medical_rag_schema
 from .milestone7_routes import bp as milestone7_bp
 from .milestone8_routes import bp as milestone8_bp
@@ -49,6 +54,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 def create_app(test_config=None):
+    install_global_public_sources()
+    install_global_medical_authorities(MEDICAL_KNOWLEDGE_SOURCES)
+
     app = Flask(
         __name__,
         template_folder=str(BASE_DIR / "templates"),
@@ -88,6 +96,7 @@ def create_app(test_config=None):
     app.register_blueprint(public_ingestion_bp)
     app.register_blueprint(dataset_snapshot_ingestion_bp)
     app.register_blueprint(provider_onboarding_bp)
+    app.register_blueprint(global_data_bp)
     app.register_blueprint(system_intelligence_bp)
     app.after_request(finish_operational_careloop_request)
     app.after_request(finish_careloop_request)
@@ -97,6 +106,7 @@ def create_app(test_config=None):
     with app.app_context():
         try:
             init_db()
+            ensure_global_data_schema()
             ensure_consent_schema()
             ensure_medical_knowledge_document_schema()
             ensure_medical_rag_schema()
