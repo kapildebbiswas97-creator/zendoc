@@ -56,8 +56,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 def create_app(test_config=None):
-    install_global_public_sources()
+    # Extend the in-memory source catalog before binding it into the existing
+    # governed ingestion registry.
     install_continental_coverage()
+    install_global_public_sources()
     install_global_medical_authorities(MEDICAL_KNOWLEDGE_SOURCES)
     install_continental_medical_authorities(MEDICAL_KNOWLEDGE_SOURCES)
 
