@@ -1,7 +1,7 @@
 """Session-authenticated web console for diagnostic and home-health fulfilment."""
 from __future__ import annotations
 
-from flask import Blueprint, flash, g, redirect, render_template, request, url_for
+from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
 
 from .db import get_db
 from .operational_fulfilment import (
@@ -88,6 +88,11 @@ def _provider_reports(actor, bookings):
 @login_required
 def fulfilment_console():
     actor = dict(g.user)
+    role = str(actor.get("role") or "")
+    if role not in {"patient", "doctor", "hospital", "admin"}:
+        abort(403)
+    if role == "admin" and not is_owner(actor):
+        abort(403)
 
     if request.method == "POST":
         action = str(request.form.get("action") or "").strip()
@@ -135,7 +140,6 @@ def fulfilment_console():
             flash(str(error), "error")
         return redirect(url_for("operational_fulfilment_ui.fulfilment_console"))
 
-    role = str(actor.get("role") or "")
     patient_diagnostics = []
     patient_home = []
     provider_diagnostics = []
@@ -154,12 +158,8 @@ def fulfilment_console():
         provider_home = _safe_home_assignments(actor)
         capabilities = _safe_capabilities(actor)
         provider_reports = _provider_reports(actor, provider_diagnostics)
-    elif role == "admin" and is_owner(actor):
-        readiness = release_readiness(actor)
-        patient_diagnostics = list_patient_diagnostic_requests(actor)
-        patient_home = list_patient_home_health_requests(actor)
     else:
-        raise PermissionError("This account does not have fulfilment-console access.")
+        readiness = release_readiness(actor)
 
     return render_template(
         "fulfilment_operations.html",
