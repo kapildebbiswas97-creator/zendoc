@@ -1,5 +1,5 @@
 from zendoc.continental_coverage import ASIA, EUROPE, OCEANIA, AFRICA_FIRST_WAVE, continent_coverage_summary
-from zendoc.global_source_registry import country_coverage_manifest
+from zendoc.global_source_registry import country_coverage_manifest, get_global_public_ingestion_source
 from zendoc.medical_knowledge_registry import get_medical_knowledge_source
 from zendoc.public_source_registry import get_public_ingestion_source
 from tests.test_milestone1 import login_web, make_app
@@ -32,15 +32,16 @@ def test_reviewed_official_sources_are_available_without_false_connectivity(tmp_
         brazil = get_public_ingestion_source("br_cnes")
         australia = get_public_ingestion_source("au_nhsd")
         new_zealand = get_public_ingestion_source("nz_healthpoint")
-        assert japan["country_code"] == "JP"
         assert "public_healthcare_entities" in japan["ingestion_types"]
-        assert france["country_code"] == "FR"
         assert "public_healthcare_entities" in france["ingestion_types"]
-        assert brazil["country_code"] == "BR"
         assert "public_healthcare_entities" in brazil["ingestion_types"]
         assert australia["ingestion_types"] == []
         assert new_zealand["ingestion_types"] == []
         assert "SCRAPING_PROHIBITED" in new_zealand["live_fetch_status"]
+
+        assert get_global_public_ingestion_source("jp_mhlw_nabii")["country_code"] == "JP"
+        assert get_global_public_ingestion_source("fr_ans_annuaire_sante")["country_code"] == "FR"
+        assert get_global_public_ingestion_source("br_cnes")["country_code"] == "BR"
 
 
 def test_continental_medical_authorities_keep_snapshot_gate(tmp_path):
