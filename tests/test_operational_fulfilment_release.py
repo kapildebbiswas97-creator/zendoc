@@ -99,7 +99,7 @@ def test_diagnostic_provider_and_patient_work_queues_are_scoped(tmp_path):
             list_diagnostic_provider_requests({"id": lab_id, "role": "hospital"}, "invented")
 
 
-def test_completed_diagnostic_can_link_only_patient_owned_provider_uploaded_report(tmp_path):
+def test_completed_diagnostic_can_link_only_patient_owned_provider_uploaded_report(tmp_path, monkeypatch):
     app = make_app(tmp_path)
     with app.app_context():
         db = get_db()
@@ -152,11 +152,31 @@ def test_completed_diagnostic_can_link_only_patient_owned_provider_uploaded_repo
         with pytest.raises(PermissionError):
             link_diagnostic_report(lab, booking_id, patient_uploaded_id)
 
+        import zendoc.operational_fulfilment_release as release
+        stale_access = release._diagnostic_access(lab, booking_id)
         linked = link_diagnostic_report(lab, booking_id, report_id)
         assert int(linked["report_record_id"]) == report_id
         assert linked["external_execution"] is False
         replay = link_diagnostic_report(lab, booking_id, report_id)
         assert replay["report_link_idempotent_replay"] is True
+        assert db.execute(
+            "SELECT COUNT(*) c FROM notifications WHERE user_id=? AND title='Diagnostic report linked'",
+            (patient_id,),
+        ).fetchone()["c"] == 1
+        from zendoc.health_timeline import list_timeline
+        events = list_timeline({"id": patient_id, "role": "patient"}, event_type="diagnostic_report_linked")
+        assert events["total"] == 1
+        assert events["events"][0]["details_url"] == "/operations/fulfilment"
+        # A competing request read the unlinked booking before the first write.
+        # Its stale view must not produce a second event or notification.
+        monkeypatch.setattr(release, "_diagnostic_access", lambda *_: stale_access)
+        with pytest.raises(ValueError, match="changed concurrently"):
+            link_diagnostic_report(lab, booking_id, report_id)
+        assert db.execute(
+            "SELECT COUNT(*) c FROM health_timeline_events WHERE patient_id=? AND event_type='DIAGNOSTIC_REPORT_LINKED'",
+            (patient_id,),
+        ).fetchone()["c"] == 1
+
 
 
 def test_home_health_capability_and_patient_queue_are_real_assignment_views(tmp_path):
