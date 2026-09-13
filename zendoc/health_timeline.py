@@ -6,7 +6,7 @@ TIMELINE_TYPES = (
     "appointment", "consultation", "report", "medical_record", "measurement", "medication",
     "vaccination", "procedure", "ai_health_event", "mental_wellness", "fitness",
     "diagnostic_accepted", "diagnostic_sample_collected", "diagnostic_processing",
-    "diagnostic_completed", "diagnostic_cancelled", "diagnostic_declined",
+    "diagnostic_completed", "diagnostic_cancelled", "diagnostic_declined", "diagnostic_report_linked",
     "home_health_accepted", "home_health_in_progress", "home_health_completed",
     "home_health_cancelled", "home_health_declined",
 )
