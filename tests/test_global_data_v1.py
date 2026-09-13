@@ -1,8 +1,9 @@
 from zendoc.db import get_db
 from zendoc.global_public_data import ingest_global_public_healthcare
 from zendoc.global_source_registry import INDIA_ADMIN1, country_coverage_manifest
+from zendoc.medical_knowledge_registry import get_medical_knowledge_source
 from zendoc.public_source_registry import get_public_ingestion_source
-from tests.test_milestone1 import make_app
+from tests.test_milestone1 import login_web, make_app
 
 
 def test_global_country_schema_and_source_install(tmp_path):
@@ -16,6 +17,8 @@ def test_global_country_schema_and_source_install(tmp_path):
         assert "currency_code" in inventory_columns
         assert get_public_ingestion_source("us_cms_hospital_general") is not None
         assert get_public_ingestion_source("bd_dghs_facility_registry") is not None
+        assert get_medical_knowledge_source("uk_nice_guidance") is not None
+        assert get_medical_knowledge_source("sg_moh_guidance") is not None
 
 
 def test_india_manifest_covers_all_states_and_union_territories():
@@ -66,3 +69,18 @@ def test_global_import_keeps_public_listing_unverified_and_tags_country(tmp_path
         assert row["country_name"] == "United States"
         assert row["zendoc_verification_status"] == "not_verified"
         assert row["booking_connectivity"] == "not_connected"
+
+
+def test_global_coverage_endpoint_is_owner_only(tmp_path):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    anonymous = client.get("/owner/data/global-coverage", follow_redirects=False)
+    assert anonymous.status_code == 302
+    login_web(client, "admin", "admin@example.com", "AdminStrong123")
+    response = client.get("/owner/data/global-coverage")
+    assert response.status_code == 200
+    payload = response.get_json()
+    countries = {item["country_code"]: item for item in payload["countries"]}
+    assert countries["IN"]["admin1_count"] == 36
+    assert "US" in countries
+    assert "BD" in countries
