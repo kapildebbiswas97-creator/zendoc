@@ -78,6 +78,7 @@
             <div class="nav-menu-panel nav-menu-panel-right">
               <a href="{{ url_for('ecosystem.search_page') }}">Universal search</a>
               <a href="{{ url_for('main.notifications') }}">Notifications</a>
+              {% if current_user.role in ['patient','doctor','hospital','admin'] %}<a href="{{ url_for('operational_fulfilment_ui.fulfilment_console') }}">Care tracker</a>{% endif %}
               <a href="{{ url_for('milestone7.telehealth_page') }}">Telehealth <span class="menu-status">Beta</span></a>
               <a href="{{ url_for('ecosystem.marketplace_page') }}">All services</a>
               {% if current_user.role == 'patient' %}
