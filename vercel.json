@@ -1,9 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "rewrites": [
-    {
-      "source": "/:path*",
-      "destination": "https://zendoc-ykax.onrender.com/:path*"
-    }
-  ]
+  "git": {
+    "deploymentEnabled": false
+  }
 }
