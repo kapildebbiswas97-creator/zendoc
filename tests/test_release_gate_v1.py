@@ -182,7 +182,7 @@ def test_merged_release_workflow_can_trigger_render_deploy_hook():
     trigger = (root / "scripts/trigger_render_deploy.py").read_text(encoding="utf-8")
     assert "RENDER_DEPLOY_HOOK_URL" in workflow
     assert "scripts/trigger_render_deploy.py" in workflow
-    assert "RENDER_DEPLOY_HOOK_URL is not configured" in workflow
+    assert "Trigger Render deployment hook when configured" in workflow
     assert "Render deploy hook accepted." in trigger
     assert "render.com" in trigger
 
@@ -196,10 +196,10 @@ def test_deployment_verifier_reports_only_safe_health_summary():
     assert '"git_commit_short"' in verifier
 
 
-def test_merged_release_verification_fails_fast_without_render_hook():
+def test_merged_release_verification_uses_auto_deploy_when_hook_is_absent():
     root = Path(__file__).resolve().parents[1]
     workflow = (root / ".github/workflows/merged-release-verification.yml").read_text(encoding="utf-8")
-    assert "Require and trigger Render deployment hook" in workflow
-    assert "RENDER_DEPLOY_HOOK_URL is not configured" in workflow
-    assert "exit 1" in workflow
-    assert "relying on Render auto-deploy" not in workflow
+    assert "Trigger Render deployment hook when configured" in workflow
+    assert "relying on render.yaml autoDeployTrigger=commit" in workflow
+    assert "scripts/verify_deployment.py" in workflow
+    assert "--expected-commit" in workflow
