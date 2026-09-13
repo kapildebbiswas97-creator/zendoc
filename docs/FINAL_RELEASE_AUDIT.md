@@ -1,88 +1,92 @@
-# ZENDOC — Final Pre-Selection Release Audit
+# ZENDOC — Release Verification Record
 
-**Audit Target**: ZENDOC Healthcare & Wellness Platform  
-**Target Milestone**: Selection Beta Release Hardening  
-**Audit Date**: August 31, 2026  
-**Auditor**: Antigravity Automated Verification Agent  
-**Baseline Git HEAD**: `4f5d952`  
+**Verification model updated:** 13 September 2026  
+**Current completion branch:** `release/system-completion-v1`  
+**Authoritative code truth:** runtime capability registry + current GitHub Production Gate  
+**Deployment truth:** must be verified separately after merge/deploy
 
----
+This file replaces the obsolete August pre-selection snapshot. It is a release-verification record, not a permanent production certificate. ZENDOC changes frequently; old commit hashes, route counts, test counts, provider configuration and deployment-health claims must not be presented as current facts after the code changes.
 
-## 1. Executive Summary
+## Current release objectives
 
-This comprehensive audit evaluates the readiness of the ZENDOC application for the selection round. The objective of this release hardening phase was to discover, functionally test, identify broken or misleading flows, fix all P0/P1 issues, retest end-to-end, truthfully classify features, and establish a rock-solid, production-grade Selection Beta baseline.
+The completion branch consolidates the current mobile-first frontend with the latest healthcare safety baseline and closes remaining truth/integration gaps without fabricating external services.
 
-### Key Audit Findings:
-- **Test Suite Status**: 100% green passing rate across all 192 automated unit and integration tests.
-- **Route Inventory**: 122 registered routes mapped, verified, and audited across 8 blueprints (`main`, `health_memory`, `fitness`, `family`, `ecosystem`, `milestone7`, `milestone8`, `milestone82`).
-- **Security & Integrity**: Strict CSRF protection verified on all web forms, IDOR access controls verified across multi-patient scenarios, SQL injection resilience confirmed, and owner privilege isolation strictly enforced.
-- **Clinical & AI Safety**: Deterministic emergency triage overrides, non-diagnosis medical disclaimers, prescription request refusals, and local deterministic fallback mechanisms confirmed functional.
-- **Data Durability & Truthfulness**: Local and restart SQLite persistence confirmed `WORKING`. PostgreSQL adapter confirmed `BETA`. Cloud ephemeral persistence limitations on free-tier Render explicitly documented without deceptive claims.
+Current verified design requirements are:
 
----
+- emergency-first deterministic safety remains ahead of model output;
+- language-model output cannot directly execute registered tools;
+- role, tenant, consent, human approval, idempotency and audit rules remain server-side;
+- patient/provider/owner data access is authorization-scoped;
+- external actions are recorded as requests/handoffs until an authoritative provider confirms execution;
+- public/official datasets retain source/provenance and are not treated as complete simply because a connector exists;
+- provider verification requires evidence/review rather than self-assertion;
+- AI runtime status distinguishes configured providers from actually verified reachability;
+- patient-facing AI clearly separates the governed ZENDOC AI path from deterministic navigation/wellness helpers;
+- stale claims about medicine delivery, ambulance dispatch or unsupported model behavior are rejected by tests.
 
-## 2. Issues Discovered and Remediated During Hardening
+## Completion work represented by this release
 
-| ID | Issue Description | Severity | Remediated Code / File | Status |
-| :--- | :--- | :--- | :--- | :--- |
-| **AUD-01** | Missing hidden `csrf_token` input on 18 POST forms across 10 templates (`ambulance.html`, `family_care.html`, `fitness_hydration.html`, `fitness_nutrition.html`, `fitness_plan.html`, `fitness_profile.html`, `fitness_workout.html`, `home_health.html`, `iot_hub.html`, `pharmacy.html`). | **P1 (High)** | Updated all 10 templates with `<input type="hidden" name="csrf_token" value="{{ csrf_token }}">` | **FIXED & VERIFIED** |
-| **AUD-02** | Missing `get_db().commit()` in `create_measurement()` in `zendoc/health_analytics.py` causing uncommitted transactions on device measurements. | **P1 (High)** | Added `get_db().commit()` immediately following measurement insertion | **FIXED & VERIFIED** |
-| **AUD-03** | Route naming alignment between web requests and API endpoints for ambulance transport (`/api/v1/ambulance/requests`). | **P2 (Medium)** | Standardized route endpoints and response payloads | **FIXED & VERIFIED** |
-| **AUD-04** | Doctor availability status normalization (`available` vs legacy `online`). | **P2 (Medium)** | Updated doctor availability state handling and validation | **FIXED & VERIFIED** |
-| **AUD-05** | Ambiguous marketing claims (e.g. "Instant Advice", "Dispatched") in web copy. | **P2 (Medium)** | Audited and corrected all templates to provide truthful, transparent status badges | **FIXED & VERIFIED** |
+### Frontend and patient experience
 
----
+- Warm, mobile-first public homepage with clearer care-navigation shortcuts.
+- Third-party autoplay hero media removed from the landing page.
+- Homepage and AI copy use explicit truth boundaries rather than implying live integrations.
+- AI page exposes response layer, route, approved-context count (when present) and safety notice.
+- Legacy guided tools are labeled as deterministic helpers instead of appearing to be separate AI models.
 
-## 3. Domain-by-Domain Audit Results
+### AI, agent and tool governance
 
-### 3.1 Authentication & Authorization (`WORKING`)
-- **Multi-Role Support**: Patient, Doctor, Hospital, Pharmacy, Government, Admin roles operate with strict role boundaries.
-- **Credential Security**: Passwords hashed with Argon2id; timing attacks mitigated.
-- **Normalization**: User emails are stripped of whitespace and lowercased before lookup and insertion.
-- **Owner Isolation**: `/admin` routes reject non-owner users with `403 Forbidden`.
+- Deterministic safety is the non-optional first boundary for emergency/high-risk guidance.
+- Model routing supports governed deterministic/local/configured-cloud paths with privacy/risk policy.
+- Owner intelligence now exposes metadata-only AI runtime status without causing an external provider health call.
+- Owner intelligence exposes registered-tool risk classes, approval-gated tools and critically blocked actions.
+- Autonomous prescribing and emergency dispatch remain blocked tool classes.
+- Configured model/provider settings are not reported as externally reachable without a separate health verification.
+- The model/tool execution boundary is explicit: model output proposes; server policy decides.
 
-### 3.2 Appointment Booking & Scheduling (`WORKING`)
-- **Slot Generation**: Weekly recurring schedules generate distinct time slots.
-- **Atomic Booking**: Simultaneous booking requests for the same slot are prevented via atomic database checks.
-- **Status Lifecycle**: `requested` &rarr; `accepted` &rarr; `scheduled` &rarr; `completed` / `cancelled`.
+### Healthcare workflows
 
-### 3.3 Health Memory & Records (`WORKING`)
-- **Multi-Format Storage**: Secure storage and retrieval for PDF, PNG, JPG, TXT, DOC, DOCX.
-- **Timeline Aggregation**: Visits, vital measurements, lab reports, and workout sessions aggregate chronologically.
-- **IDOR Protection**: Access control layer ensures patient A cannot access patient B's health records or summaries.
-- **Sanitized Export**: Health data export generates structured JSON without exposing internal server filesystem paths.
+- Health memory, records, timeline and vitals are protected by application authorization boundaries.
+- Provider onboarding supports evidence review and does not auto-verify self-entered provider data.
+- Appointment/provider scheduling uses ZENDOC-owned durable workflow state; external confirmation is not invented.
+- Pharmacy, diagnostics, medical transport, home health and fulfilment workflows preserve request/status truth.
+- Diagnostic report linking includes completion notification/provenance and concurrency-safe linking on the current main baseline.
+- Real pharmacy stock/price/dispensing/delivery, ambulance dispatch and home-health staffing remain external integration concerns unless a connected provider confirms them.
 
-### 3.4 Fitness & Nutrition Coach (`WORKING` / `BETA`)
-- **Workout Plan Generator**: Algorithmic generation based on user goals, equipment, and time availability (`WORKING`).
-- **Interactive Workout Sessions**: Set-by-set rep logging and rest tracking (`WORKING`).
-- **Nutrition & Hydration**: Food logging and water tracking with progress indicators (`WORKING`).
-- **Camera Pose Coach**: Local browser MediaDevices integration with canvas rendering fallback (`BETA`).
+### Data, geography and partner systems
 
-### 3.5 ZENDOC Connect & Telehealth (`WORKING` / `BETA`)
-- **Direct Messaging**: Permission-governed messaging requiring existing doctor-patient relationship, appointment, or open availability policy (`WORKING`).
-- **Contact Discovery**: Privacy-redacted contact search (email/phone hidden until permitted) (`WORKING`).
-- **Video Consultation Rooms**: WebRTC room signaling and interactive UI (`BETA`).
+- Public/official ingestion supports controlled dry-run/apply, provenance, checksums, validation/rejection and idempotent update behavior.
+- India geography/health-graph infrastructure is separated from actual verified record coverage.
+- Business/partner API v1 includes API-key/rate-limit/audit/handoff boundaries; partner-side execution remains external.
+- Pilot/startup analytics are derived from stored ZENDOC records and must not be converted into fabricated traction/savings claims.
 
-### 3.6 Connected Ecosystem & IoT Hub (`WORKING` / `INTEGRATION REQUIRED`)
-- **IoT Device Sync**: BP monitors, smartwatches, and glucometers record vitals with provenance source=`device` (`WORKING`).
-- **Medicine Search & Reminders**: OTC/Rx medicine search and recurring dosage reminders (`WORKING`).
-- **Doorstep Logistics**: Ambulance, home nursing, and medicine delivery workflows record valid database entities but disclose required physical fulfillment integration (`INTEGRATION REQUIRED`).
+## Security and integrity verification
 
-### 3.7 Owner Command Center & Model Evaluation Lab (`WORKING`)
-- **Model Evaluation Lab**: Candidate benchmark suite with two-step confirmation preventing accidental local LLM invocation (`WORKING`).
-- **Operational Monitoring**: Real-time metrics, queue latencies, and security audit log viewer (`WORKING`).
+The repository Production Gate is the release authority. A branch intended for merge must pass the current jobs configured in `.github/workflows/ci.yml`, including the security/safety gate, SQLite suite, PostgreSQL readiness/migration checks and release gate.
 
----
+Specific regression areas maintained in the current suite include:
 
-## 4. Durability & Infrastructure Statement
+- owner-only intelligence/runtime access;
+- role and IDOR isolation;
+- emergency/safety precedence;
+- model-to-tool separation and critical tool blocking;
+- diagnostic completion/report-link integrity;
+- provider/data provenance truth;
+- stale integration-claim prevention in the legacy AI helper;
+- patient UI labeling of deterministic helper tools.
 
-- **Local Development / Desktop**: SQLite database persists all user accounts, appointments, workouts, and vitals across server restarts.
-- **PostgreSQL Compatibility**: Schema and query layers support PostgreSQL (`BETA`).
-- **Cloud Demo Limitation**: Render free-tier instances run on ephemeral filesystems. On instance idle cold-boot, the SQLite database resets to seeded initial state. This limitation is clearly disclosed to testers and does not block the Selection Beta.
+Do **not** copy a historical test count into presentations as a permanent number. Use the latest successful workflow run for the release commit.
 
----
+## Infrastructure truth
 
-## 5. Audit Verdict
+- SQLite is supported for local/test application persistence.
+- PostgreSQL status is environment-dependent and is only `WORKING` when configuration and the documented persistence verification are both satisfied; otherwise it remains `BETA` or `INTEGRATION_REQUIRED` according to the runtime registry.
+- Local record storage can be working for a single deployment boundary without implying production-grade shared object storage.
+- Multi-region HA/DR, real external messaging delivery, live provider logistics, payment/insurance authorization and other third-party infrastructure are not created by the application alone.
+- A green pull-request gate does not prove the public Render deployment is healthy. Deployment health must be checked separately after merge/deployment.
 
-**SELECTION BETA READY**  
-The codebase meets all functional, security, safety, and truthfulness criteria required for the selection round.
+## Release verdict rule
+
+A commit may be called **repository release-ready** only when its current Production Gate is green and there are no known unreviewed P0/P1 safety/security regressions in the completion scope.
+
+A deployment may be called **production healthy** only after the deployed revision is identified and the public health/application checks succeed. Until that verification exists, the truthful statement is **repository validated; deployment health not yet verified**.
