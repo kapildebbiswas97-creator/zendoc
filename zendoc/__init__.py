@@ -16,6 +16,7 @@ from .family_routes import bp as family_bp
 from .fitness_routes import bp as fitness_bp
 from .geography_routes import bp as geography_graph_bp
 from .global_data_schema import ensure_global_data_schema
+from .global_registry_install import install_global_public_sources
 from .health_access import ensure_consent_schema
 from .health_routes import bp as health_memory_bp
 from .knowledge_routes import bp as medical_knowledge_bp
@@ -50,6 +51,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 def create_app(test_config=None):
+    # Make international sources available to the existing governed ingestion
+    # engine before any request can resolve a source id.
+    install_global_public_sources()
+
     app = Flask(
         __name__,
         template_folder=str(BASE_DIR / "templates"),
