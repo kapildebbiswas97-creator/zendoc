@@ -1,77 +1,77 @@
 # ZENDOC — Feature Truth Matrix
 
-**Release Target**: Selection Beta  
-**Branch**: `main`  
-**Evaluation Date**: August 2026  
-**Durability & Persistence Status**: Local SQLite Persistence (`WORKING`), Live Managed PostgreSQL Connection (`WORKING` via `DATABASE_URL`), Enterprise Multi-Region HA & Backups (`INTEGRATION REQUIRED`).
+**Truth model updated:** 13 September 2026  
+**Authoritative runtime source:** `zendoc/capability_registry.py`  
+**Owner inspection:** `/owner/intelligence-manifest` and `/owner/ai-runtime`
 
----
+This document describes the product boundary. It is intentionally conservative. Environment-dependent capabilities must be read from the runtime capability registry rather than inferred from screenshots, configuration files, demo data, or old release notes.
 
-## 1. Feature Classification Taxonomy
+## Status taxonomy
 
-Each capability in ZENDOC is evaluated and classified into one of the following five truthful operational states:
+ZENDOC uses exactly these runtime statuses:
 
-1. **`WORKING`**: Feature is fully implemented, functionally verified, covered by automated test suites, and operates end-to-end with persistent data storage in local/test SQLite.
-2. **`BETA`**: Feature is functional in the reference web application with browser-local or deterministic fallbacks when external cloud services (e.g. third-party LLM keys, TURN servers) are not provisioned.
-3. **`INTEGRATION REQUIRED`**: Feature provides complete frontend workflows, validation, and database records, but requires external physical infrastructure, live carrier integrations, or merchant fleet agreements for live external execution (e.g., real ambulance dispatch, live pharmacy doorstep delivery).
-4. **`PROTOTYPE`**: Working browser-local prototype or UI intake demonstrating user experience and schema design without live AI model evaluation or physical hardware integration (e.g., Fitness Camera Preview).
-5. **`FUTURE`**: Long-term roadmap capability scheduled for post-selection development (e.g., native mobile app binary packages, on-device Edge TPU hardware acceleration, autonomous logistics).
+- **`WORKING`** — the ZENDOC-owned software workflow is implemented and tested for its stated boundary.
+- **`BETA`** — the workflow is usable, but a provider, model, browser feature, or operational dependency still limits production guarantees.
+- **`INTEGRATION_REQUIRED`** — ZENDOC has a safe integration/workflow boundary, but a real external provider, credential, authorization, partner, infrastructure service, or verified dataset is required.
+- **`DISABLED`** — deliberately unavailable by policy or configuration.
+- **`FUTURE`** — intentionally outside the current implemented product boundary.
 
----
+`Configured` does not mean `reachable`, and a recorded request does not mean an external action occurred.
 
-## 2. Complete Capabilities Truth Matrix
+## Current capability truth
 
-| Domain / Subsystem | Capability / Feature | Classification | Execution Mode & Truthful Description | Verification Method |
-| :--- | :--- | :--- | :--- | :--- |
-| **Auth & Security** | Multi-Role Registration & Login (Patient, Doctor, Hospital, Pharmacy, Gov) | `WORKING` | Argon2id password hashing, session tokens, role authorization | Automated Tests (`tests/test_final_release_hardening.py`) |
-| **Auth & Security** | Email Case & Whitespace Normalization | `WORKING` | Normalizes uppercase/whitespace inputs preventing duplicate account collisions | Automated Tests |
-| **Auth & Security** | Owner Isolation & Admin Access Control | `WORKING` | Admin route (`/admin`) restricted exclusively to configured `ADMIN_EMAIL` | Automated Tests |
-| **Auth & Security** | CSRF Protection on All Web Forms | `WORKING` | Server-validated CSRF tokens on all POST requests across all 18 templates | Template audit & automated web tests |
-| **Auth & Security** | Session Rotation & Logout Invalidation | `WORKING` | Secure cookie rotation on login/logout, legacy GET logout compatibility | Unit & Integration tests |
-| **Auth & Security** | Password Reset & Recovery | `BETA` | Local demo recovery token flow; email transport requires SMTP credentials | Web test flow |
-| **Database & Durability** | Local SQLite File Persistence | `WORKING` | ACID transactions, foreign keys, write-ahead logging (WAL), table triggers | Full suite restart tests |
-| **Database & Durability** | Managed PostgreSQL Backend | `WORKING` | Schema-ordered migrations applied; active for live Render selection deployment via `DATABASE_URL` | Automated Tests & Schema Verification |
-| **Database & Durability** | Enterprise Multi-Region HA & Disaster Recovery | `INTEGRATION REQUIRED` | Multi-region failover and automated backups not provisioned in selection tier | Documented Infrastructure Scope |
-| **Appointments & Finder** | Healthcare Provider Directory & Filters | `WORKING` | Filter by specialty, city, provider type, ratings, and verified badge | Web & API tests |
-| **Appointments & Finder** | Provider Schedule & Slot Management | `WORKING` | Doctors create weekly recurring schedules with custom slot durations | Automated Tests |
-| **Appointments & Finder** | Real-Time Slot Booking & Double-Booking Prevention | `WORKING` | Atomic appointment reservation, prevents double-booking same slot | Automated Tests |
-| **Appointments & Finder** | Universal Multimodal Search (`/search`) | `WORKING` | Full text search across doctors, medicines, records, workouts, and services | Automated Tests |
-| **Clinical Intelligence (AI)** | Deterministic Emergency Triage (Chest Pain, Stroke, Trauma) | `WORKING` | Rule-based safety gate overrides LLM, directs user immediately to 108 / ER | Safety engine test suite |
-| **Clinical Intelligence (AI)** | Non-Diagnosis Disclaimer & Refusal on Prescriptions | `WORKING` | Refuses to prescribe Rx medications; provides structured guidance and encourages clinician visits | Intelligence test suite |
-| **Clinical Intelligence (AI)** | Multimodal Intent Router (28+ intents) | `WORKING` | Rule-assisted intent routing across health, fitness, family, and ecosystem | Intent test suite |
-| **Clinical Intelligence (AI)** | Configurable Cloud LLM Router | `BETA` | Fallback to deterministic engine when cloud API keys (OpenAI/Gemini/Anthropic) are absent | Model router tests |
-| **Health Memory** | Medical Records Upload & Storage | `WORKING` | Multi-format record upload (PDF, PNG, JPG, TXT, DOCX) with audit provenance | Storage & access tests |
-| **Health Memory** | Health Timeline & Longitudinal History | `WORKING` | Chronological aggregation of visits, uploads, measurements, and workouts | Timeline tests |
-| **Health Memory** | Manual Vitals & Metric Logging | `WORKING` | Record BP, heart rate, blood glucose, weight, SpO2 with range validation | Analytics tests |
-| **Health Memory** | IDOR Multi-Tenant Privacy Isolation | `WORKING` | Strict RBAC prevents cross-patient record/summary viewing | Automated security tests |
-| **Health Memory** | Full Health Data Export (JSON) | `WORKING` | Structured export of health profile, timeline, metrics; sanitizes file paths | Export verification tests |
-| **Fitness Coach** | Fitness Profile & Goal Configuration | `WORKING` | Captures experience level, goal, location, equipment, available minutes | Fitness test suite |
-| **Fitness Coach** | Personalised Workout Plan Generator | `WORKING` | Algorithmic plan generation based on user constraints and muscle focus | Automated Tests |
-| **Fitness Coach** | Interactive Workout Session & Set Logger | `WORKING` | Live set/rep logging, timer tracking, automatic timeline recording | Automated Tests |
-| **Fitness Coach** | Nutrition & Meal Logging | `WORKING` | Food, macro, and calorie tracking without fabricated calorie claims | Automated Tests |
-| **Fitness Coach** | Daily Hydration Tracker | `WORKING` | Quick-log presets (250ml, 500ml, 750ml) with daily wellness target progress | Automated Tests |
-| **Camera & Video** | Fitness Camera Preview Prototype | `PROTOTYPE` | Browser-local camera preview and duration capture; automatic pose analysis and rep counting not connected | Camera test suite |
-| **Camera & Video** | Curated Educational Exercise Videos | `BETA` | Searches verified educational fitness videos; graceful offline fallback | Video search tests |
-| **Family Care** | Family Member & Dependent Management | `WORKING` | Add parents, children, spouse with proxy permissions and emergency flags | Family test suite |
-| **Family Care** | Care Tasks & Medication Reminders | `WORKING` | Assign and mark completed care tasks for dependents | Automated Tests |
-| **Family Care** | Remote Parent Care Dashboard | `WORKING` | Single-pane monitoring of elderly parent vitals, tasks, and alert triggers | Remote parent tests |
-| **ZENDOC Connect** | Permission-Governed Direct Messaging | `WORKING` | Patient-doctor and doctor-doctor messaging with strict privacy controls | Connect test suite |
-| **ZENDOC Connect** | Doctor Availability & Message Policies | `WORKING` | Doctors control online/busy/offline status and accepted message scopes | Telehealth tests |
-| **ZENDOC Connect** | WebRTC Consultation Rooms | `BETA` | Real-time audio/video room creation; local WebRTC demo mode in browser | Telehealth detail tests |
-| **Connected Ecosystem** | IoT Health Device Hub & Sync | `WORKING` | Register BP monitors, smartwatches, glucometers; records provenance as `device` | IoT Hub tests |
-| **Connected Ecosystem** | Pharmacy Medicine Catalog Search | `WORKING` | Search OTC and Rx medicines with clinical usage and dosage notes | Pharmacy tests |
-| **Connected Ecosystem** | Refill & Dosage Reminders | `WORKING` | Schedule recurring daily/weekly medicine reminders with push alerts | Reminders tests |
-| **Connected Ecosystem** | Doorstep Medicine Delivery | `INTEGRATION REQUIRED` | Order creation with delivery address; requires pharmacy logistics partner API | Ecosystem tests |
-| **Connected Ecosystem** | Medical Transport & Ambulance Booking | `INTEGRATION REQUIRED` | Request BLS, ICU van, wheelchair transport; requires live dispatch fleet API | Transport tests |
-| **Connected Ecosystem** | Doorstep Home Healthcare Booking | `INTEGRATION REQUIRED` | Book nurse, physiotherapist, elder attendant visits; requires clinician staffing API | Home health tests |
-| **Owner Command Center** | Model Evaluation Lab | `WORKING` | Multi-candidate benchmark engine with strict two-step confirmation for local models | Evaluation Lab tests |
-| **Owner Command Center** | Real-Time Operations Monitoring | `WORKING` | System health, database connection metrics, queue latencies, audit log stream | Command Center tests |
-| **Owner Command Center** | Role Management & Provider Verification | `WORKING` | Owner review and verification workflow for registered doctors and clinics | Admin tests |
+| Domain | Capability | Truth status | Current boundary |
+| --- | --- | --- | --- |
+| Security | Role/session/owner authorization | `WORKING` | Server-side authorization protects owner, patient, provider and tenant-scoped resources. |
+| Security | CSRF, IDOR and audit controls | `WORKING` | Mutating web flows use CSRF validation; protected records are subject to ownership/role checks and audited access. |
+| AI safety | Deterministic emergency safety gate | `WORKING` | Runs before model routing for safety-sensitive guidance; models do not replace emergency services. |
+| AI governance | Model router | `WORKING` | Routes by privacy/risk/configuration. Model output cannot directly execute tools. |
+| AI governance | Tool registry and approval boundary | `WORKING` | Role, consent, owner/doctor approval, idempotency and audit policy are enforced server-side. Critical autonomous prescribing/dispatch actions remain blocked. |
+| AI product | ZENDOC-SLM product layer | `WORKING` | Safety, approved context, structured validation and advisory response layer work without claiming a particular local model is installed. |
+| AI runtime | Local model provider | `BETA` or `INTEGRATION_REQUIRED` | Depends on runtime model/provider configuration and explicit health verification. |
+| AI runtime | Cloud LLM provider | `BETA` or `INTEGRATION_REQUIRED` | Depends on configured provider/key/model; health-sensitive and high-risk routing remains restricted. |
+| AI knowledge | Approved knowledge/RAG foundation | `WORKING` | Curated/provenance-aware repository knowledge and ingestion workflow; discovered sources are not automatically trusted for patient answers. |
+| Health memory | Records, timeline, vitals and access controls | `WORKING` | Persistent application records with provenance and authorization. Uploaded content is not automatically clinician-verified. |
+| Reports | Report intelligence | `BETA` | Deterministic educational interpretation and report workflow; not diagnosis. |
+| Appointments | Provider profiles, schedules and booking state | `WORKING` | ZENDOC-owned scheduling/booking records work; external provider truth is shown only when confirmed. |
+| Finder | Local/ingested healthcare finder | `BETA` or `WORKING` | Local/verified records work. Live Places status depends on configured provider and server-side key. |
+| Provider network | Onboarding and evidence review | `WORKING` | Providers submit evidence; owner review controls verification. ZENDOC does not auto-verify from self-asserted data. |
+| Public data | Official/public dataset ingestion | `WORKING` | Owner-only dry-run/apply, checksums, schema mapping, provenance, rejection reasons and idempotent upsert are implemented. |
+| Public data | Live official connectors | `INTEGRATION_REQUIRED` | LGD/OGD/ABDM or other sources require source-specific download/API/authorized access. |
+| Geography | India hierarchy and health graph foundation | `WORKING` | Ingestion/search architecture is implemented; production coverage depends on actually ingested verified records. |
+| Pharmacy | Catalog/search/request workflow | `WORKING` | ZENDOC can manage/search recorded data and create fulfilment workflow records. |
+| Pharmacy | Real stock, price, dispensing and doorstep delivery | `INTEGRATION_REQUIRED` unless confirmed by connected source | Never inferred or fabricated. External execution requires a real pharmacy/logistics response. |
+| Diagnostics | Diagnostic workflow and report linking | `WORKING` | Request/status/report-link lifecycle includes provenance, notifications and concurrency-safe completion handling. |
+| Transport | Medical transport request intake | `WORKING` | ZENDOC can record and track a request. |
+| Transport | Real ambulance dispatch | `INTEGRATION_REQUIRED` | ZENDOC never claims dispatch without a connected provider confirmation. |
+| Home health | Service request intake | `WORKING` | ZENDOC can record and coordinate the request state. |
+| Home health | Real staffing/visit fulfilment | `INTEGRATION_REQUIRED` | Requires connected, verified care providers. |
+| Care journeys | Deterministic care journey coordinator | `WORKING` | Durable coordination state machine with human gates and next-safe-action logic; no diagnostic authority. |
+| CareFin | Benefit discovery | `WORKING` | Provenance-aware discovery and missing-information analysis. |
+| CareFin | Personal eligibility/approval/payment confirmation | `INTEGRATION_REQUIRED` | Requires authoritative government/insurer/CSR/trust/payment responses. |
+| Family care | Family/dependent coordination | `WORKING` | Permissioned app workflow; real-world care remains subject to connected providers. |
+| Messaging | ZENDOC Connect | `WORKING` | Policy-aware messaging and sharing within ZENDOC authorization boundaries. |
+| Telehealth | Consultation workflow | `BETA` | App workflow is available; production-grade real-time media requires appropriate infrastructure/provider. |
+| IoT | Device registration/manual measurements | `BETA` | Device records and measurement provenance work; live hardware sync requires device SDK/integration. |
+| Fitness | Plans, sessions, nutrition and hydration | `WORKING` | General wellness tooling; not medical diagnosis/treatment. |
+| Fitness camera | Camera preview | `BETA` | Browser-local preview only; no fabricated pose/rep/form analysis. |
+| Notifications | In-app notifications | `WORKING` | Delivered inside ZENDOC. |
+| Notifications | External email/SMS/WhatsApp/push | `INTEGRATION_REQUIRED` | Requires configured real delivery providers. |
+| Database | SQLite application persistence | `WORKING` | Supported for local/test operation. |
+| Database | PostgreSQL | runtime-dependent | `WORKING` only when configured **and** operator persistence verification is recorded; otherwise `BETA`/`INTEGRATION_REQUIRED`. |
+| Storage | Secure local record storage | `WORKING` for its deployment boundary | Production object storage is separately configuration/integration dependent. |
+| Operations | Pilot analytics, observability and safe operations automation | `WORKING` | Metrics are derived from stored ZENDOC events; no invented traction, savings, uptime or provider performance. |
+| Partner API | Business/partner API v1 | `WORKING` for ZENDOC-owned API boundary | API keys, rate limits, audit events and handoffs are implemented; partner-side execution remains external. |
 
----
+## Non-negotiable truth boundaries
 
-## 3. Truthful Testing Disclosure Summary
+1. **No fake healthcare inventory:** providers, facilities, medicine stock, prices, slots, ratings, distance, ETA or verification must come from stored/verified/connected evidence.
+2. **No fake external execution:** ambulance dispatch, medicine delivery, home-health staffing, insurer approval, payment, messaging delivery and similar actions are not complete until a real external system confirms them.
+3. **No autonomous clinical authority:** ZENDOC AI can provide educational guidance and workflow suggestions. It cannot autonomously diagnose, prescribe, or bypass clinician/owner approval gates.
+4. **No model-to-tool shortcut:** language-model output is advisory. Server-side policy decides whether any registered tool may execute.
+5. **No configuration-as-health claim:** presence of an API key/model URL/provider setting is not proof the service is currently reachable.
+6. **No static coverage claim:** geographic/data coverage is measured from ingested records and provenance, not from the existence of a schema or connector.
 
-- **Local/Test Environment**: 100% of capabilities function reliably using SQLite.
-- **Production Server (Render Selection Beta)**: Connected to managed PostgreSQL database via `DATABASE_URL` with ordered schema migrations applied. Application state persists across service lifecycles. Temporary web service sleep/cold-start characteristics after prolonged inactivity remain disclosed.
-- **No Deceptive Demos**: ZENDOC does not simulate fake ambulance dispatches, fake camera AI detections, or fake payment confirmations. All external execution boundaries are truthfully labeled.
+## Verification rule
+
+Do not publish a fixed test count or production-health claim from this document. The current branch/release must pass the repository's **ZENDOC Production Gate**, including security/safety, SQLite, PostgreSQL readiness and release-gate jobs. Deployment health must be checked separately after merge/deployment; PR CI does not prove the public deployment is healthy.
