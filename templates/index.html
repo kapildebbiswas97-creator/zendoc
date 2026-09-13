@@ -5,34 +5,32 @@
 {% block content %}
 
 <section class="landing-hero" aria-labelledby="home-title">
-  <video class="landing-hero__video" id="hero-video" autoplay muted loop playsinline aria-hidden="true">
-    <source src="https://raw.githubusercontent.com/Anjel-cmd/Zendoc/main/static/assets/hero.mp4" type="video/mp4">
-  </video>
-  <div class="landing-hero__overlay"></div>
+  <div class="care-orbit care-orbit--one" aria-hidden="true"></div>
+  <div class="care-orbit care-orbit--two" aria-hidden="true"></div>
 
   <div class="landing-hero__inner">
     <div class="landing-hero__text">
       <div class="section-kicker landing-hero__kicker">
         <span class="pulse-dot" aria-hidden="true"></span>
-        <span>AI-Powered Connected Healthcare</span>
+        <span>A little clarity. A lot more care.</span>
       </div>
       <h1 id="home-title" class="landing-hero__title">
-        One connected <span class="landing-hero__gradient">healthcare journey.</span>
+        Your health, <span class="landing-hero__gradient">a little simpler.</span>
       </h1>
       <p class="landing-hero__copy">
-        Understand your symptoms safely, find care options, request appointments, and organize your private Health Memory — all in one calm, AI-native platform.
+        Find your next care step, keep your records together, and look after the people you love. One welcoming place to begin.
       </p>
 
       <div class="landing-hero__ctas">
-        <a href="{{ url_for('main.register', role='patient') }}" class="primary-action landing-hero__btn-primary">Get started as Patient &rarr;</a>
+        <a href="{{ url_for('main.register', role='patient') }}" class="primary-action landing-hero__btn-primary">Start your care journey &rarr;</a>
         <a href="{{ url_for('main.ai_center') }}" class="landing-hero__btn-secondary">Try ZENDOC AI</a>
         <a href="{{ url_for('main.login') }}" class="landing-hero__link">Sign in &rarr;</a>
       </div>
 
       <div class="landing-hero__badges">
-        <span class="landing-hero__badge-item">✓ Emergency-first safety triage</span>
-        <span class="landing-hero__badge-item">✓ Patient-controlled Health Memory</span>
-        <span class="landing-hero__badge-item">✓ Provider verification status shown when confirmed</span>
+        <span class="landing-hero__badge-item">✓ Emergency guidance comes first</span>
+        <span class="landing-hero__badge-item">✓ You control your health records</span>
+        <span class="landing-hero__badge-item">✓ Provider verification status is visible</span>
       </div>
     </div>
 
@@ -43,10 +41,10 @@
             <div class="ai-preview-icon-wrap" aria-hidden="true">✦</div>
             <div>
               <strong>ZENDOC AI Assistant</strong>
-              <span class="ai-preview-status">Safety checks active</span>
+              <span class="ai-preview-status">Explore an example below</span>
             </div>
           </div>
-          <span class="status-badge working">Safety-aware</span>
+          <span class="status-badge working">Example preview</span>
         </div>
 
         <div class="scenario-selector" role="tablist" aria-label="Example healthcare scenarios">
@@ -138,6 +136,14 @@
 </section>
 
 <div class="page">
+  <section class="care-start" aria-labelledby="care-start-title">
+    <div class="care-start__intro"><p class="eyebrow">Start wherever you are</p><h2 id="care-start-title">What would help today?</h2><p>Three simple ways to take the next step.</p></div>
+    <div class="care-start__grid">
+      <a class="care-start__tile" href="{{ url_for('main.finder') }}"><span class="care-tile-icon" aria-hidden="true">⌖</span><h3>Find the right care</h3><p>Explore providers by specialty and location.</p><span class="care-tile-link">Explore care <b aria-hidden="true">↗</b></span></a>
+      <a class="care-start__tile" href="{{ url_for('operational_fulfilment_ui.fulfilment_console') }}"><span class="care-tile-icon care-tile-icon--peach" aria-hidden="true">✓</span><h3>Know what’s next</h3><p>Follow your lab and home-care requests.</p><span class="care-tile-link">Open care tracker <b aria-hidden="true">↗</b></span></a>
+      <a class="care-start__tile" href="{{ url_for('main.records') }}"><span class="care-tile-icon care-tile-icon--lavender" aria-hidden="true">▤</span><h3>Keep it all together</h3><p>Your reports and health records, organized.</p><span class="care-tile-link">View my records <b aria-hidden="true">↗</b></span></a>
+    </div>
+  </section>
   <section class="spaced-panel" aria-labelledby="how-it-works-title">
     <div class="section-intro">
       <p class="eyebrow">How ZENDOC works</p>
