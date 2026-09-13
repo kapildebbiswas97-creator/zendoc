@@ -1,11 +1,15 @@
-"""Observed public-data freshness and ingestion quality for ZENDOC."""
+"""Observed public-data freshness and owner-visible data inventory for ZENDOC."""
 from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
 from typing import Any
 
+from flask import current_app
+
 from .db import get_db
+from .medical_knowledge_registry import list_medical_knowledge_sources
+from .places_provider import places_configuration_status
 from .public_source_registry import list_public_ingestion_sources
 from .security import assert_owner
 
@@ -132,6 +136,7 @@ def ingestion_freshness_report(actor: Any, *, recent_batch_limit: int = 50) -> d
         "status_counts": counts,
         "sources": source_rows,
         "recent_completed_batches": recent_batches,
+        "inventory": platform_data_inventory(actor),
         "thresholds": {
             "recent_days": RECENT_DAYS,
             "aging_days": AGING_DAYS,
@@ -141,6 +146,157 @@ def ingestion_freshness_report(actor: Any, *, recent_batch_limit: int = 50) -> d
             "It is not a claim that an external registry itself is complete or current. "
             "Reference-only sources are intentionally not treated as failed ingestion."
         ),
+    }
+
+
+def platform_data_inventory(actor: Any) -> dict:
+    """Owner-only aggregate counts and source modes without exposing patient PII."""
+    assert_owner(actor)
+    db = get_db()
+
+    users_by_role = _group_counts(db, "users", "role", "active=1")
+    provider_by_type = _group_counts(
+        db,
+        "provider_profiles",
+        "provider_type",
+        "verification_status='verified'",
+    )
+    public_by_category = _group_counts(db, "public_healthcare_entities", "category", "active=1")
+    appointments_by_status = _group_counts(db, "appointments", "status")
+    medicine_orders_by_status = _group_counts(db, "medicine_orders", "status")
+    inventory_by_status = _group_counts(db, "inventory_observations", "stock_status")
+    rag_reviews = _group_counts(db, "medical_knowledge_documents", "review_status")
+
+    places = places_configuration_status()
+    source_families = list_medical_knowledge_sources()
+
+    return {
+        "database_engine": str(current_app.config.get("DATABASE_ENGINE") or "sqlite"),
+        "accounts": {
+            "active_total": _count(db, "users", "active=1"),
+            "by_role": users_by_role,
+        },
+        "provider_network": {
+            "profiles_total": _count(db, "provider_profiles"),
+            "verified_total": _count(db, "provider_profiles", "verification_status='verified'"),
+            "pending_total": _count(db, "provider_profiles", "verification_status='pending'"),
+            "verified_by_type": provider_by_type,
+            "active_schedules": _count(db, "provider_schedules", "active=1"),
+        },
+        "official_public_directory": {
+            "active_total": _count(db, "public_healthcare_entities", "active=1"),
+            "by_category": public_by_category,
+            "completed_import_batches": _count(
+                db,
+                "data_ingestion_batches",
+                "dry_run=0 AND status='completed'",
+            ),
+        },
+        "appointments": {
+            "total": _count(db, "appointments"),
+            "by_status": appointments_by_status,
+        },
+        "pharmacy": {
+            "verified_pharmacy_profiles": int(provider_by_type.get("pharmacy", 0)),
+            "medicine_orders": _count(db, "medicine_orders"),
+            "orders_by_status": medicine_orders_by_status,
+            "inventory_observations": _count(db, "inventory_observations"),
+            "inventory_by_status": inventory_by_status,
+            "medicine_skus": _count(db, "medication_skus"),
+        },
+        "patient_health": {
+            "medical_records": _count(db, "medical_records"),
+            "health_metrics": _count(db, "health_metrics"),
+            "timeline_events": _count(db, "health_timeline_events"),
+        },
+        "ai_and_rag": {
+            "ai_interactions": _count(db, "ai_interactions"),
+            "ai_conversations": _count(db, "ai_conversations"),
+            "approved_source_families": len(source_families),
+            "knowledge_documents": _count(db, "medical_knowledge_documents"),
+            "documents_by_review_status": rag_reviews,
+            "approved_documents": int(rag_reviews.get("APPROVED", 0)),
+            "knowledge_chunks": _count(db, "medical_knowledge_chunks"),
+            "stored_embeddings": _count(db, "medical_knowledge_embeddings"),
+        },
+        "live_discovery": {
+            "configured_provider": places.get("configured_provider"),
+            "effective_provider": places.get("effective_provider"),
+            "mode": places.get("mode"),
+            "google_places_key_configured": bool(places.get("google_places_key_configured")),
+            "production_fallback_active": bool(places.get("production_fallback_active")),
+            "persistence_rule": "EXTERNAL_DISCOVERY_NOT_VERIFIED_OR_PERSISTED_AUTOMATICALLY",
+        },
+        "data_flow": [
+            {
+                "area": "Hospitals / clinics / doctors / pharmacies",
+                "source": "Verified provider DB + imported official/public directory + live Google/OpenStreetMap discovery",
+                "persistence": "Verified/imported rows persist; external search results remain unverified discovery unless separately onboarded/imported.",
+            },
+            {
+                "area": "Appointments",
+                "source": "ZENDOC verified provider schedules or explicit partner booking handoffs",
+                "persistence": "Persisted in PostgreSQL; arbitrary internet listings are not directly bookable.",
+            },
+            {
+                "area": "Pharmacy stock / prices / orders",
+                "source": "Registered pharmacy observations and connected fulfilment workflows",
+                "persistence": "Orders and confirmed observations persist; live web listings never create fake stock or prices.",
+            },
+            {
+                "area": "AI medical knowledge",
+                "source": "Owner-approved immutable documents from governed authorities plus authorized patient context",
+                "persistence": "Approved documents/chunks persist for RAG; arbitrary live web pages are not trusted as medical evidence.",
+            },
+        ],
+        "truth_notice": (
+            "Counts describe records actually present in this ZENDOC database. "
+            "Live Places results are request-time external discovery and are intentionally not counted as ZENDOC-verified data."
+        ),
+    }
+
+
+def _table_exists(db: Any, table: str) -> bool:
+    engine = str(current_app.config.get("DATABASE_ENGINE") or "sqlite").lower()
+    if engine == "postgresql":
+        row = db.execute(
+            """
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.tables
+                WHERE table_schema='public' AND table_name=?
+            ) AS present
+            """,
+            (table,),
+        ).fetchone()
+        return bool(row and row["present"])
+    row = db.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+        (table,),
+    ).fetchone()
+    return bool(row)
+
+
+def _count(db: Any, table: str, where: str | None = None) -> int:
+    if not _table_exists(db, table):
+        return 0
+    sql = f"SELECT COUNT(*) AS c FROM {table}"
+    if where:
+        sql += f" WHERE {where}"
+    row = db.execute(sql).fetchone()
+    return int(row["c"] if row else 0)
+
+
+def _group_counts(db: Any, table: str, column: str, where: str | None = None) -> dict[str, int]:
+    if not _table_exists(db, table):
+        return {}
+    sql = f"SELECT {column} AS key, COUNT(*) AS c FROM {table}"
+    if where:
+        sql += f" WHERE {where}"
+    sql += f" GROUP BY {column} ORDER BY {column}"
+    rows = db.execute(sql).fetchall()
+    return {
+        str(row["key"] if row["key"] is not None else "unknown"): int(row["c"] or 0)
+        for row in rows
     }
 
 
