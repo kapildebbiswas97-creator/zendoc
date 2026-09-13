@@ -1,14 +1,17 @@
 """Provider-scoped operational activity timeline for the ZENDOC web app.
 
-This view intentionally reads only records already assigned to the authenticated
-provider. It does not expose unrelated patient data and it never claims external
-execution for lab, pharmacy, or home-health work.
+Every event comes from a record already visible to the authenticated provider.
+The timeline is informational: it never claims external LIS, courier, payment,
+dispatch, arrival, or agency execution.
 """
 from __future__ import annotations
 
 from flask import Blueprint, abort, g, render_template, request
 
 from .db import get_db
+from .operational_fulfilment import list_assigned_home_health_requests
+from .operational_fulfilment_release import list_diagnostic_provider_requests
+from .pharmacy_service import list_medicine_orders
 from .security import login_required
 
 
@@ -31,6 +34,13 @@ def _event(kind, event_at, title, summary, status=None, patient_name=None, detai
     }
 
 
+def _patient_name(patient_id):
+    if not patient_id:
+        return None
+    row = get_db().execute("SELECT name FROM users WHERE id=?", (int(patient_id),)).fetchone()
+    return row["name"] if row else None
+
+
 def list_provider_activity(actor, kind: str = "all", limit: int = 120) -> list[dict]:
     role = str(actor.get("role") or "").lower()
     provider_id = int(actor.get("id") or 0)
@@ -44,11 +54,10 @@ def list_provider_activity(actor, kind: str = "all", limit: int = 120) -> list[d
     db = get_db()
     events: list[dict] = []
 
-    notification_rows = db.execute(
+    for row in db.execute(
         "SELECT id,title,message,is_read,created_at FROM notifications WHERE user_id=? ORDER BY created_at DESC LIMIT 80",
         (provider_id,),
-    ).fetchall()
-    for row in notification_rows:
+    ).fetchall():
         events.append(
             _event(
                 "notification",
@@ -62,7 +71,7 @@ def list_provider_activity(actor, kind: str = "all", limit: int = 120) -> list[d
         )
 
     if role in {"doctor", "hospital"}:
-        appointment_rows = db.execute(
+        for row in db.execute(
             """
             SELECT a.id,a.status,a.scheduled_for,a.created_at,u.name AS patient_name
             FROM appointments a
@@ -72,8 +81,7 @@ def list_provider_activity(actor, kind: str = "all", limit: int = 120) -> list[d
             LIMIT 120
             """,
             (provider_id,),
-        ).fetchall()
-        for row in appointment_rows:
+        ).fetchall():
             events.append(
                 _event(
                     "appointment",
@@ -87,82 +95,59 @@ def list_provider_activity(actor, kind: str = "all", limit: int = 120) -> list[d
                 )
             )
 
-        diagnostic_rows = db.execute(
-            """
-            SELECT b.id,b.status,b.scheduled_date,b.created_at,u.name AS patient_name,dc.name AS test_name
-            FROM diagnostic_bookings b
-            JOIN users u ON u.id=b.patient_id
-            JOIN diagnostic_catalog dc ON dc.id=b.test_id
-            WHERE b.lab_id=?
-            ORDER BY b.created_at DESC,b.id DESC
-            LIMIT 120
-            """,
-            (provider_id,),
-        ).fetchall()
-        for row in diagnostic_rows:
+        try:
+            diagnostic_rows = list_diagnostic_provider_requests(actor)
+        except PermissionError:
+            diagnostic_rows = []
+        for item in diagnostic_rows:
+            patient_name = _patient_name(item.get("patient_id"))
             events.append(
                 _event(
                     "diagnostic",
-                    row["created_at"],
-                    f"{row['test_name']} · {row['patient_name']}",
-                    f"Scheduled {row['scheduled_date'] or 'date not set'} in ZENDOC.",
-                    row["status"],
-                    row["patient_name"],
+                    item.get("updated_at") or item.get("created_at"),
+                    f"{item.get('test_name') or 'Diagnostic request'}{f' · {patient_name}' if patient_name else ''}",
+                    "Verified provider workflow recorded inside ZENDOC. External LIS, payment, sample chain and interpretation are not implied.",
+                    item.get("status"),
+                    patient_name,
                     "/operations/fulfilment",
-                    int(row["id"]),
+                    item.get("id"),
                 )
             )
 
-        home_rows = db.execute(
-            """
-            SELECT h.id,h.status,h.service_type,h.scheduled_date,h.created_at,u.name AS patient_name
-            FROM home_health_requests h
-            JOIN home_health_assignments a ON a.request_id=h.id
-            JOIN users u ON u.id=h.patient_id
-            WHERE a.provider_id=?
-            ORDER BY h.created_at DESC,h.id DESC
-            LIMIT 120
-            """,
-            (provider_id,),
-        ).fetchall()
-        for row in home_rows:
-            title = str(row["service_type"] or "home health").replace("_", " ").title()
+        try:
+            home_rows = list_assigned_home_health_requests(actor)
+        except PermissionError:
+            home_rows = []
+        for item in home_rows:
+            patient_name = _patient_name(item.get("patient_id"))
+            service = str(item.get("service_type") or "Home health").replace("_", " ").title()
             events.append(
                 _event(
                     "home_health",
-                    row["created_at"],
-                    f"{title} · {row['patient_name']}",
-                    f"Assigned home-health request for {row['scheduled_date'] or 'date not set'}.",
-                    row["status"],
-                    row["patient_name"],
+                    item.get("updated_at") or item.get("created_at") or item.get("scheduled_date"),
+                    f"{service}{f' · {patient_name}' if patient_name else ''}",
+                    "Assigned verified-provider workflow inside ZENDOC. External dispatch, arrival, payment and agency execution are not implied.",
+                    item.get("status"),
+                    patient_name,
                     "/operations/fulfilment",
-                    int(row["id"]),
+                    item.get("id"),
                 )
             )
 
     if role == "pharmacy":
-        order_rows = db.execute(
-            """
-            SELECT mo.id,mo.status,mo.created_at,u.name AS patient_name
-            FROM medicine_orders mo
-            JOIN users u ON u.id=mo.patient_id
-            WHERE mo.pharmacy_id=?
-            ORDER BY mo.created_at DESC,mo.id DESC
-            LIMIT 120
-            """,
-            (provider_id,),
-        ).fetchall()
-        for row in order_rows:
+        for item in list_medicine_orders(actor):
+            if int(item.get("pharmacy_id") or 0) != provider_id:
+                continue
             events.append(
                 _event(
                     "pharmacy",
-                    row["created_at"],
-                    f"Medicine order · {row['patient_name']}",
-                    "Assigned ZENDOC pharmacy order. Stock, payment, dispensing and courier execution are not implied by this timeline.",
-                    row["status"],
-                    row["patient_name"],
+                    item.get("created_at"),
+                    f"Medicine order · {item.get('patient_name') or 'patient'}",
+                    "Assigned ZENDOC pharmacy order. Stock, payment, dispensing and courier execution are not implied.",
+                    item.get("status"),
+                    item.get("patient_name"),
                     "/pharmacy",
-                    int(row["id"]),
+                    item.get("id"),
                 )
             )
 
