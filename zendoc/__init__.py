@@ -27,6 +27,7 @@ from .milestone82_routes import bp as milestone82_bp
 from .nutrition_routes import bp as nutrition_intelligence_bp
 from .organization_routes import bp as provider_organizations_bp
 from .personal_baseline_routes import bp as personal_health_baseline_bp
+from .pharmacy_order_routes import bp as pharmacy_order_ops_bp
 from .preventive_care import ensure_preventive_care_schema
 from .preventive_care_routes import bp as preventive_care_bp
 from .public_ingestion_routes import bp as public_ingestion_bp
@@ -63,6 +64,7 @@ def create_app(test_config=None):
     app.register_blueprint(fitness_bp)
     app.register_blueprint(family_bp)
     app.register_blueprint(ecosystem_bp)
+    app.register_blueprint(pharmacy_order_ops_bp)
     app.register_blueprint(milestone7_bp)
     app.register_blueprint(milestone8_bp)
     app.register_blueprint(milestone82_bp)
