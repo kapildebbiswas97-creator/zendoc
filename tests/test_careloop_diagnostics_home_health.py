@@ -133,6 +133,27 @@ def test_verified_lab_diagnostic_lifecycle_links_and_syncs_careloop(tmp_path):
 
         patient_view = get_diagnostic_booking(patient, booking_id)
         assert "does not independently verify" in patient_view["truth_notice"].lower()
+        patient_notifications = db.execute(
+            "SELECT title,message FROM notifications WHERE user_id=? ORDER BY id",
+            (patient_id,),
+        ).fetchall()
+        lab_notifications = db.execute(
+            "SELECT title FROM notifications WHERE user_id=? ORDER BY id",
+            (lab_id,),
+        ).fetchall()
+        assert [item["title"] for item in patient_notifications] == [
+            "Diagnostic accepted",
+            "Diagnostic sample collected",
+            "Diagnostic processing",
+            "Diagnostic completed",
+        ]
+        assert len(lab_notifications) == 4
+        timeline_event = db.execute(
+            "SELECT event_type,source_ref FROM health_timeline_events WHERE patient_id=? ORDER BY id DESC LIMIT 1",
+            (patient_id,),
+        ).fetchone()
+        assert timeline_event["event_type"] == "DIAGNOSTIC_COMPLETED"
+        assert timeline_event["source_ref"] == f"diagnostic:{booking_id}"
 
 
 def test_diagnostic_idor_and_patient_advance_are_blocked(tmp_path):
@@ -204,6 +225,10 @@ def test_home_health_requires_explicit_verified_provider_capability(tmp_path):
 
         assignment = assign_home_health_provider(patient, int(request_row["id"]), provider_id)
         assert int(assignment["provider_id"]) == provider_id
+        assert db.execute(
+            "SELECT COUNT(*) c FROM notifications WHERE user_id IN (?,?) AND title='Home-care provider assigned'",
+            (patient_id, provider_id),
+        ).fetchone()["c"] == 2
         action = _care_action(db, f"zendoc_home_health_request:{int(request_row['id'])}")
         assert action is not None
         assert action["status"] == "STAGED"
