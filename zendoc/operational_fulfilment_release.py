@@ -16,6 +16,7 @@ from .operational_fulfilment import (
     HOME_HEALTH_SERVICE_IDS,
     _actor_id,
     _diagnostic_access,
+    _deliver_workflow_notifications,
     _verified_provider,
     get_diagnostic_booking,
     get_home_health_fulfilment,
@@ -112,11 +113,13 @@ def link_diagnostic_report(actor, booking_id: int, record_id: int) -> dict:
         result["report_link_idempotent_replay"] = True
         return result
 
-    db.execute(
-        "UPDATE diagnostic_bookings SET report_record_id=?,updated_at=? WHERE id=? AND status='completed'",
+    update = db.execute(
+        "UPDATE diagnostic_bookings SET report_record_id=?,updated_at=? WHERE id=? AND status='completed' AND report_record_id IS NULL",
         (int(record_id), now_iso(), int(booking_id)),
     )
-    source = "PROVIDER_RECORDED" if lab_verified else "OWNER_RECORDED"
+    if update.rowcount != 1:
+        raise ValueError("The booking report changed concurrently; refresh before retrying.")
+    source = "PROVIDER_RECORDED" if lab_verified else "USER_REPORTED"
     record_care_continuity_event(
         patient_id=int(row["patient_id"]),
         event_type="DIAGNOSTIC_REPORT_LINKED",
@@ -128,12 +131,18 @@ def link_diagnostic_report(actor, booking_id: int, record_id: int) -> dict:
         metadata={
             "booking_id": int(booking_id),
             "report_record_id": int(record_id),
+            "actor_kind": "assigned_lab" if lab_verified else "zendoc_owner",
             "lab_id": int(row["lab_id"]),
             "source": source,
         },
     )
     db.commit()
     result = get_diagnostic_booking(actor, int(booking_id))
+    _deliver_workflow_notifications(
+        {int(row["patient_id"]), int(row["lab_id"])},
+        "Diagnostic report linked",
+        "A report has been linked to the completed diagnostic booking in ZENDOC. Open your care tracker to review it.",
+    )
     result["report_record"] = dict(record)
     result["report_truth_notice"] = (
         "The linked record is evidence stored in ZENDOC. Linking it does not verify an external LIS, payment, sample chain-of-custody, or clinical interpretation."
