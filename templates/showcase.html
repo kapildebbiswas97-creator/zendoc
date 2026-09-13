@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}ZENDOC — Connected Care Operating System{% endblock %}
+{% block body_class %}demo-day-page{% endblock %}
+{% block main_class %}demo-day-page{% endblock %}
+{% block content %}
+<div class="demo-shell">
+  <section class="demo-hero" aria-labelledby="showcase-title">
+    <div>
+      <div class="demo-kicker"><span class="demo-kicker-dot" aria-hidden="true"></span>DHN HealthTech Innovation Challenge 2026 · IIT Kanpur</div>
+      <h1 id="showcase-title" class="demo-title">One operating layer for a <em>connected healthcare journey.</em></h1>
+      <p class="demo-lede">ZENDOC connects patients, verified providers, hospitals, pharmacies, diagnostics and longitudinal health records through privacy-governed AI, trusted data and interoperable care workflows.</p>
+      <div class="demo-actions">
+        <a class="demo-button demo-button--primary" href="{{ url_for('main.register', role='patient') }}">Experience patient journey →</a>
+        <a class="demo-button demo-button--ghost" href="{{ url_for('main.finder') }}">Explore care discovery</a>
+        <a class="demo-button demo-button--ghost" href="{{ url_for('main.ai_center') }}">Open ZENDOC AI</a>
+      </div>
+      <div class="demo-proofline">
+        <span class="demo-proof">Emergency-first safety</span>
+        <span class="demo-proof">Patient-controlled Health Memory</span>
+        <span class="demo-proof">Verified-provider boundary</span>
+        <span class="demo-proof">Country-aware data architecture</span>
+      </div>
+    </div>
+
+    <aside class="demo-hero-card" aria-label="ZENDOC system overview">
+      <div class="demo-card-head"><div class="demo-logo-orb">Z</div><span class="demo-live">Production architecture</span></div>
+      <div class="demo-stack">
+        <div class="demo-stack-row"><span class="demo-stack-icon">AI</span><div><strong>Safety-governed AI</strong><small>Approved knowledge only; emergency rules precede assistance.</small></div><span class="demo-stack-state">Guarded</span></div>
+        <div class="demo-stack-row"><span class="demo-stack-icon">HM</span><div><strong>Health Memory</strong><small>Timeline, reports, vitals, provenance and access controls.</small></div><span class="demo-stack-state">User-controlled</span></div>
+        <div class="demo-stack-row"><span class="demo-stack-icon">Px</span><div><strong>Connected care network</strong><small>Provider identity, schedules, appointments and operations.</small></div><span class="demo-stack-state">Verified-only</span></div>
+        <div class="demo-stack-row"><span class="demo-stack-icon">Rx</span><div><strong>Pharmacy & diagnostics</strong><small>Operational stock, price and fulfilment only when observed.</small></div><span class="demo-stack-state">Truthful status</span></div>
+      </div>
+    </aside>
+  </section>
+
+  <section class="demo-section">
+    <div class="demo-section-head"><div class="demo-eyebrow">Why ZENDOC</div><h2>Healthcare is fragmented. ZENDOC connects the journey without faking certainty.</h2><p>Patients often move between search engines, hospitals, labs, pharmacies, family members and scattered records. ZENDOC gives those steps one governed workflow while clearly separating public discovery data from verified operational data.</p></div>
+    <div class="demo-grid demo-grid--4">
+      <article class="demo-panel"><div class="demo-number">01</div><h3>Find trusted care</h3><p>Search facilities and providers while showing verification and connectivity truthfully.</p></article>
+      <article class="demo-panel demo-panel--blue"><div class="demo-number">02</div><h3>Coordinate the next step</h3><p>Move from discovery to schedules, appointment requests, messages and care tasks.</p></article>
+      <article class="demo-panel demo-panel--violet"><div class="demo-number">03</div><h3>Remember the patient journey</h3><p>Keep reports, vitals and health events in a longitudinal, consent-aware memory.</p></article>
+      <article class="demo-panel"><div class="demo-number">04</div><h3>Connect real operations</h3><p>Use provider-confirmed schedules, inventory observations and fulfilment records instead of inferred claims.</p></article>
+    </div>
+  </section>
+
+  <section class="demo-section">
+    <div class="demo-section-head"><div class="demo-eyebrow">Challenge fit</div><h2>Built around the exact problems DHN 2026 is asking startups to solve.</h2></div>
+    <div class="demo-grid demo-grid--3">
+      <article class="demo-panel"><div class="demo-number">A</div><h3>Trusted Health Data, DPDP, ABDM & Interoperability</h3><p>Consent, provenance, data separation, governed ingestion and patient-controlled records are core architecture decisions.</p></article>
+      <article class="demo-panel demo-panel--blue"><div class="demo-number">B</div><h3>AI for Primary Care & Rural Health</h3><p>Safety-first guidance and care discovery are designed for mobile access and can be extended with multilingual, low-bandwidth workflows.</p></article>
+      <article class="demo-panel demo-panel--violet"><div class="demo-number">C</div><h3>Smart Hospitals & Workflow Automation</h3><p>Provider onboarding, schedules, messaging, operational workflows and business APIs create an enterprise adoption path.</p></article>
+    </div>
+  </section>
+
+  <section class="demo-section">
+    <div class="demo-trust-grid">
+      <article class="demo-trust-panel">
+        <div class="demo-eyebrow" style="color:#65e2cb">Trust architecture</div>
+        <h3>What ZENDOC deliberately refuses to fake</h3>
+        <p>Trust is a product feature. The system separates discovery, verification, connectivity and operational confirmation so a polished interface never creates false medical or commercial certainty.</p>
+        <div class="demo-trust-list">
+          <div class="demo-trust-item"><span class="demo-trust-check">✓</span><div><strong>Internet result ≠ verified provider</strong><br><small>Public discovery remains visibly unverified until onboarding and evidence review are complete.</small></div></div>
+          <div class="demo-trust-item"><span class="demo-trust-check">✓</span><div><strong>Web page ≠ AI knowledge</strong><br><small>Medical documents require snapshot, provenance, review, approval and governed RAG ingestion.</small></div></div>
+          <div class="demo-trust-item"><span class="demo-trust-check">✓</span><div><strong>Listing ≠ live availability</strong><br><small>Appointments need schedules; pharmacy stock and price need real observations.</small></div></div>
+        </div>
+      </article>
+      <article class="demo-source-panel">
+        <div class="demo-eyebrow">Data maturity</div>
+        <h3>From public source to real operation</h3>
+        <div class="demo-source-row"><strong>Official dataset</strong><span>Reference / discovery</span></div>
+        <div class="demo-source-row"><strong>Provider onboarding</strong><span>Identity + evidence</span></div>
+        <div class="demo-source-row"><strong>Verified profile</strong><span>Connected provider</span></div>
+        <div class="demo-source-row"><strong>Schedule / inventory</strong><span>Operational truth</span></div>
+        <div class="demo-source-row"><strong>Patient consent</strong><span>Controlled access</span></div>
+      </article>
+    </div>
+  </section>
+
+  <section class="demo-section">
+    <div class="demo-section-head"><div class="demo-eyebrow">Scale architecture</div><h2>India-first validation. Country-aware architecture for global expansion.</h2><p>The platform can represent jurisdiction, source maturity, provider status and medical-authority provenance separately. That allows expansion without pretending every country exposes the same registries, APIs or rules.</p></div>
+    <div class="demo-metrics">
+      <div class="demo-metric"><strong>36</strong><span>Indian states and union territories represented in the coverage manifest.</span></div>
+      <div class="demo-metric"><strong>48</strong><span>Asian jurisdictions represented in the continent-aware country registry.</span></div>
+      <div class="demo-metric"><strong>44</strong><span>European jurisdictions represented in the same governed architecture.</span></div>
+      <div class="demo-metric"><strong>14</strong><span>Oceania jurisdictions represented, with Africa and Brazil expansion layers added.</span></div>
+    </div>
+  </section>
+
+  <section class="demo-cta">
+    <div><div class="demo-eyebrow" style="color:#6ee8d1">Demo journey</div><h2>See the connected-care loop, not a slide-only concept.</h2><p>Start with care guidance, move into provider discovery, review Health Memory and then inspect how verified schedules, appointments, pharmacy observations and governed medical knowledge fit together.</p></div>
+    <div class="demo-actions"><a class="demo-button demo-button--ghost" href="{{ url_for('main.register', role='patient') }}">Start demo →</a></div>
+  </section>
+</div>
+{% endblock %}
