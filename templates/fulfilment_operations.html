@@ -7,7 +7,7 @@
   {% set steps = diagnostic_steps if kind == 'diagnostic' else home_steps %}
   {% set values = steps | map(attribute=0) | list %}
   {% set current_index = values.index(status) if status in values else -1 %}
-  <ol class="care-progress" aria-label="{{ kind | replace('_',' ') | title }} progress">
+  <ol class="care-progress" style="--step-count: {{ steps | length }}" aria-label="{{ kind | replace('_',' ') | title }} progress">
   {% for value,label in steps %}<li class="{{ 'is-complete' if loop.index0 < current_index else 'is-current' if loop.index0 == current_index else '' }}"><span>{{ loop.index }}</span><small>{{ label }}</small></li>{% endfor %}
   </ol>
   {% if status in ['cancelled','declined'] %}<p class="workflow-stopped"><strong>{{ status | title }}</strong> — this workflow will not advance.</p>{% endif %}
@@ -39,7 +39,7 @@
   <div class="card-grid">
     {% for item in patient_diagnostics %}
     <article class="card fulfilment-card">
-      <div class="fulfilment-card__head"><div><span class="service-icon" aria-hidden="true">D</span><h3>{{ item.test_name }}</h3></div><span class="status-badge active">{{ item.status | replace('_',' ') }}</span></div>
+      <div class="fulfilment-card__head"><div><span class="service-icon" aria-hidden="true">D</span><h3>{{ item.test_name }}</h3></div><span class="status-badge {{ 'inactive' if item.status in ['cancelled','declined'] else 'active' }}">{{ item.status | replace('_',' ') }}</span></div>
       {{ care_progress('diagnostic', item.status) }}
       <p><strong>Lab:</strong> {{ item.lab_name }}</p>
       <p><strong>Scheduled:</strong> {{ item.scheduled_date }}</p>
@@ -66,12 +66,12 @@
   <div class="card-grid">
     {% for item in patient_home %}
     <article class="card fulfilment-card">
-      <div class="fulfilment-card__head"><div><span class="service-icon home" aria-hidden="true">H</span><h3>{{ item.service_type | replace('_',' ') | title }}</h3></div><span class="status-badge active">{{ item.status | replace('_',' ') }}</span></div>
+      <div class="fulfilment-card__head"><div><span class="service-icon home" aria-hidden="true">H</span><h3>{{ item.service_type | replace('_',' ') | title }}</h3></div><span class="status-badge {{ 'inactive' if item.status in ['cancelled','declined'] else 'active' }}">{{ item.status | replace('_',' ') }}</span></div>
       {{ care_progress('home', item.status) }}
       <p><strong>Scheduled:</strong> {{ item.scheduled_date }}</p>
       {% if item.provider_name %}<p><strong>Provider:</strong> {{ item.provider_name }}</p>{% endif %}
       <p class="muted">{{ item.truth_notice }}</p>
-      {% if not item.provider_id %}
+      {% if not item.provider_id and item.status == "requested" %}
         {% set choices = provider_options.get(item.id, []) %}
         {% if choices %}
         <form method="post">
@@ -81,7 +81,7 @@
           <label>Verified provider
             <select name="provider_id" required>
               {% for provider in choices %}
-              <option value="{{ provider.id }}">{{ provider.name }}{% if provider.organization %} — {{ provider.organization }}{% endif %}</option>
+              <option value="{{ provider.provider_id }}">{{ provider.provider_name }}{% if provider.organization %} — {{ provider.organization }}{% endif %}</option>
               {% endfor %}
             </select>
           </label>
@@ -114,7 +114,7 @@
   <div class="card-grid">
     {% for item in provider_diagnostics %}
     <article class="card fulfilment-card">
-      <div class="fulfilment-card__head"><div><span class="service-icon" aria-hidden="true">D</span><h3>{{ item.test_name }}</h3></div><span class="status-badge active">{{ item.status | replace('_',' ') }}</span></div>
+      <div class="fulfilment-card__head"><div><span class="service-icon" aria-hidden="true">D</span><h3>{{ item.test_name }}</h3></div><span class="status-badge {{ 'inactive' if item.status in ['cancelled','declined'] else 'active' }}">{{ item.status | replace('_',' ') }}</span></div>
       {{ care_progress('diagnostic', item.status) }}
       <p><strong>Booking:</strong> #{{ item.id }}</p>
       <p><strong>Scheduled:</strong> {{ item.scheduled_date }}</p>
@@ -193,7 +193,7 @@
   <div class="card-grid">
     {% for item in provider_home %}
     <article class="card fulfilment-card">
-      <div class="fulfilment-card__head"><div><span class="service-icon home" aria-hidden="true">H</span><h3>{{ item.service_type | replace('_',' ') | title }}</h3></div><span class="status-badge active">{{ item.status | replace('_',' ') }}</span></div>
+      <div class="fulfilment-card__head"><div><span class="service-icon home" aria-hidden="true">H</span><h3>{{ item.service_type | replace('_',' ') | title }}</h3></div><span class="status-badge {{ 'inactive' if item.status in ['cancelled','declined'] else 'active' }}">{{ item.status | replace('_',' ') }}</span></div>
       {{ care_progress('home', item.status) }}
       <p><strong>Request:</strong> #{{ item.id }}</p>
       <p><strong>Scheduled:</strong> {{ item.scheduled_date }}</p>
