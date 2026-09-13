@@ -1,18 +1,120 @@
 {% extends "base.html" %}
-{% block title %}Data Freshness — ZENDOC{% endblock %}
+{% block title %}Data Inventory & Freshness — ZENDOC{% endblock %}
 {% block content %}
 <section class="section-head">
   <div>
-    <p class="eyebrow">Public data operations</p>
-    <h1>Data Freshness & Ingestion</h1>
-    <p class="section-copy">Observed source freshness, recent imports and geography-link quality. No synthetic coverage score.</p>
+    <p class="eyebrow">Data operations</p>
+    <h1>Data Inventory & Freshness</h1>
+    <p class="section-copy">See what is actually stored in ZENDOC, what comes from live internet discovery, and which official imports still need data.</p>
   </div>
   <a class="secondary-action" href="{{ url_for('main.startup_command_center') }}">Back to Startup Command Center</a>
 </section>
 
+<section class="panel spaced-panel">
+  <div class="panel-head">
+    <div>
+      <h2>What data is actually inside ZENDOC?</h2>
+      <p class="form-note">{{ report.inventory.truth_notice }}</p>
+    </div>
+    <span class="status-badge working">{{ report.inventory.database_engine|upper }}</span>
+  </div>
+
+  <div class="grid two">
+    <article>
+      <h3>Provider & care data</h3>
+      <div class="summary-row"><span>Provider profiles</span><strong>{{ report.inventory.provider_network.profiles_total }}</strong></div>
+      <div class="summary-row"><span>Verified providers</span><strong>{{ report.inventory.provider_network.verified_total }}</strong></div>
+      <div class="summary-row"><span>Pending providers</span><strong>{{ report.inventory.provider_network.pending_total }}</strong></div>
+      <div class="summary-row"><span>Active provider schedules</span><strong>{{ report.inventory.provider_network.active_schedules }}</strong></div>
+      {% for kind, count in report.inventory.provider_network.verified_by_type.items() %}
+      <div class="summary-row"><span>Verified {{ kind|replace('_',' ')|title }}</span><strong>{{ count }}</strong></div>
+      {% endfor %}
+      <div class="summary-row"><span>Official/public healthcare rows</span><strong>{{ report.inventory.official_public_directory.active_total }}</strong></div>
+      <div class="summary-row"><span>Completed official imports</span><strong>{{ report.inventory.official_public_directory.completed_import_batches }}</strong></div>
+      {% for category, count in report.inventory.official_public_directory.by_category.items() %}
+      <div class="summary-row"><span>Public {{ category|replace('_',' ')|title }}</span><strong>{{ count }}</strong></div>
+      {% endfor %}
+    </article>
+
+    <article>
+      <h3>Appointments & pharmacy</h3>
+      <div class="summary-row"><span>Appointments</span><strong>{{ report.inventory.appointments.total }}</strong></div>
+      {% for status, count in report.inventory.appointments.by_status.items() %}
+      <div class="summary-row"><span>Appointment {{ status|replace('_',' ')|title }}</span><strong>{{ count }}</strong></div>
+      {% endfor %}
+      <div class="summary-row"><span>Verified pharmacies</span><strong>{{ report.inventory.pharmacy.verified_pharmacy_profiles }}</strong></div>
+      <div class="summary-row"><span>Medicine SKUs</span><strong>{{ report.inventory.pharmacy.medicine_skus }}</strong></div>
+      <div class="summary-row"><span>Inventory observations</span><strong>{{ report.inventory.pharmacy.inventory_observations }}</strong></div>
+      <div class="summary-row"><span>Medicine orders</span><strong>{{ report.inventory.pharmacy.medicine_orders }}</strong></div>
+      {% for status, count in report.inventory.pharmacy.orders_by_status.items() %}
+      <div class="summary-row"><span>Order {{ status|replace('_',' ')|title }}</span><strong>{{ count }}</strong></div>
+      {% endfor %}
+    </article>
+
+    <article>
+      <h3>Patient health data</h3>
+      <div class="summary-row"><span>Active accounts</span><strong>{{ report.inventory.accounts.active_total }}</strong></div>
+      {% for role, count in report.inventory.accounts.by_role.items() %}
+      <div class="summary-row"><span>{{ role|title }} accounts</span><strong>{{ count }}</strong></div>
+      {% endfor %}
+      <div class="summary-row"><span>Medical records</span><strong>{{ report.inventory.patient_health.medical_records }}</strong></div>
+      <div class="summary-row"><span>Health metrics</span><strong>{{ report.inventory.patient_health.health_metrics }}</strong></div>
+      <div class="summary-row"><span>Timeline events</span><strong>{{ report.inventory.patient_health.timeline_events }}</strong></div>
+    </article>
+
+    <article>
+      <h3>AI &amp; medical RAG</h3>
+      <div class="summary-row"><span>AI interactions</span><strong>{{ report.inventory.ai_and_rag.ai_interactions }}</strong></div>
+      <div class="summary-row"><span>AI conversations</span><strong>{{ report.inventory.ai_and_rag.ai_conversations }}</strong></div>
+      <div class="summary-row"><span>Governed source families</span><strong>{{ report.inventory.ai_and_rag.approved_source_families }}</strong></div>
+      <div class="summary-row"><span>Knowledge documents</span><strong>{{ report.inventory.ai_and_rag.knowledge_documents }}</strong></div>
+      <div class="summary-row"><span>Approved RAG documents</span><strong>{{ report.inventory.ai_and_rag.approved_documents }}</strong></div>
+      <div class="summary-row"><span>RAG chunks</span><strong>{{ report.inventory.ai_and_rag.knowledge_chunks }}</strong></div>
+      <div class="summary-row"><span>Stored embeddings</span><strong>{{ report.inventory.ai_and_rag.stored_embeddings }}</strong></div>
+      {% for status, count in report.inventory.ai_and_rag.documents_by_review_status.items() %}
+      <div class="summary-row"><span>RAG {{ status|replace('_',' ')|title }}</span><strong>{{ count }}</strong></div>
+      {% endfor %}
+    </article>
+  </div>
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head">
+    <div>
+      <h2>Live internet discovery</h2>
+      <p class="form-note">This is the search layer for external hospitals, clinics, doctors, pharmacies and labs. External results are discovery data, not automatically ZENDOC-verified records.</p>
+    </div>
+    <span class="status-badge {% if report.inventory.live_discovery.mode == 'unconfigured' %}integration{% else %}working{% endif %}">{{ report.inventory.live_discovery.mode|replace('_',' ')|title }}</span>
+  </div>
+  <div class="grid two">
+    <div>
+      <div class="summary-row"><span>Configured provider</span><strong>{{ report.inventory.live_discovery.configured_provider or 'none' }}</strong></div>
+      <div class="summary-row"><span>Effective provider</span><strong>{{ report.inventory.live_discovery.effective_provider or 'none' }}</strong></div>
+      <div class="summary-row"><span>Google Places key configured</span><strong>{{ 'Yes' if report.inventory.live_discovery.google_places_key_configured else 'No' }}</strong></div>
+      <div class="summary-row"><span>Production OSM fallback</span><strong>{{ 'Active' if report.inventory.live_discovery.production_fallback_active else 'No' }}</strong></div>
+    </div>
+    <div>
+      <p class="form-note"><strong>Important:</strong> Google/OpenStreetMap can discover nearby facilities live. They do not prove appointment availability, pharmacy stock/prices, provider verification, bed availability or emergency dispatch.</p>
+      <p class="form-note">Persistence rule: {{ report.inventory.live_discovery.persistence_rule|replace('_',' ')|title }}.</p>
+    </div>
+  </div>
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head"><h2>Where each kind of data comes from</h2></div>
+  <table>
+    <thead><tr><th>Area</th><th>Source</th><th>How ZENDOC stores/uses it</th></tr></thead>
+    <tbody>
+    {% for flow in report.inventory.data_flow %}
+      <tr><td><strong>{{ flow.area }}</strong></td><td>{{ flow.source }}</td><td>{{ flow.persistence }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
 <section class="grid two">
   <article class="panel">
-    <div class="panel-head"><h2>Freshness states</h2><span class="status-badge working">{{ report.source_count }} sources</span></div>
+    <div class="panel-head"><h2>Official data freshness</h2><span class="status-badge working">{{ report.source_count }} sources</span></div>
     <div class="summary-row"><span>Recent</span><strong>{{ report.status_counts.recent }}</strong></div>
     <div class="summary-row"><span>Aging</span><strong>{{ report.status_counts.aging }}</strong></div>
     <div class="summary-row"><span>Stale</span><strong>{{ report.status_counts.stale }}</strong></div>
@@ -46,9 +148,7 @@
       <div class="summary-row"><span>{{ status|replace('_',' ')|title }}</span><strong>{{ count }}</strong></div>
       {% endfor %}
     </div>
-    <div>
-      <p class="form-note">{{ operations.truth_notice }}</p>
-    </div>
+    <div><p class="form-note">{{ operations.truth_notice }}</p></div>
   </div>
 
   {% if operations.urgent_sources %}
