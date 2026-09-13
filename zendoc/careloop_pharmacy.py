@@ -6,6 +6,8 @@ dispensing, or external courier execution.
 """
 from __future__ import annotations
 
+import json
+
 from .care_action_ledger import ALLOWED_TRANSITIONS, create_action, ensure_care_action_ledger_schema
 from .care_journey_store import create_persisted_journey
 from .db import get_db, now_iso
@@ -154,7 +156,7 @@ def sync_registered_pharmacy_order_status(actor, order_id: int, target_order_sta
         """,
         (
             int(action["id"]), current, target, "INTERNAL_PHARMACY_ORDER_SYNC", note, actor_id,
-            __import__("json").dumps(provenance, sort_keys=True, separators=(",", ":")), now,
+            json.dumps(provenance, sort_keys=True, separators=(",", ":")), now,
         ),
     )
     db.commit()
