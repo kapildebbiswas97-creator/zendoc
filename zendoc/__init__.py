@@ -15,6 +15,7 @@ from .ecosystem_routes import bp as ecosystem_bp
 from .family_routes import bp as family_bp
 from .fitness_routes import bp as fitness_bp
 from .geography_routes import bp as geography_graph_bp
+from .global_data_schema import ensure_global_data_schema
 from .health_access import ensure_consent_schema
 from .health_routes import bp as health_memory_bp
 from .knowledge_routes import bp as medical_knowledge_bp
@@ -97,6 +98,7 @@ def create_app(test_config=None):
     with app.app_context():
         try:
             init_db()
+            ensure_global_data_schema()
             ensure_consent_schema()
             ensure_medical_knowledge_document_schema()
             ensure_medical_rag_schema()
