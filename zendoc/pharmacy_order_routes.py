@@ -5,9 +5,9 @@ not claim pharmacy stock, payment, dispensing, or external delivery execution.
 """
 from __future__ import annotations
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 
-from .db import get_db, now_iso
+from .db import get_db
 from .routes import audit, require_api_user
 from .security import is_owner
 
@@ -60,6 +60,17 @@ def update_medicine_order_status(actor, order_id: int, target_status: str) -> di
         (target, int(order_id)),
     )
     db.commit()
+
+    # The order is the operational source of truth. CareLoop mirrors it only
+    # after the source update succeeds, and a ledger failure cannot roll back
+    # the pharmacy's real ZENDOC workflow state.
+    try:
+        from .careloop_pharmacy import sync_registered_pharmacy_order_status
+
+        sync_registered_pharmacy_order_status(actor, int(order_id), target)
+    except Exception:
+        current_app.logger.exception("CareLoop pharmacy-order status sync failed safely.")
+
     updated = db.execute(
         """
         SELECT mo.*, patient.name AS patient_name, pharmacy.name AS pharmacy_name
