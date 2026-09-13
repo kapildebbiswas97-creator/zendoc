@@ -1,6 +1,17 @@
 {% extends "base.html" %}
 {% block title %}Notifications{% endblock %}
 {% block content %}
-<section class="section-head"><div><p class="eyebrow">Updates</p><h1>Notifications</h1></div></section>
-<section class="panel">{% if notifications %}{% for item in notifications %}<article class="notice"><strong>{{ item.title }}</strong><p>{{ item.message }}</p><span>{{ item.created_at }}</span></article>{% endfor %}{% else %}<p>No notifications.</p>{% endif %}</section>
+<section class="section-head notification-hero"><div><p class="eyebrow">Care updates</p><h1>Your notifications</h1><p class="section-copy">Appointment, diagnostic and home-care changes in one calm, private feed.</p></div><a class="secondary-action" href="{{ url_for('operational_fulfilment_ui.fulfilment_console') }}">Open care tracker</a></section>
+<section class="notification-feed" aria-label="Notifications">
+{% if notifications %}
+  {% for item in notifications %}
+  <article class="notification-card {{ 'was-unread' if not item.is_read else '' }}">
+    <span class="notification-card__icon" aria-hidden="true">{{ '✓' if 'completed' in item.title|lower else '↗' }}</span>
+    <div><div class="notification-card__head"><strong>{{ item.title }}</strong>{% if not item.is_read %}<span class="new-pill">New</span>{% endif %}</div><p>{{ item.message }}</p><time datetime="{{ item.created_at }}">{{ item.created_at.replace('T',' · ')[:19] }} UTC</time></div>
+  </article>
+  {% endfor %}
+{% else %}
+  <div class="empty-state panel"><span class="empty-state__icon" aria-hidden="true">✓</span><h2>You are all caught up</h2><p>Important care and fulfilment updates will appear here automatically.</p><a class="primary-action" href="{{ url_for('main.dashboard') }}">Back to dashboard</a></div>
+{% endif %}
+</section>
 {% endblock %}

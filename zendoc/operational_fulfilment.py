@@ -24,6 +24,27 @@ from .security import is_owner
 
 bp = Blueprint("operational_fulfilment", __name__)
 
+
+def _deliver_workflow_notifications(recipients, title: str, message: str) -> None:
+    """Best-effort in-app delivery after the source workflow is committed."""
+    from .notification_providers import deliver_notification
+
+    delivered = set()
+    try:
+        for recipient_id in recipients:
+            recipient_id = int(recipient_id or 0)
+            if not recipient_id or recipient_id in delivered:
+                continue
+            deliver_notification(
+                recipient_id, title, message,
+                channel="in_app", template_type="care_workflow",
+            )
+            delivered.add(recipient_id)
+        get_db().commit()
+    except Exception:
+        get_db().rollback()
+        current_app.logger.exception("Workflow notification delivery failed after source commit")
+
 DIAGNOSTIC_STATUS_TO_ACTION = {
     "requested": "STAGED",
     "accepted": "CONFIRMED",
@@ -330,6 +351,12 @@ def update_diagnostic_booking_status(actor, booking_id: int, target_status: str,
     )
     db.commit()
 
+    _deliver_workflow_notifications(
+        {int(row["patient_id"]), int(row["lab_id"])},
+        f"Diagnostic {target.replace('_', ' ')}",
+        f"{row['test_name']} is now {target.replace('_', ' ')} in the verified ZENDOC workflow.",
+    )
+
     try:
         sync_diagnostic_careloop_status(actor, booking_id, target)
     except Exception:
@@ -498,6 +525,11 @@ def assign_home_health_provider(actor, request_id: int, provider_id: int) -> dic
     )
     assignment_id = int(cursor.lastrowid)
     db.commit()
+    _deliver_workflow_notifications(
+        {int(source["patient_id"]), int(provider_id)},
+        "Home-care provider assigned",
+        f"{provider['name']} was assigned to the {str(source['service_type']).replace('_', ' ')} request. Provider acceptance is still required.",
+    )
     try:
         ensure_home_health_careloop_link(request_id)
     except Exception:
@@ -684,6 +716,14 @@ def update_home_health_request_status(actor, request_id: int, target_status: str
         },
     )
     db.commit()
+    service_title = HOME_HEALTH_SERVICE_TITLES.get(
+        str(row["service_type"]), str(row["service_type"]).replace("_", " ").title()
+    )
+    _deliver_workflow_notifications(
+        {int(row["patient_id"]), int(row["provider_id"])},
+        f"Home care {target.replace('_', ' ')}",
+        f"{service_title} is now {target.replace('_', ' ')} in the assigned provider's ZENDOC workflow.",
+    )
     try:
         sync_home_health_careloop_status(actor, request_id, target)
     except Exception:
