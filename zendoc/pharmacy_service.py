@@ -8,6 +8,8 @@ Never invents stock availability.
 
 import json
 
+from flask import current_app
+
 from .db import get_db, now_iso
 from .family_care import authorize_family_patient
 
@@ -117,7 +119,18 @@ def create_medicine_order(user, data):
         (patient_id, uid, pharmacy_id, json.dumps(items), address, "pending", prescription_record_id, now),
     )
     db.commit()
-    return get_medicine_order(user, cursor.lastrowid)
+    order = get_medicine_order(user, cursor.lastrowid)
+
+    # The medicine-order record is the source of truth. CareLoop linking is
+    # intentionally fail-safe so a ledger problem cannot undo a real request.
+    if pharmacy_id:
+        try:
+            from .careloop_pharmacy import link_registered_pharmacy_order
+
+            link_registered_pharmacy_order(user, int(order["id"]))
+        except Exception:
+            current_app.logger.exception("CareLoop pharmacy-order link failed safely.")
+    return order
 
 
 def list_medicine_orders(user):
@@ -208,4 +221,3 @@ def delete_medicine_reminder(user, reminder_id):
     get_db().execute("UPDATE medicine_reminders SET active=0 WHERE id=? AND user_id=?", (reminder_id, uid))
     get_db().commit()
     return True
-
