@@ -30,6 +30,7 @@ from .operational_fulfilment import (
     ensure_operational_fulfilment_schema,
     finish_operational_careloop_request,
 )
+from .operational_fulfilment_release import bp as operational_fulfilment_release_bp
 from .organization_routes import bp as provider_organizations_bp
 from .personal_baseline_routes import bp as personal_health_baseline_bp
 from .pharmacy_order_routes import bp as pharmacy_order_ops_bp
@@ -71,6 +72,7 @@ def create_app(test_config=None):
     app.register_blueprint(ecosystem_bp)
     app.register_blueprint(pharmacy_order_ops_bp)
     app.register_blueprint(operational_fulfilment_bp)
+    app.register_blueprint(operational_fulfilment_release_bp)
     app.register_blueprint(milestone7_bp)
     app.register_blueprint(milestone8_bp)
     app.register_blueprint(milestone82_bp)
