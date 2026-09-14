@@ -144,6 +144,7 @@ def check_product_routes(app) -> None:
     _set_browser_session(patient_client, patient_id, "patient")
     patient_routes = (
         "/dashboard",
+        "/care-os",
         "/finder",
         "/appointments",
         "/health-summary",
@@ -154,6 +155,8 @@ def check_product_routes(app) -> None:
         response = patient_client.get(path, follow_redirects=False)
         if response.status_code >= 400:
             fail(f"Patient product route returned HTTP {response.status_code}: {path}")
+        if path == "/care-os" and b"ZENDOC Care OS" not in response.data:
+            fail("Care OS route rendered without the unified patient experience marker.")
 
     owner_headers = {"Authorization": f"Bearer {owner_token}"}
     patient_headers = {"Authorization": f"Bearer {patient_token}"}
