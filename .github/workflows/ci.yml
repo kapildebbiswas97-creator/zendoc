@@ -147,7 +147,17 @@ jobs:
       - name: High-confidence high-severity static scan
         run: bandit -r zendoc -q -lll -iii
       - name: Dependency vulnerability audit
-        run: pip-audit -r requirements.txt
+        run: |
+          for attempt in 1 2 3; do
+            if pip-audit -r requirements.txt; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            echo "pip-audit attempt $attempt failed; retrying after transient-error backoff..."
+            sleep $((attempt * 5))
+          done
 
   release-readiness:
     name: Release Gate
@@ -174,7 +184,6 @@ jobs:
           test "$SQLITE" = "success"
           test "$POSTGRES" = "success"
           test "$SECURITY" = "success"
-
 
   deployment-verification:
     name: Deployment Health Verification
@@ -209,5 +218,3 @@ jobs:
           --require-persistence-verified
           --attempts 40
           --interval 15
-
-
