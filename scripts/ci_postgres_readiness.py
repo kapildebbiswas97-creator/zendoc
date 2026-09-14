@@ -7,6 +7,7 @@ import io
 import json
 import sys
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -77,6 +78,57 @@ def check_snapshot_round_trip(app) -> None:
             fail("Snapshot replay was not idempotent.")
 
 
+def check_product_routes(app) -> None:
+    """Catch PostgreSQL-only 500s on the product surfaces used for demos/submission."""
+    with app.app_context():
+        owner = get_db().execute(
+            "SELECT id,role FROM users WHERE email_normalized=? AND role='admin'",
+            (app.config["ADMIN_EMAIL"].lower(),),
+        ).fetchone()
+        if not owner:
+            fail("Owner account is missing before product-route smoke.")
+        owner_id = int(owner["id"])
+
+    client = app.test_client()
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    with client.session_transaction() as session:
+        session["user_id"] = owner_id
+        session["role"] = "admin"
+        session["session_nonce"] = "ci-postgres-product-smoke"
+        session["authenticated_at"] = now
+        session["last_activity_at"] = now
+        session["csrf_token"] = "ci-postgres-product-smoke-csrf"
+
+    critical_gets = (
+        "/dashboard",
+        "/admin",
+        "/admin/startup",
+        "/admin/agent-command-center",
+        "/finder",
+        "/appointments",
+        "/health-summary",
+        "/records",
+        "/videos?q=squat",
+        "/api/v1/fitness/videos?q=squat",
+        "/api/v1/capabilities",
+        "/api/v1/admin/agent-command-center",
+    )
+    for path in critical_gets:
+        response = client.get(path, follow_redirects=False)
+        if response.status_code >= 500:
+            fail(f"Critical product route returned HTTP {response.status_code}: {path}")
+
+    agent = client.post(
+        "/api/v1/agent/message",
+        json={"message": "show platform health"},
+    )
+    if agent.status_code >= 500:
+        fail(f"Core Agent production smoke returned HTTP {agent.status_code}.")
+    payload = agent.get_json(silent=True)
+    if not isinstance(payload, dict) or not payload.get("message"):
+        fail("Core Agent production smoke did not return a usable response envelope.")
+
+
 def main() -> int:
     database_url = os.environ.get("DATABASE_URL", "")
     if not database_url.startswith(("postgresql://", "postgresql+psycopg://")):
@@ -132,6 +184,8 @@ def main() -> int:
         )
         db.commit()
 
+    check_product_routes(app)
+
     app2 = create_app()
     with app2.app_context():
         report2 = readiness_report()
@@ -153,4 +207,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
