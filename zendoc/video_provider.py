@@ -91,7 +91,7 @@ class NullVideoProvider:
         return {
             "available": False,
             "reason": (
-                "Live in-app video results require a configured YouTube API key. "
+                "Video discovery requires a video provider API key for live in-app results. "
                 "You can still open the same search directly on YouTube using the link below."
             ),
             "results": [],
