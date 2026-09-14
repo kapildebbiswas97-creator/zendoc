@@ -4,6 +4,7 @@ from flask import Flask
 
 from .config import load_config, validate_startup_config
 from .care_action_ledger import ensure_care_action_ledger_schema
+from .care_os_routes import bp as care_os_bp
 from .carefin_routes import bp as carefin_bp
 from .care_journey_routes import bp as care_journey_bp
 from .careloop_integration import finish_careloop_request
@@ -94,6 +95,7 @@ def create_app(test_config=None):
     app.register_blueprint(milestone8_bp)
     app.register_blueprint(milestone82_bp)
     app.register_blueprint(connected_care_bp)
+    app.register_blueprint(care_os_bp)
     app.register_blueprint(carefin_bp)
     app.register_blueprint(care_journey_bp)
     app.register_blueprint(nutrition_intelligence_bp)
