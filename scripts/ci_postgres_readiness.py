@@ -74,8 +74,29 @@ def check_snapshot_round_trip(app) -> None:
             fail("Snapshot replay was not idempotent.")
 
 
+def _set_browser_session(client, user_id: int, role: str) -> None:
+    stamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    with client.session_transaction() as session:
+        session.clear()
+        session["user_id"] = int(user_id)
+        session["role"] = role
+        session["session_nonce"] = f"ci-postgres-{role}-smoke"
+        session["authenticated_at"] = stamp
+        session["last_activity_at"] = stamp
+        session["csrf_token"] = f"ci-postgres-{role}-csrf"
+
+
+def _issue_api_token(db, user_id: int) -> str:
+    token = new_token()
+    db.execute(
+        "INSERT INTO api_tokens (user_id,token_hash,token_type,created_at) VALUES (?,?,'access',?)",
+        (int(user_id), hash_token(token), now_iso()),
+    )
+    return token
+
+
 def check_product_routes(app) -> None:
-    """Catch PostgreSQL-only failures on the product surfaces used for demos/submission."""
+    """Exercise owner, patient, API, agent and video surfaces on PostgreSQL."""
     with app.app_context():
         db = get_db()
         owner = db.execute(
@@ -85,55 +106,72 @@ def check_product_routes(app) -> None:
         if not owner:
             fail("Owner account is missing before product-route smoke.")
         owner_id = int(owner["id"])
-        api_token = new_token()
-        db.execute(
-            "INSERT INTO api_tokens (user_id,token_hash,token_type,created_at) VALUES (?,?,'access',?)",
-            (owner_id, hash_token(api_token), now_iso()),
-        )
+
+        patient_email = "ci-patient@example.invalid"
+        patient = db.execute("SELECT id,role FROM users WHERE email_normalized=?", (patient_email,)).fetchone()
+        if not patient:
+            stamp = now_iso()
+            cursor = db.execute(
+                """
+                INSERT INTO users (name,email,email_normalized,password_hash,role,city,verified,active,created_at,updated_at)
+                VALUES (?,?,?,?,?,'CI Test City',1,1,?,?)
+                """,
+                ("CI Patient", patient_email, patient_email, "ci-not-a-login-password", "patient", stamp, stamp),
+            )
+            patient_id = int(cursor.lastrowid)
+        else:
+            patient_id = int(patient["id"])
+
+        owner_token = _issue_api_token(db, owner_id)
+        patient_token = _issue_api_token(db, patient_id)
         db.commit()
 
-    client = app.test_client()
-    session_now = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    with client.session_transaction() as session:
-        session["user_id"] = owner_id
-        session["role"] = "admin"
-        session["session_nonce"] = "ci-postgres-product-smoke"
-        session["authenticated_at"] = session_now
-        session["last_activity_at"] = session_now
-        session["csrf_token"] = "ci-postgres-product-smoke-csrf"
-
-    browser_routes = (
+    owner_client = app.test_client()
+    _set_browser_session(owner_client, owner_id, "admin")
+    owner_routes = (
         "/dashboard",
         "/admin",
         "/admin/startup",
         "/admin/agent-command-center",
+        "/finder",
+    )
+    for path in owner_routes:
+        response = owner_client.get(path, follow_redirects=False)
+        if response.status_code >= 400:
+            fail(f"Owner product route returned HTTP {response.status_code}: {path}")
+
+    patient_client = app.test_client()
+    _set_browser_session(patient_client, patient_id, "patient")
+    patient_routes = (
+        "/dashboard",
         "/finder",
         "/appointments",
         "/health-summary",
         "/records",
         "/videos?q=squat",
     )
-    for path in browser_routes:
-        response = client.get(path, follow_redirects=False)
+    for path in patient_routes:
+        response = patient_client.get(path, follow_redirects=False)
         if response.status_code >= 400:
-            fail(f"Authenticated product route returned HTTP {response.status_code}: {path}")
+            fail(f"Patient product route returned HTTP {response.status_code}: {path}")
 
-    auth_headers = {"Authorization": f"Bearer {api_token}"}
-    api_routes = (
-        "/api/v1/fitness/videos?q=squat",
-        "/api/v1/capabilities",
-        "/api/v1/admin/agent-command-center",
-    )
-    for path in api_routes:
-        response = client.get(path, headers=auth_headers, follow_redirects=False)
+    owner_headers = {"Authorization": f"Bearer {owner_token}"}
+    patient_headers = {"Authorization": f"Bearer {patient_token}"}
+
+    for path, headers in (
+        ("/api/v1/capabilities", owner_headers),
+        ("/api/v1/admin/agent-command-center", owner_headers),
+        ("/api/v1/fitness/videos?q=squat", patient_headers),
+    ):
+        response = owner_client.get(path, headers=headers, follow_redirects=False)
         if response.status_code >= 400:
             fail(f"Authenticated API route returned HTTP {response.status_code}: {path}")
         if not isinstance(response.get_json(silent=True), dict):
             fail(f"Authenticated API route did not return JSON object: {path}")
 
-    agent = client.post(
+    agent = owner_client.post(
         "/api/v1/agent/message",
-        headers=auth_headers,
+        headers=owner_headers,
         json={"message": "show platform health"},
     )
     if agent.status_code >= 400:
@@ -171,9 +209,7 @@ def main() -> int:
         if missing_migrations:
             fail(f"Required migrations missing: {missing_migrations}")
 
-        rows = db.execute(
-            "SELECT table_name FROM information_schema.tables WHERE table_schema=current_schema()"
-        ).fetchall()
+        rows = db.execute("SELECT table_name FROM information_schema.tables WHERE table_schema=current_schema()").fetchall()
         tables = {str(row["table_name"]) for row in rows}
         missing_tables = sorted(set(REQUIRED_TABLES) - tables)
         if missing_tables:
