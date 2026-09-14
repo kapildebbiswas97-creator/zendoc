@@ -51,6 +51,7 @@ from .public_ingestion_routes import bp as public_ingestion_bp
 from .provider_onboarding_routes import bp as provider_onboarding_bp
 from .showcase_routes import bp as showcase_bp
 from .system_intelligence_routes import bp as system_intelligence_bp
+from .universal_search_routes import bp as universal_search_bp
 from .database_reliability import readiness_report
 from .observability import finish_request_observation, start_request_observation
 from .routes import bp
@@ -123,6 +124,7 @@ def create_app(test_config=None):
     app.register_blueprint(connected_care_bp)
     app.register_blueprint(care_os_bp)
     app.register_blueprint(india_care_rail_bp)
+    app.register_blueprint(universal_search_bp)
     app.register_blueprint(carefin_bp)
     app.register_blueprint(care_journey_bp)
     app.register_blueprint(nutrition_intelligence_bp)
