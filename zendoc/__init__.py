@@ -25,6 +25,7 @@ from .global_medical_authorities import install_global_medical_authorities
 from .global_registry_install import install_global_public_sources
 from .health_access import ensure_consent_schema
 from .health_routes import bp as health_memory_bp
+from .india_care_rail import bp as india_care_rail_bp
 from .knowledge_routes import bp as medical_knowledge_bp
 from .language_routes import bp as language_bp
 from .medical_knowledge_documents import ensure_medical_knowledge_document_schema
@@ -121,6 +122,7 @@ def create_app(test_config=None):
     app.register_blueprint(milestone82_bp)
     app.register_blueprint(connected_care_bp)
     app.register_blueprint(care_os_bp)
+    app.register_blueprint(india_care_rail_bp)
     app.register_blueprint(carefin_bp)
     app.register_blueprint(care_journey_bp)
     app.register_blueprint(nutrition_intelligence_bp)

@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}India Care Rail — ZENDOC{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">India Care Rail</p>
+    <h1>ABDM, ABHA, UHI and NHCX readiness</h1>
+    <p class="section-copy">A truthful view of ZENDOC's interoperability readiness. This page never treats local code, sandbox setup or planned adapters as a live government integration.</p>
+  </div>
+  <a class="secondary-action" href="{{ url_for('care_os.care_os_home') }}">Back to Care OS</a>
+</section>
+
+<section class="grid four">
+  <article class="panel"><p class="eyebrow">India rails</p><h2>{{ rail_status.total }}</h2><p>Tracked interoperability layers</p></article>
+  <article class="panel"><p class="eyebrow">Production verified</p><h2>{{ rail_status.verified_count }}</h2><p>Explicitly verified live connections only</p></article>
+  <article class="panel"><p class="eyebrow">External live</p><h2>{{ 'Yes' if rail_status.any_external_live else 'No' }}</h2><p>No inference from configuration alone</p></article>
+  <article class="panel"><p class="eyebrow">All verified</p><h2>{{ 'Yes' if rail_status.all_production_verified else 'No' }}</h2><p>Every tracked rail must be separately verified</p></article>
+</section>
+
+<section class="panel spaced-panel">
+  <p class="eyebrow">Truth boundary</p>
+  <h2>What ZENDOC is allowed to claim</h2>
+  <p>{{ rail_status.truth_boundary }}</p>
+</section>
+
+<section class="grid two spaced-panel">
+  {% for rail in rail_status.rails %}
+    <article class="panel">
+      <div class="summary-row">
+        <div>
+          <p class="eyebrow">{{ rail.name }}</p>
+          <h2>{{ rail.status_label }}</h2>
+        </div>
+        <span class="status-badge {{ 'working' if rail.external_live else 'integration' }}">{{ rail.status|replace('_',' ')|title }}</span>
+      </div>
+      <p>{{ rail.purpose }}</p>
+      <p class="form-note">{{ rail.notice }}</p>
+      <div class="summary-row"><strong>Configured credentials</strong><span>{{ 'Yes' if rail.credentials_configured else 'No' }}</span></div>
+      <div class="summary-row"><strong>Production verified</strong><span>{{ 'Yes' if rail.production_verified else 'No' }}</span></div>
+      <div class="summary-row"><strong>External transaction claimed</strong><span>No</span></div>
+      <h3>Target capabilities</h3>
+      <ul>
+        {% for capability in rail.capabilities %}<li>{{ capability }}</li>{% endfor %}
+      </ul>
+    </article>
+  {% endfor %}
+</section>
+
+<section class="panel spaced-panel">
+  <p class="eyebrow">Consent-first interoperability</p>
+  <h2>ZENDOC stays patient-controlled</h2>
+  <p>Future ABDM health-information exchange must remain consent-based and scope-limited. Existing ZENDOC Health Memory and Consent Wallet remain the local source of truth until an external flow is genuinely integrated and verified.</p>
+  <a class="secondary-action" href="{{ url_for('health_memory.health_access_page') }}">Open Consent Wallet</a>
+</section>
+{% endblock %}
