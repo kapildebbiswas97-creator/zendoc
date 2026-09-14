@@ -50,7 +50,16 @@ def get_json(url: str, timeout: float) -> tuple[int, dict]:
 def safe_payload_summary(payload: dict) -> dict:
     if not isinstance(payload, dict):
         return {}
-    allowed = ("status", "service", "check", "database", "database_engine", "persistence_verified")
+    allowed = (
+        "status",
+        "service",
+        "check",
+        "database",
+        "database_engine",
+        "database_durability",
+        "persistence_verified",
+        "persistence_verification_source",
+    )
     summary = {key: payload.get(key) for key in allowed if key in payload}
     deployment = payload.get("deployment")
     if isinstance(deployment, dict):
@@ -170,7 +179,12 @@ def main() -> int:
         )
 
     if args.require_persistence_verified and ready.get("persistence_verified") is not True:
-        fail("Production persistence verification is not confirmed.")
+        fail(
+            "Production persistence verification is not confirmed "
+            f"(durability={ready.get('database_durability')!r}, "
+            f"source={ready.get('persistence_verification_source')!r}, "
+            f"engine={ready.get('database_engine')!r})."
+        )
 
     print(
         "Deployment verification PASSED "
