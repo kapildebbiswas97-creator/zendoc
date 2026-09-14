@@ -16,7 +16,7 @@
     </p>
   </div>
   <div class="form-actions">
-    {% if current_user.role == 'patient' %}<a href="{{ url_for('main.ai_center') }}" class="primary-action">Ask ZENDOC AI</a>{% endif %}
+    {% if current_user.role == 'patient' %}<a href="{{ url_for('care_os.care_os_home') }}" class="primary-action">Open Care OS</a><a href="{{ url_for('main.ai_center') }}" class="secondary-action">Ask ZENDOC AI</a>{% endif %}
     <a href="{{ url_for('main.notifications') }}" class="secondary-action">Notifications{% if stats.get('Unread') %} ({{ stats.get('Unread') }}){% endif %}</a>
   </div>
 </section>
@@ -43,15 +43,15 @@
     {% if next_appointment %}
       <h2>Prepare for your upcoming appointment</h2>
       <p>You have a {{ next_appointment.status }} request with {{ next_appointment.provider_name }} on {{ next_appointment.scheduled_for.replace('T', ' at ') }}.</p>
-      <div class="form-actions"><a href="{{ url_for('main.appointments') }}" class="primary-action">View appointment</a><a href="{{ url_for('milestone7.messages_page') }}" class="secondary-action">Message care team</a></div>
+      <div class="form-actions"><a href="{{ url_for('main.appointments') }}" class="primary-action">View appointment</a><a href="{{ url_for('care_os.care_os_home') }}" class="secondary-action">Open Care OS</a></div>
     {% elif stats.get('Records', 0) == 0 %}
       <h2>Start building your Health Memory</h2>
       <p>Add a report or record so your health journey is easier to review in one place.</p>
-      <div class="form-actions"><a href="{{ url_for('main.records') }}" class="primary-action">Upload your first report</a><a href="{{ url_for('health_memory.health_summary_page') }}" class="secondary-action">Open Health Memory</a></div>
+      <div class="form-actions"><a href="{{ url_for('main.records') }}" class="primary-action">Upload your first report</a><a href="{{ url_for('care_os.care_os_home') }}" class="secondary-action">Open Care OS</a></div>
     {% else %}
       <h2>What would you like help with today?</h2>
-      <p>Ask ZENDOC AI for educational guidance, or find a reviewed provider and request an appointment.</p>
-      <div class="form-actions"><a href="{{ url_for('main.ai_center') }}" class="primary-action">Ask ZENDOC AI</a><a href="{{ url_for('main.finder') }}" class="secondary-action">Find care</a></div>
+      <p>Open Care OS for your complete journey, or ask ZENDOC AI for educational guidance and next steps.</p>
+      <div class="form-actions"><a href="{{ url_for('care_os.care_os_home') }}" class="primary-action">Open Care OS</a><a href="{{ url_for('main.ai_center') }}" class="secondary-action">Ask ZENDOC AI</a></div>
     {% endif %}
   </article>
 
@@ -70,11 +70,11 @@
 <section aria-labelledby="quick-actions-title">
   <div class="panel-head"><div><p class="eyebrow">Common tasks</p><h2 id="quick-actions-title">Quick actions</h2></div></div>
   <div class="quick-action-grid">
-    <a href="{{ url_for('main.ai_center') }}" class="quick-action primary"><strong>Ask ZENDOC AI</strong><span>Get guidance and next steps</span><span class="quick-action-arrow">→</span></a>
+    <a href="{{ url_for('care_os.care_os_home') }}" class="quick-action primary"><strong>Care OS</strong><span>Your complete care journey in one place</span><span class="quick-action-arrow">→</span></a>
+    <a href="{{ url_for('main.ai_center') }}" class="quick-action"><strong>Ask ZENDOC AI</strong><span>Get guidance and next steps</span><span class="quick-action-arrow">→</span></a>
     <a href="{{ url_for('main.finder') }}" class="quick-action"><strong>Find a doctor</strong><span>Search reviewed care options</span><span class="quick-action-arrow">→</span></a>
     <a href="{{ url_for('main.appointments') }}" class="quick-action"><strong>Appointments</strong><span>Review requests and status</span><span class="quick-action-arrow">→</span></a>
     <a href="{{ url_for('main.records') }}" class="quick-action"><strong>Upload report</strong><span>Add to Health Memory</span><span class="quick-action-arrow">→</span></a>
-    <a href="{{ url_for('health_memory.health_summary_page') }}" class="quick-action"><strong>Health Memory</strong><span>See your health snapshot</span><span class="quick-action-arrow">→</span></a>
     <a href="{{ url_for('milestone7.messages_page') }}" class="quick-action"><strong>Message provider</strong><span>Continue a care conversation</span><span class="quick-action-arrow">→</span></a>
   </div>
 </section>

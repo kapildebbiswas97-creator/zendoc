@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Care OS — ZENDOC{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">ZENDOC Care OS</p>
+    <h1>Your complete care journey in one place</h1>
+    <p class="section-copy">Journeys, actions, outcomes, Health Memory, consent, family care, personal baselines and next safe actions — composed from the same underlying ZENDOC systems.</p>
+  </div>
+  <a class="primary-action compact-action" href="{{ url_for('main.ai_center') }}">Open AI Assistant</a>
+</section>
+
+<section class="grid four">
+  <article class="panel"><p class="eyebrow">Care actions</p><h2>{{ action_total }}</h2><p>{{ active_action_total }} currently active</p></article>
+  <article class="panel"><p class="eyebrow">Outcomes</p><h2>{{ outcome_total }}</h2><p>Reported or verified results linked to care actions</p></article>
+  <article class="panel"><p class="eyebrow">Integrated actions</p><h2>{{ integrated_action_total }}</h2><p>Actions linked to an actual internal ZENDOC execution record</p></article>
+  <article class="panel"><p class="eyebrow">Active permissions</p><h2>{{ active_provider_grants + active_family_grants }}</h2><p>Provider and family access grants under your control</p></article>
+</section>
+
+<section class="grid two spaced-panel">
+  <article class="panel">
+    <p class="eyebrow">Next safe actions</p>
+    <h2>What needs attention now</h2>
+    {% if next_actions %}
+      {% for item in next_actions %}
+        <div class="summary-row"><div><strong>{{ item.title }}</strong><p class="form-note">{{ item.description }}</p></div><a class="secondary-action" href="{{ item.cta_url or item.target_url }}">{{ item.cta_label or item.button_label or 'Open' }}</a></div>
+      {% endfor %}
+    {% else %}
+      <div class="empty-state"><h3>No pending safe action</h3><p>ZENDOC has no non-clinical follow-up to surface right now.</p></div>
+    {% endif %}
+  </article>
+
+  <article class="panel">
+    <p class="eyebrow">Health Memory</p>
+    <h2>Evidence & provenance</h2>
+    <div class="summary-row"><strong>Total longitudinal events</strong><span>{{ provenance.total_events or 0 }}</span></div>
+    {% for source, items in (provenance.by_provenance or {}).items() %}
+      <div class="summary-row"><span>{{ source|replace('_',' ')|title }}</span><strong>{{ items|length }}</strong></div>
+    {% endfor %}
+    <a class="secondary-action" href="{{ url_for('health_memory.health_summary_page') }}">Open Health Memory</a>
+  </article>
+</section>
+
+<section class="panel spaced-panel">
+  <div class="summary-row"><div><p class="eyebrow">CareLoop</p><h2>Journeys, actions and outcomes</h2></div><a class="secondary-action" href="{{ url_for('connected_care.care_journey_page') }}">Manage journeys</a></div>
+  {% if journeys %}
+    <div class="grid two">
+      {% for journey in journeys %}
+        <article class="panel">
+          <div class="summary-row"><strong>Journey #{{ journey.id }}</strong><span class="status-badge {{ 'working' if journey.status == 'completed' else 'integration' }}">{{ journey.state|replace('_',' ') }}</span></div>
+          <p><strong>Next step:</strong> {{ (journey.next_safe_action or 'none')|replace('_',' ') }}</p>
+          <p class="form-note">{{ journey.action_count }} tracked action{% if journey.action_count != 1 %}s{% endif %} · {{ journey.outcome_count }} outcome{% if journey.outcome_count != 1 %}s{% endif %}</p>
+          {% for action in journey.actions[:4] %}
+            <div class="summary-row"><span>{{ action.title }}</span><span>{{ action.status }}</span></div>
+            <p class="form-note">{{ action.integration_status|replace('_',' ')|title }}{% if action.notice %} · {{ action.notice }}{% endif %}</p>
+          {% endfor %}
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state"><h3>No care journey yet</h3><p>Start a care journey when you want ZENDOC to coordinate multiple steps across discovery, appointments, diagnostics, fulfilment and follow-up.</p></div>
+  {% endif %}
+</section>
+
+<section class="grid two spaced-panel">
+  <article class="panel">
+    <div class="summary-row"><div><p class="eyebrow">Consent Wallet</p><h2>Provider access</h2></div><a class="secondary-action" href="{{ url_for('health_memory.health_access_page') }}">Manage access</a></div>
+    {% if provider_grants %}
+      {% for grant in provider_grants[:6] %}
+        <div class="summary-row"><span>{{ grant.provider_name or grant.organization or 'Provider' }}</span><span>{{ 'Active' if grant.active else 'Inactive' }}</span></div>
+        <p class="form-note">{{ grant.purpose|replace('_',' ')|title }} · {{ grant.scopes|join(', ') }}</p>
+      {% endfor %}
+    {% else %}<p>No provider access grants.</p>{% endif %}
+  </article>
+
+  <article class="panel">
+    <div class="summary-row"><div><p class="eyebrow">Family Care Graph</p><h2>People and delegated care</h2></div><a class="secondary-action" href="{{ url_for('family.family_page') }}">Manage family</a></div>
+    <div class="summary-row"><strong>Family members</strong><span>{{ family_members|length }}</span></div>
+    <div class="summary-row"><strong>Active family permissions</strong><span>{{ active_family_grants }}</span></div>
+    {% for grant in family_given[:3] %}<p class="form-note">Shared with {{ grant.grantee_name }} · {{ grant.scopes|join(', ') }}</p>{% endfor %}
+    {% for grant in family_received[:3] %}<p class="form-note">Received from {{ grant.grantor_name }} · {{ grant.scopes|join(', ') }}</p>{% endfor %}
+  </article>
+</section>
+
+<section class="panel spaced-panel">
+  <p class="eyebrow">Personal Baselines</p>
+  <h2>Your own recent pattern vs your own history</h2>
+  <p class="section-copy">Descriptive longitudinal analytics only — not diagnosis or emergency detection.</p>
+  {% if baselines %}
+    <div class="grid two">
+      {% for item in baselines %}
+        <article class="panel">
+          <div class="summary-row"><strong>{{ item.metric_type|replace('_',' ')|title }}</strong><span>{{ item.status|replace('_',' ')|title }}</span></div>
+          {% if item.unit %}<p class="form-note">Unit: {{ item.unit }} · Baseline {{ item.baseline_days }} days · Recent {{ item.recent_days }} days</p>{% endif %}
+          {% if item.notice %}<p>{{ item.notice }}</p>{% endif %}
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}<div class="empty-state"><h3>Not enough measurement history yet</h3><p>Add vitals or wellness measurements to build your personal baseline.</p></div>{% endif %}
+</section>
+
+<section class="panel spaced-panel">
+  <p class="eyebrow">Evidence Passport</p>
+  <h2>Where each care action came from</h2>
+  {% if evidence_passport %}
+    {% for item in evidence_passport[:12] %}
+      <div class="summary-row"><div><strong>{{ item.title }}</strong><p class="form-note">Source: {{ item.source }} · Review: {{ item.review_state }} · {{ item.integration_status|replace('_',' ')|title }}</p></div><span>{{ item.updated_at or '' }}</span></div>
+    {% endfor %}
+  {% else %}<p>No care action evidence records yet.</p>{% endif %}
+</section>
+
+<section class="grid four spaced-panel">
+  <a class="panel" href="{{ url_for('main.finder') }}"><strong>Find Care</strong><p>Search providers and facilities.</p></a>
+  <a class="panel" href="{{ url_for('connected_care.carefin_page') }}"><strong>CareFin</strong><p>Explore support and affordability routes.</p></a>
+  <a class="panel" href="{{ url_for('connected_care.diagnostics_page') }}"><strong>Diagnostics</strong><p>Browse diagnostic pathways and confirmed offers.</p></a>
+  <a class="panel" href="{{ url_for('operational_fulfilment_ui.fulfilment_console') }}"><strong>Care Tracker</strong><p>Track operational fulfilment and status.</p></a>
+</section>
+{% endblock %}
