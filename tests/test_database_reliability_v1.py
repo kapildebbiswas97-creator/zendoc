@@ -120,6 +120,28 @@ def test_postgres_adapter_translates_begin_immediate_and_qmark_parameters():
     assert "?" not in sql
 
 
+def test_postgres_adapter_escapes_literal_percent_when_binding_parameters():
+    from zendoc.postgres_backend import translate_sql
+
+    sql, _ = translate_sql(
+        "SELECT COUNT(*) FROM platform_events WHERE created_at>=? "
+        "AND (event_type LIKE '%.emergency%' OR action LIKE '%emergency%')",
+        return_inserted_id=False,
+    )
+
+    assert "created_at>=%s" in sql
+    assert "LIKE '%%.emergency%%'" in sql
+    assert "LIKE '%%emergency%%'" in sql
+
+
+def test_postgres_adapter_does_not_double_percent_without_bound_parameters():
+    from zendoc.postgres_backend import translate_sql
+
+    sql, _ = translate_sql("SELECT '100%' AS label", return_inserted_id=False)
+    assert "100%" in sql
+    assert "100%%" not in sql
+
+
 def test_deployment_identity_uses_render_metadata(monkeypatch):
     monkeypatch.setenv("RENDER", "true")
     monkeypatch.setenv("RENDER_SERVICE_NAME", "zendoc-production")

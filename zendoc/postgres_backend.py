@@ -106,10 +106,22 @@ LASTROWID_TABLES = {
 }
 
 
+_PARAM_SENTINEL = "__ZENDOC_PSYCOPG_PARAM__"
+
+
 def _replace_qmark_parameters(sql: str) -> str:
+    """Convert qmark parameters to psycopg format without corrupting literal `%`.
+
+    Psycopg treats percent characters specially whenever parameters are bound,
+    including percent signs inside SQL string literals such as LIKE '%term%'.
+    ZENDOC writes portable qmark SQL, so we first mark real qmark parameters with
+    a sentinel.  Only when at least one real parameter exists do we escape the
+    pre-existing literal percent signs, then restore the sentinel as `%s`.
+    """
     output = []
     in_single = False
     in_double = False
+    replaced_parameter = False
     index = 0
     while index < len(sql):
         char = sql[index]
@@ -124,11 +136,17 @@ def _replace_qmark_parameters(sql: str) -> str:
             in_double = not in_double
             output.append(char)
         elif char == "?" and not in_single and not in_double:
-            output.append("%s")
+            output.append(_PARAM_SENTINEL)
+            replaced_parameter = True
         else:
             output.append(char)
         index += 1
-    return "".join(output)
+
+    translated = "".join(output)
+    if replaced_parameter:
+        translated = translated.replace("%", "%%")
+        translated = translated.replace(_PARAM_SENTINEL, "%s")
+    return translated
 
 
 def translate_sql(sql: str, *, return_inserted_id: bool = True) -> tuple[str, bool]:
@@ -284,4 +302,3 @@ def connect_postgresql(database_url):
 def is_postgresql_integrity_error(error):
     sqlstate = str(getattr(error, "sqlstate", "") or "")
     return sqlstate.startswith("23")
-
