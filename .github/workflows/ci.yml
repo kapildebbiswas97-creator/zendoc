@@ -35,7 +35,7 @@ jobs:
     env:
       ZENDOC_ENV: development
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -68,7 +68,7 @@ jobs:
     env:
       ZENDOC_ENV: development
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -111,7 +111,7 @@ jobs:
       ZENDOC_CONNECTED_CARE_DATA_MODE: LIVE
       ZENDOC_CI_FIXTURES: "true"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -130,7 +130,7 @@ jobs:
     env:
       ZENDOC_ENV: development
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: actions/setup-python@v5
@@ -205,7 +205,7 @@ jobs:
     env:
       DEPLOYMENT_URL: ${{ inputs.deployment_url || vars.ZENDOC_DEPLOYMENT_URL || 'https://zendoc-ykax.onrender.com' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
