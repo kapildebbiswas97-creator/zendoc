@@ -2,16 +2,18 @@
 Video Provider — provider abstraction for fitness video discovery.
 
 Provider selection via ZENDOC_VIDEO_PROVIDER environment variable:
-    none     → NullVideoProvider (returns structured unavailable response)
+    none     → NullVideoProvider (returns a safe external search fallback)
     youtube  → YouTubeProvider (requires ZENDOC_YOUTUBE_API_KEY)
 
 IMPORTANT: No video results are ever fabricated.
-If a provider is unavailable or fails, the response clearly states this.
+If a provider is unavailable or fails, the response clearly states this and may
+provide a generic YouTube search URL rather than pretending a specific video
+was returned by the API.
 """
 
 import hashlib
 import time
-from urllib.parse import urlencode
+from urllib.parse import quote_plus, urlencode
 from urllib.request import urlopen, Request
 import json
 import os
@@ -49,6 +51,13 @@ def _cache_set(key, value):
         _CACHE[key] = (time.time(), value)
 
 
+def _youtube_search_url(query):
+    clean = str(query or "").strip()
+    if not clean:
+        return None
+    return "https://www.youtube.com/results?search_query=" + quote_plus(f"{clean} fitness tutorial")
+
+
 # ---------------------------------------------------------------------------
 # Provider base
 # ---------------------------------------------------------------------------
@@ -74,7 +83,7 @@ class VideoResult:
 
 
 class NullVideoProvider:
-    """Returns a structured 'unavailable' response.  Never fabricates results."""
+    """Never fabricates API results; provides a truthful external search link."""
 
     name = "none"
 
@@ -82,12 +91,13 @@ class NullVideoProvider:
         return {
             "available": False,
             "reason": (
-                "Video discovery requires a video provider API key. "
-                "Set ZENDOC_VIDEO_PROVIDER=youtube and ZENDOC_YOUTUBE_API_KEY "
-                "to enable real video results."
+                "Live in-app video results require a configured YouTube API key. "
+                "You can still open the same search directly on YouTube using the link below."
             ),
             "results": [],
             "query": query,
+            "search_url": _youtube_search_url(query),
+            "search_provider": "youtube_web_search",
         }
 
 
@@ -126,9 +136,11 @@ class YouTubeProvider:
         except Exception as exc:
             return {
                 "available": False,
-                "reason": f"Video provider request failed: {type(exc).__name__}. Please try again later.",
+                "reason": f"Video provider request failed: {type(exc).__name__}. You can use the direct YouTube search link below.",
                 "results": [],
                 "query": query,
+                "search_url": _youtube_search_url(query),
+                "search_provider": "youtube_web_search",
             }
 
         results = []
@@ -152,6 +164,7 @@ class YouTubeProvider:
             "query": query,
             "provider": "youtube",
             "total": len(results),
+            "search_url": _youtube_search_url(query),
         }
         _cache_set(cache_key, response)
         return response
@@ -167,7 +180,7 @@ def configured_video_provider():
         api_key = os.environ.get("ZENDOC_YOUTUBE_API_KEY", "").strip()
         if api_key:
             return YouTubeProvider(api_key)
-        # Key not set — degrade gracefully
+        # Key not set — degrade gracefully with a truthful search link.
         return NullVideoProvider()
     return NullVideoProvider()
 
@@ -184,5 +197,6 @@ def search_fitness_video(query, max_results=5):
             "reason": "A search query is required.",
             "results": [],
             "query": "",
+            "search_url": None,
         }
     return configured_video_provider().search(clean_query, max_results)
