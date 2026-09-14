@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from flask import Flask
@@ -57,7 +58,31 @@ from .routes import bp
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
+def _normalize_hosted_environment():
+    """Fail toward production security when the app is running on Render.
+
+    Render supplies platform metadata independently of Blueprint-managed custom
+    environment variables.  A real hosted service must therefore never fall
+    back to development cookie/security/persistence semantics merely because
+    ZENDOC_ENV was omitted in the service dashboard.
+    """
+    if os.environ.get("ZENDOC_ENV"):
+        return
+    if any(
+        os.environ.get(key)
+        for key in (
+            "RENDER",
+            "RENDER_SERVICE_ID",
+            "RENDER_SERVICE_NAME",
+            "RENDER_EXTERNAL_HOSTNAME",
+        )
+    ):
+        os.environ["ZENDOC_ENV"] = "production"
+
+
 def create_app(test_config=None):
+    _normalize_hosted_environment()
+
     # Extend the in-memory source catalog before binding it into the existing
     # governed ingestion registry.
     install_continental_coverage()
