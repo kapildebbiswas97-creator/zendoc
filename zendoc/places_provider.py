@@ -109,7 +109,7 @@ class NominatimPlacesProvider(PlacesProvider):
                 available=True,
                 results=[],
                 message=(
-                    "OpenStreetMap fallback needs a city, area, or PIN code. "
+                    "OpenStreetMap fallback needs a city, area, or postal code. "
                     "Enter a location manually to search healthcare listings."
                 ),
                 source=self.source,
@@ -128,7 +128,7 @@ class NominatimPlacesProvider(PlacesProvider):
             "emergency": "hospital",
         }.get(category, category.replace("_", " "))
         if location:
-            terms = [term for term in (specialty, human_category, f"in {location}, India") if term]
+            terms = [term for term in (specialty, human_category, f"in {location}") if term]
         else:
             # Nominatim has no nearby-search endpoint. A bounded coordinate
             # query still lets GPS-only searches resolve a local listing while
@@ -140,10 +140,12 @@ class NominatimPlacesProvider(PlacesProvider):
             "addressdetails": "1",
             "extratags": "1",
             "namedetails": "1",
-            "countrycodes": "in",
             "layer": "poi",
             "limit": "20",
         }
+        country_code = _normalized_country_code(normalized.get("country_code"))
+        if country_code:
+            params["countrycodes"] = country_code.lower()
         if latitude is not None and longitude is not None:
             south, north, west, east = bounding_box(latitude, longitude, _bounded_radius_km(normalized.get("radius_km")))
             # Nominatim viewboxes cannot represent two disjoint dateline
@@ -304,11 +306,10 @@ class GooglePlacesProvider(PlacesProvider):
     def _nearby_search_body(self, query, latitude, longitude):
         category = str(query.get("category") or "doctor").strip().lower()
         radius_km = _bounded_radius_km(query.get("radius_km"))
-        return {
+        body = {
             "includedTypes": list(GOOGLE_CATEGORY_TYPES.get(category, GOOGLE_CATEGORY_TYPES["doctor"])),
             "maxResultCount": 20,
             "rankPreference": "DISTANCE",
-            "regionCode": "IN",
             "languageCode": "en",
             "locationRestriction": {
                 "circle": {
@@ -320,6 +321,10 @@ class GooglePlacesProvider(PlacesProvider):
                 }
             },
         }
+        country_code = _normalized_country_code(query.get("country_code"))
+        if country_code:
+            body["regionCode"] = country_code
+        return body
 
     def _text_search_body(self, query):
         category = str(query.get("category") or "doctor").strip().lower()
@@ -327,14 +332,17 @@ class GooglePlacesProvider(PlacesProvider):
         location = str(query.get("location") or "").strip()
         human_category = category.replace("_", " ")
         terms = [term for term in (specialty, human_category, f"in {location}" if location else "") if term]
-        return {
+        body = {
             "textQuery": " ".join(terms),
             "includedType": GOOGLE_TEXT_CATEGORY.get(category, "doctor"),
             "strictTypeFiltering": True,
             "pageSize": 20,
-            "regionCode": "IN",
             "languageCode": "en",
         }
+        country_code = _normalized_country_code(query.get("country_code"))
+        if country_code:
+            body["regionCode"] = country_code
+        return body
 
     def _post_json(self, url, body):
         if not self.api_key:
@@ -533,6 +541,13 @@ def _coordinate_number(value, minimum, maximum):
     return number if number is not None and minimum <= number <= maximum else None
 
 
+def _normalized_country_code(value):
+    code = str(value or "").strip().upper()
+    if len(code) != 2 or not code.isalpha():
+        return None
+    return code
+
+
 def _safe_google_error_message(exc):
     if isinstance(exc, urllib.error.HTTPError):
         if exc.code in {401, 403}:
@@ -563,5 +578,3 @@ class ShortLivedCache:
 
     def set(self, key, value):
         self._items[key] = {"created": time.time(), "value": value}
-
-
