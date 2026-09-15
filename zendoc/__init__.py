@@ -15,6 +15,7 @@ from .dataset_snapshot_routes import bp as dataset_snapshot_ingestion_bp
 from .db import close_db, get_db, init_db
 from .connected_care_routes import bp as connected_care_bp
 from .document_extraction_routes import bp as document_extraction_bp
+from .edgecare_routes import bp as edgecare_bp
 from .ecosystem_routes import bp as ecosystem_bp
 from .family_routes import bp as family_bp
 from .fitness_routes import bp as fitness_bp
@@ -64,7 +65,7 @@ def _normalize_hosted_environment():
     """Fail toward production security when the app is running on Render.
 
     Render supplies platform metadata independently of Blueprint-managed custom
-    environment variables.  A real hosted service must therefore never fall
+    environment variables. A real hosted service must therefore never fall
     back to development cookie/security/persistence semantics merely because
     ZENDOC_ENV was omitted in the service dashboard.
     """
@@ -120,6 +121,7 @@ def create_app(test_config=None):
     app.register_blueprint(operational_fulfilment_ui_bp)
     app.register_blueprint(milestone7_bp)
     app.register_blueprint(milestone8_bp)
+    app.register_blueprint(edgecare_bp)
     app.register_blueprint(milestone82_bp)
     app.register_blueprint(connected_care_bp)
     app.register_blueprint(care_os_bp)
