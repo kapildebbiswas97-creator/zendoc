@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta, timezone
-import re
 
 from tests.test_milestone1 import csrf, login_web, make_client, register_web
 from zendoc.db import get_db
@@ -64,11 +63,7 @@ def test_submission_search_profile_slot_booking_careloop_flow(tmp_path, monkeypa
     assert b"Dr Demo Sen" in search.data
     assert b"Cardiology" in search.data
     assert b"View profile &amp; availability" in search.data
-    profile_href = re.search(
-        rb'href="([^"]+/providers/%d[^"]*)"' % int(profile_id),
-        search.data,
-    )
-    assert profile_href is not None
+    assert f'href="/providers/{profile_id}"'.encode() in search.data
 
     # 2) Profile renders provider-published future availability.
     detail = client.get(f"/providers/{profile_id}?date={target_date.isoformat()}")
