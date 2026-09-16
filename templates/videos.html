@@ -5,14 +5,14 @@
   <div>
     <p class="eyebrow">Video Guidance</p>
     <h1>ZENDOC Videos</h1>
-    <p class="section-copy">Search real provider-backed video results when configured, with structured ZENDOC guidance shown separately.</p>
+    <p class="section-copy">Search an exercise, condition-education topic, device setup, rehabilitation topic, or platform guide. ZENDOC shows real YouTube API results when configured and a truthful YouTube search handoff otherwise.</p>
   </div>
   <a href="{{ url_for('milestone7.pose_coach_page') }}" class="secondary-action">Camera Coach</a>
 </section>
 
 <form method="get" action="{{ url_for('milestone7.videos_page') }}" class="filter-bar">
   <label>Search Videos
-    <input type="text" name="q" value="{{ q }}" placeholder="e.g. squat technique, inhaler setup, knee rehab" required>
+    <input type="text" name="q" value="{{ q }}" placeholder="e.g. inhaler technique, knee rehabilitation, blood pressure education" required>
   </label>
   <label>Category
     <select name="category">
@@ -34,7 +34,7 @@
           <span>{{ video.channel }} · {{ video.provider.title() }}</span>
           <p>{{ video.why_recommended }}</p>
           <div class="form-actions">
-            <a href="{{ video.url }}" target="_blank" rel="noopener" class="primary-action">Watch Demo</a>
+            <a href="{{ video.url }}" target="_blank" rel="noopener noreferrer" class="primary-action">Watch on YouTube</a>
             <a href="{{ url_for('milestone7.videos_page', q=q, category=selected_category) }}#guidance" class="secondary-action">Show Steps</a>
           </div>
         </article>
@@ -42,8 +42,13 @@
     {% else %}
       <div class="empty-state">
         <h2>Video Search Status</h2>
-        <p>{{ video_data.reason or 'No live video results are currently available.' }}</p>
-        <p>ZENDOC does not invent video links. Configure the video provider to display real external results.</p>
+        <p>{{ video_data.reason or 'No live in-app video results are currently available.' }}</p>
+        {% if video_data.search_url %}
+          <p>This opens a real YouTube results page for the same topic; ZENDOC is not pretending those links came from its API.</p>
+          <a href="{{ video_data.search_url }}" target="_blank" rel="noopener noreferrer" class="primary-action">Search this topic on YouTube</a>
+        {% else %}
+          <p>ZENDOC does not invent video links. Configure a supported provider to display real external results.</p>
+        {% endif %}
       </div>
     {% endif %}
   </section>
