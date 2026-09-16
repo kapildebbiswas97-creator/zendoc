@@ -4,6 +4,7 @@ from pathlib import Path
 from flask import Flask
 
 from .config import load_config, validate_startup_config
+from .ai_chat_routes import bp as ai_chat_bp
 from .care_action_ledger import ensure_care_action_ledger_schema
 from .care_os_routes import bp as care_os_bp
 from .carefin_routes import bp as carefin_bp
@@ -62,13 +63,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 def _normalize_hosted_environment():
-    """Fail toward production security when the app is running on Render.
-
-    Render supplies platform metadata independently of Blueprint-managed custom
-    environment variables. A real hosted service must therefore never fall
-    back to development cookie/security/persistence semantics merely because
-    ZENDOC_ENV was omitted in the service dashboard.
-    """
+    """Fail toward production security when the app is running on Render."""
     if os.environ.get("ZENDOC_ENV"):
         return
     if any(
@@ -86,8 +81,6 @@ def _normalize_hosted_environment():
 def create_app(test_config=None):
     _normalize_hosted_environment()
 
-    # Extend the in-memory source catalog before binding it into the existing
-    # governed ingestion registry.
     install_continental_coverage()
     install_global_public_sources()
     install_global_medical_authorities(MEDICAL_KNOWLEDGE_SOURCES)
@@ -106,6 +99,10 @@ def create_app(test_config=None):
 
     app.before_request(start_request_observation)
 
+    # Register the conversation-first /ai surface before the legacy main
+    # blueprint. The legacy endpoint remains in the codebase for compatibility,
+    # but browser requests to /ai now land on the ChatGPT-style conversation UI.
+    app.register_blueprint(ai_chat_bp)
     app.register_blueprint(bp)
     app.register_blueprint(health_memory_bp)
     app.register_blueprint(medical_knowledge_bp)
