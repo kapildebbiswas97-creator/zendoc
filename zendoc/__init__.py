@@ -93,15 +93,17 @@ def create_app(test_config=None):
     )
     app.config.from_mapping(load_config(BASE_DIR, test_config))
 
+    # Unit/integration tests must remain deterministic and offline. Production
+    # and normal development keep OSM POI augmentation enabled by default.
+    if app.config.get("TESTING"):
+        os.environ["ZENDOC_OSM_POI_ENABLED"] = "false"
+
     Path(app.config["UPLOAD_FOLDER"]).mkdir(parents=True, exist_ok=True)
     if app.config.get("DATABASE_ENGINE") == "sqlite" and app.config["DATABASE"] != ":memory:":
         Path(app.config["DATABASE"]).parent.mkdir(parents=True, exist_ok=True)
 
     app.before_request(start_request_observation)
 
-    # Register the conversation-first /ai surface before the legacy main
-    # blueprint. The legacy endpoint remains in the codebase for compatibility,
-    # but browser requests to /ai now land on the ChatGPT-style conversation UI.
     app.register_blueprint(ai_chat_bp)
     app.register_blueprint(bp)
     app.register_blueprint(health_memory_bp)
