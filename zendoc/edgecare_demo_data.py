@@ -5,13 +5,14 @@ search -> verified profile -> published slot -> appointment flow without
 pretending that a public directory or map listing is connected to ZENDOC.
 
 The records are deliberately and visibly labelled DEMO ONLY. The seeder
-refuses to run when ``ZENDOC_ENV=production`` and never contains a committed
-password. A local password must be supplied through ``ZENDOC_DEMO_PASSWORD``.
+refuses to run in production and never contains a committed password. A local
+password must be supplied through ``ZENDOC_DEMO_PASSWORD``.
 """
 from __future__ import annotations
 
 import os
 from datetime import datetime, timezone
+from typing import Any
 
 from werkzeug.security import generate_password_hash
 
@@ -59,11 +60,12 @@ def _upsert_demo_user(db, *, email: str, name: str, role: str, password: str) ->
     )
 
 
-def seed_edgecare_demo_data(*, password: str | None = None) -> dict[str, object]:
+def seed_edgecare_demo_data(*, password: str | None = None, app: Any | None = None) -> dict[str, object]:
     """Create/update clearly synthetic local demo users, provider and schedules.
 
-    The function is idempotent for the two fixed ``@zendoc.local`` identities.
-    It is intentionally unavailable in production.
+    ``app`` exists for isolated regression tests. Normal CLI use creates the
+    configured local ZENDOC app. The function is idempotent for the two fixed
+    ``@zendoc.local`` identities and unavailable in production.
     """
 
     environment = (_normalized_env("ZENDOC_ENV") or "development").lower()
@@ -74,7 +76,11 @@ def seed_edgecare_demo_data(*, password: str | None = None) -> dict[str, object]
     if len(password) < 12:
         raise ValueError("Set ZENDOC_DEMO_PASSWORD to a local-only password of at least 12 characters.")
 
-    app = create_app()
+    app = app or create_app()
+    app_environment = str(app.config.get("ZENDOC_ENV", "development") or "development").strip().lower()
+    if app_environment == "production":
+        raise RuntimeError("EdgeCare synthetic demo data is disabled in production.")
+
     with app.app_context():
         db = get_db()
         doctor_id = _upsert_demo_user(
@@ -140,7 +146,7 @@ def seed_edgecare_demo_data(*, password: str | None = None) -> dict[str, object]
                 INSERT INTO provider_schedules
                 (provider_profile_id,weekday,start_time,end_time,slot_minutes,active,
                  organization_id,organization_location_id,created_at,updated_at)
-                VALUES (?,?,?, ?,30,1,NULL,NULL,?,?)
+                VALUES (?,?,?,?,30,1,NULL,NULL,?,?)
                 """,
                 (profile_id, weekday, "09:00", "17:00", now, now),
             )
