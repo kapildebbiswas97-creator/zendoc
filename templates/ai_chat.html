@@ -23,6 +23,8 @@
   .ai-chat-composer{position:sticky;bottom:12px;max-width:900px;width:100%;margin:0 auto;background:var(--surface,#fff);border:1px solid var(--border,#dce6e4);border-radius:18px;padding:12px;box-shadow:0 12px 35px rgba(0,0,0,.08)}
   .ai-chat-composer textarea{width:100%;resize:vertical;min-height:76px;border:0;background:transparent;outline:none;padding:6px}
   .ai-chat-composer-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .ai-guided-truth{margin-top:4px}
+  .ai-guided-truth p{margin:.35rem 0}
   @media(max-width:760px){.ai-chat-shell{grid-template-columns:1fr}.ai-chat-sidebar{position:static;max-height:none}.ai-conversation-list{max-height:180px;overflow:auto}.ai-chat-bubble{max-width:95%}}
 </style>
 
@@ -45,6 +47,13 @@
       </nav>
     </div>
     <p class="form-note">{{ 'Doctor AI stays focused on health concerns and care navigation.' if mode == 'doctor' else 'ZENDOC AI can help navigate the platform, health memory, care search, wellness and everyday health questions.' }}</p>
+    <details class="ai-guided-truth">
+      <summary>Guided safety tools</summary>
+      <p><strong>Platform navigation helper</strong></p>
+      <p class="form-note">Deterministic navigation guidance only; it does not call a model or execute tools.</p>
+      <p><strong>Mental wellness check-in</strong></p>
+      <p class="form-note">Rule-based wellbeing guidance. Not a clinical assessment.</p>
+    </details>
   </aside>
 
   <section class="ai-chat-main" aria-labelledby="ai-chat-title">
