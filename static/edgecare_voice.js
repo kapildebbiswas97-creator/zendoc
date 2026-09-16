@@ -8,7 +8,7 @@
   const csrfInput = form && form.querySelector("input[name='csrf_token']");
   const endpoint = "/edgecare/asr/transcribe";
   const maxClientBytes = 8 * 1024 * 1024;
-  const maxRecordingMs = 45 * 1000;
+  const maxRecordingMs = 30 * 1000;
 
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
     button.disabled = true;
@@ -179,7 +179,7 @@
       status.textContent = "Recording locally. Press Stop when finished; nothing is sent until recording stops.";
       stopTimer = window.setTimeout(() => {
         if (recorder && recorder.state !== "inactive") {
-          status.textContent = "Maximum recording length reached. Transcribing locally…";
+          status.textContent = "30-second recording limit reached. Transcribing locally…";
           finishRecording();
         }
       }, maxRecordingMs);
@@ -215,5 +215,5 @@
   });
 
   setButtonState(false, false);
-  status.textContent = "Voice input uses the configured ZENDOC local speech runtime. Review the transcript before pressing Send.";
+  status.textContent = "Voice input uses the configured ZENDOC local speech runtime. Record up to 30 seconds, review the transcript, then press Send.";
 })();
