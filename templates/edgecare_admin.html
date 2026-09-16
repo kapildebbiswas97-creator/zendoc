@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}EdgeCare Runtime — ZENDOC{% endblock %}
+{% block content %}
+{% set edgecare = snapshot.edgecare %}
+{% set claims = edgecare.claims %}
+{% set asr = edgecare.local_asr %}
+{% set local_ai = edgecare.local_ai %}
+
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Owner verification console</p>
+    <h1>ZENDOC EdgeCare AI Runtime</h1>
+    <p class="section-copy">This page reports what is configured, what is actually ready, and what still requires real Snapdragon/Qualcomm measurement evidence.</p>
+  </div>
+  <span class="status-badge {{ 'active' if edgecare.readiness_stage == 'npu_measurement_recorded' else 'working' }}">{{ edgecare.readiness_stage.replace('_', ' ') }}</span>
+</section>
+
+<section class="grid three">
+  <article class="panel">
+    <p class="eyebrow">Deployment target</p>
+    <h2>{{ edgecare.profile.target_chipset }}</h2>
+    <p>{{ edgecare.profile.target_platform }}</p>
+    <p><strong>Declared target:</strong> {{ 'Yes' if claims.snapdragon_target_declared else 'No' }}</p>
+    <p class="form-note">A declared target is not proof of measured execution.</p>
+  </article>
+
+  <article class="panel">
+    <p class="eyebrow">Local language model</p>
+    <h2>{{ local_ai.status.replace('_', ' ') }}</h2>
+    <p><strong>Provider:</strong> {{ local_ai.provider or 'Not configured' }}</p>
+    <p><strong>Model:</strong> {{ local_ai.model or edgecare.profile.language_model }}</p>
+    {% if local_ai.latency_ms is not none %}<p><strong>Health-check latency:</strong> {{ local_ai.latency_ms }} ms</p>{% endif %}
+    <span class="status-badge {{ 'active' if claims.local_runtime_ready else 'inactive' }}">{{ 'Ready' if claims.local_runtime_ready else 'Not verified ready' }}</span>
+  </article>
+
+  <article class="panel">
+    <p class="eyebrow">Local speech recognition</p>
+    <h2>{{ asr.status.replace('_', ' ') }}</h2>
+    <p><strong>Provider:</strong> {{ asr.provider or 'Not configured' }}</p>
+    <p><strong>Model:</strong> {{ asr.model or edgecare.profile.speech_model }}</p>
+    {% if asr.latency_ms is defined and asr.latency_ms is not none %}<p><strong>Health-check latency:</strong> {{ asr.latency_ms }} ms</p>{% endif %}
+    <span class="status-badge {{ 'active' if claims.local_asr_ready else 'inactive' }}">{{ 'Ready' if claims.local_asr_ready else 'Not verified ready' }}</span>
+  </article>
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <div><p class="eyebrow">Truthful hardware evidence</p><h2>Benchmark and NPU status</h2></div>
+  </div>
+  <div class="grid three">
+    <div><strong>Measurement recorded</strong><p>{{ 'Yes' if claims.measurement_recorded else 'No' }}</p></div>
+    <div><strong>NPU measurement recorded</strong><p>{{ 'Yes' if claims.npu_measurement_recorded else 'No' }}</p></div>
+    <div><strong>Independently verified by ZENDOC</strong><p>{{ 'Yes' if claims.independently_verified_by_zendoc else 'No' }}</p></div>
+  </div>
+  {% if claims.measurement_recorded %}
+    <div class="grid three">
+      <div><strong>Device</strong><p>{{ edgecare.benchmark.device }}</p></div>
+      <div><strong>Runtime</strong><p>{{ edgecare.benchmark.runtime }}</p></div>
+      <div><strong>Execution provider</strong><p>{{ edgecare.benchmark.execution_provider }}</p></div>
+      <div><strong>Median latency</strong><p>{{ edgecare.benchmark.median_latency_ms }} ms</p></div>
+      <div><strong>P95 latency</strong><p>{{ edgecare.benchmark.p95_latency_ms }} ms</p></div>
+      <div><strong>Evidence reference</strong><p>{{ edgecare.benchmark.evidence_reference or 'Not supplied' }}</p></div>
+    </div>
+  {% else %}
+    <p class="form-note">No real Snapdragon benchmark evidence has been recorded yet. Do not claim NPU execution or performance numbers until a real measurement session is completed.</p>
+  {% endif %}
+</section>
+
+<section class="grid two">
+  <article class="panel">
+    <p class="eyebrow">Safe verification</p>
+    <h2>Local model smoke test</h2>
+    <p>Runs the existing fixed harmless prompt. It does not accept arbitrary owner input and cannot execute tools.</p>
+    <form method="post" action="{{ url_for('edgecare.edgecare_admin_test_local_ai') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" data-submitting-label="Testing locally…">Run local AI smoke test</button>
+    </form>
+  </article>
+
+  <article class="panel">
+    <p class="eyebrow">Clinical boundary</p>
+    <h2>What the model cannot do</h2>
+    <ul>
+      <li>Diagnose disease autonomously</li>
+      <li>Prescribe or change medication autonomously</li>
+      <li>Dispatch emergency care autonomously</li>
+      <li>Execute model-generated tools or commands</li>
+      <li>Turn configured hardware targets into fake benchmark claims</li>
+    </ul>
+  </article>
+</section>
+
+<section class="trust-note">
+  <strong>Submission rule:</strong> {{ edgecare.truth_note }}
+</section>
+{% endblock %}
