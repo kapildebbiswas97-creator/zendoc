@@ -4,6 +4,7 @@ from pathlib import Path
 from flask import Flask
 
 from .config import load_config, validate_startup_config
+from .ai_chat_routes import bp as ai_chat_bp
 from .care_action_ledger import ensure_care_action_ledger_schema
 from .care_os_routes import bp as care_os_bp
 from .carefin_routes import bp as carefin_bp
@@ -49,6 +50,7 @@ from .preventive_care import ensure_preventive_care_schema
 from .preventive_care_routes import bp as preventive_care_bp
 from .public_ingestion_routes import bp as public_ingestion_bp
 from .provider_onboarding_routes import bp as provider_onboarding_bp
+from .release_probe_routes import bp as release_probe_bp
 from .showcase_routes import bp as showcase_bp
 from .system_intelligence_routes import bp as system_intelligence_bp
 from .universal_search_routes import bp as universal_search_bp
@@ -61,43 +63,25 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 def _normalize_hosted_environment():
-    """Fail toward production security when the app is running on Render.
-
-    Render supplies platform metadata independently of Blueprint-managed custom
-    environment variables.  A real hosted service must therefore never fall
-    back to development cookie/security/persistence semantics merely because
-    ZENDOC_ENV was omitted in the service dashboard.
-    """
+    """Fail toward production security when the app is running on Render."""
     if os.environ.get("ZENDOC_ENV"):
         return
-    if any(
-        os.environ.get(key)
-        for key in (
-            "RENDER",
-            "RENDER_SERVICE_ID",
-            "RENDER_SERVICE_NAME",
-            "RENDER_EXTERNAL_HOSTNAME",
-        )
-    ):
+    if any(os.environ.get(key) for key in ("RENDER", "RENDER_SERVICE_ID", "RENDER_SERVICE_NAME", "RENDER_EXTERNAL_HOSTNAME")):
         os.environ["ZENDOC_ENV"] = "production"
 
 
 def create_app(test_config=None):
     _normalize_hosted_environment()
-
-    # Extend the in-memory source catalog before binding it into the existing
-    # governed ingestion registry.
     install_continental_coverage()
     install_global_public_sources()
     install_global_medical_authorities(MEDICAL_KNOWLEDGE_SOURCES)
     install_continental_medical_authorities(MEDICAL_KNOWLEDGE_SOURCES)
 
-    app = Flask(
-        __name__,
-        template_folder=str(BASE_DIR / "templates"),
-        static_folder=str(BASE_DIR / "static"),
-    )
+    app = Flask(__name__, template_folder=str(BASE_DIR / "templates"), static_folder=str(BASE_DIR / "static"))
     app.config.from_mapping(load_config(BASE_DIR, test_config))
+
+    if app.config.get("TESTING"):
+        os.environ["ZENDOC_OSM_POI_ENABLED"] = "false"
 
     Path(app.config["UPLOAD_FOLDER"]).mkdir(parents=True, exist_ok=True)
     if app.config.get("DATABASE_ENGINE") == "sqlite" and app.config["DATABASE"] != ":memory:":
@@ -105,7 +89,9 @@ def create_app(test_config=None):
 
     app.before_request(start_request_observation)
 
+    app.register_blueprint(ai_chat_bp)
     app.register_blueprint(bp)
+    app.register_blueprint(release_probe_bp)
     app.register_blueprint(health_memory_bp)
     app.register_blueprint(medical_knowledge_bp)
     app.register_blueprint(personal_health_baseline_bp)
@@ -163,5 +149,4 @@ def create_app(test_config=None):
                 pass
             app.logger.exception("ZENDOC database initialization/readiness failed.")
             raise
-
     return app
