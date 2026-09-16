@@ -14,6 +14,15 @@ function Require-Command([string]$Name) {
     }
 }
 
+function Test-AsrReady([int]$Port) {
+    try {
+        $health = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/healthz" -TimeoutSec 3
+        return ($health.status -eq "ready")
+    } catch {
+        return $false
+    }
+}
+
 Require-Command "python"
 Require-Command "ollama"
 
@@ -71,29 +80,31 @@ $env:ZENDOC_EDGECARE_SPEECH_MODEL = "whisper_small"
 $env:ZENDOC_EDGECARE_ASR_TIMEOUT = "60"
 $env:EDGECARE_DEMO_ASR_PORT = "$AsrPort"
 
-Write-Host "Starting local ASR bridge in a separate PowerShell window..."
-$asrCommand = @"
+$asrReady = Test-AsrReady -Port $AsrPort
+if ($asrReady) {
+    Write-Host "Reusing already-running local ASR bridge on port $AsrPort."
+} else {
+    Write-Host "Starting local ASR bridge in a separate PowerShell window..."
+    Write-Host "First startup may download the Whisper model and can take several minutes."
+    $asrCommand = @"
 Set-Location '$repoRoot'
 `$env:EDGECARE_DEMO_ASR_PORT='$AsrPort'
 & '$venvPython' -m zendoc.edgecare_demo_asr_server
 "@
-Start-Process powershell -ArgumentList @("-NoExit", "-Command", $asrCommand)
+    Start-Process powershell -ArgumentList @("-NoExit", "-Command", $asrCommand)
 
-$deadline = (Get-Date).AddMinutes(2)
-$asrReady = $false
-while ((Get-Date) -lt $deadline) {
-    try {
-        $health = Invoke-RestMethod -Uri "http://127.0.0.1:$AsrPort/healthz" -TimeoutSec 3
-        if ($health.status -eq "ready") {
+    $deadline = (Get-Date).AddMinutes(10)
+    while ((Get-Date) -lt $deadline) {
+        if (Test-AsrReady -Port $AsrPort) {
             $asrReady = $true
             break
         }
-    } catch {
         Start-Sleep -Seconds 2
     }
 }
+
 if (-not $asrReady) {
-    throw "Local ASR bridge did not become ready. Check the ASR PowerShell window for details."
+    throw "Local ASR bridge did not become ready within 10 minutes. Check the ASR PowerShell window for details."
 }
 
 Write-Host "Local ASR bridge is ready and explicitly reports no NPU claim."
