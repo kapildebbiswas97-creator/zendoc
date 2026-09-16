@@ -6,6 +6,7 @@ free text.
 """
 from __future__ import annotations
 
+import os
 import re
 from collections import OrderedDict
 
@@ -39,6 +40,7 @@ EXTERNAL_CATEGORIES = (
 
 CATEGORY_ALIASES = {
     "doctors": "doctor",
+    "doctor": "doctor",
     "physician": "doctor",
     "physicians": "doctor",
     "cardiologist": "doctor",
@@ -112,12 +114,7 @@ def normalize_universal_query(text=None, category=None, latitude=None, longitude
 
 
 def _text_parts(text):
-    """Return free-text term, explicit location and inferred category.
-
-    Natural phrases such as ``cardiologist in Kolkata`` and ``pharmacy near
-    Kalyani`` receive a useful location hint while ordinary names such as
-    ``Apollo Hospital`` remain intact for local database name matching.
-    """
+    """Return free-text term, explicit location and inferred category."""
     raw = str(text or "").strip()
     term = raw
     location = ""
@@ -128,10 +125,19 @@ def _text_parts(text):
 
     lowered = term.lower()
     inferred = None
+    matched_alias = None
     for alias in sorted(CATEGORY_ALIASES, key=len, reverse=True):
         if re.search(rf"\b{re.escape(alias)}\b", lowered):
             inferred = CATEGORY_ALIASES[alias]
+            matched_alias = alias
             break
+
+    # Make natural shorthand such as "pharmacy Kalyani" useful for nearby
+    # discovery without breaking named searches such as "Apollo Hospital".
+    if not location and matched_alias and lowered.startswith(matched_alias):
+        remainder = term[len(matched_alias):].strip(" ,-:")
+        if remainder:
+            location = remainder
     return term, location, inferred
 
 
@@ -169,7 +175,6 @@ def _registered_matches(text, category, latitude, longitude, radius_km):
         """,
         params,
     ).fetchall()
-    # public_provider expects the joined name column used by the legacy query.
     records = []
     for row in rows:
         item = dict(row)
@@ -276,11 +281,32 @@ def _rank(item, text):
     return (score, source_rank, float(item.get("distance_km") or 999999), str(item.get("name") or ""))
 
 
+def _osm_poi_enabled():
+    return str(os.environ.get("ZENDOC_OSM_POI_ENABLED", "true")).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _osm_poi_results(location, category, latitude, longitude, radius_km):
+    if not _osm_poi_enabled() or (not location and latitude is None):
+        return [], None
+    try:
+        from .osm_healthcare import OverpassHealthcareProvider
+        result = OverpassHealthcareProvider().search({
+            "category": category,
+            "location": location,
+            "latitude": latitude,
+            "longitude": longitude,
+            "radius_km": radius_km,
+            "country_code": "in",
+        })
+    except Exception:
+        return [], "OpenStreetMap nearby healthcare discovery is temporarily unavailable."
+    return list(result.get("results") or []), result.get("message")
+
+
 def universal_search(text=None, category="all", latitude=None, longitude=None, radius_km=10, places_provider=None):
     query = normalize_universal_query(text, category, latitude, longitude, radius_km)
     term, explicit_location, inferred = _text_parts(query["text"])
     selected_category = query["category"]
-    categories = [selected_category] if selected_category != "all" else list(SEARCH_CATEGORIES)
 
     internal_text = query["text"]
     records = _registered_matches(internal_text, selected_category, query["latitude"], query["longitude"], query["radius_km"])
@@ -289,8 +315,6 @@ def universal_search(text=None, category="all", latitude=None, longitude=None, r
     provider = places_provider or configured_places_provider()
     external_results = []
     external_messages = []
-    # For an explicit "X in Y" query, use Y as the place and X as specialty/name
-    # hint. Otherwise treat the free text as a location for broad nearby discovery.
     external_location = explicit_location or query["text"]
     external_hint = term if explicit_location else ""
     external_categories = [selected_category] if selected_category != "all" else list(EXTERNAL_CATEGORIES)
@@ -310,6 +334,21 @@ def universal_search(text=None, category="all", latitude=None, longitude=None, r
             if place_result.message:
                 external_messages.append(place_result.message)
 
+        # Only real configured searches add Overpass. Unit tests that inject a
+        # places provider remain deterministic and make no network calls.
+        if places_provider is None:
+            osm_category = selected_category if selected_category != "all" else (inferred or "all")
+            osm_results, osm_message = _osm_poi_results(
+                explicit_location or query["text"],
+                osm_category,
+                query["latitude"],
+                query["longitude"],
+                query["radius_km"],
+            )
+            external_results.extend(osm_results)
+            if osm_message:
+                external_messages.append(osm_message)
+
     records.extend(external_results)
     records = _dedupe(records)
     records.sort(key=lambda item: _rank(item, query["text"]))
@@ -320,8 +359,6 @@ def universal_search(text=None, category="all", latitude=None, longitude=None, r
         if items:
             grouped[key] = {"label": label, "count": len(items), "results": items[:25]}
 
-    # External emergency searches commonly resolve hospitals. Keep them under
-    # Hospitals rather than duplicating the same place into an artificial group.
     flat = [item for group in grouped.values() for item in group["results"]]
     source_tiers = {
         "zendoc_verified": sum(1 for item in flat if item.get("source") == "zendoc_provider_network"),
