@@ -77,8 +77,8 @@ class NullVideoProvider:
         return {
             "available": False,
             "reason": (
-                "Live in-app video cards require a configured video provider API. "
-                "You can still open this exact topic as a real YouTube search."
+                "Video discovery requires a video provider API key for live in-app results. "
+                "You can still open this exact topic as a real YouTube search using the link below."
             ),
             "results": [],
             "query": query,
