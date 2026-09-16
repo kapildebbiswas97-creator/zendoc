@@ -10,7 +10,8 @@ It proves:
 - audio stays on the local machine for the development ASR path;
 - a local transcript appears in the ZENDOC AI composer;
 - the transcript is never auto-submitted;
-- the owner readiness page reports runtime truthfully.
+- the owner readiness page reports runtime truthfully;
+- the connected-care demo can run deterministically with clearly labelled synthetic local records.
 
 It does **not** prove Snapdragon/NPU acceleration. Real Qualcomm evidence is a separate final-device step.
 
@@ -28,6 +29,7 @@ A microphone is needed only if you want to test voice capture. Headphones are us
 
 ```powershell
 git checkout competition/edgecare-ai-2026
+git pull origin competition/edgecare-ai-2026
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
@@ -43,6 +45,34 @@ $env:ZENDOC_SECRET_KEY="replace-with-a-long-random-local-secret"
 $env:ZENDOC_ADMIN_EMAIL="your-owner-email@example.com"
 $env:ZENDOC_ADMIN_PASSWORD="replace-with-a-strong-local-password"
 ```
+
+## Optional but recommended — deterministic search and booking fixture
+
+A fresh local database may not contain any connected provider with published availability. External/public search results are intentionally **not** treated as bookable. For a reliable recording, create the repository's development-only synthetic fixture.
+
+Choose a local-only password of at least 12 characters and run:
+
+```powershell
+$env:ZENDOC_DEMO_PASSWORD="replace-with-a-local-only-demo-password"
+python -m zendoc.edgecare_demo_data
+```
+
+The command creates/updates two visibly synthetic local accounts:
+
+```text
+Patient:  demo-patient@zendoc.local
+Provider: demo-doctor@zendoc.local
+```
+
+Search location:
+
+```text
+Kalyani
+```
+
+The provider and patient names contain **DEMO ONLY**, and the provider biography explicitly says it is a synthetic competition fixture and not a real clinician/provider. The fixture creates availability for every weekday so the search → profile → slot → appointment path is deterministic.
+
+**Never describe this fixture as a real doctor, clinic, user, pilot, customer or healthcare deployment.** The seeder refuses to run when ZENDOC is configured as production.
 
 ## Terminal 2 — local LLM
 
@@ -109,6 +139,12 @@ $env:ZENDOC_EDGECARE_ASR_TIMEOUT="60"
 python run.py
 ```
 
+Or, after the admin variables are set, use the repository launcher:
+
+```powershell
+.\scripts\start_edgecare_local_demo.ps1
+```
+
 Open:
 
 ```text
@@ -124,14 +160,19 @@ Before making any competition recording:
 3. Confirm local LLM status is ready.
 4. Confirm local ASR status is ready.
 5. Run the fixed harmless local-model smoke test.
-6. Open the ZENDOC AI Assistant.
-7. Press **Use local voice input**.
-8. Speak a short non-emergency request.
-9. Stop recording.
-10. Confirm the transcript appears in the textarea.
-11. Confirm nothing is submitted automatically.
-12. Review the transcript and press Send manually.
-13. Confirm the normal ZENDOC safety layer remains active.
+6. Sign in as `demo-patient@zendoc.local` if using the synthetic care fixture.
+7. Open Find Care and search `Kalyani`.
+8. Open the clearly labelled **DEMO ONLY** ZENDOC provider profile.
+9. Choose a future date, select one published slot and request the appointment.
+10. Open Appointments and confirm the request appears as requested/pending provider confirmation.
+11. Open the ZENDOC AI Assistant.
+12. Press **Use local voice input**.
+13. Speak a short non-emergency request.
+14. Stop recording.
+15. Confirm the transcript appears in the textarea.
+16. Confirm nothing is submitted automatically.
+17. Review the transcript and press Send manually.
+18. Confirm the normal ZENDOC safety layer remains active.
 
 ## If microphone capture fails
 
@@ -176,6 +217,6 @@ Confirm `llama3.2:3b` is present or set `ZENDOC_LOCAL_AI_MODEL` to the exact ins
 
 When all functional-verification steps above pass, ordinary-laptop software work is complete.
 
-Do **not** record statements such as "runs on Snapdragon NPU" or "NPU latency is X ms" yet.
+Do **not** record statements such as "runs on Snapdragon NPU" or "NPU latency is X ms" unless you have real evidence.
 
-Next use `docs/QUALCOMM_AI_HUB_RUNTIME_SETUP.md` to obtain the actual Snapdragon/Qualcomm model profile and record real measurement metadata. Only then update `instance/edgecare_benchmark.json` and record the final evidence-backed submission video.
+For Qualcomm hardware evidence, use `docs/QUALCOMM_AI_HUB_RUNTIME_SETUP.md` to obtain an actual Snapdragon/Qualcomm model profile and record real measurement metadata. Only update `instance/edgecare_benchmark.json` with measured values from that real source.
