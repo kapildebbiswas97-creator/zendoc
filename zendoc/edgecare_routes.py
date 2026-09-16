@@ -3,14 +3,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, url_for
 
 from .db import get_db
 from .edgecare_asr import get_edgecare_asr
 from .edgecare_runtime import EdgeCareSettings, build_edgecare_status, load_benchmark_evidence
 from .model_router import get_model_router
 from .routes import audit, require_api_user
-from .security import assert_owner, login_required
+from .security import assert_owner, login_required, owner_required
 
 
 bp = Blueprint("edgecare", __name__)
@@ -52,6 +52,37 @@ def _runtime_snapshot(check_health: bool = True):
     edgecare["local_asr"] = asr_status
     edgecare["claims"]["local_asr_ready"] = asr_status.get("status") == "ready"
     return {"edgecare": edgecare, "model_router": router_status}
+
+
+@bp.get("/admin/edgecare")
+@owner_required
+def edgecare_admin_page():
+    """Human-readable owner dashboard for competition/runtime verification."""
+    return render_template("edgecare_admin.html", snapshot=_runtime_snapshot(check_health=True))
+
+
+@bp.post("/admin/edgecare/test-local-ai")
+@owner_required
+def edgecare_admin_test_local_ai():
+    """Run the fixed harmless local-model test from the owner dashboard."""
+    from flask import g
+
+    result = get_model_router().test_local_ai(actor_id=g.user["id"])
+    audit(
+        "test_edgecare_local_ai",
+        "model_provider",
+        f"{result.provider}:{'success' if result.success else result.error_category or 'failed'}",
+        actor=g.user,
+    )
+    get_db().commit()
+    if result.success:
+        flash(f"Local AI smoke test passed with {result.provider} / {result.model}.", "success")
+    else:
+        flash(
+            f"Local AI smoke test did not pass: {result.error_category or 'runtime unavailable'}.",
+            "warning",
+        )
+    return redirect(url_for("edgecare.edgecare_admin_page"))
 
 
 @bp.get("/api/v1/admin/edgecare/runtime")
