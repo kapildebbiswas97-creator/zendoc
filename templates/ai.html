@@ -94,8 +94,8 @@
       {% if conversations %}<input type="hidden" name="conversation_id" value="{{ conversations[0].id }}">{% endif %}
       <label for="assistant-message">Your message</label>
       <textarea id="assistant-message" name="message" rows="4" maxlength="1500" data-character-count="assistant-count" placeholder="For example: I have had a fever and cough for two days. What should I do next?" required></textarea>
-      <div class="composer-footer"><small id="assistant-count">0 characters</small><span class="form-actions"><button type="button" id="voice-input-toggle" class="secondary-action" aria-pressed="false">Use voice input</button><button type="submit" data-submitting-label="Reviewing safely…">Send message</button></span></div>
-      <p id="voice-input-status" class="form-note" role="status" aria-live="polite">Voice input is optional. Your message is never sent until you press Send.</p>
+      <div class="composer-footer"><small id="assistant-count">0 characters</small><span class="form-actions"><button type="button" id="edgecare-voice-input-toggle" class="secondary-action" aria-pressed="false">Use local voice input</button><button type="submit" data-submitting-label="Reviewing safely…">Send message</button></span></div>
+      <p id="edgecare-voice-input-status" class="form-note" role="status" aria-live="polite">Voice input uses the configured ZENDOC local speech runtime. Review the transcript before pressing Send.</p>
     </form>
   </div>
 
@@ -121,4 +121,5 @@
     <form class="panel subtle-panel" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="feature" value="mental_health"><h2>Mental wellness check-in</h2><p class="form-note">Deterministic wellbeing guidance with the same emergency-first safety check. Not a clinical assessment.</p><label>Age group <select name="age_group"><option>student</option><option>working professional</option><option>elderly</option><option>adult</option></select></label><label>Stress level from 0 to 10 <input name="stress_level" type="number" min="0" max="10" value="5"></label><label>What is happening? <textarea name="context" rows="3"></textarea></label><button type="submit">Review next steps</button></form>
   </div>
 </details>
+<script src="{{ url_for('static', filename='edgecare_voice.js') }}" defer></script>
 {% endblock %}
