@@ -10,6 +10,8 @@ from .care_journey_store import (
     get_persisted_journey,
     list_patient_journeys,
 )
+from .context_engine import verify_context_authorization
+from .db import get_db
 from .routes import require_api_user
 
 
@@ -26,6 +28,32 @@ def _error(exc):
     else:
         code = 400
     return jsonify({"error": {"code": code, "message": str(exc)}}), code
+
+
+def _enforce_careloop_context_scope(user, *, journey_id=None, action_id=None):
+    """Require minimum-necessary consent before delegated CareLoop access.
+
+    Patient self-access and owner override remain handled by the context engine.
+    Any delegated actor must have authorization for the care_graph purpose, which
+    requires timeline scope and honors revocation/expiry in the consent engine.
+    """
+    if journey_id is not None:
+        row = get_db().execute(
+            "SELECT patient_id FROM care_journeys WHERE id=?",
+            (int(journey_id),),
+        ).fetchone()
+        if not row:
+            raise LookupError("Care journey not found.")
+    elif action_id is not None:
+        row = get_db().execute(
+            "SELECT patient_id FROM care_actions WHERE id=?",
+            (int(action_id),),
+        ).fetchone()
+        if not row:
+            raise LookupError("Care action not found.")
+    else:
+        raise ValueError("A care journey or care action is required.")
+    verify_context_authorization(user, int(row["patient_id"]), "care_graph")
 
 
 def _enforce_linked_action_state_authority(user, action_id, target_status):
@@ -118,6 +146,7 @@ def api_create_care_action(journey_id):
     if error:
         return error
     try:
+        _enforce_careloop_context_scope(user, journey_id=journey_id)
         action = create_action(user, journey_id, request.get_json(silent=True) or {})
     except (PermissionError, LookupError, TypeError, ValueError) as exc:
         return _error(exc)
@@ -130,6 +159,7 @@ def api_list_care_actions(journey_id):
     if error:
         return error
     try:
+        _enforce_careloop_context_scope(user, journey_id=journey_id)
         actions = list_actions(user, journey_id)
     except (PermissionError, LookupError, TypeError, ValueError) as exc:
         return _error(exc)
@@ -142,6 +172,7 @@ def api_get_care_action(action_id):
     if error:
         return error
     try:
+        _enforce_careloop_context_scope(user, action_id=action_id)
         action = get_action(user, action_id)
     except (PermissionError, LookupError, TypeError, ValueError) as exc:
         return _error(exc)
@@ -155,6 +186,7 @@ def api_transition_care_action(action_id):
         return error
     data = request.get_json(silent=True) or {}
     try:
+        _enforce_careloop_context_scope(user, action_id=action_id)
         _enforce_linked_action_state_authority(user, action_id, data.get("target_status"))
         action = transition_action(
             user,
@@ -174,6 +206,7 @@ def api_record_care_outcome(action_id):
     if error:
         return error
     try:
+        _enforce_careloop_context_scope(user, action_id=action_id)
         outcome = record_outcome(user, action_id, request.get_json(silent=True) or {})
     except (PermissionError, LookupError, TypeError, ValueError) as exc:
         return _error(exc)
