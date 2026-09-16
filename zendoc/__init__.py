@@ -4,6 +4,7 @@ from pathlib import Path
 from flask import Flask
 
 from .config import load_config, validate_startup_config
+from .ai_chat_routes import bp as ai_chat_bp
 from .care_action_ledger import ensure_care_action_ledger_schema
 from .care_os_routes import bp as care_os_bp
 from .carefin_routes import bp as carefin_bp
@@ -86,8 +87,6 @@ def _normalize_hosted_environment():
 def create_app(test_config=None):
     _normalize_hosted_environment()
 
-    # Extend the in-memory source catalog before binding it into the existing
-    # governed ingestion registry.
     install_continental_coverage()
     install_global_public_sources()
     install_global_medical_authorities(MEDICAL_KNOWLEDGE_SOURCES)
@@ -106,6 +105,7 @@ def create_app(test_config=None):
 
     app.before_request(start_request_observation)
 
+    app.register_blueprint(ai_chat_bp)
     app.register_blueprint(bp)
     app.register_blueprint(compat_bp)
     app.register_blueprint(health_memory_bp)
