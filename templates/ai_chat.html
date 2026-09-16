@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Doctor AI' if mode == 'doctor' else 'ZENDOC AI' }} — ZENDOC{% endblock %}
+{% block main_class %}page ai-chat-page{% endblock %}
+{% block content %}
+<style>
+  .ai-chat-shell{display:grid;grid-template-columns:minmax(220px,280px) minmax(0,1fr);gap:18px;min-height:calc(100vh - 190px)}
+  .ai-chat-sidebar{display:flex;flex-direction:column;gap:12px;align-self:start;position:sticky;top:96px;max-height:calc(100vh - 120px);overflow:auto}
+  .ai-mode-switch{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .ai-mode-switch a{text-align:center}
+  .ai-conversation-list{display:flex;flex-direction:column;gap:6px}
+  .ai-conversation-link{display:block;padding:10px 12px;border-radius:12px;text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ai-conversation-link[aria-current="page"]{font-weight:700;background:var(--surface-2,#eef7f5)}
+  .ai-chat-main{display:flex;flex-direction:column;min-width:0;min-height:68vh}
+  .ai-chat-heading{padding:2px 4px 14px}
+  .ai-chat-thread{display:flex;flex-direction:column;gap:18px;flex:1;padding:4px 0 22px;max-width:900px;width:100%;margin:0 auto}
+  .ai-chat-turn{display:flex;gap:10px;align-items:flex-start}
+  .ai-chat-turn.user{justify-content:flex-end}
+  .ai-chat-bubble{max-width:min(760px,88%);padding:14px 16px;border-radius:18px;background:var(--surface,#fff);border:1px solid var(--border,#dce6e4);white-space:pre-wrap;line-height:1.55}
+  .ai-chat-turn.user .ai-chat-bubble{background:var(--surface-2,#eef7f5)}
+  .ai-chat-meta{display:block;font-size:.78rem;opacity:.72;margin-bottom:6px}
+  .ai-chat-emergency{display:block;margin-bottom:8px;font-weight:800}
+  .ai-chat-empty{max-width:720px;margin:auto;text-align:center;padding:46px 18px}
+  .ai-chat-composer{position:sticky;bottom:12px;max-width:900px;width:100%;margin:0 auto;background:var(--surface,#fff);border:1px solid var(--border,#dce6e4);border-radius:18px;padding:12px;box-shadow:0 12px 35px rgba(0,0,0,.08)}
+  .ai-chat-composer textarea{width:100%;resize:vertical;min-height:76px;border:0;background:transparent;outline:none;padding:6px}
+  .ai-chat-composer-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  @media(max-width:760px){.ai-chat-shell{grid-template-columns:1fr}.ai-chat-sidebar{position:static;max-height:none}.ai-conversation-list{max-height:180px;overflow:auto}.ai-chat-bubble{max-width:95%}}
+</style>
+
+<section class="ai-chat-shell">
+  <aside class="panel ai-chat-sidebar" aria-label="AI conversations">
+    <div class="ai-mode-switch">
+      <a class="secondary-action" href="{{ url_for('ai_chat.chat_home', mode='zendoc', new=1) }}" {% if mode == 'zendoc' %}aria-current="page"{% endif %}>ZENDOC AI</a>
+      <a class="secondary-action" href="{{ url_for('ai_chat.chat_home', mode='doctor', new=1) }}" {% if mode == 'doctor' %}aria-current="page"{% endif %}>Doctor AI</a>
+    </div>
+    <a class="primary-action" href="{{ url_for('ai_chat.chat_home', mode=mode, new=1) }}">+ New chat</a>
+    <div>
+      <p class="eyebrow">Previous chats</p>
+      <nav class="ai-conversation-list" aria-label="Previous AI chats">
+        {% for conversation in conversations %}
+          {% set clean_title = conversation.title.replace('[Doctor AI] ', '') if conversation.title else 'Untitled chat' %}
+          <a class="ai-conversation-link" href="{{ url_for('ai_chat.chat_home', mode=mode, conversation_id=conversation.id) }}" {% if selected_conversation and selected_conversation.id == conversation.id %}aria-current="page"{% endif %}>{{ clean_title }}</a>
+        {% else %}
+          <p class="form-note">No previous {{ 'Doctor AI' if mode == 'doctor' else 'ZENDOC AI' }} chats yet.</p>
+        {% endfor %}
+      </nav>
+    </div>
+    <p class="form-note">{{ 'Doctor AI stays focused on health concerns and care navigation.' if mode == 'doctor' else 'ZENDOC AI can help navigate the platform, health memory, care search, wellness and everyday health questions.' }}</p>
+  </aside>
+
+  <section class="ai-chat-main" aria-labelledby="ai-chat-title">
+    <header class="ai-chat-heading">
+      <p class="eyebrow">{{ 'Clinical guidance mode' if mode == 'doctor' else 'Healthcare assistant' }}</p>
+      <h1 id="ai-chat-title">{{ 'Doctor AI' if mode == 'doctor' else 'ZENDOC AI' }}</h1>
+      <p class="section-copy">{{ 'Safety-first educational guidance for symptoms, reports, medicines and deciding what kind of care to seek. It does not diagnose or prescribe.' if mode == 'doctor' else 'One conversation at a time, with your previous chats kept separate.' }}</p>
+    </header>
+
+    <div class="ai-chat-thread" id="ai-chat-thread" aria-live="polite">
+      {% if history %}
+        {% for item in history %}
+          <article class="ai-chat-turn user">
+            <div class="ai-chat-bubble"><span class="ai-chat-meta">You</span>{{ item.input_text }}</div>
+          </article>
+          <article class="ai-chat-turn assistant">
+            <div class="ai-chat-bubble">
+              <span class="ai-chat-meta">{{ 'Doctor AI' if mode == 'doctor' else 'ZENDOC AI' }} · {{ item.risk_level.replace('_',' ') }}</span>
+              {% if item.risk_level in ['emergency','high'] %}<span class="ai-chat-emergency">Emergency guidance — Seek urgent care now</span>{% endif %}
+              {{ item.output_text }}
+            </div>
+          </article>
+        {% endfor %}
+      {% else %}
+        <div class="ai-chat-empty">
+          <span class="brand-spark" aria-hidden="true">✦</span>
+          <h2>{{ 'What health concern can I help you organize?' if mode == 'doctor' else 'How can ZENDOC help today?' }}</h2>
+          <p>{{ 'Describe symptoms, a report, medicine question, or the type of doctor you may need.' if mode == 'doctor' else 'Ask about finding care, appointments, reports, Health Memory, wellness, videos, pharmacy services, or how to use ZENDOC.' }}</p>
+        </div>
+      {% endif %}
+      <div id="chat-end"></div>
+    </div>
+
+    <form class="ai-chat-composer" method="post" action="{{ url_for('ai_chat.chat_home') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="mode" value="{{ mode }}">
+      {% if selected_conversation %}<input type="hidden" name="conversation_id" value="{{ selected_conversation.id }}">{% endif %}
+      <label class="sr-only" for="assistant-message">Message {{ 'Doctor AI' if mode == 'doctor' else 'ZENDOC AI' }}</label>
+      <textarea id="assistant-message" name="message" maxlength="3000" rows="3" placeholder="{{ 'Describe your health concern…' if mode == 'doctor' else 'Message ZENDOC AI…' }}" required></textarea>
+      <div class="ai-chat-composer-footer">
+        <span id="edgecare-voice-input-status" class="form-note" role="status" aria-live="polite">Voice creates editable text only; it is never sent until you press Send.</span>
+        <span class="form-actions">
+          <button type="button" id="edgecare-voice-input-toggle" class="secondary-action" aria-pressed="false">Use local voice</button>
+          <button type="submit" data-submitting-label="Thinking…">Send</button>
+        </span>
+      </div>
+    </form>
+  </section>
+</section>
+<script src="{{ url_for('static', filename='edgecare_voice.js') }}" defer></script>
+<script>
+  window.addEventListener('load', function () {
+    const end = document.getElementById('chat-end');
+    if (end && {{ 'true' if history else 'false' }}) end.scrollIntoView({block:'end'});
+    const box = document.getElementById('assistant-message');
+    if (box) box.focus();
+  });
+</script>
+{% endblock %}
