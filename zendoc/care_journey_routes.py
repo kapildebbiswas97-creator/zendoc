@@ -15,6 +15,8 @@ from .routes import require_api_user
 
 bp = Blueprint("care_journey", __name__)
 
+_PROVIDER_SYNCHRONIZED_APPOINTMENT_STATES = {"CONFIRMED", "IN_PROGRESS", "COMPLETED"}
+
 
 def _error(exc):
     if isinstance(exc, PermissionError):
@@ -24,6 +26,25 @@ def _error(exc):
     else:
         code = 400
     return jsonify({"error": {"code": code, "message": str(exc)}}), code
+
+
+def _enforce_linked_action_state_authority(user, action_id, target_status):
+    """Keep provider-synchronized appointment state separate from ledger reports.
+
+    A CareLoop action linked to a real registered-provider appointment may expose
+    provider confirmation/completion only when that state arrives through the
+    appointment lifecycle synchronizer. The generic ledger transition endpoint
+    must never be able to manufacture the same provider-backed state.
+    """
+    target = str(target_status or "").strip().upper()
+    if target not in _PROVIDER_SYNCHRONIZED_APPOINTMENT_STATES:
+        return
+    action = get_action(user, action_id)
+    if action.get("integration_source_type") == "appointment":
+        raise PermissionError(
+            "Linked registered-provider appointment confirmation and completion must be "
+            "synchronized from the appointment lifecycle; this ledger endpoint cannot assert provider state."
+        )
 
 
 @bp.post("/api/v1/care-journeys")
@@ -134,6 +155,7 @@ def api_transition_care_action(action_id):
         return error
     data = request.get_json(silent=True) or {}
     try:
+        _enforce_linked_action_state_authority(user, action_id, data.get("target_status"))
         action = transition_action(
             user,
             action_id,
