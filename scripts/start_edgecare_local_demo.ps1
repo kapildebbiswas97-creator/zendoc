@@ -2,11 +2,11 @@ param(
     [string]$AdminEmail = $env:ZENDOC_ADMIN_EMAIL,
     [string]$AdminPassword = $env:ZENDOC_ADMIN_PASSWORD,
     [string]$LocalModel = "llama3.2:3b",
-    [int]$ZendocPort = 5000,
     [int]$AsrPort = 8001
 )
 
 $ErrorActionPreference = "Stop"
+$ZendocPort = 5000
 
 function Require-Command([string]$Name) {
     if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
@@ -100,5 +100,4 @@ Write-Host "Local ASR bridge is ready and explicitly reports no NPU claim."
 Write-Host "Starting ZENDOC at http://127.0.0.1:$ZendocPort"
 Write-Host "After sign-in, open http://127.0.0.1:$ZendocPort/admin/edgecare"
 
-$env:FLASK_RUN_PORT = "$ZendocPort"
 & $venvPython run.py
