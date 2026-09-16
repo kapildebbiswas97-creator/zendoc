@@ -1,38 +1,27 @@
-"""
-Video Provider — provider abstraction for fitness video discovery.
+"""Video-provider abstraction for real educational video discovery.
 
-Provider selection via ZENDOC_VIDEO_PROVIDER environment variable:
-    none     → NullVideoProvider (returns a safe external search fallback)
-    youtube  → YouTubeProvider (requires ZENDOC_YOUTUBE_API_KEY)
+Provider selection via ``ZENDOC_VIDEO_PROVIDER``:
+- ``none``: return a truthful direct YouTube search handoff;
+- ``youtube``: use YouTube Data API v3 when ``ZENDOC_YOUTUBE_API_KEY`` exists.
 
-IMPORTANT: No video results are ever fabricated.
-If a provider is unavailable or fails, the response clearly states this and may
-provide a generic YouTube search URL rather than pretending a specific video
-was returned by the API.
+No video cards or links are fabricated as API results.
 """
 
 import hashlib
-import time
-from urllib.parse import quote_plus, urlencode
-from urllib.request import urlopen, Request
 import json
 import os
+import time
 from threading import Lock
+from urllib.parse import quote_plus, urlencode
+from urllib.request import Request, urlopen
 
-
-# ---------------------------------------------------------------------------
-# Simple in-memory LRU cache (no Redis required)
-# ---------------------------------------------------------------------------
-
-_CACHE = {}          # key → (timestamp, result)
-_CACHE_TTL = 3600    # 1 hour
+_CACHE = {}
+_CACHE_TTL = 3600
 _CACHE_MAX = 128
 _CACHE_LOCK = Lock()
 
-
 def _cache_key(query, max_results):
     return hashlib.sha256(f"{query}:{max_results}".encode()).hexdigest()
-
 
 def _cache_get(key):
     with _CACHE_LOCK:
@@ -42,25 +31,18 @@ def _cache_get(key):
         _CACHE.pop(key, None)
         return None
 
-
 def _cache_set(key, value):
     with _CACHE_LOCK:
         if len(_CACHE) >= _CACHE_MAX:
-            oldest = min(_CACHE, key=lambda k: _CACHE[k][0])
+            oldest = min(_CACHE, key=lambda item: _CACHE[item][0])
             del _CACHE[oldest]
         _CACHE[key] = (time.time(), value)
 
-
 def _youtube_search_url(query):
-    clean = str(query or "").strip()
+    clean = " ".join(str(query or "").strip().split())[:200]
     if not clean:
         return None
-    return "https://www.youtube.com/results?search_query=" + quote_plus(f"{clean} fitness tutorial")
-
-
-# ---------------------------------------------------------------------------
-# Provider base
-# ---------------------------------------------------------------------------
+    return "https://www.youtube.com/results?search_query=" + quote_plus(clean)
 
 class VideoResult:
     def __init__(self, title, channel, url, thumbnail_url=None, duration=None, provider="unknown"):
@@ -72,42 +54,23 @@ class VideoResult:
         self.provider = provider
 
     def to_dict(self):
-        return {
-            "title": self.title,
-            "channel": self.channel,
-            "url": self.url,
-            "thumbnail_url": self.thumbnail_url,
-            "duration": self.duration,
-            "provider": self.provider,
-        }
-
+        return {"title": self.title, "channel": self.channel, "url": self.url, "thumbnail_url": self.thumbnail_url, "duration": self.duration, "provider": self.provider}
 
 class NullVideoProvider:
-    """Never fabricates API results; provides a truthful external search link."""
-
     name = "none"
 
     def search(self, query, max_results=5):
         return {
             "available": False,
-            "reason": (
-                "Video discovery requires a video provider API key for live in-app results. "
-                "You can still open the same search directly on YouTube using the link below."
-            ),
+            "reason": "Video discovery requires a video provider API key for live in-app results. You can still open this exact topic as a real YouTube search using the link below.",
             "results": [],
             "query": query,
             "search_url": _youtube_search_url(query),
             "search_provider": "youtube_web_search",
+            "provider": "none",
         }
 
-
 class YouTubeProvider:
-    """
-    YouTube Data API v3 video search.
-    Requires ZENDOC_YOUTUBE_API_KEY.
-    Timeout: 5 seconds.  Results cached 1 hour in-process.
-    """
-
     name = "youtube"
     _BASE = "https://www.googleapis.com/youtube/v3/search"
 
@@ -119,84 +82,37 @@ class YouTubeProvider:
         cached = _cache_get(cache_key)
         if cached:
             return cached
-
-        params = urlencode({
-            "part": "snippet",
-            "q": f"{query} fitness tutorial",
-            "type": "video",
-            "maxResults": min(int(max_results), 10),
-            "safeSearch": "moderate",
-            "key": self._api_key,
-        })
-        url = f"{self._BASE}?{params}"
+        params = urlencode({"part": "snippet", "q": query, "type": "video", "maxResults": min(max(int(max_results), 1), 10), "safeSearch": "moderate", "relevanceLanguage": "en", "key": self._api_key})
         try:
-            req = Request(url, headers={"Accept": "application/json"})
-            with urlopen(req, timeout=5) as resp:
-                data = json.loads(resp.read().decode())
+            request = Request(f"{self._BASE}?{params}", headers={"Accept": "application/json", "User-Agent": "ZENDOC/1.0 VideoDiscovery"})
+            with urlopen(request, timeout=5) as response:
+                raw = response.read(2_097_153)
+            if len(raw) > 2_097_152:
+                raise ValueError("YouTube response exceeded the safe response limit.")
+            data = json.loads(raw.decode("utf-8"))
         except Exception as exc:
-            return {
-                "available": False,
-                "reason": f"Video provider request failed: {type(exc).__name__}. You can use the direct YouTube search link below.",
-                "results": [],
-                "query": query,
-                "search_url": _youtube_search_url(query),
-                "search_provider": "youtube_web_search",
-            }
-
+            return {"available": False, "reason": f"Video provider request failed: {type(exc).__name__}. You can use the direct YouTube search link below.", "results": [], "query": query, "search_url": _youtube_search_url(query), "search_provider": "youtube_web_search", "provider": "youtube"}
         results = []
         for item in data.get("items", []):
             snippet = item.get("snippet", {})
-            vid_id = item.get("id", {}).get("videoId", "")
-            if not vid_id:
+            video_id = item.get("id", {}).get("videoId", "")
+            if not video_id:
                 continue
-            results.append(VideoResult(
-                title=snippet.get("title", ""),
-                channel=snippet.get("channelTitle", ""),
-                url=f"https://www.youtube.com/watch?v={vid_id}",
-                thumbnail_url=(snippet.get("thumbnails", {}).get("medium", {}).get("url")),
-                duration=None,  # Requires a separate /videos?part=contentDetails call
-                provider="youtube",
-            ).to_dict())
-
-        response = {
-            "available": True,
-            "results": results,
-            "query": query,
-            "provider": "youtube",
-            "total": len(results),
-            "search_url": _youtube_search_url(query),
-        }
+            results.append(VideoResult(str(snippet.get("title") or "")[:300], str(snippet.get("channelTitle") or "")[:160], f"https://www.youtube.com/watch?v={video_id}", snippet.get("thumbnails", {}).get("medium", {}).get("url"), None, "youtube").to_dict())
+        response = {"available": True, "results": results, "query": query, "provider": "youtube", "total": len(results), "search_url": _youtube_search_url(query)}
         _cache_set(cache_key, response)
         return response
 
-
 def configured_video_provider():
-    """
-    Return the video provider configured via ZENDOC_VIDEO_PROVIDER.
-    Defaults to NullVideoProvider if not set or key is missing.
-    """
     provider_name = os.environ.get("ZENDOC_VIDEO_PROVIDER", "none").strip().lower()
     if provider_name == "youtube":
         api_key = os.environ.get("ZENDOC_YOUTUBE_API_KEY", "").strip()
         if api_key:
             return YouTubeProvider(api_key)
-        # Key not set — degrade gracefully with a truthful search link.
-        return NullVideoProvider()
     return NullVideoProvider()
 
-
 def search_fitness_video(query, max_results=5):
-    """
-    Top-level entry point used by routes and FitnessCoach.
-    Sanitises query and delegates to the configured provider.
-    """
-    clean_query = str(query or "").strip()[:200]
+    clean_query = " ".join(str(query or "").strip().split())[:200]
     if not clean_query:
-        return {
-            "available": False,
-            "reason": "A search query is required.",
-            "results": [],
-            "query": "",
-            "search_url": None,
-        }
+        return {"available": False, "reason": "A search query is required.", "results": [], "query": "", "search_url": None, "provider": "none"}
     return configured_video_provider().search(clean_query, max_results)
