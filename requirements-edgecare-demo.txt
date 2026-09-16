@@ -1,0 +1,4 @@
+# Optional local-development dependency for the EdgeCare CPU ASR bridge.
+# This file is intentionally separate from production requirements.txt so
+# production/CI never downloads or initializes a speech model.
+faster-whisper>=1.1,<2.0
