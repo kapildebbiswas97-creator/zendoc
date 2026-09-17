@@ -26,6 +26,22 @@ Observed pattern: coordinated virtual care across pregnancy, postpartum/newborn 
 
 ZENDOC learning: pregnancy, postpartum, newborn and menopause journeys must be explicitly selected and should organize records, appointments, care tasks and follow-through. Sensitive state must never be inferred from gender, age or model output.
 
+### Wellthy
+
+Public source: https://wellthy.com/
+
+Observed pattern: care concierge and caregiver navigation across family planning, parenting/childcare, aging/eldercare and personal health, with a shared care dashboard and human care support.
+
+ZENDOC learning: caregiver value comes from reducing fragmented coordination work, not from granting blanket access. ZENDOC can connect consented tasks, records, appointments, verified services and CareLoop outcomes while keeping each patient's permissions authoritative.
+
+### Cariloop
+
+Public source: https://cariloop.com/solutions/caregiver-support-platform
+
+Observed pattern: global caregiver support combines dedicated coaching, resources, community and practical coordination tools for working parents and caregivers.
+
+ZENDOC learning: remote-family care should support coordination across geography and life stage, but a caregiver relationship must never itself create clinical-data permission, payment authority or provider-confirmation status.
+
 ### Birdie
 
 Public source: https://www.birdie.care/product-features/family-app
@@ -41,6 +57,22 @@ Public source: https://www.blueberrypediatrics.com/
 Observed pattern: household pediatric membership, 24/7 pediatric access, developmental screening and optional home measurement tools.
 
 ZENDOC learning: a child-care journey should follow age stages and preserve pediatric records and follow-through. ZENDOC must not imitate diagnosis, prescribing or home-device claims without licensed clinicians, validated devices and real integrations.
+
+### Practo
+
+Public source: https://www.practo.com/health-app
+
+Observed pattern: consumer healthcare navigation combines doctor discovery/appointments, lab booking, medicine ordering, online consultation, reminders and stored health records.
+
+ZENDOC learning: breadth is useful only when capability truth is explicit. Public/map discovery, ZENDOC-connected provider booking, external service handoffs and stored longitudinal records must remain visibly different states.
+
+### Tata 1mg
+
+Public sources: https://www.1mg.com/ and https://www.1mg.com/labs
+
+Observed pattern: medicine ordering, lab booking/home collection, doctor consultation and health information are connected to real transaction/service workflows on its own platform.
+
+ZENDOC learning: do not imitate transaction success with UI. Pharmacy orders, diagnostic bookings and payments can become connected only after a real provider/gateway integration returns authoritative state. Until then, ZENDOC should expose discovery or handoff status truthfully.
 
 ### Included Health
 
@@ -74,6 +106,18 @@ Observed pattern: aging-at-home support includes companionship, transportation, 
 
 ZENDOC learning: older-adult support should coordinate tasks and verified services while distinguishing a family reminder from a provider-confirmed service.
 
+## Competitive gap map for the competition branch
+
+| User need | Market pattern | ZENDOC safe differentiator | Current branch boundary |
+| --- | --- | --- | --- |
+| Family life stages | Maven/Pomelo organize care into explicit journeys | One consented longitudinal family graph spanning child, adult, maternity/midlife and older-adult navigation | Care categories only; no claim of clinical-program equivalence |
+| Remote parent care | Wellthy/Cariloop/Birdie coordinate caregivers remotely | Scoped, revocable family access plus tasks, verified-care handoffs and provenance-distinct outcomes | Relationship never grants permission automatically |
+| Child continuity | Blueberry offers a pediatric family membership | Age-stage continuity, records, tasks and verified local pediatric discovery without autonomous diagnosis/prescribing | No pediatric clinical service or device claim |
+| Broad India consumer care | Practo and Tata 1mg connect multiple health services | Universal search with explicit discovery-vs-connected capability labels plus Health Memory/CareLoop continuity | External/public/map listings remain discovery-only |
+| Affordability and sponsorship | Benefits/navigation platforms connect coverage and care | CareFin plus remote-family sponsorship readiness with health-data permission separated from payer authority | No live payment, coverage approval or cross-border settlement claim |
+| After-visit continuity | Care-journey platforms support follow-up | CareLoop can preserve task -> action -> patient/family/provider state -> outcome -> longitudinal memory | Provider-confirmed and patient/family-reported states stay separate |
+| AI assistance | Many platforms use AI or guided navigation | EdgeCare can help summarize/navigate while deterministic services control clinical, payment, permission and emergency actions | No model-controlled diagnosis, prescribing, payment or authorization |
+
 ## Product gaps to implement safely
 
 1. **Life-stage family navigation**
@@ -91,6 +135,7 @@ ZENDOC learning: older-adult support should coordinate tasks and verified servic
    - Never infer consent from being a parent, child, spouse or caregiver.
    - Prefer read-only visibility for observers; write/action scopes must be separately granted.
    - A remote family payer must never gain clinical-data access merely because they fund care.
+   - Country/location differences can influence handoff/payment readiness only when explicitly supplied; do not infer residency or legal/payment eligibility.
 
 3. **Fertility/family-building, pregnancy, postpartum, newborn and menopause journeys**
    - User-selected only.
@@ -100,10 +145,12 @@ ZENDOC learning: older-adult support should coordinate tasks and verified servic
 4. **Child growth and pediatric continuity**
    - Age-stage navigation, records, tasks and verified-provider handoffs.
    - No autonomous diagnosis or prescribing.
+   - Preserve transition into adolescent and adult continuity rather than creating disconnected records at each age boundary.
 
 5. **Adult and older-adult continuity**
    - Keep portable longitudinal context and care tasks across provider changes.
    - For remote parents, separate family-reported state, patient-reported state and provider-confirmed state.
+   - Aging-at-home support should distinguish reminders/coordination from a verified home-care service completion.
 
 6. **Subscription categories before billing**
    - Family Essentials
@@ -115,6 +162,7 @@ ZENDOC learning: older-adult support should coordinate tasks and verified servic
    - Menopause & Midlife
    - Older Adult Support
    - These are currently care categories, not purchasable plans.
+   - Future monthly/annual pricing must not be shown until actual pricing, tax, refund/cancellation policy and gateway behavior are defined and tested.
 
 7. **Payment integration boundary**
    - Candidate methods: UPI, cards, net banking, supported wallets, employer/insurer benefit pathways and provider-direct payment handoff.
@@ -124,6 +172,7 @@ ZENDOC learning: older-adult support should coordinate tasks and verified servic
    - Model output must never initiate payment, change payment permissions or mark a payment successful.
    - Payment/coverage state transitions require deterministic gateway or authoritative evidence.
    - Cross-border family sponsorship requires explicit payer authorization and must remain separate from health-data permissions.
+   - A payer may fund care without becoming a clinical-data viewer; a clinical-data viewer may have no payment authority.
 
 8. **Continuous care-loop differentiation**
    - Discovery results remain discovery until a real connection proves availability/action capability.
@@ -131,6 +180,18 @@ ZENDOC learning: older-adult support should coordinate tasks and verified servic
    - Booking/order/payment confirmations require authoritative responses, never model-generated success text.
    - Follow-up and outcome state should preserve whether it was patient-reported, family-reported or provider-confirmed.
 
+9. **Family-to-provider handoff quality**
+   - A family member should be able to move from the appropriate life-stage view to verified-provider discovery without losing the consent/provenance context.
+   - External/public provider results must remain labelled discovery-only even when they are relevant to a family care program.
+   - A ZENDOC-connected provider can expose real availability only when verified data exists for that provider/service.
+
+10. **No-copy differentiation**
+   - Do not recreate competitor branding, clinical pathways or proprietary workflows.
+   - Use public observations only to identify unmet coordination gaps.
+   - ZENDOC's target chain remains: consented context -> truthful discovery -> verified service capability -> deterministic action -> outcome -> longitudinal memory -> evidence/audit.
+
 ## Explicit non-integrations
 
 None of the companies above are integrated with ZENDOC by this work. Their public product patterns are references only. A future integration requires a documented API/partner agreement, authentication, consent mapping, failure handling, provenance and integration-specific tests.
+
+The competition branch must never show a competitor logo, provider inventory, benefit eligibility, booking state, pharmacy order state or payment state as if supplied by one of these companies unless a real authorized integration supplies that data at runtime.
