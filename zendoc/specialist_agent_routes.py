@@ -7,6 +7,7 @@ from .agent_autonomy import bounded_autonomy_manifest
 from .agent_fleet import list_fleet_agents
 from .agent_handoffs import handoff_for_intent, handoff_manifest
 from .appointment_continuity import complete_follow_up, sync_provider_appointment_status
+from .care_continuity import get_care_continuity_snapshot
 from .care_journey_store import get_persisted_journey
 from .careloop_integration import link_registered_appointment
 from .db import get_db
@@ -166,6 +167,7 @@ def _confirm_connected_booking(user, data: dict, *, require_persisted_refs: bool
 def agent_os_page():
     result = None
     follow_up_journey = None
+    continuity_snapshot = None
     command = request.values.get("command", "")
     if request.method == "POST":
         try:
@@ -183,13 +185,16 @@ def agent_os_page():
             flash(str(error), "error")
     elif request.args.get("journey_id"):
         try:
-            follow_up_journey = get_persisted_journey(int(request.args.get("journey_id")), g.user)
+            journey_id = int(request.args.get("journey_id"))
+            follow_up_journey = get_persisted_journey(journey_id, g.user)
+            continuity_snapshot = get_care_continuity_snapshot(g.user, journey_id)
         except (TypeError, ValueError, LookupError, PermissionError) as error:
             flash(str(error), "error")
     return render_template(
         "agent_os.html",
         result=result,
         follow_up_journey=follow_up_journey,
+        continuity_snapshot=continuity_snapshot,
         command=command,
         fleet=list_fleet_agents(),
         autonomy=bounded_autonomy_manifest(),
