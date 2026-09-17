@@ -10,6 +10,7 @@ from zendoc.care_journey import (
     PROVIDER_SEARCH,
     WAITING_HUMAN,
     WAITING_USER_SELECTION,
+    WAITING_VISIT,
     start_journey,
     transition_journey,
 )
@@ -102,7 +103,14 @@ def test_completed_journey_is_terminal():
     journey = transition_journey(journey, target_state=WAITING_USER_SELECTION, reason="Select")
     journey = transition_journey(journey, target_state=APPOINTMENT_STAGED, reason="Staged", required_actor="patient")
     journey = transition_journey(journey, target_state="WAITING_PROVIDER", reason="Patient confirmed; waiting provider")
-    journey = transition_journey(journey, target_state="CONSULTATION", reason="Provider accepted")
+    journey = transition_journey(
+        journey,
+        target_state=WAITING_VISIT,
+        reason="Provider accepted; patient is waiting for the scheduled visit",
+        actor_type="provider",
+        required_actor="patient",
+    )
+    journey = transition_journey(journey, target_state="CONSULTATION", reason="Provider recorded that the visit occurred")
     journey = transition_journey(journey, target_state=FOLLOW_UP, reason="No prescription or diagnostics required")
     journey = transition_journey(journey, target_state=COMPLETED, reason="Follow-up complete")
     assert journey.state == COMPLETED

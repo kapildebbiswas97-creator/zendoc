@@ -3,15 +3,16 @@ ZENDOC Specialized Agent Registry — Milestone 8
 Registry of specialized agents with their purpose, tools, risk, and status.
 
 Each agent entry is a real metadata definition.
-Agents are NOT autonomous AI LLMs — they are structured handlers
+Agents are NOT unrestricted autonomous LLMs — they are structured handlers
 chosen by the Core Agent based on validated intent.
 
 CRITICAL: An agent can NEVER bypass authentication, authorization,
-consent, doctor authority, emergency safeguards, or financial approval.
+consent, doctor authority, emergency safeguards, financial approval,
+or the bounded-autonomy policy.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass
@@ -103,6 +104,30 @@ AGENT_REGISTRY: dict[str, AgentDefinition] = {
         description="External discovery never implies verified credentials, live slots, emergency readiness, or ZENDOC booking connectivity.",
     ),
 
+    "BookingAgent": AgentDefinition(
+        identifier="BookingAgent",
+        name="Booking Agent",
+        purpose="Search connected care options, inspect verified provider availability and prepare booking/reschedule actions for user confirmation.",
+        allowed_tools=["search_healthcare_providers", "get_provider_booking_options", "confirm_provider_booking"],
+        allowed_actor_roles=["patient", "admin"],
+        risk_level="CONSENT_REQUIRED",
+        approval_requirements=["explicit_user_confirmation_before_booking"],
+        status="beta",
+        description="May search and compare automatically. External/unconnected listings cannot be booked in ZENDOC. Final booking is human-gated and payment is outside model authority.",
+    ),
+
+    "CommerceAgent": AgentDefinition(
+        identifier="CommerceAgent",
+        name="Health Commerce Agent",
+        purpose="Truthful non-medicine health product discovery and comparison with clinical/commercial separation.",
+        allowed_tools=["search_health_products"],
+        allowed_actor_roles=["patient", "admin"],
+        risk_level="READ_ONLY",
+        approval_requirements=["explicit_user_confirmation_for_future_checkout"],
+        status="beta",
+        description="Current merchant results are external search/catalog handoffs only. No stock, price, affiliate, order or payment claim is inferred.",
+    ),
+
     "HealthMemoryAgent": AgentDefinition(
         identifier="HealthMemoryAgent",
         name="Health Memory Agent",
@@ -113,6 +138,30 @@ AGENT_REGISTRY: dict[str, AgentDefinition] = {
         approval_requirements=["context_authorization_required"],
         status="connected",
         description="Uses only authorized patient context and preserves provenance. No cross-user leakage.",
+    ),
+
+    "PreventionAgent": AgentDefinition(
+        identifier="PreventionAgent",
+        name="Prevention Agent",
+        purpose="Use authorized longitudinal context for non-diagnostic prevention, routine follow-up and questions to discuss with care professionals.",
+        allowed_tools=["get_health_memory_context"],
+        allowed_actor_roles=["patient", "doctor", "admin"],
+        risk_level="CONSENT_REQUIRED",
+        approval_requirements=["context_authorization_required", "clinician_review_for_medical_decisions"],
+        status="beta",
+        description="Does not diagnose, prescribe, infer sensitive life stages or replace validated screening guidance with model opinion.",
+    ),
+
+    "LifecycleAgent": AgentDefinition(
+        identifier="LifecycleAgent",
+        name="Life-stage Continuity Agent",
+        purpose="Coordinate explicit user-selected life-stage journeys across family building, childhood, adulthood, caregiving and older age.",
+        allowed_tools=["get_health_memory_context"],
+        allowed_actor_roles=["patient", "doctor", "admin"],
+        risk_level="CONSENT_REQUIRED",
+        approval_requirements=["patient_or_guardian_consent", "explicit_sensitive_life_stage_selection"],
+        status="beta",
+        description="Pregnancy, fertility, postpartum and menopause states are never inferred from age, gender or model output.",
     ),
 
     "MedicationSafetyAgent": AgentDefinition(
@@ -194,7 +243,19 @@ AGENT_REGISTRY: dict[str, AgentDefinition] = {
         risk_level="READ_ONLY",
         approval_requirements=[],
         status="connected",
-        description="Fitness plans and session data for the authenticated patient only.",
+        description="Fitness plans and session data for the authenticated patient only; clinical exercise restrictions remain outside autonomous model authority.",
+    ),
+
+    "LearningAgent": AgentDefinition(
+        identifier="LearningAgent",
+        name="Health Learning Agent",
+        purpose="Create topic-based educational journeys and locate truthful educational resources.",
+        allowed_tools=["search_educational_video"],
+        allowed_actor_roles=ALL_ROLES,
+        risk_level="READ_ONLY",
+        approval_requirements=["clinician_review_for_personal_medical_decision"],
+        status="beta",
+        description="Educational only. Source/citation truth is mandatory and learning output does not become diagnosis or treatment.",
     ),
 
     "VideoAgent": AgentDefinition(
@@ -278,6 +339,18 @@ AGENT_REGISTRY: dict[str, AgentDefinition] = {
         description="Reads registered device data for the authenticated patient only.",
     ),
 
+    "ModelImprovementAgent": AgentDefinition(
+        identifier="ModelImprovementAgent",
+        name="Model Improvement Agent",
+        purpose="Propose and evaluate prompt, routing and model candidates inside the isolated no-tools evaluation boundary.",
+        allowed_tools=[],
+        allowed_actor_roles=["admin"],
+        risk_level="OWNER_APPROVAL",
+        approval_requirements=["configured_owner_review_before_any_production_promotion"],
+        status="beta",
+        description="May generate/evaluate candidates offline. Cannot self-modify code/policy, change permissions, access secrets, deploy, disable safeguards or promote itself.",
+    ),
+
     "OperationsAgent": AgentDefinition(
         identifier="OperationsAgent",
         name="Operations Agent",
@@ -338,11 +411,22 @@ def choose_agent_for_intent(intent: str) -> AgentDefinition | None:
         "emergency":        "SafetyAgent",
         "carefin":          "CareFinAgent",
         "provider_discovery": "ProviderDiscoveryAgent",
+        "booking":          "BookingAgent",
+        "appointment_booking": "BookingAgent",
+        "appointment_reschedule": "BookingAgent",
+        "commerce":         "CommerceAgent",
+        "health_commerce":  "CommerceAgent",
+        "prevention":       "PreventionAgent",
+        "preventive_care":  "PreventionAgent",
+        "lifecycle":        "LifecycleAgent",
+        "life_stage":       "LifecycleAgent",
+        "health_learning":  "LearningAgent",
+        "model_improvement": "ModelImprovementAgent",
         "prescription":     "MedicationSafetyAgent",
         "diagnostics":      "DiagnosticsAgent",
         "nutrition":        "NutritionAgent",
         "symptoms":         "CareAgent",
-        "appointment":      "CareAgent",
+        "appointment":      "BookingAgent",
         "report_history":   "CareAgent",
         "report_intelligence": "CareAgent",
         "health_timeline":  "CareAgent",

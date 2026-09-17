@@ -3,21 +3,30 @@ from __future__ import annotations
 
 from flask import Blueprint, jsonify, request
 
+from .appointment_continuity import complete_follow_up
 from .care_action_ledger import create_action, get_action, list_actions, record_outcome, transition_action
+from .care_continuity import get_care_continuity_snapshot
 from .care_journey_store import (
     advance_persisted_journey,
     create_persisted_journey,
     get_persisted_journey,
     list_patient_journeys,
 )
-from .context_engine import verify_context_authorization
-from .db import get_db
 from .routes import require_api_user
 
 
 bp = Blueprint("care_journey", __name__)
 
-_PROVIDER_SYNCHRONIZED_APPOINTMENT_STATES = {"CONFIRMED", "IN_PROGRESS", "COMPLETED"}
+# These states are evidence/authority-bound. A generic patient-authenticated
+# transition endpoint must never be able to forge them. Dedicated workflows
+# create the required appointment, provider status, outcome and follow-up proof.
+_EVIDENCE_BOUND_JOURNEY_TARGETS = {
+    "WAITING_PROVIDER",
+    "WAITING_VISIT",
+    "CONSULTATION",
+    "FOLLOW_UP",
+    "COMPLETED",
+}
 
 
 def _error(exc):
@@ -28,51 +37,6 @@ def _error(exc):
     else:
         code = 400
     return jsonify({"error": {"code": code, "message": str(exc)}}), code
-
-
-def _enforce_careloop_context_scope(user, *, journey_id=None, action_id=None):
-    """Require minimum-necessary consent before delegated CareLoop access.
-
-    Patient self-access and owner override remain handled by the context engine.
-    Any delegated actor must have authorization for the care_graph purpose, which
-    requires timeline scope and honors revocation/expiry in the consent engine.
-    """
-    if journey_id is not None:
-        row = get_db().execute(
-            "SELECT patient_id FROM care_journeys WHERE id=?",
-            (int(journey_id),),
-        ).fetchone()
-        if not row:
-            raise LookupError("Care journey not found.")
-    elif action_id is not None:
-        row = get_db().execute(
-            "SELECT patient_id FROM care_actions WHERE id=?",
-            (int(action_id),),
-        ).fetchone()
-        if not row:
-            raise LookupError("Care action not found.")
-    else:
-        raise ValueError("A care journey or care action is required.")
-    verify_context_authorization(user, int(row["patient_id"]), "care_graph")
-
-
-def _enforce_linked_action_state_authority(user, action_id, target_status):
-    """Keep provider-synchronized appointment state separate from ledger reports.
-
-    A CareLoop action linked to a real registered-provider appointment may expose
-    provider confirmation/completion only when that state arrives through the
-    appointment lifecycle synchronizer. The generic ledger transition endpoint
-    must never be able to manufacture the same provider-backed state.
-    """
-    target = str(target_status or "").strip().upper()
-    if target not in _PROVIDER_SYNCHRONIZED_APPOINTMENT_STATES:
-        return
-    action = get_action(user, action_id)
-    if action.get("integration_source_type") == "appointment":
-        raise PermissionError(
-            "Linked registered-provider appointment confirmation and completion must be "
-            "synchronized from the appointment lifecycle; this ledger endpoint cannot assert provider state."
-        )
 
 
 @bp.post("/api/v1/care-journeys")
@@ -116,17 +80,35 @@ def api_get_care_journey(journey_id):
     return jsonify({"journey": journey})
 
 
+@bp.get("/api/v1/care-journeys/<int:journey_id>/continuity")
+def api_get_care_journey_continuity(journey_id):
+    """Return one evidence-backed canonical care-chain snapshot."""
+    user, error = require_api_user()
+    if error:
+        return error
+    try:
+        snapshot = get_care_continuity_snapshot(user, journey_id)
+    except (LookupError, PermissionError, TypeError, ValueError) as exc:
+        return _error(exc)
+    return jsonify({"continuity": snapshot})
+
+
 @bp.post("/api/v1/care-journeys/<int:journey_id>/transition")
 def api_transition_care_journey(journey_id):
     user, error = require_api_user()
     if error:
         return error
     data = request.get_json(silent=True) or {}
+    target_state = str(data.get("target_state") or "").strip().upper()
     try:
+        if target_state in _EVIDENCE_BOUND_JOURNEY_TARGETS:
+            raise PermissionError(
+                "This Care Journey state is evidence-bound and must be advanced by its dedicated booking/provider/outcome/follow-up workflow."
+            )
         journey = advance_persisted_journey(
             user,
             journey_id,
-            target_state=data.get("target_state"),
+            target_state=target_state,
             reason=data.get("reason"),
             actor_type="user",
             next_safe_action=data.get("next_safe_action"),
@@ -140,13 +122,30 @@ def api_transition_care_journey(journey_id):
     return jsonify({"status": "updated", "journey": journey})
 
 
+@bp.post("/api/v1/care-journeys/<int:journey_id>/follow-up/complete")
+def api_complete_care_journey_follow_up(journey_id):
+    """Patient-only, evidence-bound completion of a post-visit journey."""
+    user, error = require_api_user()
+    if error:
+        return error
+    data = request.get_json(silent=True) or {}
+    try:
+        result = complete_follow_up(
+            user,
+            journey_id,
+            user_confirmed=data.get("user_confirmed") is True,
+        )
+    except (LookupError, PermissionError, TypeError, ValueError) as exc:
+        return _error(exc)
+    return jsonify({"status": "completed", "follow_up": result})
+
+
 @bp.post("/api/v1/care-journeys/<int:journey_id>/actions")
 def api_create_care_action(journey_id):
     user, error = require_api_user()
     if error:
         return error
     try:
-        _enforce_careloop_context_scope(user, journey_id=journey_id)
         action = create_action(user, journey_id, request.get_json(silent=True) or {})
     except (PermissionError, LookupError, TypeError, ValueError) as exc:
         return _error(exc)
@@ -159,7 +158,6 @@ def api_list_care_actions(journey_id):
     if error:
         return error
     try:
-        _enforce_careloop_context_scope(user, journey_id=journey_id)
         actions = list_actions(user, journey_id)
     except (PermissionError, LookupError, TypeError, ValueError) as exc:
         return _error(exc)
@@ -172,7 +170,6 @@ def api_get_care_action(action_id):
     if error:
         return error
     try:
-        _enforce_careloop_context_scope(user, action_id=action_id)
         action = get_action(user, action_id)
     except (PermissionError, LookupError, TypeError, ValueError) as exc:
         return _error(exc)
@@ -186,8 +183,11 @@ def api_transition_care_action(action_id):
         return error
     data = request.get_json(silent=True) or {}
     try:
-        _enforce_careloop_context_scope(user, action_id=action_id)
-        _enforce_linked_action_state_authority(user, action_id, data.get("target_status"))
+        current = get_action(user, action_id)
+        if str(current.get("service_ref") or "").startswith("zendoc_appointment:"):
+            raise PermissionError(
+                "Connected appointment CareLoop actions are synchronized only from the authorized appointment-status workflow."
+            )
         action = transition_action(
             user,
             action_id,
@@ -206,7 +206,6 @@ def api_record_care_outcome(action_id):
     if error:
         return error
     try:
-        _enforce_careloop_context_scope(user, action_id=action_id)
         outcome = record_outcome(user, action_id, request.get_json(silent=True) or {})
     except (PermissionError, LookupError, TypeError, ValueError) as exc:
         return _error(exc)

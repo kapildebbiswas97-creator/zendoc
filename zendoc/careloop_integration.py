@@ -10,7 +10,7 @@ import re
 from flask import current_app, g, request
 
 from .care_action_ledger import create_action, ensure_care_action_ledger_schema, sync_registered_appointment_status
-from .care_journey_store import create_persisted_journey
+from .care_journey_store import create_persisted_journey, get_persisted_journey
 from .db import get_db
 
 
@@ -35,7 +35,7 @@ def finish_careloop_request(response):
         if request.path == "/appointments":
             location = str(response.headers.get("Location") or "")
             if "requested=1" in location and str(actor["role"]) == "patient":
-                _link_latest_registered_appointment(actor)
+                link_registered_appointment(actor)
             return response
 
         match = _APPOINTMENT_STATUS_PATH.match(request.path)
@@ -52,26 +52,48 @@ def finish_careloop_request(response):
     return response
 
 
-def _link_latest_registered_appointment(patient):
+def link_registered_appointment(patient, appointment_id=None, *, journey_id=None):
+    """Idempotently link one persisted connected appointment into CareLoop.
+
+    Agent OS may pass its already-authorized Care Journey so booking, provider
+    response, outcome, Health Memory and follow-up stay on one longitudinal
+    chain. Legacy/browser appointment creation without a journey keeps the
+    previous behavior and creates a dedicated journey.
+
+    External/free-text appointments without a connected provider are never
+    promoted into CareLoop.
+    """
     ensure_care_action_ledger_schema()
     db = get_db()
-    appointment = db.execute(
-        """
-        SELECT id,patient_id,provider_id,provider_name,provider_profile_id,specialty,
-               scheduled_for,reason,status,created_at
-        FROM appointments
-        WHERE patient_id=? AND provider_id IS NOT NULL
-        ORDER BY id DESC LIMIT 1
-        """,
-        (int(patient["id"]),),
-    ).fetchone()
+    patient_id = int(patient["id"])
+    if appointment_id is None:
+        appointment = db.execute(
+            """
+            SELECT id,patient_id,provider_id,provider_name,provider_profile_id,specialty,
+                   scheduled_for,reason,status,created_at
+            FROM appointments
+            WHERE patient_id=? AND provider_id IS NOT NULL
+            ORDER BY id DESC LIMIT 1
+            """,
+            (patient_id,),
+        ).fetchone()
+    else:
+        appointment = db.execute(
+            """
+            SELECT id,patient_id,provider_id,provider_name,provider_profile_id,specialty,
+                   scheduled_for,reason,status,created_at
+            FROM appointments
+            WHERE id=? AND patient_id=? AND provider_id IS NOT NULL
+            """,
+            (int(appointment_id), patient_id),
+        ).fetchone()
     if not appointment:
         return None
 
     service_ref = f"zendoc_appointment:{int(appointment['id'])}"
     existing = db.execute(
         "SELECT id FROM care_actions WHERE service_ref=? AND patient_id=? ORDER BY id DESC LIMIT 1",
-        (service_ref, int(patient["id"])),
+        (service_ref, patient_id),
     ).fetchone()
     if existing:
         return int(existing["id"])
@@ -87,14 +109,22 @@ def _link_latest_registered_appointment(patient):
     if not provider or not bool(provider["active"]):
         return None
 
-    journey = create_persisted_journey(
-        patient,
-        provenance={
-            "source": "zendoc_registered_provider_appointment",
-            "appointment_id": int(appointment["id"]),
-            "provider_id": int(appointment["provider_id"]),
-        },
-    )
+    if journey_id not in (None, ""):
+        journey = get_persisted_journey(int(journey_id), patient)
+        if int(journey["patient_id"]) != patient_id:
+            raise PermissionError("Care Journey does not belong to this patient.")
+        if journey["state"] not in {"APPOINTMENT_STAGED", "WAITING_PROVIDER"}:
+            raise ValueError("Care Journey is not in an appointment-linkable state.")
+    else:
+        journey = create_persisted_journey(
+            patient,
+            provenance={
+                "source": "zendoc_registered_provider_appointment",
+                "appointment_id": int(appointment["id"]),
+                "provider_id": int(appointment["provider_id"]),
+            },
+        )
+
     action = create_action(
         patient,
         int(journey["id"]),
@@ -105,7 +135,7 @@ def _link_latest_registered_appointment(patient):
             "status": "STAGED",
             "human_confirmation_required": True,
             "owner_type": "patient",
-            "owner_id": int(patient["id"]),
+            "owner_id": patient_id,
             "provider_name": appointment["provider_name"],
             "service_ref": service_ref,
             "due_at": appointment["scheduled_for"],
@@ -119,7 +149,13 @@ def _link_latest_registered_appointment(patient):
                 "provider_id": int(appointment["provider_id"]),
                 "provider_profile_id": appointment["provider_profile_id"],
                 "provider_verification_status": provider["verification_status"],
+                "care_journey_reused": journey_id not in (None, ""),
             },
         },
     )
     return int(action["id"])
+
+
+# Backward-compatible internal alias for older callers/tests.
+def _link_latest_registered_appointment(patient):
+    return link_registered_appointment(patient)

@@ -51,7 +51,6 @@ def get_health_memory_provenance_summary(patient_id: int | Any, actor: Any = Non
     verify_context_authorization(actor, int(patient_id), "health_memory_view")
 
     db = get_db()
-    # Fetch timeline events
     events = db.execute(
         """
         SELECT * FROM health_timeline_events
@@ -83,8 +82,12 @@ def get_health_memory_provenance_summary(patient_id: int | Any, actor: Any = Non
 
 def determine_next_safe_actions(patient_id: int | Any, actor: Any = None) -> list[dict[str, Any]]:
     """
-    Context-aware Next Safe Action generator:
-    Inspects active care objects and returns prioritized, actionable, non-clinical next steps.
+    Context-aware Next Safe Action generator.
+
+    It only proposes non-clinical logistics from persisted evidence. In
+    particular, post-visit follow-up is generated only when the Care Journey is
+    actually in FOLLOW_UP and a VERIFIED appointment-completion outcome has also
+    been written into Health Memory with provider/owner provenance.
     """
     if not isinstance(patient_id, (int, float)):
         if actor is None:
@@ -99,7 +102,51 @@ def determine_next_safe_actions(patient_id: int | Any, actor: Any = None) -> lis
     db = get_db()
     actions: list[dict[str, Any]] = []
 
-    # 1. Check for newly delivered orders -> Prompt dosage / refill reminder
+    # 0. Evidence-backed post-visit follow-up. Never generate this from model
+    # text or appointment intent alone.
+    follow_up = db.execute(
+        """
+        SELECT cj.id journey_id,cj.next_safe_action,co.id outcome_id,co.source_ref
+        FROM care_journeys cj
+        JOIN care_outcomes co ON co.journey_id=cj.id
+        WHERE cj.patient_id=? AND cj.state='FOLLOW_UP' AND cj.status='active'
+          AND co.status='VERIFIED' AND co.outcome_type='appointment_completion'
+        ORDER BY co.id DESC LIMIT 1
+        """,
+        (patient_id,),
+    ).fetchone()
+    if follow_up:
+        memory_event = db.execute(
+            """
+            SELECT id,source FROM health_timeline_events
+            WHERE patient_id=? AND event_type='provider_outcome' AND source_ref=?
+              AND source IN ('PROVIDER_RECORDED','OWNER_RECORDED')
+            ORDER BY id DESC LIMIT 1
+            """,
+            (patient_id, f"care_outcome:{int(follow_up['outcome_id'])}"),
+        ).fetchone()
+        if memory_event:
+            actions.append({
+                "action_type": "REVIEW_POST_VISIT_FOLLOW_UP",
+                "title": "Review Post-Visit Follow-Up",
+                "description": (
+                    "A verified connected-visit completion outcome is recorded in Health Memory. "
+                    "Review the non-clinical follow-up step and mark it complete only after you actually complete it."
+                ),
+                "button_label": "Review Follow-Up",
+                "target_url": f"/agent-os?journey_id={int(follow_up['journey_id'])}",
+                "priority": "high",
+                "cta_label": "Review Follow-Up",
+                "cta_url": f"/agent-os?journey_id={int(follow_up['journey_id'])}",
+                "urgency": "high",
+                "journey_id": int(follow_up["journey_id"]),
+                "care_outcome_id": int(follow_up["outcome_id"]),
+                "health_memory_event_id": int(memory_event["id"]),
+                "provenance": memory_event["source"],
+                "clinical_directive": False,
+            })
+
+    # 1. Check for newly delivered orders -> Prompt user-configured reminders.
     delivered_order = db.execute(
         """
         SELECT * FROM medicine_orders
@@ -121,7 +168,7 @@ def determine_next_safe_actions(patient_id: int | Any, actor: Any = None) -> lis
             "urgency": "high",
         })
 
-    # 2. Check for active prescription without fulfilment order -> Prompt pharmacy fulfilment
+    # 2. Active prescription without fulfilment order -> pharmacy discovery.
     active_presc = db.execute(
         """
         SELECT p.* FROM prescriptions p
@@ -144,7 +191,7 @@ def determine_next_safe_actions(patient_id: int | Any, actor: Any = None) -> lis
             "urgency": "critical",
         })
 
-    # 3. Check for ready diagnostic reports -> Prompt sharing with doctor
+    # 3. Ready diagnostic reports -> prompt sharing with doctor.
     diag_completed = db.execute(
         """
         SELECT db.*, dc.name test_name FROM diagnostic_bookings db
@@ -167,7 +214,7 @@ def determine_next_safe_actions(patient_id: int | Any, actor: Any = None) -> lis
             "urgency": "normal",
         })
 
-    # 4. Check for upcoming doctor appointment
+    # 4. Upcoming provider-confirmed appointment.
     upcoming_appt = db.execute(
         """
         SELECT a.*, d.name doctor_name FROM appointments a
