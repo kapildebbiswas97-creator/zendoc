@@ -52,6 +52,33 @@
   </div>
   <p><strong>Journey {{ follow_up_journey.journey_uid }}</strong></p>
   <p class="form-note">Next safe action: {{ follow_up_journey.next_safe_action.replace('_',' ') }}{% if follow_up_journey.required_actor %} · Waiting for: {{ follow_up_journey.required_actor }}{% endif %}</p>
+
+  {% if continuity_snapshot %}
+  <div class="panel subtle-panel" style="margin-top:16px;">
+    <div class="panel-head"><div><p class="eyebrow">Evidence-backed state</p><h3>Canonical care continuity</h3></div><span class="status-badge beta">{{ continuity_snapshot.state.replace('_',' ') }}</span></div>
+    <div class="grid two">
+      <div>
+        <p><strong>Appointment:</strong> {{ continuity_snapshot.appointment.status or 'not linked' }}</p>
+        <p><strong>CareLoop:</strong> {{ continuity_snapshot.careloop.status or 'not linked' }}</p>
+        <p><strong>Provider confirmed:</strong> {{ 'Yes' if continuity_snapshot.evidence.provider_confirmed else 'No' }}</p>
+      </div>
+      <div>
+        <p><strong>Verified outcome:</strong> {{ 'Present' if continuity_snapshot.evidence.verified_outcome_present else 'Not present' }}</p>
+        <p><strong>Health Memory:</strong> {{ continuity_snapshot.evidence.health_memory_provenance or 'No provider outcome recorded' }}</p>
+        <p><strong>Waiting for:</strong> {{ continuity_snapshot.required_actor or 'No human gate' }}</p>
+      </div>
+    </div>
+    {% if continuity_snapshot.available_next_safe_actions %}
+      <div class="appointment-list" style="margin-top:12px;">
+      {% for action in continuity_snapshot.available_next_safe_actions %}
+        <article class="appointment-card"><div><p class="eyebrow">Next Safe Action</p><h3>{{ action.title }}</h3><p>{{ action.description }}</p></div><span class="status-badge active">Evidence-backed</span></article>
+      {% endfor %}
+      </div>
+    {% endif %}
+    <p class="form-note">Appointment completion proves only that the visit was marked completed by the authorized provider/owner workflow. ZENDOC does not infer diagnosis, prescription, treatment response or other clinical findings from that status.</p>
+  </div>
+  {% endif %}
+
   {% if follow_up_journey.state == 'FOLLOW_UP' and current_user.role == 'patient' %}
     <p>Verified provider visit-completion evidence already exists in CareLoop and Health Memory. Mark this follow-up complete only after you have actually completed the non-clinical post-visit step.</p>
     <form method="post" action="{{ url_for('specialist_agents.agent_os_follow_up_complete', journey_id=follow_up_journey.id) }}">
