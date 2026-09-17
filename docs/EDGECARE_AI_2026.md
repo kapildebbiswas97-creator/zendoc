@@ -2,39 +2,54 @@
 
 **Tagline:** Privacy-first, offline-capable healthcare assistance with governed on-device AI.
 
-This document describes the competition layer built on top of the existing ZENDOC platform. The same engineering core can be packaged for two different judging contexts without pretending they are two separate products.
+This document describes the competition layer built on top of the existing ZENDOC platform. The primary current target is the **Snapdragon® AI Lab Build & Present Challenge — Qualcomm (2026)**. The exact submission answer bank is maintained in `docs/QUALCOMM_SNAPDRAGON_AI_LAB_2026_SUBMISSION.md`.
 
 ## 1. Core product
 
-ZENDOC EdgeCare AI is a local-first healthcare assistant intended for Snapdragon X Series Windows PCs. It combines:
+ZENDOC EdgeCare AI is a local-first healthcare assistant designed and intended for optimisation on Snapdragon-powered Windows PCs. It combines:
 
 - ZENDOC Health Memory and governed medical RAG context.
-- A bounded local language model for summarization, navigation, extraction, and provider-discovery assistance.
-- Local speech-to-text as a competition target using a Qualcomm AI Hub speech model.
-- Deterministic safety gates for emergency, diagnosis, prescribing, medication change, permissions, payments, and other high-risk actions.
-- Online ZENDOC services for provider search, appointments, maps/data integrations, and synchronization when connectivity is available.
+- A bounded local language-model path for summarization, navigation, extraction and care-navigation assistance.
+- Local speech-to-text using an open-source Faster-Whisper development bridge and a stable adapter contract for a final Snapdragon/Qualcomm runtime.
+- Deterministic safety gates for emergency, diagnosis, prescribing, medication change, permissions, payments and other high-risk actions.
+- Online ZENDOC services for provider discovery, appointments and synchronization only where connectivity and real integrations exist.
 
-The model is advisory. It cannot directly execute tools or perform clinical actions.
+The model is advisory. It cannot directly execute clinical or other high-risk actions.
 
-## 2. Target AI models
+## 2. Significant challenge-period AI modification
 
-Competition target models:
+ZENDOC existed before the 2026 challenge. The competition branch is a significant AI modification rather than a renamed pre-existing product. It adds:
 
-- Language: `llama_v3_2_3b_instruct_ssd` or another validated Qualcomm AI Hub/open-source model appropriate for the final Snapdragon runtime.
-- Speech: `whisper_small` or a compatible Qualcomm AI Hub ASR model.
+1. local open-source LLM routing through Ollama/OpenAI-compatible runtime contracts;
+2. local speech-to-text with Faster-Whisper for development;
+3. microphone capture with editable transcript and explicit manual Send;
+4. owner-only EdgeCare runtime/readiness reporting;
+5. strict separation between target configuration and measured Snapdragon/NPU evidence;
+6. Qualcomm AI Hub profiling/deployment runbook;
+7. deterministic healthcare safety and permission boundaries around all local-model behavior;
+8. end-to-end care-search → provider → availability → appointment → CareLoop regression coverage.
 
-The exact artifact used in the final demonstration must be recorded in benchmark evidence. A model name in configuration is a target declaration, not proof that the model ran on an NPU.
+This matches the public challenge rule that a pre-existing proposal must be significantly modified to add Qualcomm AI Hub or other open-source AI models.
 
-## 3. Architecture
+## 3. Target AI models
+
+Current development/competition direction:
+
+- Language: a small open-source instruct model through the local model adapter; the final artifact must be named exactly as actually used.
+- Speech: Faster-Whisper local development path with `whisper_small` as the target identifier; a Qualcomm AI Hub-supported artifact may be substituted for final Snapdragon profiling.
+
+A model or chipset name in configuration is a target declaration, not proof that inference ran on a Snapdragon NPU.
+
+## 4. Architecture
 
 ```text
 Patient / clinician
        |
        v
-Local speech capture
+Local speech capture / text
        |
        v
-On-device ASR target
+Local ASR target
        |
        v
 ZENDOC deterministic safety gate
@@ -44,150 +59,101 @@ ZENDOC deterministic safety gate
        v
 Privacy-aware model router
        |
-       +---- health-sensitive safe local task ---> local model runtime
-       |                                          |
-       |                                          v
-       |                                  governed context / RAG
+       +---- eligible low-risk task ---> local model runtime
+       |                                  |
+       |                                  v
+       |                          governed Health Memory / RAG
        |
-       +---- permitted online operation --------> ZENDOC cloud/backend services
-                                                  |
-                                                  +--> provider search
-                                                  +--> appointment workflow
-                                                  +--> data synchronization
+       +---- permitted online operation -> ZENDOC services
+                                          |
+                                          +--> provenance-aware care discovery
+                                          +--> connected appointment workflow
+                                          +--> CareLoop continuity
 ```
 
-## 4. One demo flow to make bulletproof
+## 5. One reliable demo flow
 
-The competition demo should optimize for reliability instead of trying to show every ZENDOC screen.
+1. User speaks or enters a low-risk healthcare-navigation request.
+2. Speech is transcribed locally when ASR is enabled.
+3. The transcript remains editable and is not submitted until the user presses **Send**.
+4. ZENDOC classifies risk deterministically before model routing.
+5. A bounded local model provides non-diagnostic assistance.
+6. Consent-governed Health Memory may provide authorized context.
+7. The user continues into provenance-aware provider discovery.
+8. A real connected ZENDOC provider can expose published availability and accept an appointment request; external/public/map listings remain discovery-only.
+9. CareLoop carries the confirmed workflow forward without inventing provider outcomes.
 
-1. A user speaks or enters a non-emergency healthcare request.
-2. Speech is transcribed locally when the ASR runtime is available.
-3. ZENDOC classifies safety/risk deterministically before model routing.
-4. The bounded local model produces structured, non-diagnostic assistance.
-5. Relevant consent-governed Health Memory/RAG context can support summarization.
-6. ZENDOC shows the structured result and the runtime status.
-7. If connectivity is available, the user can continue into real provider discovery/appointment workflows.
-8. The owner runtime page/API shows whether local inference is ready and whether real Snapdragon/NPU benchmark evidence has been recorded.
+Do not use autonomous diagnosis, prescribing or emergency dispatch as the model demo; those are intentionally blocked or human-governed.
 
-Do not use an emergency or diagnosis scenario as the primary model demo. Those intentionally remain deterministic/human-governed.
+## 6. Truthful Snapdragon readiness
 
-## 5. Truthful Snapdragon verification
+The EdgeCare runtime exposes owner-only readiness/test surfaces and uses strict states to distinguish:
 
-The EdgeCare runtime exposes two owner-only endpoints:
+- disabled/not configured;
+- runtime verification required;
+- local runtime ready but benchmark required;
+- benchmark recorded with NPU unconfirmed;
+- measurement recorded with explicit NPU evidence.
 
-- `GET /api/v1/admin/edgecare/runtime`
-- `POST /api/v1/admin/edgecare/test`
+Even a recorded benchmark is only as trustworthy as the retained Qualcomm AI Hub or physical-device source evidence.
 
-The POST endpoint accepts no caller prompt. It reuses the existing harmless local-AI smoke test.
+## 7. Benchmark evidence contract
 
-Readiness stages are deliberately strict:
+Do not create or populate `instance/edgecare_benchmark.json` with invented values. When real profiling exists, record only the exact reported values, including source, timestamp, device, chipset, model, runtime/execution provider, run count, latency values and whether NPU execution is explicitly confirmed.
 
-- `disabled`: EdgeCare target is disabled.
-- `runtime_verification_required`: target is enabled but local inference is not verified ready.
-- `benchmark_required`: local inference is ready but no hardware benchmark evidence is recorded.
-- `benchmark_recorded_npu_unconfirmed`: benchmark metadata exists but NPU execution is not confirmed.
-- `npu_measurement_recorded`: benchmark metadata explicitly records confirmed NPU execution.
+Never put patient data, prompts, responses, credentials, API tokens, private keys or hidden reasoning into benchmark evidence.
 
-Even the last state is described as **recorded**, not independently verified by ZENDOC. Keep raw Qualcomm AI Hub Workbench/device evidence with the submission.
+## 8. Local development configuration
 
-## 6. Benchmark evidence contract
+For ordinary software-flow validation, local Ollama and Faster-Whisper are valid open-source development paths. They prove the application flow, not Snapdragon acceleration.
 
-Do not create `instance/edgecare_benchmark.json` until real measurements exist.
+For setup, use:
 
-Required fields:
+- `docs/EDGECARE_LOCAL_DEMO_SETUP.md`
+- `docs/QUALCOMM_AI_HUB_RUNTIME_SETUP.md`
+- `docs/DEMO_RELEASE_CHECKLIST.md`
+- `docs/EDGECARE_SUBMISSION_READINESS.md`
 
-| Field | Meaning |
-| --- | --- |
-| `schema_version` | Must be `1`. |
-| `source` | `local_snapdragon_device`, `qualcomm_ai_hub_workbench`, or `qualcomm_device_cloud`. |
-| `measured_at` | Timestamp from the measurement session. |
-| `device` | Actual target device used. |
-| `chipset` | Actual chipset. |
-| `runtime` | Actual inference runtime. |
-| `execution_provider` | Actual execution provider/backend. |
-| `model` | Exact measured model artifact. |
-| `runs` | Number of measured runs. |
-| `success_rate` | Fraction from 0 to 1. |
-| `median_latency_ms` | Measured median latency. |
-| `p95_latency_ms` | Measured p95 latency. |
-| `npu_confirmed` | `true` only when the measurement evidence confirms NPU execution. |
-| `evidence_reference` | Local reference to screenshot/report/job ID; never a secret. |
-
-Never put patient data, prompts, model responses, credentials, API keys, or hidden reasoning in this benchmark file.
-
-## 7. Suggested runtime configuration
-
-```bash
-ZENDOC_EDGECARE_ENABLED=true
-ZENDOC_EDGECARE_TARGET_PLATFORM="Snapdragon X Series Windows PC"
-ZENDOC_EDGECARE_TARGET_CHIPSET="Snapdragon X Elite"
-ZENDOC_EDGECARE_LANGUAGE_MODEL=llama_v3_2_3b_instruct_ssd
-ZENDOC_EDGECARE_SPEECH_MODEL=whisper_small
-
-ZENDOC_LOCAL_AI_ENABLED=true
-ZENDOC_LOCAL_AI_PROVIDER=openai_compatible
-ZENDOC_LOCAL_AI_BASE_URL=http://127.0.0.1:<local-runtime-port>
-ZENDOC_LOCAL_AI_MODEL=<exact-local-model-id>
-```
-
-The final provider/runtime values depend on the actual Qualcomm/Windows deployment path selected during hardware integration. Do not change labels to imply QNN/NPU use until it has been measured.
-
-## 8. Qualcomm submission package
-
-Emphasize:
-
-- On-device AI and privacy.
-- Snapdragon X target and measured deployment evidence.
-- NPU/edge performance once measured.
-- Offline/poor-connectivity value.
-- Technical implementation: model conversion/deployment, routing, structured outputs, latency evidence, and safety boundaries.
-- A live demonstration showing local inference without sending health-sensitive content to a cloud LLM.
+## 9. Challenge positioning
 
 Suggested title:
 
-**ZENDOC EdgeCare AI — A Privacy-First, Offline-Capable Agentic Healthcare System for Snapdragon PCs**
+**ZENDOC EdgeCare AI — Privacy-First, Offline-Capable Agentic Healthcare for Snapdragon PCs**
 
 Suggested one-line pitch:
 
-**ZENDOC EdgeCare AI turns a Snapdragon-powered PC into a private healthcare intelligence hub that can understand user input, retrieve governed health context, and assist care workflows locally while reserving clinical decisions for deterministic safeguards and humans.**
+**ZENDOC EdgeCare AI turns a Snapdragon-powered PC into a private healthcare intelligence hub that can understand user input, use governed health context and assist care workflows locally while reserving consequential clinical and operational decisions for deterministic safeguards and humans.**
 
-## 9. IIT/Digital Health submission package
-
-Use the same core product, but lead with the healthcare problem instead of the chipset:
-
-- Fragmented patient records and provider discovery.
-- Poor connectivity and digital access gaps.
-- Consent-governed longitudinal Health Memory.
-- Search-to-care continuity.
-- Safe AI assistance and human/clinical boundaries.
-- Scalability across clinics, hospitals, diagnostics, pharmacies, and patients.
-
-The Snapdragon layer is still a technical advantage, but it should support the healthcare story rather than replace it.
+The public Snapdragon AI Lab challenge allows solutions that are designed, developed **or intended to be optimised** for Snapdragon-powered HP PCs. Therefore, genuine Qualcomm AI Hub/physical Snapdragon profiling is a strong enhancement, but no NPU claim is allowed unless real evidence exists.
 
 ## 10. Safety and submission claims
 
-Allowed claims must match evidence. In particular:
-
 - Do not say ZENDOC diagnoses disease.
-- Do not say it prescribes medication autonomously.
+- Do not say it prescribes or changes medication autonomously.
 - Do not say emergency dispatch is AI-controlled.
-- Do not say a model ran on the Snapdragon NPU until evidence confirms it.
-- Do not fabricate latency, accuracy, battery, privacy, user-count, hospital, provider, or deployment metrics.
-- Do not describe a configured integration as live unless it is actually working in the demo environment.
+- Do not say a model ran on Snapdragon/NPU until evidence confirms it.
+- Do not fabricate latency, accuracy, power, battery, privacy, users, hospitals, providers, pilots, partnerships or revenue.
+- Do not describe a public/map provider as bookable unless the real ZENDOC provider integration supports that action.
 
-## 11. Engineering completion checklist
+## 11. Repository completion status
 
-- [x] Isolated competition branch created from production main.
-- [x] EdgeCare runtime profile added.
-- [x] Owner-only runtime verification API added.
-- [x] Existing deterministic clinical safety boundary preserved.
-- [x] Benchmark evidence is separated from target configuration.
-- [x] Regression tests added for truthful hardware claims.
-- [ ] Run the complete test suite in CI.
-- [ ] Connect the final local runtime/model artifact.
-- [ ] Integrate/verify local ASR path.
-- [ ] Profile the chosen model on a real/hosted Snapdragon X target.
-- [ ] Save real benchmark evidence and reviewer-verifiable report reference.
-- [ ] Record a reliable end-to-end demo.
-- [ ] Prepare the Qualcomm-specific pitch/submission.
-- [ ] Prepare the healthcare/IIT-specific pitch/submission.
+Repository-side competition engineering is complete for proposal submission:
+
+- [x] Isolated competition branch retained; production `main` is not modified by the competition layer.
+- [x] Local open-source LLM path implemented.
+- [x] Local Faster-Whisper ASR development bridge implemented.
+- [x] Voice transcript remains editable and requires explicit Send.
+- [x] EdgeCare readiness/evidence states implemented.
+- [x] Deterministic clinical safety and permissions preserved.
+- [x] Benchmark evidence separated from target configuration.
+- [x] Health Memory, provenance-aware discovery, appointments and CareLoop retained.
+- [x] Mental Wellness and messaging competition surfaces retained with safety boundaries.
+- [x] Apache-2.0 license present.
+- [x] Local demo, recording and Qualcomm AI Hub profiling runbooks present.
+- [x] Dedicated Qualcomm Snapdragon AI Lab 2026 submission package present.
+
+Machine-dependent evidence cannot be fabricated by repository code. Local runtime checks, optional Qualcomm AI Hub profiling and the final recording must be performed on the actual machine/environment used for the demo.
+
+## 12. Submission freeze
+
+After the final competition branch SHA has a green Production Gate, freeze unrelated feature work. Fix only a reproducible submission blocker. **Do not merge PR #68 into `main` merely for the Qualcomm submission.**
