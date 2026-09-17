@@ -10,7 +10,7 @@ import re
 from flask import current_app, g, request
 
 from .care_action_ledger import create_action, ensure_care_action_ledger_schema, sync_registered_appointment_status
-from .care_journey_store import create_persisted_journey
+from .care_journey_store import create_persisted_journey, get_persisted_journey
 from .db import get_db
 
 
@@ -52,13 +52,16 @@ def finish_careloop_request(response):
     return response
 
 
-def link_registered_appointment(patient, appointment_id=None):
+def link_registered_appointment(patient, appointment_id=None, *, journey_id=None):
     """Idempotently link one persisted connected appointment into CareLoop.
 
-    When ``appointment_id`` is omitted this preserves the legacy browser bridge
-    behavior and selects the latest connected appointment for the patient. When
-    supplied, the appointment must belong to that patient. External/free-text
-    appointments without a connected provider are never promoted into CareLoop.
+    Agent OS may pass its already-authorized Care Journey so booking, provider
+    response, outcome, Health Memory and follow-up stay on one longitudinal
+    chain. Legacy/browser appointment creation without a journey keeps the
+    previous behavior and creates a dedicated journey.
+
+    External/free-text appointments without a connected provider are never
+    promoted into CareLoop.
     """
     ensure_care_action_ledger_schema()
     db = get_db()
@@ -106,14 +109,22 @@ def link_registered_appointment(patient, appointment_id=None):
     if not provider or not bool(provider["active"]):
         return None
 
-    journey = create_persisted_journey(
-        patient,
-        provenance={
-            "source": "zendoc_registered_provider_appointment",
-            "appointment_id": int(appointment["id"]),
-            "provider_id": int(appointment["provider_id"]),
-        },
-    )
+    if journey_id not in (None, ""):
+        journey = get_persisted_journey(int(journey_id), patient)
+        if int(journey["patient_id"]) != patient_id:
+            raise PermissionError("Care Journey does not belong to this patient.")
+        if journey["state"] not in {"APPOINTMENT_STAGED", "WAITING_PROVIDER"}:
+            raise ValueError("Care Journey is not in an appointment-linkable state.")
+    else:
+        journey = create_persisted_journey(
+            patient,
+            provenance={
+                "source": "zendoc_registered_provider_appointment",
+                "appointment_id": int(appointment["id"]),
+                "provider_id": int(appointment["provider_id"]),
+            },
+        )
+
     action = create_action(
         patient,
         int(journey["id"]),
@@ -138,6 +149,7 @@ def link_registered_appointment(patient, appointment_id=None):
                 "provider_id": int(appointment["provider_id"]),
                 "provider_profile_id": appointment["provider_profile_id"],
                 "provider_verification_status": provider["verification_status"],
+                "care_journey_reused": journey_id not in (None, ""),
             },
         },
     )
