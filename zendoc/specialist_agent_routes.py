@@ -95,9 +95,10 @@ def api_orchestrate_specialist():
 def api_confirm_agent_booking():
     """Finalize a previously inspected connected slot after fresh user consent.
 
-    The model never calls this endpoint by itself. The authenticated patient/app
-    must send ``user_confirmed: true`` together with the exact provider and slot
-    selected from the read-only Booking Agent result.
+    The model never receives an arbitrary HTTP/browser tool for this endpoint.
+    The authenticated patient/app must send ``user_confirmed: true`` together
+    with the exact provider and slot selected from the read-only Booking Agent
+    result.
     """
     user, error = require_api_user()
     if error:
@@ -126,7 +127,9 @@ def api_confirm_agent_booking():
     careloop_action_id = None
     try:
         careloop_action_id = link_registered_appointment(user, appointment_id=appointment_id)
+        get_db().commit()
     except Exception:
+        get_db().rollback()
         warnings.append("Appointment was created, but CareLoop linking needs reconciliation.")
 
     try:
