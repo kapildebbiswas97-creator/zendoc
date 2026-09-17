@@ -24,7 +24,7 @@ Public source: https://www.pomelocare.com/
 
 Observed pattern: coordinated virtual care across pregnancy, postpartum/newborn and perimenopause/menopause, designed to work alongside in-person providers.
 
-ZENDOC learning: a pregnancy journey must be explicitly selected and should organize records, appointments, care tasks and follow-through. Pregnancy must never be inferred from gender, age or model output.
+ZENDOC learning: pregnancy, postpartum, newborn and menopause journeys must be explicitly selected and should organize records, appointments, care tasks and follow-through. Sensitive state must never be inferred from gender, age or model output.
 
 ### Birdie
 
@@ -50,6 +50,22 @@ Observed pattern: care navigation combines clinical access, benefits understandi
 
 ZENDOC learning: CareFin and care navigation can meet at a deterministic affordability layer, but benefit eligibility, approval and payment must remain evidence-backed rather than model-decided.
 
+### Transcarent
+
+Public source: https://transcarent.com/
+
+Observed pattern: benefits navigation, clinical guidance and care delivery are combined into one member journey, with longitudinal context and both AI and human support.
+
+ZENDOC learning: the product should not stop at search. It should preserve a truthful state transition from discovery -> verified provider/service -> availability -> action -> outcome -> longitudinal memory while keeping clinical decisions and payment execution outside model control.
+
+### Memora Health
+
+Public source: https://www.memorahealth.com/
+
+Observed pattern: structured care journeys extend before and after visits, collect patient-reported information and surface clinically relevant follow-up to care teams.
+
+ZENDOC learning: CareLoop should continue after the encounter with tasks, reminders, patient-reported state, provider-confirmed state and outcome tracking. These states must remain provenance-distinct.
+
 ### Honor / Home Instead
 
 Public source: https://www.honorcare.com/
@@ -74,10 +90,11 @@ ZENDOC learning: older-adult support should coordinate tasks and verified servic
    - Keep existing explicit family access grants as the authorization source.
    - Never infer consent from being a parent, child, spouse or caregiver.
    - Prefer read-only visibility for observers; write/action scopes must be separately granted.
+   - A remote family payer must never gain clinical-data access merely because they fund care.
 
-3. **Pregnancy, postpartum and newborn journey**
+3. **Fertility/family-building, pregnancy, postpartum, newborn and menopause journeys**
    - User-selected only.
-   - Never infer pregnancy.
+   - Never infer fertility, pregnancy, postpartum or menopause state.
    - Organize care; do not let a model diagnose, prescribe, change medicines or execute emergency actions.
 
 4. **Child growth and pediatric continuity**
@@ -91,18 +108,28 @@ ZENDOC learning: older-adult support should coordinate tasks and verified servic
 6. **Subscription categories before billing**
    - Family Essentials
    - Remote Parent & Family
+   - Fertility & Family Building
    - Pregnancy, Postpartum & Newborn
    - Child Growth & Pediatrics
    - Adult Continuity
+   - Menopause & Midlife
    - Older Adult Support
    - These are currently care categories, not purchasable plans.
 
 7. **Payment integration boundary**
-   - Candidate methods: UPI, cards, net banking, supported wallets and employer/insurer benefit pathways.
+   - Candidate methods: UPI, cards, net banking, supported wallets, employer/insurer benefit pathways and provider-direct payment handoff.
+   - International cards/currencies are possible only if a future verified gateway supports them.
    - Do not accept payment until a real gateway is integrated and verified.
    - Never store CVV, UPI PIN or banking passwords.
    - Model output must never initiate payment, change payment permissions or mark a payment successful.
    - Payment/coverage state transitions require deterministic gateway or authoritative evidence.
+   - Cross-border family sponsorship requires explicit payer authorization and must remain separate from health-data permissions.
+
+8. **Continuous care-loop differentiation**
+   - Discovery results remain discovery until a real connection proves availability/action capability.
+   - Connected provider availability must come from ZENDOC-owned verified data or an authenticated integration.
+   - Booking/order/payment confirmations require authoritative responses, never model-generated success text.
+   - Follow-up and outcome state should preserve whether it was patient-reported, family-reported or provider-confirmed.
 
 ## Explicit non-integrations
 
