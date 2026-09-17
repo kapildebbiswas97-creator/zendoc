@@ -1,11 +1,12 @@
 """User-facing/API routes for the bounded ZENDOC specialist Agent OS."""
 from __future__ import annotations
 
-from flask import Blueprint, flash, g, jsonify, redirect, render_template, request, url_for
+from flask import Blueprint, current_app, flash, g, jsonify, redirect, render_template, request, url_for
 
 from .agent_autonomy import bounded_autonomy_manifest
 from .agent_fleet import list_fleet_agents
 from .agent_handoffs import handoff_for_intent, handoff_manifest
+from .appointment_continuity import sync_provider_appointment_status
 from .careloop_integration import link_registered_appointment
 from .db import get_db
 from .provider_service import book_provider_slot
@@ -20,6 +21,35 @@ from .startup_analytics import record_product_activity
 
 
 bp = Blueprint("specialist_agents", __name__)
+
+
+@bp.after_app_request
+def reconcile_provider_appointment_outcome(response):
+    """Post-commit continuity hook for the authoritative provider status route.
+
+    The main appointment route remains the source of truth and commits first.
+    This hook never turns an Agent OS/model assertion into provider truth. If
+    continuity reconciliation fails, the legitimate provider status change is
+    preserved and the failure is logged for repair rather than rolled back.
+    """
+    if (
+        request.method != "POST"
+        or request.endpoint != "main.appointment_status"
+        or response.status_code >= 400
+        or not getattr(g, "user", None)
+    ):
+        return response
+    appointment_id = (request.view_args or {}).get("appointment_id")
+    if not appointment_id:
+        return response
+    try:
+        sync_provider_appointment_status(g.user, int(appointment_id))
+    except Exception:
+        current_app.logger.exception(
+            "Appointment continuity reconciliation failed for appointment %s",
+            appointment_id,
+        )
+    return response
 
 
 def _api_error(error):
