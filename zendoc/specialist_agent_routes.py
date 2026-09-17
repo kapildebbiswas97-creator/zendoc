@@ -1,7 +1,7 @@
 """User-facing/API routes for the bounded ZENDOC specialist Agent OS."""
 from __future__ import annotations
 
-from flask import Blueprint, flash, g, jsonify, render_template, request
+from flask import Blueprint, flash, g, jsonify, redirect, render_template, request, url_for
 
 from .agent_autonomy import bounded_autonomy_manifest
 from .agent_fleet import list_fleet_agents
@@ -47,6 +47,86 @@ def _attach_handoff(result):
     return result
 
 
+def _confirm_connected_booking(user, data: dict, *, require_persisted_refs: bool = False) -> dict:
+    """Create one connected booking request after deterministic human-gate checks."""
+    if str(user["role"] or "") != "patient":
+        raise PermissionError("Only an authenticated patient can confirm an Agent OS appointment.")
+    if data.get("user_confirmed") is not True:
+        raise PermissionError("Fresh explicit user confirmation is required before booking.")
+
+    try:
+        provider_profile_id = int(data.get("provider_profile_id") or 0)
+    except (TypeError, ValueError):
+        provider_profile_id = 0
+    scheduled_for = str(data.get("scheduled_for") or "").strip()[:32]
+    reason = str(data.get("reason") or "Requested through ZENDOC Agent OS").strip()[:500]
+    if not provider_profile_id or not scheduled_for:
+        raise ValueError("provider_profile_id and scheduled_for are required.")
+
+    journey_id = data.get("journey_id")
+    workflow_task_id = data.get("workflow_task_id")
+    if require_persisted_refs and (not journey_id or not workflow_task_id):
+        raise PermissionError("The browser booking flow requires its persisted Agent OS task and Care Journey references.")
+
+    # Validate workflow ownership/state before any appointment side effect.
+    validate_booking_confirmation(
+        user,
+        journey_id=journey_id,
+        workflow_task_id=workflow_task_id,
+    )
+
+    appointment_id = book_provider_slot(user, provider_profile_id, scheduled_for, reason)
+
+    warnings = []
+    careloop_action_id = None
+    try:
+        careloop_action_id = link_registered_appointment(user, appointment_id=appointment_id)
+        get_db().commit()
+    except Exception:
+        get_db().rollback()
+        warnings.append("Appointment was created, but CareLoop linking needs reconciliation.")
+
+    persisted = {"workflow_task": None, "care_journey": None}
+    try:
+        persisted = mark_booking_requested(
+            user,
+            appointment_id=appointment_id,
+            provider_profile_id=provider_profile_id,
+            journey_id=journey_id,
+            workflow_task_id=workflow_task_id,
+        )
+    except Exception:
+        get_db().rollback()
+        warnings.append("Appointment was created, but Agent OS workflow state needs reconciliation.")
+
+    try:
+        create_notification(user["id"], "Appointment requested", "Your Agent OS appointment request was saved.")
+        record_product_activity(user, event_type="appointment_requested")
+        audit("create", "agent_os_connected_appointment", str(appointment_id), actor=user)
+        get_db().commit()
+    except Exception:
+        get_db().rollback()
+        warnings.append("Appointment was created, but one or more secondary notification/audit updates need reconciliation.")
+
+    return {
+        "status": "REQUESTED",
+        "appointment_id": appointment_id,
+        "provider_profile_id": provider_profile_id,
+        "scheduled_for": scheduled_for,
+        "careloop_action_id": careloop_action_id,
+        "workflow_task": persisted.get("workflow_task"),
+        "care_journey": persisted.get("care_journey"),
+        "provider_confirmation_state": "requested",
+        "payment_executed": False,
+        "user_confirmed": True,
+        "warnings": warnings,
+        "truth_notice": (
+            "The appointment request is persisted for a verified connected ZENDOC provider. "
+            "It is not provider-confirmed until the provider accepts it, and no payment was executed by AI."
+        ),
+    }
+
+
 @bp.route("/agent-os", methods=("GET", "POST"))
 @login_required
 def agent_os_page():
@@ -74,6 +154,33 @@ def agent_os_page():
         autonomy=bounded_autonomy_manifest(),
         handoffs=handoff_manifest(),
     )
+
+
+@bp.post("/agent-os/booking/confirm")
+@login_required
+def agent_os_booking_confirm():
+    """Browser human-gate for an already staged connected provider slot."""
+    data = {
+        "provider_profile_id": request.form.get("provider_profile_id"),
+        "scheduled_for": request.form.get("scheduled_for"),
+        "reason": request.form.get("reason"),
+        "journey_id": request.form.get("journey_id"),
+        "workflow_task_id": request.form.get("workflow_task_id"),
+        "user_confirmed": request.form.get("user_confirmed") == "true",
+    }
+    try:
+        result = _confirm_connected_booking(g.user, data, require_persisted_refs=True)
+    except (ValueError, LookupError, PermissionError) as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("specialist_agents.agent_os_page"))
+
+    flash(
+        f"Appointment request #{result['appointment_id']} saved. Provider confirmation is still pending.",
+        "success",
+    )
+    for warning in result.get("warnings") or []:
+        flash(warning, "warning")
+    return redirect(url_for("main.appointments"))
 
 
 @bp.post("/api/v1/agent/orchestrate")
@@ -114,85 +221,11 @@ def api_confirm_agent_booking():
     user, error = require_api_user()
     if error:
         return error
-    if str(user["role"] or "") != "patient":
-        return _api_error(PermissionError("Only an authenticated patient can confirm an Agent OS appointment."))
-
     data = request.get_json(silent=True) or {}
-    if data.get("user_confirmed") is not True:
-        return _api_error(PermissionError("Fresh explicit user confirmation is required before booking."))
     try:
-        provider_profile_id = int(data.get("provider_profile_id") or 0)
-    except (TypeError, ValueError):
-        provider_profile_id = 0
-    scheduled_for = str(data.get("scheduled_for") or "").strip()[:32]
-    reason = str(data.get("reason") or "Requested through ZENDOC Agent OS").strip()[:500]
-    if not provider_profile_id or not scheduled_for:
-        return _api_error(ValueError("provider_profile_id and scheduled_for are required."))
-
-    # Validate persisted workflow references before creating an appointment so a
-    # stale/cross-patient task or journey cannot create a side effect first.
-    try:
-        validate_booking_confirmation(
-            user,
-            journey_id=data.get("journey_id"),
-            workflow_task_id=data.get("workflow_task_id"),
-        )
+        return jsonify(_confirm_connected_booking(user, data)), 201
     except (ValueError, LookupError, PermissionError) as exc:
         return _api_error(exc)
-
-    try:
-        appointment_id = book_provider_slot(user, provider_profile_id, scheduled_for, reason)
-    except (ValueError, PermissionError) as exc:
-        return _api_error(exc)
-
-    warnings = []
-    careloop_action_id = None
-    try:
-        careloop_action_id = link_registered_appointment(user, appointment_id=appointment_id)
-        get_db().commit()
-    except Exception:
-        get_db().rollback()
-        warnings.append("Appointment was created, but CareLoop linking needs reconciliation.")
-
-    persisted = {"workflow_task": None, "care_journey": None}
-    try:
-        persisted = mark_booking_requested(
-            user,
-            appointment_id=appointment_id,
-            provider_profile_id=provider_profile_id,
-            journey_id=data.get("journey_id"),
-            workflow_task_id=data.get("workflow_task_id"),
-        )
-    except Exception:
-        get_db().rollback()
-        warnings.append("Appointment was created, but Agent OS workflow state needs reconciliation.")
-
-    try:
-        create_notification(user["id"], "Appointment requested", "Your Agent OS appointment request was saved.")
-        record_product_activity(user, event_type="appointment_requested")
-        audit("create", "agent_os_connected_appointment", str(appointment_id), actor=user)
-        get_db().commit()
-    except Exception:
-        get_db().rollback()
-        warnings.append("Appointment was created, but one or more secondary notification/audit updates need reconciliation.")
-
-    return jsonify({
-        "status": "REQUESTED",
-        "appointment_id": appointment_id,
-        "provider_profile_id": provider_profile_id,
-        "scheduled_for": scheduled_for,
-        "careloop_action_id": careloop_action_id,
-        "workflow_task": persisted.get("workflow_task"),
-        "care_journey": persisted.get("care_journey"),
-        "provider_confirmation_state": "requested",
-        "payment_executed": False,
-        "user_confirmed": True,
-        "warnings": warnings,
-        "truth_notice": (
-            "The appointment request is persisted for a verified connected ZENDOC provider. "
-            "It is not provider-confirmed until the provider accepts it, and no payment was executed by AI."
-        ),
-    }), 201
 
 
 @bp.get("/api/v1/agent/autonomy")
