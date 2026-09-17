@@ -4,9 +4,10 @@ This module is intentionally non-clinical and non-transactional. It organizes
 family-care journeys by explicit relationship/age context without diagnosing,
 prescribing, changing permissions, or executing payments.
 
-Pregnancy is never inferred from age, gender, relationship, or model output. A
-pregnancy/postpartum journey can only be activated from an explicit user-selected
-care context in a future persisted workflow.
+Pregnancy, fertility/family-building, postpartum, newborn and menopause/midlife
+journeys are never inferred from age, gender, relationship, model output or
+medical records. Sensitive care contexts can only be activated by an explicit
+user selection in a future persisted workflow.
 """
 from __future__ import annotations
 
@@ -31,6 +32,7 @@ FAMILY_PROGRAMS = (
         "audience": "Households coordinating everyday healthcare",
         "summary": "One family care network for appointments, records, reminders and consent-scoped coordination.",
         "activation": "available_as_care_category",
+        "clinical_scope": "care_navigation_only",
         "subscription_available": False,
     },
     {
@@ -39,6 +41,16 @@ FAMILY_PROGRAMS = (
         "audience": "Families living in different cities or countries",
         "summary": "Coordinate care tasks and visibility for parents or dependents without automatically granting write access to their health data.",
         "activation": "explicit_consent_required",
+        "clinical_scope": "care_navigation_only",
+        "subscription_available": False,
+    },
+    {
+        "id": "family_building",
+        "label": "Fertility & Family Building",
+        "audience": "People who explicitly choose a family-building journey",
+        "summary": "Organize records, appointments, verified-provider discovery and follow-through for family-building care without inferring fertility status or treatment needs.",
+        "activation": "user_selected_only",
+        "clinical_scope": "care_navigation_only",
         "subscription_available": False,
     },
     {
@@ -47,6 +59,7 @@ FAMILY_PROGRAMS = (
         "audience": "People who explicitly choose a maternity/newborn care journey",
         "summary": "Organize appointments, records, care tasks and handoffs across pregnancy, postpartum and newborn care.",
         "activation": "user_selected_only",
+        "clinical_scope": "care_navigation_only",
         "subscription_available": False,
     },
     {
@@ -55,6 +68,7 @@ FAMILY_PROGRAMS = (
         "audience": "Children and adolescents",
         "summary": "Keep age-stage records, preventive follow-through, appointments and caregiver coordination together.",
         "activation": "age_context_only",
+        "clinical_scope": "care_navigation_only",
         "subscription_available": False,
     },
     {
@@ -63,6 +77,16 @@ FAMILY_PROGRAMS = (
         "audience": "Adults managing care across providers",
         "summary": "Preserve portable longitudinal context, follow-up tasks and verified care actions through adult life stages.",
         "activation": "age_context_only",
+        "clinical_scope": "care_navigation_only",
+        "subscription_available": False,
+    },
+    {
+        "id": "menopause_midlife",
+        "label": "Menopause & Midlife",
+        "audience": "People who explicitly choose a menopause or midlife-health journey",
+        "summary": "Organize records, appointments, questions and follow-up across midlife care without inferring menopause status or recommending hormone treatment.",
+        "activation": "user_selected_only",
+        "clinical_scope": "care_navigation_only",
         "subscription_available": False,
     },
     {
@@ -71,6 +95,7 @@ FAMILY_PROGRAMS = (
         "audience": "Older adults and consented family caregivers",
         "summary": "Support remote coordination and care follow-through while keeping the patient in control of permissions.",
         "activation": "explicit_consent_required",
+        "clinical_scope": "care_navigation_only",
         "subscription_available": False,
     },
 )
@@ -87,7 +112,7 @@ PAYMENT_METHODS = (
     {
         "id": "card",
         "label": "Credit / debit card",
-        "region": "Provider-dependent",
+        "region": "Domestic or international only if a future gateway supports it",
         "integration_status": "provider_required",
         "collect_in_zendoc": False,
     },
@@ -112,7 +137,24 @@ PAYMENT_METHODS = (
         "integration_status": "authoritative_coverage_confirmation_required",
         "collect_in_zendoc": False,
     },
+    {
+        "id": "provider_direct",
+        "label": "Pay provider directly",
+        "region": "Provider-dependent",
+        "integration_status": "external_provider_handoff_only",
+        "collect_in_zendoc": False,
+    },
 )
+
+
+EXPLICIT_CARE_CONTEXTS = {
+    "family_building": "family_building",
+    "pregnancy": "maternity_newborn",
+    "postpartum": "maternity_newborn",
+    "newborn": "maternity_newborn",
+    "menopause": "menopause_midlife",
+    "midlife_health": "menopause_midlife",
+}
 
 
 def age_band(age):
@@ -136,10 +178,9 @@ def age_band(age):
 
 
 def _explicit_care_context(member):
-    """Normalize future explicit care context without inferring sensitive state."""
+    """Normalize explicit care context without inferring sensitive state."""
     value = str((member or {}).get("care_context") or "").strip().lower()
-    allowed = {"pregnancy", "postpartum", "newborn"}
-    return value if value in allowed else None
+    return value if value in EXPLICIT_CARE_CONTEXTS else None
 
 
 def member_lifecycle(member):
@@ -158,13 +199,14 @@ def member_lifecycle(member):
         programs.append("adult_continuity")
     elif stage["id"] == "older_adult":
         programs.append("older_adult_support")
-    if explicit_context in {"pregnancy", "postpartum", "newborn"}:
-        programs.append("maternity_newborn")
+    if explicit_context:
+        programs.append(EXPLICIT_CARE_CONTEXTS[explicit_context])
 
     item["life_stage"] = stage
     item["care_program_ids"] = list(dict.fromkeys(programs))
     item["explicit_care_context"] = explicit_context
     item["pregnancy_inferred"] = False
+    item["sensitive_context_inferred"] = False
     return item
 
 
@@ -182,9 +224,14 @@ def payment_readiness():
         "payment_execution_enabled": False,
         "billing_provider": None,
         "status": "not_configured",
+        "remote_family_sponsor_payment_enabled": False,
+        "cross_border_settlement_enabled": False,
+        "stored_sensitive_payment_credentials": False,
         "methods": [deepcopy(method) for method in PAYMENT_METHODS],
         "truth_notice": (
             "No payment is taken from this family-care screen. A payment method becomes usable only after "
-            "a real payment provider integration is configured, verified and audited. ZENDOC must never store card CVV, UPI PIN or banking passwords."
+            "a real payment provider integration is configured, verified and audited. Cross-border family payment "
+            "requires gateway-supported currency, compliance and payer authorization. ZENDOC must never store card CVV, "
+            "UPI PIN or banking passwords, and model output must never execute or confirm a payment."
         ),
     }
