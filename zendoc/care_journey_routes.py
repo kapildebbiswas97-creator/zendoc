@@ -3,7 +3,9 @@ from __future__ import annotations
 
 from flask import Blueprint, jsonify, request
 
+from .appointment_continuity import complete_follow_up
 from .care_action_ledger import create_action, get_action, list_actions, record_outcome, transition_action
+from .care_continuity import build_care_continuity_snapshot
 from .care_journey_store import (
     advance_persisted_journey,
     create_persisted_journey,
@@ -18,6 +20,16 @@ from .routes import require_api_user
 bp = Blueprint("care_journey", __name__)
 
 _PROVIDER_SYNCHRONIZED_APPOINTMENT_STATES = {"CONFIRMED", "IN_PROGRESS", "COMPLETED"}
+
+# These states require real appointment/provider/outcome/follow-up evidence.
+# A generic user transition endpoint must never manufacture them.
+_EVIDENCE_BOUND_JOURNEY_TARGETS = {
+    "WAITING_PROVIDER",
+    "WAITING_VISIT",
+    "CONSULTATION",
+    "FOLLOW_UP",
+    "COMPLETED",
+}
 
 
 def _error(exc):
@@ -98,7 +110,11 @@ def api_list_care_journeys():
     if error:
         return error
     try:
-        journeys = list_patient_journeys(user, patient_id=request.args.get("patient_id"), limit=request.args.get("limit", 25))
+        journeys = list_patient_journeys(
+            user,
+            patient_id=request.args.get("patient_id"),
+            limit=request.args.get("limit", 25),
+        )
     except (PermissionError, LookupError, TypeError, ValueError) as exc:
         return _error(exc)
     return jsonify({"journeys": journeys})
@@ -116,17 +132,35 @@ def api_get_care_journey(journey_id):
     return jsonify({"journey": journey})
 
 
+@bp.get("/api/v1/care-journeys/<int:journey_id>/continuity")
+def api_get_care_journey_continuity(journey_id):
+    """Return one permission-checked, evidence-backed longitudinal care snapshot."""
+    user, error = require_api_user()
+    if error:
+        return error
+    try:
+        snapshot = build_care_continuity_snapshot(user, journey_id)
+    except (LookupError, PermissionError, TypeError, ValueError) as exc:
+        return _error(exc)
+    return jsonify({"continuity": snapshot})
+
+
 @bp.post("/api/v1/care-journeys/<int:journey_id>/transition")
 def api_transition_care_journey(journey_id):
     user, error = require_api_user()
     if error:
         return error
     data = request.get_json(silent=True) or {}
+    target_state = str(data.get("target_state") or "").strip().upper()
     try:
+        if target_state in _EVIDENCE_BOUND_JOURNEY_TARGETS:
+            raise PermissionError(
+                "This Care Journey state is evidence-bound and must be advanced by its dedicated booking/provider/outcome/follow-up workflow."
+            )
         journey = advance_persisted_journey(
             user,
             journey_id,
-            target_state=data.get("target_state"),
+            target_state=target_state,
             reason=data.get("reason"),
             actor_type="user",
             next_safe_action=data.get("next_safe_action"),
@@ -138,6 +172,24 @@ def api_transition_care_journey(journey_id):
     except (LookupError, PermissionError, TypeError, ValueError) as exc:
         return _error(exc)
     return jsonify({"status": "updated", "journey": journey})
+
+
+@bp.post("/api/v1/care-journeys/<int:journey_id>/follow-up/complete")
+def api_complete_care_journey_follow_up(journey_id):
+    """Patient-only, evidence-bound completion of post-visit follow-up."""
+    user, error = require_api_user()
+    if error:
+        return error
+    data = request.get_json(silent=True) or {}
+    try:
+        result = complete_follow_up(
+            user,
+            journey_id,
+            user_confirmed=data.get("user_confirmed") is True,
+        )
+    except (LookupError, PermissionError, TypeError, ValueError) as exc:
+        return _error(exc)
+    return jsonify({"status": "completed", "follow_up": result})
 
 
 @bp.post("/api/v1/care-journeys/<int:journey_id>/actions")
