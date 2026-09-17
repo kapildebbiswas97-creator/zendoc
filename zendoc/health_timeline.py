@@ -3,7 +3,8 @@ from .health_access import authorize_patient
 
 
 TIMELINE_TYPES = (
-    "appointment", "consultation", "report", "medical_record", "measurement", "medication",
+    "appointment", "appointment_confirmed", "appointment_cancelled", "appointment_completed",
+    "consultation", "report", "medical_record", "measurement", "medication",
     "vaccination", "procedure", "ai_health_event", "mental_wellness", "fitness",
     "diagnostic_accepted", "diagnostic_sample_collected", "diagnostic_processing",
     "diagnostic_completed", "diagnostic_cancelled", "diagnostic_declined", "diagnostic_report_linked",
@@ -74,7 +75,7 @@ def _where_clause(event_type=None, query=None, start_date=None, end_date=None):
 
 
 def _details_path(item):
-    if item["source"] == "appointments":
+    if item["source"] == "appointments" or str(item["event_type"]).startswith("appointment_"):
         return "/appointments"
     if item["source"] == "medical_records":
         return f"/reports/{item['source_id']}" if item["event_type"] == "report" else "/records"
