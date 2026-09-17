@@ -9,10 +9,32 @@ code execution, payment execution, prescribing, or emergency dispatch.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import replace
 
 from .agent_executor import execute_plan
 from .agent_planner import PlanStep, build_plan
+
+
+_SPECIALTY_ALIASES = (
+    (("cardiologist", "heart doctor", "heart specialist"), "Cardiology"),
+    (("dermatologist", "skin doctor", "skin specialist"), "Dermatology"),
+    (("neurologist", "brain doctor", "neuro doctor"), "Neurology"),
+    (("orthopedist", "orthopaedist", "orthopedic", "orthopaedic", "bone doctor"), "Orthopedics"),
+    (("pediatrician", "paediatrician", "child doctor"), "Pediatrics"),
+    (("gynecologist", "gynaecologist", "gyne doctor", "gynae doctor"), "Gynecology"),
+    (("psychiatrist",), "Psychiatry"),
+    (("ophthalmologist", "eye doctor", "eye specialist"), "Ophthalmology"),
+    (("ent doctor", "ear nose throat doctor"), "ENT"),
+    (("general physician", "general doctor", "physician"), "General Medicine"),
+)
+
+_TEMPORAL_TAIL = re.compile(
+    r"\b(?:today|tomorrow|tonight|this\s+(?:morning|afternoon|evening|week|month)|"
+    r"next\s+(?:week|month|monday|tuesday|wednesday|thursday|friday|saturday|sunday)|"
+    r"on\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday))\b.*$",
+    re.IGNORECASE,
+)
 
 
 def _value(actor, key, default=None):
@@ -36,6 +58,40 @@ def _clean_context(context):
     if raw.get("category"):
         cleaned["category"] = str(raw.get("category") or "").strip().lower()[:60]
     return cleaned
+
+
+def _booking_discovery_arguments(command):
+    """Normalize ordinary booking language without inventing location or availability."""
+    text = " ".join(str(command or "").strip().split())[:500]
+    lower = text.lower()
+
+    specialty = ""
+    for aliases, canonical in _SPECIALTY_ALIASES:
+        if canonical.lower() in lower or any(alias in lower for alias in aliases):
+            specialty = canonical
+            break
+
+    location = ""
+    for marker in (" in ", " near "):
+        if marker in lower:
+            start = lower.rfind(marker) + len(marker)
+            candidate = text[start:].strip(" ,.-")
+            candidate = _TEMPORAL_TAIL.sub("", candidate).strip(" ,.-")
+            if candidate.lower() not in {"me", "my location", "current location", "nearby"}:
+                location = candidate[:100]
+            break
+
+    if specialty and location:
+        normalized_query = f"{specialty} in {location}"
+    elif specialty:
+        normalized_query = specialty
+    else:
+        normalized_query = text
+
+    result = {"query": normalized_query}
+    if location:
+        result["location"] = location
+    return result
 
 
 def _specialize_plan(plan, context):
@@ -62,6 +118,19 @@ def _specialize_plan(plan, context):
             expected_output="verified_provider_slots",
             fallback_strategy="no_booking_when_availability_unknown",
         )
+
+    if plan.intent == "appointment_booking" and plan.steps:
+        step = plan.steps[0]
+        if step.tool_name == "search_healthcare_providers":
+            return replace(
+                plan,
+                steps=(
+                    replace(
+                        step,
+                        arguments=_booking_discovery_arguments(plan.command),
+                    ),
+                ),
+            )
 
     if plan.intent == "health_commerce" and context.get("category") and plan.steps:
         step = plan.steps[0]
