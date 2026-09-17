@@ -96,7 +96,7 @@ def _confirm_connected_booking(user, data: dict, *, require_persisted_refs: bool
     journey_id = data.get("journey_id")
     workflow_task_id = data.get("workflow_task_id")
     if require_persisted_refs and (not journey_id or not workflow_task_id):
-        raise PermissionError("The browser booking flow requires its persisted Agent OS task and Care Journey references.")
+        raise PermissionError("The booking flow requires its persisted Agent OS task and Care Journey references.")
 
     # Validate workflow ownership/state before any appointment side effect.
     validate_booking_confirmation(
@@ -110,7 +110,11 @@ def _confirm_connected_booking(user, data: dict, *, require_persisted_refs: bool
     warnings = []
     careloop_action_id = None
     try:
-        careloop_action_id = link_registered_appointment(user, appointment_id=appointment_id)
+        careloop_action_id = link_registered_appointment(
+            user,
+            appointment_id=appointment_id,
+            journey_id=journey_id,
+        )
         get_db().commit()
     except Exception:
         get_db().rollback()
@@ -151,7 +155,7 @@ def _confirm_connected_booking(user, data: dict, *, require_persisted_refs: bool
         "user_confirmed": True,
         "warnings": warnings,
         "truth_notice": (
-            "The appointment request is persisted for a verified connected ZENDOC provider. "
+            "The appointment request is persisted for a verified connected ZENDOC provider on the same Care Journey. "
             "It is not provider-confirmed until the provider accepts it, and no payment was executed by AI."
         ),
     }
@@ -246,14 +250,14 @@ def api_confirm_agent_booking():
     The model never receives an arbitrary HTTP/browser tool for this endpoint.
     The authenticated patient/app must send ``user_confirmed: true`` together
     with the exact provider and slot selected from the read-only Booking Agent
-    result.
+    result plus the persisted Agent OS task and Care Journey references.
     """
     user, error = require_api_user()
     if error:
         return error
     data = request.get_json(silent=True) or {}
     try:
-        return jsonify(_confirm_connected_booking(user, data)), 201
+        return jsonify(_confirm_connected_booking(user, data, require_persisted_refs=True)), 201
     except (ValueError, LookupError, PermissionError) as exc:
         return _api_error(exc)
 
