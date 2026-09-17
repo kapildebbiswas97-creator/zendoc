@@ -44,6 +44,28 @@
   <p class="form-note">The model cannot execute payment, prescribe, change medication, dispatch emergency services, run arbitrary code/SQL/shell, read secrets, expand its own permissions, disable safeguards or deploy itself.</p>
 </section>
 
+{% if follow_up_journey %}
+<section class="panel" style="margin-top:20px;">
+  <div class="panel-head">
+    <div><p class="eyebrow">Longitudinal Care Journey</p><h2>Post-visit continuity</h2></div>
+    <span class="status-badge {{ 'active' if follow_up_journey.state == 'COMPLETED' else 'beta' }}">{{ follow_up_journey.state.replace('_',' ') }}</span>
+  </div>
+  <p><strong>Journey {{ follow_up_journey.journey_uid }}</strong></p>
+  <p class="form-note">Next safe action: {{ follow_up_journey.next_safe_action.replace('_',' ') }}{% if follow_up_journey.required_actor %} · Waiting for: {{ follow_up_journey.required_actor }}{% endif %}</p>
+  {% if follow_up_journey.state == 'FOLLOW_UP' and current_user.role == 'patient' %}
+    <p>Verified provider visit-completion evidence already exists in CareLoop and Health Memory. Mark this follow-up complete only after you have actually completed the non-clinical post-visit step.</p>
+    <form method="post" action="{{ url_for('specialist_agents.agent_os_follow_up_complete', journey_id=follow_up_journey.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="user_confirmed" value="true">
+      <button type="submit" class="primary-action" data-submitting-label="Completing…">I completed this follow-up</button>
+    </form>
+    <p class="form-note">Your completion is stored as USER_REPORTED. It never changes the provider-recorded visit evidence into a patient claim.</p>
+  {% elif follow_up_journey.state == 'COMPLETED' %}
+    <p class="form-note">This journey is complete. Provider-recorded outcome evidence and patient-reported follow-up completion remain separately provenance-labelled in Health Memory.</p>
+  {% endif %}
+</section>
+{% endif %}
+
 {% if result %}
 <section class="panel" style="margin-top:20px;">
   <div class="panel-head">
