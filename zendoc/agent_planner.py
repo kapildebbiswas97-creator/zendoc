@@ -147,6 +147,26 @@ def build_plan(actor, command_text: str) -> AgentPlan:
         )
 
     if any(text in lower for text in (
+        "improve model", "model improvement", "evaluate model", "model candidate",
+        "prompt candidate", "routing candidate", "offline eval",
+    )):
+        if not owner:
+            return _unauthorized(command, "model_improvement")
+        return _plan(
+            command,
+            "model_improvement",
+            "ModelImprovementAgent",
+            "owner_approval",
+            (),
+            requires_confirmation=True,
+            privacy_class="INTERNAL",
+            required_context=("synthetic_eval_cases", "evaluation_policy"),
+            human_gate="configured_owner_review_before_production_promotion",
+            expected_output="offline_candidate_evaluation_plan",
+            fallback_strategy="no_production_change",
+        )
+
+    if any(text in lower for text in (
         "government scheme", "health scheme", "insurance coverage", "insurance benefit",
         "carefin", "financial help", "medical funding", "csr", "charity", "trust support",
         "who can pay", "reduce hospital cost", "reduce treatment cost",
@@ -178,27 +198,15 @@ def build_plan(actor, command_text: str) -> AgentPlan:
         )
 
     if any(text in lower for text in (
-        "medicine stock",
-        "pharmacy stock",
-        "medicine availability",
-        "find medicine",
-        "find prescribed medicine",
-        "nearby medicine",
-        "buy medicine",
+        "medicine stock", "pharmacy stock", "medicine availability", "find medicine",
+        "find prescribed medicine", "nearby medicine", "buy medicine",
     )):
         return _plan(
             command,
             "pharmacy",
             "PharmacyAgent",
             "read_only",
-            (
-                PlanStep(
-                    1,
-                    "search_nearby_pharmacy_inventory",
-                    {"query": command},
-                    "Search truthful pharmacy inventory for the authenticated patient.",
-                ),
-            ),
+            (PlanStep(1, "search_nearby_pharmacy_inventory", {"query": command}, "Search truthful pharmacy inventory for the authenticated patient."),),
             privacy_class="HEALTH_SENSITIVE",
             required_context=("authenticated_patient", "medicine_query"),
             expected_output="pharmacy_inventory_with_freshness_state",
@@ -219,7 +227,43 @@ def build_plan(actor, command_text: str) -> AgentPlan:
             fallback_strategy="unknown_availability_not_available",
         )
 
-    if any(text in lower for text in ("hospital near", "find hospital", "doctor near", "find doctor", "clinic near", "pharmacy near")):
+    if any(text in lower for text in (
+        "book appointment", "appointment booking", "doctor appointment", "appointment slot",
+        "available appointment", "available slot", "reschedule appointment", "change appointment date",
+    )):
+        return _plan(
+            command,
+            "appointment_booking",
+            "BookingAgent",
+            "consent_required",
+            (PlanStep(1, "search_healthcare_providers", {"query": command}, "Find truthful provider options before any booking action."),),
+            requires_confirmation=True,
+            privacy_class="PERSONAL",
+            required_context=("provider_or_specialty", "location_optional", "preferred_date_optional"),
+            human_gate="explicit_user_confirmation_before_booking",
+            expected_output="provider_shortlist_then_verified_slot_selection",
+            fallback_strategy="discovery_only_no_booking",
+        )
+
+    if any(text in lower for text in (
+        "health product", "wellness product", "fitness equipment", "recovery equipment",
+        "eyewear", "vision accessory", "home health device", "baby wellness product",
+        "child wellness product", "buy fitness", "buy wellness", "shop health",
+    )):
+        return _plan(
+            command,
+            "health_commerce",
+            "CommerceAgent",
+            "read_only",
+            (PlanStep(1, "search_health_products", {"query": command, "category": _commerce_category(lower)}, "Search truthful external health-product handoffs without claiming stock or price."),),
+            privacy_class="PERSONAL",
+            required_context=("product_query",),
+            human_gate="explicit_user_confirmation_for_any_future_checkout",
+            expected_output="external_product_handoffs_with_truth_state",
+            fallback_strategy="external_search_handoff_only",
+        )
+
+    if any(text in lower for text in ("hospital near", "find hospital", "doctor near", "find doctor", "clinic near", "pharmacy near", "medical store near", "chemist near")):
         return _plan(
             command,
             "provider_discovery",
@@ -230,6 +274,41 @@ def build_plan(actor, command_text: str) -> AgentPlan:
             required_context=("provider_category", "location"),
             expected_output="provider_options_with_source_state",
             fallback_strategy="registered_provider_network_only",
+        )
+
+    if any(text in lower for text in (
+        "preventive care", "prevention", "routine checkup", "routine check-up",
+        "screening reminder", "prevent disease", "health maintenance",
+    )):
+        return _plan(
+            command,
+            "preventive_care",
+            "PreventionAgent",
+            "read_only",
+            (PlanStep(1, "get_health_memory_context", {}, "Read only the authorized minimum-necessary longitudinal context."),),
+            privacy_class="HEALTH_SENSITIVE",
+            required_context=("authorized_patient_context", "explicit_prevention_goal_optional"),
+            human_gate="clinician_review_for_medical_decisions",
+            expected_output="non_diagnostic_prevention_context",
+            fallback_strategy="general_prevention_education_only",
+        )
+
+    if any(text in lower for text in (
+        "life stage", "life-stage", "pregnancy journey", "postpartum journey", "newborn journey",
+        "child growth journey", "menopause journey", "older adult journey", "elder care journey",
+        "family building journey",
+    )):
+        return _plan(
+            command,
+            "lifecycle",
+            "LifecycleAgent",
+            "consent_required",
+            (PlanStep(1, "get_health_memory_context", {}, "Use authorized context only after the user explicitly selected the life-stage journey."),),
+            privacy_class="HEALTH_SENSITIVE",
+            required_context=("explicit_user_selected_life_stage", "authorized_patient_context"),
+            human_gate="patient_or_guardian_consent",
+            expected_output="life_stage_continuity_context",
+            fallback_strategy="do_not_infer_sensitive_life_stage",
         )
 
     if any(text in lower for text in ("nutrition", "diet", "food label", "protein", "sugar", "sodium", "hydration", "healthy drink")):
@@ -244,6 +323,34 @@ def build_plan(actor, command_text: str) -> AgentPlan:
             human_gate="clinician_or_dietitian_for_medical_diet",
             expected_output="general_nutrition_guidance",
             fallback_strategy="general_wellness_only",
+        )
+
+    if any(text in lower for text in ("workout", "fitness", "exercise plan", "exercise instruction", "my progress")):
+        return _plan(
+            command,
+            "fitness",
+            "FitnessAgent",
+            "read_only",
+            (),
+            privacy_class="PERSONAL",
+            required_context=("fitness_profile_optional", "authenticated_patient"),
+            human_gate="clinician_or_fitness_professional_when_medical_restrictions_apply",
+            expected_output="general_wellness_fitness_guidance",
+            fallback_strategy="general_wellness_only",
+        )
+
+    if any(text in lower for text in ("learn about health", "health education", "teach me about", "understand health", "learning journey")):
+        return _plan(
+            command,
+            "health_learning",
+            "LearningAgent",
+            "read_only",
+            (PlanStep(1, "search_educational_video", {"query": command, "category": "patient_education"}, "Find truthful educational resources for the requested topic."),),
+            privacy_class="INTERNAL",
+            required_context=("learning_topic",),
+            human_gate="clinician_review_for_personal_medical_decision",
+            expected_output="educational_resource_options",
+            fallback_strategy="written_education_without_fabricated_citations",
         )
 
     if any(text in lower for text in ("find contact", "search contact", "discover contact", "who can i message", "search doctor")):
@@ -317,27 +424,15 @@ def build_plan(actor, command_text: str) -> AgentPlan:
             expected_output="educational_video_options",
         )
     if any(text in lower for text in (
-        "health memory",
-        "health record",
-        "medical history",
-        "health history",
-        "health timeline",
-        "my records",
-        "my reports",
+        "health memory", "health record", "medical history", "health history",
+        "health timeline", "my records", "my reports",
     )):
         return _plan(
             command,
             "health_records",
             "HealthMemoryAgent",
             "read_only",
-            (
-                PlanStep(
-                    1,
-                    "get_health_memory_context",
-                    {},
-                    "Build minimum-necessary authorized Health Memory context with provenance.",
-                ),
-            ),
+            (PlanStep(1, "get_health_memory_context", {}, "Build minimum-necessary authorized Health Memory context with provenance."),),
             privacy_class="HEALTH_SENSITIVE",
             required_context=("authorized_patient_context", "timeline_scope"),
             expected_output="authorized_health_memory_summary",
@@ -444,3 +539,17 @@ def _video_category(text):
     if "doctor" in text or "patient education" in text:
         return "patient_education"
     return "fitness"
+
+
+def _commerce_category(text):
+    if "eyewear" in text or "vision" in text or "glasses" in text:
+        return "eyewear"
+    if "fitness" in text or "recovery" in text or "workout" in text:
+        return "fitness"
+    if "nutrition" in text or "food" in text or "protein" in text:
+        return "nutrition"
+    if "baby" in text or "child" in text:
+        return "baby_child"
+    if "device" in text or "home health" in text:
+        return "home_health"
+    return "general_wellness"

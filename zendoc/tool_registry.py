@@ -15,7 +15,7 @@ NEVER exposes: execute_arbitrary_sql, execute_shell, eval_python, run_any_comman
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass
@@ -46,13 +46,12 @@ class ToolDefinition:
         }
 
 
-# ── Risk classes ───────────────────────────────────────────────────────────────
-READ_ONLY         = "READ_ONLY"
-LOW_RISK          = "LOW_RISK"
-CONSENT_REQUIRED  = "CONSENT_REQUIRED"
-DOCTOR_APPROVAL   = "DOCTOR_APPROVAL"
-OWNER_APPROVAL    = "OWNER_APPROVAL"
-CRITICAL_BLOCKED  = "CRITICAL_BLOCKED"
+READ_ONLY = "READ_ONLY"
+LOW_RISK = "LOW_RISK"
+CONSENT_REQUIRED = "CONSENT_REQUIRED"
+DOCTOR_APPROVAL = "DOCTOR_APPROVAL"
+OWNER_APPROVAL = "OWNER_APPROVAL"
+CRITICAL_BLOCKED = "CRITICAL_BLOCKED"
 
 ALL_ROLES = ["patient", "doctor", "hospital", "pharmacy", "government", "admin"]
 PROVIDER_ROLES = ["doctor", "hospital", "pharmacy", "government", "admin"]
@@ -67,10 +66,7 @@ def _value(actor, key, default=None):
     return actor.get(key, default) if isinstance(actor, dict) else default
 
 
-# ── Tool Registry ──────────────────────────────────────────────────────────────
 TOOL_REGISTRY: dict[str, ToolDefinition] = {
-
-    # ── Communication tools (M7.1 preserved) ──────────────────────────────────
     "find_contact": ToolDefinition(
         name="find_contact",
         description="Discover permitted contacts for the current user.",
@@ -143,7 +139,7 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
     "search_educational_video": ToolDefinition(
         name="search_educational_video",
         description="Search configured/local educational video guidance without fabricating transcripts.",
-        allowed_agents=["VideoAgent"],
+        allowed_agents=["VideoAgent", "LearningAgent"],
         allowed_roles=ALL_ROLES,
         risk_class=READ_ONLY,
     ),
@@ -155,7 +151,6 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
         risk_class=READ_ONLY,
     ),
 
-    # ── Platform operational tools (owner only) ────────────────────────────────
     "get_platform_summary": ToolDefinition(
         name="get_platform_summary",
         description="Retrieve high-level platform health and operation counts.",
@@ -274,12 +269,43 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
         risk_class=LOW_RISK,
     ),
 
-    # ── Specialist read tools ─────────────────────────────────────────────────
     "search_healthcare_providers": ToolDefinition(
         name="search_healthcare_providers",
         description="Search ZENDOC-verified providers plus configured external healthcare locations while preserving source/verification state.",
-        allowed_agents=["ProviderDiscoveryAgent", "SearchAgent"],
+        allowed_agents=["ProviderDiscoveryAgent", "BookingAgent", "SearchAgent"],
         allowed_roles=ALL_ROLES,
+        risk_class=READ_ONLY,
+    ),
+    "get_provider_booking_options": ToolDefinition(
+        name="get_provider_booking_options",
+        description=(
+            "Read verified ZENDOC provider profile and provider-published free slots for a requested date. "
+            "External/unverified listings are never converted into connected booking availability."
+        ),
+        allowed_agents=["BookingAgent"],
+        allowed_roles=["patient", "admin"],
+        risk_class=READ_ONLY,
+    ),
+    "confirm_provider_booking": ToolDefinition(
+        name="confirm_provider_booking",
+        description=(
+            "Create a requested appointment for a verified connected ZENDOC provider and currently free slot. "
+            "Requires fresh explicit user confirmation and is never executable in an autonomous plan."
+        ),
+        allowed_agents=["BookingAgent"],
+        allowed_roles=["patient"],
+        risk_class=CONSENT_REQUIRED,
+        requires_consent=True,
+        idempotent=False,
+    ),
+    "search_health_products": ToolDefinition(
+        name="search_health_products",
+        description=(
+            "Return truthful external search/catalog handoffs for non-medicine health products. "
+            "Does not claim stock, price, seller suitability, affiliate relationship, checkout or payment connectivity."
+        ),
+        allowed_agents=["CommerceAgent"],
+        allowed_roles=["patient", "admin"],
         risk_class=READ_ONLY,
     ),
     "get_latest_prescription_review": ToolDefinition(
@@ -289,7 +315,6 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
         allowed_roles=["patient", "doctor", "pharmacy", "admin"],
         risk_class=READ_ONLY,
     ),
-
     "compare_nutrition_products": ToolDefinition(
         name="compare_nutrition_products",
         description="Compare user-supplied nutrition labels and normalized prices for general wellness; sponsorship never changes health suitability ranking.",
@@ -297,8 +322,6 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
         allowed_roles=["patient", "admin"],
         risk_class=READ_ONLY,
     ),
-
-    # ── CareFin / benefits tools ──────────────────────────────────────────────
     "discover_carefin_benefits": ToolDefinition(
         name="discover_carefin_benefits",
         description=(
@@ -311,7 +334,6 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
         risk_class=READ_ONLY,
     ),
 
-    # ── Safety / Blocked tools ─────────────────────────────────────────────────
     "autonomous_prescribe": ToolDefinition(
         name="autonomous_prescribe",
         description="[BLOCKED] Autonomous prescribing is CRITICAL_BLOCKED. Requires legally valid doctor workflow.",
@@ -326,8 +348,21 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
         allowed_roles=[],
         risk_class=CRITICAL_BLOCKED,
     ),
+    "execute_payment": ToolDefinition(
+        name="execute_payment",
+        description="[BLOCKED] Models never execute payment or receive payment secrets. A future verified payment integration must use a separate deterministic user-authorized flow.",
+        allowed_agents=[],
+        allowed_roles=[],
+        risk_class=CRITICAL_BLOCKED,
+    ),
+    "self_modify_production": ToolDefinition(
+        name="self_modify_production",
+        description="[BLOCKED] Agents cannot rewrite production code/policy, broaden permissions, disable safeguards, or deploy themselves.",
+        allowed_agents=[],
+        allowed_roles=[],
+        risk_class=CRITICAL_BLOCKED,
+    ),
 
-    # ── Milestone 10: Connected Care tools ────────────────────────────────────
     "search_nearby_pharmacy_inventory": ToolDefinition(
         name="search_nearby_pharmacy_inventory",
         description=(
@@ -394,7 +429,7 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
             "Build an authorized, minimum-necessary Health Memory view with provenance and non-clinical next-safe actions. "
             "Cross-patient access requires explicit context authorization."
         ),
-        allowed_agents=["HealthMemoryAgent"],
+        allowed_agents=["HealthMemoryAgent", "PreventionAgent", "LifecycleAgent"],
         allowed_roles=["patient", "doctor", "hospital", "admin"],
         risk_class=READ_ONLY,
     ),
@@ -406,11 +441,7 @@ def get_tool(tool_name: str) -> ToolDefinition | None:
 
 
 def check_tool_access(tool_name: str, actor: dict, agent_name: str | None = None) -> dict:
-    """
-    Check whether the actor (and agent) may use this tool.
-    Returns {"allowed": bool, "reason": str}
-    This is a SERVER-SIDE check. Never trust client claims.
-    """
+    """Check whether the actor (and agent) may use this tool. Unknown/blocked tools fail closed."""
     tool = get_tool(tool_name)
     if not tool:
         return {"allowed": False, "reason": f"Tool '{tool_name}' is not registered."}
@@ -436,7 +467,6 @@ def check_tool_access(tool_name: str, actor: dict, agent_name: str | None = None
 
 
 def list_tools_for_role(role: str) -> list[dict]:
-    """List all tools accessible to a given role (excluding CRITICAL_BLOCKED)."""
     return [
         t.to_dict()
         for t in TOOL_REGISTRY.values()
@@ -445,7 +475,6 @@ def list_tools_for_role(role: str) -> list[dict]:
 
 
 def list_tools_for_actor(actor: dict) -> list[dict]:
-    """Return only tool metadata this authenticated actor may request."""
     result = []
     for tool in TOOL_REGISTRY.values():
         decision = check_tool_access(tool.name, actor)
