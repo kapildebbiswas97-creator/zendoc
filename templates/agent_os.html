@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}Agent OS — ZENDOC{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Bounded multi-agent health operating system</p>
+    <h1>ZENDOC Agent OS</h1>
+    <p class="section-copy">Ask for care, booking, prevention, fitness, learning, family/life-stage support, affordability, devices or health-product discovery. Safe reversible work runs first; consequential actions stop at a human gate.</p>
+  </div>
+  <a href="{{ url_for('main.ai_center') }}" class="secondary-action">Open ZENDOC AI</a>
+</section>
+
+<section class="panel">
+  <div class="panel-head"><div><p class="eyebrow">One request → specialist fleet</p><h2>Give Agent OS a task</h2></div><span class="status-badge beta">Competition Beta</span></div>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>What should ZENDOC do?
+      <textarea name="command" rows="3" maxlength="2000" required placeholder="Example: Book an appointment with a cardiologist in Kalyani next week">{{ command }}</textarea>
+    </label>
+    <details class="progressive-fields">
+      <summary>Continue a booking/product workflow</summary>
+      <div class="grid two">
+        <label>Verified provider profile ID
+          <input type="number" min="1" name="provider_profile_id" placeholder="Use after provider discovery">
+        </label>
+        <label>Date
+          <input type="date" name="date">
+        </label>
+        <label>Commerce category
+          <select name="category">
+            <option value="">Auto-detect</option>
+            <option value="eyewear">Eyewear</option>
+            <option value="fitness">Fitness</option>
+            <option value="nutrition">Nutrition</option>
+            <option value="home_health">Home health</option>
+            <option value="baby_child">Baby & child</option>
+            <option value="general_wellness">General wellness</option>
+          </select>
+        </label>
+      </div>
+    </details>
+    <button type="submit" class="primary-action" data-submitting-label="Running bounded workflow…">Run specialist workflow</button>
+  </form>
+  <p class="form-note">The model cannot execute payment, prescribe, change medication, dispatch emergency services, run arbitrary code/SQL/shell, read secrets, expand its own permissions, disable safeguards or deploy itself.</p>
+</section>
+
+{% if result %}
+<section class="panel" style="margin-top:20px;">
+  <div class="panel-head">
+    <div><p class="eyebrow">{{ result.assigned_agent }}</p><h2>{{ result.intent.replace('_',' ').title() }}</h2></div>
+    <span class="status-badge {{ 'active' if result.execution_status == 'completed' else 'beta' }}">{{ result.execution_status.replace('_',' ') }}</span>
+  </div>
+  <p>{{ result.message }}</p>
+  {% if result.human_gate %}<p class="form-note"><strong>Human gate:</strong> {{ result.human_gate.replace('_',' ') }}</p>{% endif %}
+
+  {% if result.intent == 'appointment_booking' and result.payload %}
+    {% if result.payload.available_slots is defined %}
+      <div class="panel subtle-panel" style="margin-top:16px;">
+        <p class="eyebrow">Verified connected availability</p>
+        <h3>{{ result.payload.provider_name }}</h3>
+        <p>{{ result.payload.specialty }} · {{ result.payload.date }}</p>
+        {% if result.payload.available_slots %}
+          <div class="appointment-list">
+          {% for slot in result.payload.available_slots %}
+            <article class="appointment-card">
+              <div><strong>{{ slot.replace('T',' · ') }}</strong><p>No appointment exists yet.</p></div>
+              {% if current_user.role == 'patient' %}
+              <form method="post" action="{{ url_for('main.appointments') }}" class="inline-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="provider_profile_id" value="{{ result.payload.provider_profile_id }}">
+                <input type="hidden" name="scheduled_for" value="{{ slot }}">
+                <input type="hidden" name="reason" value="Requested through ZENDOC Agent OS">
+                <button type="submit" class="primary-action" data-submitting-label="Requesting…">Confirm appointment request</button>
+              </form>
+              {% endif %}
+            </article>
+          {% endfor %}
+          </div>
+        {% else %}
+          <div class="empty-state"><h3>No free connected slots on this date</h3><p>Change the date and run the Booking Agent again. ZENDOC will not invent availability.</p></div>
+        {% endif %}
+        <p class="form-note">{{ result.payload.truth_notice }}</p>
+      </div>
+    {% elif result.payload.registered_providers is defined %}
+      <div class="grid two" style="margin-top:16px;">
+        {% for provider in result.payload.registered_providers %}
+        <article class="panel subtle-panel">
+          <p class="eyebrow">ZENDOC verified</p>
+          <h3>{{ provider.name or provider.provider_name }}</h3>
+          <p>{{ provider.specialty }}{% if provider.city %} · {{ provider.city }}{% endif %}</p>
+          <form method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="command" value="{{ command or 'Book appointment' }}">
+            <input type="hidden" name="provider_profile_id" value="{{ provider.id }}">
+            <label>Check another date <input type="date" name="date" required></label>
+            <button type="submit" class="secondary-action">Check real slots</button>
+          </form>
+        </article>
+        {% else %}
+        <div class="empty-state"><h3>No connected verified provider matched</h3><p>External/public discovery can still help locate care, but it is not converted into fake in-app booking availability.</p></div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endif %}
+
+  {% if result.intent == 'health_commerce' and result.payload %}
+    <div class="grid two" style="margin-top:16px;">
+      {% for item in result.payload.results %}
+      <article class="panel subtle-panel">
+        <p class="eyebrow">External discovery only</p><h3>{{ item.label }}</h3>
+        <p>Stock not verified · price not verified · no payment executed</p>
+        <a class="secondary-action" href="{{ item.url }}" target="_blank" rel="noopener noreferrer nofollow">Open external search</a>
+      </article>
+      {% else %}<div class="empty-state"><h3>No general-marketplace handoff</h3><p>{{ result.payload.truth_notice }}</p></div>{% endfor %}
+    </div>
+    <p class="form-note">{{ result.payload.truth_notice }}</p>
+  {% endif %}
+
+  {% if result.intent in ['preventive_care','lifecycle','health_learning','provider_discovery','diagnostics','pharmacy','carefin'] and result.payload %}
+    <details style="margin-top:16px;"><summary>View structured specialist result</summary><pre style="white-space:pre-wrap;overflow:auto;">{{ result.payload|tojson(indent=2) }}</pre></details>
+  {% endif %}
+
+  {% if result.actions %}
+    <div class="form-actions" style="margin-top:16px;">
+      {% for action in result.actions %}{% if action.url %}<a href="{{ action.url }}" class="secondary-action">{{ action.label }}</a>{% endif %}{% endfor %}
+    </div>
+  {% endif %}
+</section>
+{% endif %}
+
+<section class="grid two" style="margin-top:20px;">
+  <article class="panel">
+    <div class="panel-head"><div><p class="eyebrow">Specialist fleet</p><h2>{{ fleet|length }} bounded agents</h2></div></div>
+    <div class="appointment-list">
+      {% for agent in fleet %}
+      <article class="appointment-card"><div><h3>{{ agent.agent_id }}</h3><p>{{ agent.mission }}</p></div><span class="status-badge beta">{{ agent.automation_level.replace('_',' ') }}</span></article>
+      {% endfor %}
+    </div>
+  </article>
+  <article class="panel">
+    <div class="panel-head"><div><p class="eyebrow">Autonomy contract</p><h2>Power with hard boundaries</h2></div></div>
+    <p><strong>Automatic:</strong> search, compare, summarize, plan, change search parameters, check availability and prepare/stage reversible work.</p>
+    <p><strong>User gate:</strong> booking, cancellation/rescheduling, orders, paid services, record sharing and permission changes.</p>
+    <p><strong>Owner gate:</strong> promotion of model/prompt/routing candidates and permission-policy changes.</p>
+    <p><strong>Hard blocked:</strong> payment execution/secrets, prescribing, medicine changes, emergency dispatch, arbitrary code/SQL/shell, secret access, self-deployment and safety bypass.</p>
+    <p class="form-note">Unknown actions fail closed until explicitly classified and tested.</p>
+  </article>
+</section>
+{% endblock %}
