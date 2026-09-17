@@ -5,6 +5,7 @@ from flask import Blueprint, jsonify, request
 
 from .appointment_continuity import complete_follow_up
 from .care_action_ledger import create_action, get_action, list_actions, record_outcome, transition_action
+from .care_continuity import get_care_continuity_snapshot
 from .care_journey_store import (
     advance_persisted_journey,
     create_persisted_journey,
@@ -77,6 +78,19 @@ def api_get_care_journey(journey_id):
     except (LookupError, PermissionError) as exc:
         return _error(exc)
     return jsonify({"journey": journey})
+
+
+@bp.get("/api/v1/care-journeys/<int:journey_id>/continuity")
+def api_get_care_journey_continuity(journey_id):
+    """Return one evidence-backed canonical care-chain snapshot."""
+    user, error = require_api_user()
+    if error:
+        return error
+    try:
+        snapshot = get_care_continuity_snapshot(user, journey_id)
+    except (LookupError, PermissionError, TypeError, ValueError) as exc:
+        return _error(exc)
+    return jsonify({"continuity": snapshot})
 
 
 @bp.post("/api/v1/care-journeys/<int:journey_id>/transition")
