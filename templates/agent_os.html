@@ -51,7 +51,26 @@
     <span class="status-badge {{ 'active' if result.execution_status == 'completed' else 'beta' }}">{{ result.execution_status.replace('_',' ') }}</span>
   </div>
   <p>{{ result.message }}</p>
-  {% if result.human_gate %}<p class="form-note"><strong>Human gate:</strong> {{ result.human_gate.replace('_',' ') }}</p>{% endif %}
+  {% if result.human_gate %}<p class="form-note"><strong>Current human gate:</strong> {{ result.human_gate.replace('_',' ') }}</p>{% endif %}
+
+  {% if result.handoff_chain %}
+  <div class="panel subtle-panel" style="margin-top:16px;">
+    <div class="panel-head"><div><p class="eyebrow">Agent-to-agent orchestration</p><h3>Safe handoff chain</h3></div><span class="count-pill">{{ result.handoff_chain|length }} stages</span></div>
+    <div class="appointment-list">
+      {% for stage in result.handoff_chain %}
+      <article class="appointment-card">
+        <div>
+          <p class="eyebrow">Stage {{ loop.index }}</p>
+          <h3>{{ stage.agent }}</h3>
+          <p>{{ stage.stage.replace('_',' ') }} · {{ stage.mode.replace('_',' ') }}</p>
+        </div>
+        {% if stage.gate %}<span class="status-badge beta">Gate: {{ stage.gate.replace('_',' ') }}</span>{% else %}<span class="status-badge active">Automatic</span>{% endif %}
+      </article>
+      {% endfor %}
+    </div>
+    <p class="form-note">A handoff changes responsibility, not permissions. Each agent keeps its own tool allowlist, consent rules and truth state.</p>
+  </div>
+  {% endif %}
 
   {% if result.intent == 'appointment_booking' and result.payload %}
     {% if result.payload.available_slots is defined %}
