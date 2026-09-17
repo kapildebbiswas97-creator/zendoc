@@ -35,7 +35,7 @@ def finish_careloop_request(response):
         if request.path == "/appointments":
             location = str(response.headers.get("Location") or "")
             if "requested=1" in location and str(actor["role"]) == "patient":
-                _link_latest_registered_appointment(actor)
+                link_registered_appointment(actor)
             return response
 
         match = _APPOINTMENT_STATUS_PATH.match(request.path)
@@ -52,26 +52,45 @@ def finish_careloop_request(response):
     return response
 
 
-def _link_latest_registered_appointment(patient):
+def link_registered_appointment(patient, appointment_id=None):
+    """Idempotently link one persisted connected appointment into CareLoop.
+
+    When ``appointment_id`` is omitted this preserves the legacy browser bridge
+    behavior and selects the latest connected appointment for the patient. When
+    supplied, the appointment must belong to that patient. External/free-text
+    appointments without a connected provider are never promoted into CareLoop.
+    """
     ensure_care_action_ledger_schema()
     db = get_db()
-    appointment = db.execute(
-        """
-        SELECT id,patient_id,provider_id,provider_name,provider_profile_id,specialty,
-               scheduled_for,reason,status,created_at
-        FROM appointments
-        WHERE patient_id=? AND provider_id IS NOT NULL
-        ORDER BY id DESC LIMIT 1
-        """,
-        (int(patient["id"]),),
-    ).fetchone()
+    patient_id = int(patient["id"])
+    if appointment_id is None:
+        appointment = db.execute(
+            """
+            SELECT id,patient_id,provider_id,provider_name,provider_profile_id,specialty,
+                   scheduled_for,reason,status,created_at
+            FROM appointments
+            WHERE patient_id=? AND provider_id IS NOT NULL
+            ORDER BY id DESC LIMIT 1
+            """,
+            (patient_id,),
+        ).fetchone()
+    else:
+        appointment = db.execute(
+            """
+            SELECT id,patient_id,provider_id,provider_name,provider_profile_id,specialty,
+                   scheduled_for,reason,status,created_at
+            FROM appointments
+            WHERE id=? AND patient_id=? AND provider_id IS NOT NULL
+            """,
+            (int(appointment_id), patient_id),
+        ).fetchone()
     if not appointment:
         return None
 
     service_ref = f"zendoc_appointment:{int(appointment['id'])}"
     existing = db.execute(
         "SELECT id FROM care_actions WHERE service_ref=? AND patient_id=? ORDER BY id DESC LIMIT 1",
-        (service_ref, int(patient["id"])),
+        (service_ref, patient_id),
     ).fetchone()
     if existing:
         return int(existing["id"])
@@ -105,7 +124,7 @@ def _link_latest_registered_appointment(patient):
             "status": "STAGED",
             "human_confirmation_required": True,
             "owner_type": "patient",
-            "owner_id": int(patient["id"]),
+            "owner_id": patient_id,
             "provider_name": appointment["provider_name"],
             "service_ref": service_ref,
             "due_at": appointment["scheduled_for"],
@@ -123,3 +142,8 @@ def _link_latest_registered_appointment(patient):
         },
     )
     return int(action["id"])
+
+
+# Backward-compatible internal alias for older callers/tests.
+def _link_latest_registered_appointment(patient):
+    return link_registered_appointment(patient)
