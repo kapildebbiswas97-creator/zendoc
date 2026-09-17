@@ -2,7 +2,7 @@ name: ZENDOC Production Gate
 
 on:
   push:
-    branches: [main, post-submission-production]
+    branches: [main, post-submission-production, competition/edgecare-ai-2026]
   pull_request:
     branches: [main, post-submission-production]
   workflow_dispatch:
