@@ -75,6 +75,31 @@ def _has_explicit_permission(requester_id, target_id, channel="chat"):
     return bool(row)
 
 
+def _has_patient_initiated_conversation(patient_id, target_id):
+    """Return True only for an active conversation that the patient created.
+
+    Starting a conversation and replying to one are intentionally different
+    permissions. A provider/service may reply after a patient reaches out, but
+    this relationship must never be used to let a doctor or hospital initiate a
+    new patient conversation without explicit permission.
+    """
+    row = get_db().execute(
+        """
+        SELECT c.id
+        FROM conversations c
+        JOIN conversation_participants patient_cp
+          ON patient_cp.conversation_id=c.id AND patient_cp.user_id=?
+        JOIN conversation_participants target_cp
+          ON target_cp.conversation_id=c.id AND target_cp.user_id=?
+        WHERE c.status='active' AND c.created_by=?
+        ORDER BY c.updated_at DESC
+        LIMIT 1
+        """,
+        (int(patient_id), int(target_id), int(patient_id)),
+    ).fetchone()
+    return bool(row)
+
+
 def _has_appointment(patient_id, doctor_id):
     row = get_db().execute(
         """
@@ -158,29 +183,18 @@ def _doctor_patient_allowed(actor, target, channel="chat"):
     target_role = target["role"]
     if actor_role == "patient" and target_role in {"doctor", "hospital"}:
         patient_id, doctor_id = actor["id"], target["id"]
+        if channel == "chat":
+            return True, "Patient-initiated care conversation"
         availability = _doctor_availability(doctor_id)
         if channel == "voice":
             return bool(availability["allow_voice_requests"] and availability["accepts_voice"]), "Doctor allows voice requests"
         if channel == "video":
             return bool(availability["allow_video_requests"] and availability["accepts_video"]), "Doctor allows video requests"
-        policy = availability.get("patient_message_policy") or "accepted_consultation"
-        if policy == "nobody":
-            return False, "Doctor is not accepting patient messages"
-        if not availability.get("accepts_chat", 0):
-            return False, "Doctor chat is currently unavailable"
-        if policy == "anyone":
-            return True, "Doctor accepts new patient messages"
-        if policy == "existing_patient" and (_has_appointment(patient_id, doctor_id) or _has_any_consultation(patient_id, doctor_id)):
-            return True, "Existing patient relationship"
-        if policy == "appointment" and _has_appointment(patient_id, doctor_id):
-            return True, "Appointment context"
-        if policy == "accepted_consultation" and _has_accepted_consultation(patient_id, doctor_id):
-            return True, "Accepted consultation context"
-        return False, "Doctor message policy requires an appointment or accepted consultation"
+        return False, "Unsupported doctor-patient communication channel"
     if actor_role in {"doctor", "hospital"} and target_role == "patient":
-        if _has_appointment(target["id"], actor["id"]) or _has_accepted_consultation(target["id"], actor["id"]):
-            return True, "Care relationship"
-        return False, "Doctor-patient communication requires care context"
+        if channel == "chat" and _has_patient_initiated_conversation(target["id"], actor["id"]):
+            return True, "Reply to patient-initiated conversation"
+        return False, "Doctor or hospital initiation requires explicit patient communication permission"
     return False, "No doctor-patient context"
 
 
@@ -202,6 +216,20 @@ def permission_decision(actor, target_user_id, context=None, channel="chat"):
 
     actor_role = actor_row["role"]
     target_role = target["role"]
+
+    # Patient-first messaging is intentionally asymmetric. Patients may open a
+    # chat with any non-patient ZENDOC care/service role without waiting for a
+    # provider-side permission toggle. Voice, video and record sharing retain
+    # their stricter channel-specific gates.
+    if channel == "chat" and actor_role == "patient" and target_role in CONTACT_ROLES and target_role != "patient":
+        return {"allowed": True, "reason": "Patient-initiated care conversation", "context": ctx}
+
+    # Once a patient has opened a conversation, its other participant may reply
+    # in that established thread. This does not grant initiation permission.
+    if channel == "chat" and target_role == "patient" and actor_role != "patient":
+        if _has_patient_initiated_conversation(target["id"], actor_row["id"]):
+            return {"allowed": True, "reason": "Reply to patient-initiated conversation", "context": ctx}
+
     allowed = False
     reason = "No permitted communication context."
 
@@ -216,8 +244,8 @@ def permission_decision(actor, target_user_id, context=None, channel="chat"):
     elif "doctor" in {actor_role, target_role} or "hospital" in {actor_role, target_role}:
         allowed, reason = _doctor_patient_allowed(actor_row, target, channel=channel)
     elif actor_role == "patient" and target_role == "pharmacy":
-        allowed = _has_pharmacy_order(actor_row["id"], target["id"], ordered_by=actor_row["id"])
-        reason = "Medicine order context" if allowed else "Pharmacy messaging requires a medicine order context"
+        allowed = channel == "chat" or _has_pharmacy_order(actor_row["id"], target["id"], ordered_by=actor_row["id"])
+        reason = "Patient-initiated care conversation" if channel == "chat" else ("Medicine order context" if allowed else "Pharmacy communication requires a medicine order context")
     elif actor_role == "pharmacy" and target_role == "patient":
         allowed = _has_pharmacy_order(target["id"], actor_row["id"])
         reason = "Medicine order context" if allowed else "Pharmacy messaging requires a medicine order context"
@@ -228,7 +256,19 @@ def permission_decision(actor, target_user_id, context=None, channel="chat"):
 
 
 def can_start_conversation(actor, target_user_id, context=None):
-    return permission_decision(actor, target_user_id, context=context, channel="chat")
+    ctx = normalize_context(context)
+    if not actor:
+        return {"allowed": False, "reason": "Authentication required.", "context": ctx}
+    actor_row = get_user(_user_id(actor))
+    target = get_user(target_user_id)
+    if actor_row and target and actor_row["role"] in {"doctor", "hospital"} and target["role"] == "patient":
+        if not _has_explicit_permission(actor_row["id"], target["id"], "chat"):
+            return {
+                "allowed": False,
+                "reason": "Doctor or hospital initiation requires explicit patient communication permission",
+                "context": ctx,
+            }
+    return permission_decision(actor, target_user_id, context=ctx, channel="chat")
 
 
 def can_message(actor, target_user_id, context=None):
@@ -255,10 +295,17 @@ def discover_contacts(actor, query="", limit=12):
     if not actor:
         raise PermissionError("Authentication required.")
     clean_q = str(query or "").strip().lower()
-    if len(clean_q) < 2:
-        return []
     actor_id = _user_id(actor)
-    q_param = f"%{clean_q}%"
+    actor_row = get_user(actor_id)
+    if not actor_row:
+        raise PermissionError("Actor account not found.")
+
+    # Patients should immediately see care/service contacts so Messages does not
+    # look empty or broken. Other roles keep search-first discovery to avoid
+    # exposing patient directories without an allowed communication context.
+    if len(clean_q) < 2 and actor_row["role"] != "patient":
+        return []
+    q_param = f"%{clean_q}%" if clean_q else "%"
     rows = get_db().execute(
         """
         SELECT DISTINCT u.id, u.name, u.role, u.city, u.verified, u.active
@@ -292,4 +339,3 @@ def discover_contacts(actor, query="", limit=12):
         if len(contacts) >= int(limit):
             break
     return contacts
-
