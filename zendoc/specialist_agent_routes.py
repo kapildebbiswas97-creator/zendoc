@@ -6,7 +6,8 @@ from flask import Blueprint, current_app, flash, g, jsonify, redirect, render_te
 from .agent_autonomy import bounded_autonomy_manifest
 from .agent_fleet import list_fleet_agents
 from .agent_handoffs import handoff_for_intent, handoff_manifest
-from .appointment_continuity import sync_provider_appointment_status
+from .appointment_continuity import complete_follow_up, sync_provider_appointment_status
+from .care_journey_store import get_persisted_journey
 from .careloop_integration import link_registered_appointment
 from .db import get_db
 from .provider_service import book_provider_slot
@@ -98,7 +99,6 @@ def _confirm_connected_booking(user, data: dict, *, require_persisted_refs: bool
     if require_persisted_refs and (not journey_id or not workflow_task_id):
         raise PermissionError("The booking flow requires its persisted Agent OS task and Care Journey references.")
 
-    # Validate workflow ownership/state before any appointment side effect.
     validate_booking_confirmation(
         user,
         journey_id=journey_id,
@@ -165,6 +165,7 @@ def _confirm_connected_booking(user, data: dict, *, require_persisted_refs: bool
 @login_required
 def agent_os_page():
     result = None
+    follow_up_journey = None
     command = request.values.get("command", "")
     if request.method == "POST":
         try:
@@ -180,9 +181,15 @@ def agent_os_page():
             get_db().commit()
         except (ValueError, LookupError, PermissionError) as error:
             flash(str(error), "error")
+    elif request.args.get("journey_id"):
+        try:
+            follow_up_journey = get_persisted_journey(int(request.args.get("journey_id")), g.user)
+        except (TypeError, ValueError, LookupError, PermissionError) as error:
+            flash(str(error), "error")
     return render_template(
         "agent_os.html",
         result=result,
+        follow_up_journey=follow_up_journey,
         command=command,
         fleet=list_fleet_agents(),
         autonomy=bounded_autonomy_manifest(),
@@ -215,6 +222,24 @@ def agent_os_booking_confirm():
     for warning in result.get("warnings") or []:
         flash(warning, "warning")
     return redirect(url_for("main.appointments"))
+
+
+@bp.post("/agent-os/care-journeys/<int:journey_id>/follow-up/complete")
+@login_required
+def agent_os_follow_up_complete(journey_id):
+    """Browser patient gate for completing evidence-backed post-visit follow-up."""
+    try:
+        result = complete_follow_up(
+            g.user,
+            journey_id,
+            user_confirmed=request.form.get("user_confirmed") == "true",
+        )
+        audit("complete_follow_up", "care_journey", str(journey_id), actor=g.user)
+        get_db().commit()
+        flash("Post-visit follow-up marked complete.", "success")
+    except (ValueError, LookupError, PermissionError) as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("specialist_agents.agent_os_page", journey_id=journey_id))
 
 
 @bp.post("/api/v1/agent/orchestrate")
