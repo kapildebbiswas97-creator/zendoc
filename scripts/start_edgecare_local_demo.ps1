@@ -110,5 +110,7 @@ if (-not $asrReady) {
 Write-Host "Local ASR bridge is ready and explicitly reports no NPU claim."
 Write-Host "Starting ZENDOC at http://127.0.0.1:$ZendocPort"
 Write-Host "After sign-in, open http://127.0.0.1:$ZendocPort/admin/edgecare"
+Write-Host "After ZENDOC is ready, open a second terminal and run:"
+Write-Host ".\.venv\Scripts\python.exe scripts\verify_edgecare_submission.py"
 
 & $venvPython run.py
