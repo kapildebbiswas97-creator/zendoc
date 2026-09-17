@@ -5,6 +5,7 @@ from flask import Blueprint, flash, g, jsonify, render_template, request
 
 from .agent_autonomy import bounded_autonomy_manifest
 from .agent_fleet import list_fleet_agents
+from .agent_handoffs import handoff_for_intent, handoff_manifest
 from .db import get_db
 from .routes import audit, login_required, require_api_user
 from .specialist_orchestrator import orchestrate_specialist
@@ -31,6 +32,11 @@ def _browser_context():
     }
 
 
+def _attach_handoff(result):
+    result["handoff_chain"] = handoff_for_intent(result.get("intent"))
+    return result
+
+
 @bp.route("/agent-os", methods=("GET", "POST"))
 @login_required
 def agent_os_page():
@@ -38,7 +44,7 @@ def agent_os_page():
     command = request.values.get("command", "")
     if request.method == "POST":
         try:
-            result = orchestrate_specialist(g.user, command, _browser_context())
+            result = _attach_handoff(orchestrate_specialist(g.user, command, _browser_context()))
             audit(
                 "specialist_agent_orchestrate",
                 "agent_os",
@@ -54,6 +60,7 @@ def agent_os_page():
         command=command,
         fleet=list_fleet_agents(),
         autonomy=bounded_autonomy_manifest(),
+        handoffs=handoff_manifest(),
     )
 
 
@@ -64,11 +71,11 @@ def api_orchestrate_specialist():
         return error
     data = request.get_json(silent=True) or {}
     try:
-        result = orchestrate_specialist(
+        result = _attach_handoff(orchestrate_specialist(
             user,
             data.get("message", ""),
             data.get("context") if isinstance(data.get("context"), dict) else {},
-        )
+        ))
         audit(
             "specialist_agent_orchestrate",
             "agent_os",
@@ -88,7 +95,8 @@ def api_agent_autonomy():
         return error
     return jsonify({
         "autonomy": bounded_autonomy_manifest(),
+        "handoffs": handoff_manifest(),
         "fleet": list_fleet_agents(),
         "actor_role": str(user["role"] or ""),
-        "notice": "Fleet metadata does not grant tool permissions; every execution remains server-side permission checked.",
+        "notice": "Fleet and handoff metadata do not grant tool permissions; every execution remains server-side permission checked.",
     })
