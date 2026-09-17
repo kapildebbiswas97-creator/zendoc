@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 from tests.test_milestone1 import make_app
 from zendoc.db import get_db
-from zendoc.specialist_orchestrator import orchestrate_specialist
+from zendoc.specialist_orchestrator import _booking_discovery_arguments, orchestrate_specialist
 
 
 def _future_weekday(days_ahead=11):
@@ -59,6 +59,16 @@ def test_agent_os_route_is_registered(tmp_path):
     assert "/api/v1/agent/autonomy" in rules
 
 
+def test_natural_booking_query_normalizes_specialty_location_and_time_words():
+    parsed = _booking_discovery_arguments("Book appointment with a cardiologist in Kalyani next week")
+    assert parsed["query"] == "Cardiology in Kalyani"
+    assert parsed["location"] == "Kalyani"
+
+    near_me = _booking_discovery_arguments("Find an eye doctor near me tomorrow")
+    assert near_me["query"] == "Ophthalmology"
+    assert "location" not in near_me
+
+
 def test_booking_agent_runs_discovery_before_confirmation(tmp_path, monkeypatch):
     monkeypatch.setenv("ZENDOC_PLACES_PROVIDER", "none")
     app = make_app(tmp_path)
@@ -74,11 +84,10 @@ def test_booking_agent_runs_discovery_before_confirmation(tmp_path, monkeypatch)
         ids = {int(item["id"]) for item in result["payload"].get("registered_providers", [])}
         assert int(profile_id) in ids
 
-        count = db_count = get_db().execute(
+        count = get_db().execute(
             "SELECT COUNT(*) AS c FROM appointments WHERE patient_id=?", (actor["id"],)
         ).fetchone()["c"]
         assert count == 0
-        assert db_count == 0
 
 
 def test_booking_agent_changes_date_and_reads_real_slots_without_booking(tmp_path):
