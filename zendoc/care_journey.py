@@ -18,6 +18,7 @@ PROVIDER_SEARCH = "PROVIDER_SEARCH"
 WAITING_USER_SELECTION = "WAITING_USER_SELECTION"
 APPOINTMENT_STAGED = "APPOINTMENT_STAGED"
 WAITING_PROVIDER = "WAITING_PROVIDER"
+WAITING_VISIT = "WAITING_VISIT"
 CONSULTATION = "CONSULTATION"
 PRESCRIPTION_RECEIVED = "PRESCRIPTION_RECEIVED"
 DIAGNOSTICS_REQUIRED = "DIAGNOSTICS_REQUIRED"
@@ -36,6 +37,7 @@ CARE_JOURNEY_STATES = {
     WAITING_USER_SELECTION,
     APPOINTMENT_STAGED,
     WAITING_PROVIDER,
+    WAITING_VISIT,
     CONSULTATION,
     PRESCRIPTION_RECEIVED,
     DIAGNOSTICS_REQUIRED,
@@ -56,7 +58,8 @@ _ALLOWED = {
     PROVIDER_SEARCH: {WAITING_USER_SELECTION, WAITING_INFORMATION, BLOCKED},
     WAITING_USER_SELECTION: {APPOINTMENT_STAGED, WAITING_HUMAN, PROVIDER_SEARCH, BLOCKED},
     APPOINTMENT_STAGED: {WAITING_PROVIDER, WAITING_HUMAN, BLOCKED},
-    WAITING_PROVIDER: {CONSULTATION, APPOINTMENT_STAGED, WAITING_HUMAN, BLOCKED},
+    WAITING_PROVIDER: {WAITING_VISIT, APPOINTMENT_STAGED, WAITING_HUMAN, BLOCKED},
+    WAITING_VISIT: {CONSULTATION, PROVIDER_SEARCH, WAITING_HUMAN, BLOCKED},
     CONSULTATION: {PRESCRIPTION_RECEIVED, DIAGNOSTICS_REQUIRED, CAREFIN_CHECK, FOLLOW_UP, WAITING_HUMAN, BLOCKED},
     PRESCRIPTION_RECEIVED: {DIAGNOSTICS_REQUIRED, CAREFIN_CHECK, FULFILMENT, WAITING_HUMAN, BLOCKED},
     DIAGNOSTICS_REQUIRED: {CAREFIN_CHECK, FULFILMENT, FOLLOW_UP, WAITING_HUMAN, BLOCKED},
@@ -69,6 +72,7 @@ _ALLOWED = {
         WAITING_USER_SELECTION,
         APPOINTMENT_STAGED,
         WAITING_PROVIDER,
+        WAITING_VISIT,
         CONSULTATION,
         PRESCRIPTION_RECEIVED,
         DIAGNOSTICS_REQUIRED,
@@ -166,6 +170,8 @@ def transition_journey(
         # AI may propose/stage bounded read-only workflow output, but the state
         # must make the human gate explicit before a consequential action.
         required_actor = required_actor or "patient"
+    if target == WAITING_VISIT:
+        required_actor = required_actor or "patient"
     if target == COMPLETED and required_actor:
         raise ValueError("A completed journey cannot still require a human actor.")
 
@@ -200,12 +206,13 @@ def _default_next_action(state: str) -> str:
         WAITING_USER_SELECTION: "ask_user_to_select_provider",
         APPOINTMENT_STAGED: "ask_user_to_confirm_appointment",
         WAITING_PROVIDER: "wait_for_provider_response",
+        WAITING_VISIT: "attend_confirmed_appointment",
         CONSULTATION: "coordinate_consultation_without_clinical_authority",
         PRESCRIPTION_RECEIVED: "run_medication_safety_review",
         DIAGNOSTICS_REQUIRED: "find_truthful_diagnostic_options",
         CAREFIN_CHECK: "discover_and_verify_support_pathways",
         FULFILMENT: "stage_fulfilment_and_request_confirmation",
-        FOLLOW_UP: "schedule_safe_follow_up",
+        FOLLOW_UP: "review_post_visit_follow_up",
         WAITING_HUMAN: "wait_for_required_human",
         COMPLETED: "none",
         BLOCKED: "resolve_blocked_reason",
