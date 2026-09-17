@@ -34,6 +34,8 @@ def execute_plan(plan, actor) -> dict:
         if time.perf_counter() - started > EXECUTION_TIMEOUT_SECONDS:
             raise TimeoutError("Plan execution exceeded the bounded request timeout.")
         tool = get_tool(step.tool_name)
+        if not tool:
+            raise LookupError(f"Tool '{step.tool_name}' is not registered.")
         decision = check_tool_access(step.tool_name, actor, plan.assigned_agent)
         if not decision["allowed"]:
             raise PermissionError(decision["reason"])
@@ -112,8 +114,6 @@ def _safe_operations_automation(actor, arguments):
     )
 
 
-
-
 def _patient_target(actor, arguments, purpose):
     """Resolve and authorize a patient target for a read/stage tool."""
     from .context_engine import verify_context_authorization
@@ -124,14 +124,13 @@ def _patient_target(actor, arguments, purpose):
     return patient_id
 
 
-
 def _provider_discovery(actor, arguments):
     from .healthcare_finder import HealthcareFinder, normalize_query
     from .provider_service import SPECIALTIES
 
     query = str(arguments.get("query") or "")[:500]
     lower = query.lower()
-    if "pharmacy" in lower:
+    if "pharmacy" in lower or "medical store" in lower or "chemist" in lower:
         category = "pharmacy"
     elif any(term in lower for term in ("diagnostic", "laboratory", " lab ")):
         category = "diagnostic_centre"
@@ -166,6 +165,70 @@ def _provider_discovery(actor, arguments):
         "External results do not imply credentials, live appointments, emergency readiness, or ZENDOC booking connectivity."
     )
     return result
+
+
+def _provider_booking_options(actor, arguments):
+    """Read connected provider-published slots; never invent external availability."""
+    from .provider_service import available_slots, get_public_provider_profile
+
+    try:
+        provider_profile_id = int(arguments.get("provider_profile_id") or 0)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("provider_profile_id is required for booking options.") from exc
+    date_text = str(arguments.get("date") or "").strip()[:10]
+    if not provider_profile_id or not date_text:
+        raise ValueError("provider_profile_id and date are required for booking options.")
+
+    profile = get_public_provider_profile(provider_profile_id)
+    if not profile:
+        raise PermissionError("Only an active, ZENDOC-verified connected provider can expose in-app booking options.")
+    slots = available_slots(provider_profile_id, date_text)
+    return {
+        "status": "OK",
+        "provider_profile_id": provider_profile_id,
+        "provider_name": profile.get("organization") or profile.get("provider_name"),
+        "specialty": profile.get("specialty") or "",
+        "date": date_text,
+        "available_slots": slots,
+        "bookable_in_zendoc": True,
+        "confirmation_required": True,
+        "truth_notice": (
+            "These slots come from the verified ZENDOC provider's published schedule and current appointment/hold state. "
+            "No appointment has been created yet."
+        ),
+    }
+
+
+def _confirm_provider_booking(actor, arguments):
+    """Human-gated handler. execute_plan blocks this consent-required tool."""
+    from .provider_service import book_provider_slot
+
+    if arguments.get("user_confirmed") is not True:
+        raise PermissionError("Fresh explicit user confirmation is required before booking a provider slot.")
+    if str(_value(actor, "role", "")) != "patient":
+        raise PermissionError("Only the authenticated patient can confirm an appointment booking.")
+    provider_profile_id = int(arguments.get("provider_profile_id") or 0)
+    scheduled_for = str(arguments.get("scheduled_for") or "").strip()[:32]
+    reason = str(arguments.get("reason") or "Appointment request").strip()[:500]
+    if not provider_profile_id or not scheduled_for:
+        raise ValueError("provider_profile_id and scheduled_for are required.")
+    appointment_id = book_provider_slot(actor, provider_profile_id, scheduled_for, reason)
+    return {
+        "status": "REQUESTED",
+        "appointment_id": appointment_id,
+        "provider_profile_id": provider_profile_id,
+        "scheduled_for": scheduled_for,
+        "payment_executed": False,
+    }
+
+
+def _health_product_search(actor, arguments):
+    from .health_commerce import search_health_products
+
+    return search_health_products(
+        arguments.get("query"),
+        category=arguments.get("category") or "general_wellness",
+    )
 
 
 def _latest_prescription_review(actor, arguments):
@@ -240,6 +303,7 @@ def _carefin_discovery(actor, arguments):
         "desired_categories": desired_categories,
     })
 
+
 def _pharmacy_search(actor, arguments):
     from .inventory_service import search_pharmacy_offers
 
@@ -267,7 +331,7 @@ def _pharmacy_compare(actor, arguments):
     prescription_id = int(arguments.get("prescription_id") or 0)
     if not prescription_id:
         raise ValueError("prescription_id is required for fulfilment comparison.")
-    plan = optimize_prescription_fulfilment(
+    return optimize_prescription_fulfilment(
         prescription_id=prescription_id,
         patient_id=patient_id,
         actor=actor,
@@ -277,7 +341,6 @@ def _pharmacy_compare(actor, arguments):
         radius_km=float(arguments.get("radius_km", 12)),
         stage_in_db=False,
     )
-    return plan
 
 
 def _pharmacy_stage(actor, arguments):
@@ -373,8 +436,6 @@ def _health_memory_context(actor, arguments):
         next_safe_actions = determine_next_safe_actions(patient_id, actor=actor)
         next_safe_actions_authorized = True
     except PermissionError:
-        # Purpose separation is intentional: timeline/Health Memory consent
-        # does not automatically grant proactive continuity/action context.
         pass
 
     return {
@@ -408,6 +469,9 @@ TOOL_HANDLERS = {
     "run_proactive_alert_check": _alert_check,
     "run_safe_operations_automation": _safe_operations_automation,
     "search_healthcare_providers": _provider_discovery,
+    "get_provider_booking_options": _provider_booking_options,
+    "confirm_provider_booking": _confirm_provider_booking,
+    "search_health_products": _health_product_search,
     "get_latest_prescription_review": _latest_prescription_review,
     "compare_nutrition_products": _nutrition_compare,
     "discover_carefin_benefits": _carefin_discovery,
