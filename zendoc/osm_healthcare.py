@@ -1,12 +1,14 @@
 """Bounded OpenStreetMap healthcare POI discovery for interactive searches.
 
 Nominatim is useful for geocoding and named-place search, but it is not a
-nearby POI enumeration service.  This module uses Nominatim only to resolve a
+nearby POI enumeration service. This module uses Nominatim only to resolve a
 user-supplied location to a centre point, then asks Overpass for healthcare
 features around that point.
 
-External OSM records are discovery references only.  They are never promoted
-to ZENDOC verification or connected booking.
+External OSM records are discovery references only. They are never promoted
+to ZENDOC verification or connected booking. Retail health shops discovered
+from OpenStreetMap are not assumed to dispense prescription medicines unless
+the source explicitly tags them as a pharmacy.
 """
 from __future__ import annotations
 
@@ -28,10 +30,25 @@ _CATEGORY_FILTERS = {
     "doctor": (("amenity", "doctors"), ("healthcare", "doctor")),
     "hospital": (("amenity", "hospital"), ("healthcare", "hospital")),
     "clinic": (("amenity", "clinic"), ("healthcare", "clinic")),
-    "pharmacy": (("amenity", "pharmacy"), ("healthcare", "pharmacy")),
+    # Rural/local healthcare is often tagged as a pharmacy, chemist, or medical
+    # supply shop. Surface all three for discovery, but preserve dispensing
+    # truth in the returned metadata instead of treating every shop as a
+    # prescription-dispensing pharmacy.
+    "pharmacy": (
+        ("amenity", "pharmacy"),
+        ("healthcare", "pharmacy"),
+        ("shop", "chemist"),
+        ("shop", "medical_supply"),
+    ),
     "diagnostic_centre": (("healthcare", "laboratory"), ("amenity", "laboratory")),
     "laboratory": (("healthcare", "laboratory"), ("amenity", "laboratory")),
-    "health_centre": (("healthcare", "centre"), ("healthcare", "health_centre")),
+    # health_post is common for village/neighbourhood primary-care facilities.
+    "health_centre": (
+        ("healthcare", "centre"),
+        ("healthcare", "health_centre"),
+        ("healthcare", "health_post"),
+        ("amenity", "health_post"),
+    ),
     "nursing_home": (("healthcare", "nursing_home"), ("amenity", "nursing_home")),
     "blood_bank": (("healthcare", "blood_bank"), ("amenity", "blood_bank")),
     "emergency": (("amenity", "hospital"), ("healthcare", "hospital")),
@@ -89,7 +106,16 @@ def _filters_for(category):
     if category == "all":
         seen = set()
         filters = []
-        for key in ("doctor", "hospital", "clinic", "pharmacy", "diagnostic_centre", "health_centre", "nursing_home", "blood_bank"):
+        for key in (
+            "doctor",
+            "hospital",
+            "clinic",
+            "pharmacy",
+            "diagnostic_centre",
+            "health_centre",
+            "nursing_home",
+            "blood_bank",
+        ):
             for item in _CATEGORY_FILTERS[key]:
                 if item not in seen:
                     seen.add(item)
@@ -112,7 +138,8 @@ def _infer_category(tags, requested):
         return requested
     amenity = str(tags.get("amenity") or "").lower()
     healthcare = str(tags.get("healthcare") or "").lower()
-    if amenity == "pharmacy" or healthcare == "pharmacy":
+    shop = str(tags.get("shop") or "").lower()
+    if amenity == "pharmacy" or healthcare == "pharmacy" or shop in {"chemist", "medical_supply"}:
         return "pharmacy"
     if amenity == "hospital" or healthcare == "hospital":
         return "hospital"
@@ -122,7 +149,7 @@ def _infer_category(tags, requested):
         return "doctor"
     if healthcare == "laboratory" or amenity == "laboratory":
         return "diagnostic_centre"
-    if healthcare in {"centre", "health_centre"}:
+    if healthcare in {"centre", "health_centre", "health_post"} or amenity == "health_post":
         return "health_centre"
     if healthcare == "nursing_home" or amenity == "nursing_home":
         return "nursing_home"
@@ -144,7 +171,7 @@ def _address_from_tags(tags):
     ).strip()
     if street:
         parts.append(street)
-    for key in ("addr:suburb", "addr:city", "addr:district", "addr:state", "addr:postcode"):
+    for key in ("addr:suburb", "addr:village", "addr:town", "addr:city", "addr:district", "addr:state", "addr:postcode"):
         value = str(tags.get(key) or "").strip()
         if value and value not in parts:
             parts.append(value)
@@ -162,6 +189,11 @@ def _public_element(element, requested_category):
     if not name or latitude is None or longitude is None:
         return None
     category = _infer_category(tags, requested_category)
+    amenity = str(tags.get("amenity") or "").lower()
+    healthcare = str(tags.get("healthcare") or "").lower()
+    shop = str(tags.get("shop") or "").lower()
+    explicit_pharmacy_tag = amenity == "pharmacy" or healthcare == "pharmacy"
+    retail_health_subtype = shop if shop in {"chemist", "medical_supply"} else None
     return {
         "id": f"osm:{element.get('type', 'element')}:{element.get('id', '')}",
         "name": name[:240],
@@ -169,7 +201,7 @@ def _public_element(element, requested_category):
         "category": category,
         "specialty": str(tags.get("healthcare:speciality") or tags.get("healthcare:specialty") or "")[:160],
         "address": _address_from_tags(tags),
-        "city": str(tags.get("addr:city") or "")[:120],
+        "city": str(tags.get("addr:city") or tags.get("addr:town") or tags.get("addr:village") or "")[:120],
         "district": str(tags.get("addr:district") or "")[:120],
         "state": str(tags.get("addr:state") or "")[:120],
         "postal_code": str(tags.get("addr:postcode") or "")[:40],
@@ -184,6 +216,13 @@ def _public_element(element, requested_category):
         "bookable_in_zendoc": False,
         "map_url": f"https://www.openstreetmap.org/?mlat={latitude:.6f}&mlon={longitude:.6f}#map=17/{latitude:.6f}/{longitude:.6f}",
         "attribution": "OpenStreetMap contributors",
+        "retail_health_subtype": retail_health_subtype,
+        "prescription_dispensing_verified": bool(explicit_pharmacy_tag) if category == "pharmacy" else None,
+        "capability_notice": (
+            "OpenStreetMap identifies this listing as a chemist or medical-supply shop; prescription dispensing is not verified by ZENDOC."
+            if category == "pharmacy" and retail_health_subtype and not explicit_pharmacy_tag
+            else None
+        ),
     }
 
 
@@ -206,7 +245,14 @@ class OverpassHealthcareProvider:
         longitude = _number(query.get("longitude"), -180, 180)
         location = str(query.get("location") or "").strip()[:160]
         radius = _radius_km(query.get("radius_km"))
-        country_code = str(query.get("country_code") or "").strip().lower()[:2]
+
+        # Country restriction is opt-in. Universal search historically passed
+        # country_code='in', which unintentionally made a supposedly global
+        # discovery path India-only. Keep explicit country pinning available to
+        # future callers, but default locality resolution to worldwide.
+        country_code = ""
+        if bool(query.get("restrict_country")):
+            country_code = str(query.get("country_code") or "").strip().lower()[:2]
 
         if latitude is None or longitude is None:
             if not location:
