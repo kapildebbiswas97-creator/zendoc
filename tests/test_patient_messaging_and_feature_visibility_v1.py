@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from zendoc.db import get_db, now_iso
+from zendoc.telehealth import set_doctor_availability
 from tests.test_milestone1 import login_web, make_app, register_web
 from tests.test_milestone7 import headers
 
@@ -31,12 +32,33 @@ def _user(app, email):
         return dict(row)
 
 
-def test_patient_can_start_doctor_chat_and_doctor_can_reply(tmp_path):
+def _allow_new_patient_chat(app, doctor):
+    with app.app_context():
+        set_doctor_availability(
+            doctor,
+            {
+                "status": "available",
+                "accepts_chat": True,
+                "patient_message_policy": "anyone",
+            },
+        )
+
+
+def test_patient_requires_provider_chat_policy_for_doctor_then_doctor_can_reply(tmp_path):
     app = make_app(tmp_path)
     client = app.test_client()
-    patient_token = _register_api(client, "open-chat-patient@example.com", "patient", "Open Chat Patient")
-    doctor_token = _register_api(client, "open-chat-doctor@example.com", "doctor", "Open Chat Doctor")
-    doctor = _user(app, "open-chat-doctor@example.com")
+    patient_token = _register_api(client, "policy-chat-patient@example.com", "patient", "Policy Chat Patient")
+    doctor_token = _register_api(client, "policy-chat-doctor@example.com", "doctor", "Policy Chat Doctor")
+    doctor = _user(app, "policy-chat-doctor@example.com")
+
+    blocked = client.post(
+        "/api/v1/conversations",
+        json={"target_user_id": doctor["id"], "context_type": "direct"},
+        headers=headers(patient_token),
+    )
+    assert blocked.status_code == 403
+
+    _allow_new_patient_chat(app, doctor)
 
     started = client.post(
         "/api/v1/conversations",
@@ -54,13 +76,20 @@ def test_patient_can_start_doctor_chat_and_doctor_can_reply(tmp_path):
     assert reply.status_code == 201
 
 
-def test_doctor_cannot_initiate_patient_chat_without_explicit_permission_even_with_appointment(tmp_path):
+def test_doctor_can_initiate_patient_chat_with_real_care_relationship_without_explicit_chat_grant(tmp_path):
     app = make_app(tmp_path)
     client = app.test_client()
-    patient_token = _register_api(client, "permission-patient@example.com", "patient", "Permission Patient")
-    doctor_token = _register_api(client, "permission-doctor@example.com", "doctor", "Permission Doctor")
-    patient = _user(app, "permission-patient@example.com")
-    doctor = _user(app, "permission-doctor@example.com")
+    _register_api(client, "relationship-patient@example.com", "patient", "Relationship Patient")
+    doctor_token = _register_api(client, "relationship-doctor@example.com", "doctor", "Relationship Doctor")
+    patient = _user(app, "relationship-patient@example.com")
+    doctor = _user(app, "relationship-doctor@example.com")
+
+    unrelated = client.post(
+        "/api/v1/conversations",
+        json={"target_user_id": patient["id"], "context_type": "direct"},
+        headers=headers(doctor_token),
+    )
+    assert unrelated.status_code == 403
 
     with app.app_context():
         db = get_db()
@@ -68,30 +97,11 @@ def test_doctor_cannot_initiate_patient_chat_without_explicit_permission_even_wi
             """
             INSERT INTO appointments
             (patient_id, provider_id, provider_name, scheduled_for, reason, status, created_at, updated_at)
-            VALUES (?, ?, 'Permission Doctor', '2026-12-20T10:00', 'Review', 'confirmed', ?, ?)
+            VALUES (?, ?, 'Relationship Doctor', '2026-12-20T10:00', 'Review', 'confirmed', ?, ?)
             """,
             (patient["id"], doctor["id"], now_iso(), now_iso()),
         )
         db.commit()
-
-    blocked = client.post(
-        "/api/v1/conversations",
-        json={"target_user_id": patient["id"], "context_type": "direct"},
-        headers=headers(doctor_token),
-    )
-    assert blocked.status_code == 403
-
-    permission = client.post(
-        "/api/v1/communication-permissions",
-        json={
-            "requester_id": doctor["id"],
-            "target_user_id": patient["id"],
-            "context_type": "direct",
-            "allow_chat": True,
-        },
-        headers=headers(patient_token),
-    )
-    assert permission.status_code == 201
 
     allowed = client.post(
         "/api/v1/conversations",
@@ -99,6 +109,7 @@ def test_doctor_cannot_initiate_patient_chat_without_explicit_permission_even_wi
         headers=headers(doctor_token),
     )
     assert allowed.status_code == 201
+    assert allowed.get_json()["conversation"]["id"]
 
 
 def test_patient_can_message_pharmacy_without_existing_order(tmp_path):
@@ -124,10 +135,28 @@ def test_patient_can_message_pharmacy_without_existing_order(tmp_path):
     assert reply.status_code == 201
 
 
-def test_patient_messages_page_shows_contacts_without_search(tmp_path):
+def test_same_role_users_can_start_direct_text_chat(tmp_path):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    patient_a_token = _register_api(client, "same-role-a@example.com", "patient", "Same Role A")
+    _register_api(client, "same-role-b@example.com", "patient", "Same Role B")
+    patient_b = _user(app, "same-role-b@example.com")
+
+    started = client.post(
+        "/api/v1/conversations",
+        json={"target_user_id": patient_b["id"], "context_type": "direct"},
+        headers=headers(patient_a_token),
+    )
+    assert started.status_code == 201
+
+
+def test_patient_messages_page_shows_permitted_provider_contacts_without_exposing_patient_directory(tmp_path):
     app = make_app(tmp_path)
     client = app.test_client()
     _register_api(client, "visible-doctor@example.com", "doctor", "Visible Doctor")
+    doctor = _user(app, "visible-doctor@example.com")
+    _allow_new_patient_chat(app, doctor)
+    register_web(client, "patient", "other-patient@example.com", "Other Patient")
     register_web(client, "patient", "visible-patient@example.com", "Visible Patient")
     login_web(client, "patient", "visible-patient@example.com")
 
@@ -135,7 +164,13 @@ def test_patient_messages_page_shows_contacts_without_search(tmp_path):
     assert page.status_code == 200
     body = page.data.decode()
     assert "Visible Doctor" in body
-    assert "Patient-initiated care conversation" in body
+    assert "Provider accepts new patient messages" in body
+    assert "Other Patient" not in body
+
+    searched = client.get("/messages?q=Other+Patient")
+    assert searched.status_code == 200
+    assert "Other Patient" in searched.data.decode()
+    assert "Same-role ZENDOC conversation" in searched.data.decode()
 
 
 def test_patient_dashboard_surfaces_new_tools_and_ai_surfaces_mental_awareness(tmp_path):
