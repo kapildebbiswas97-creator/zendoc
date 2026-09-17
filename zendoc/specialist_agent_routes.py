@@ -86,6 +86,9 @@ def api_agent_autonomy():
     user, error = require_api_user()
     if error:
         return error
-    role = str(user["role"] or "")
-    fleet = [agent for agent in list_fleet_agents() if role != "admin" or True]
-    return jsonify({"autonomy": bounded_autonomy_manifest(), "fleet": fleet})
+    return jsonify({
+        "autonomy": bounded_autonomy_manifest(),
+        "fleet": list_fleet_agents(),
+        "actor_role": str(user["role"] or ""),
+        "notice": "Fleet metadata does not grant tool permissions; every execution remains server-side permission checked.",
+    })
