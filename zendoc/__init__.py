@@ -26,6 +26,7 @@ from .global_data_schema import ensure_global_data_schema
 from .global_medical_authorities import install_global_medical_authorities
 from .global_registry_install import install_global_public_sources
 from .health_access import ensure_consent_schema
+from .health_hub_routes import bp as health_hub_bp
 from .health_routes import bp as health_memory_bp
 from .india_care_rail import bp as india_care_rail_bp
 from .knowledge_routes import bp as medical_knowledge_bp
@@ -116,6 +117,7 @@ def create_app(test_config=None):
     app.register_blueprint(fitness_bp)
     app.register_blueprint(family_bp)
     app.register_blueprint(ecosystem_bp)
+    app.register_blueprint(health_hub_bp)
     app.register_blueprint(pharmacy_order_ops_bp)
     app.register_blueprint(operational_fulfilment_bp)
     app.register_blueprint(operational_fulfilment_release_bp)

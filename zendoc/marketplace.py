@@ -25,6 +25,19 @@ MARKETPLACE_CATEGORIES = [
         "url": "/family",
     },
     {
+        "id": "health_hub",
+        "title": "Health Hub",
+        "badge": "Competition Beta",
+        "badge_color": "primary",
+        "icon": "heartbeat",
+        "description": (
+            "Daily health learning, child-development continuity, real video discovery and truthful "
+            "health-product search handoffs. Creator publishing, cross-posting and affiliate attribution "
+            "remain disabled until real integrations are configured."
+        ),
+        "url": "/health-hub",
+    },
+    {
         "id": "home_health",
         "title": "Home Healthcare",
         "badge": "Beta",
