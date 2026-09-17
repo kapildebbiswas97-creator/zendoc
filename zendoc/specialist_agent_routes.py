@@ -11,6 +11,11 @@ from .db import get_db
 from .provider_service import book_provider_slot
 from .routes import audit, create_notification, login_required, require_api_user
 from .specialist_orchestrator import orchestrate_specialist
+from .specialist_workflow_store import (
+    mark_booking_requested,
+    persist_specialist_result,
+    validate_booking_confirmation,
+)
 from .startup_analytics import record_product_activity
 
 
@@ -32,6 +37,8 @@ def _browser_context():
         "provider_profile_id": request.form.get("provider_profile_id"),
         "date": request.form.get("date"),
         "category": request.form.get("category"),
+        "journey_id": request.form.get("journey_id"),
+        "workflow_task_id": request.form.get("workflow_task_id"),
     }
 
 
@@ -47,7 +54,9 @@ def agent_os_page():
     command = request.values.get("command", "")
     if request.method == "POST":
         try:
-            result = _attach_handoff(orchestrate_specialist(g.user, command, _browser_context()))
+            context = _browser_context()
+            result = _attach_handoff(orchestrate_specialist(g.user, command, context))
+            result = persist_specialist_result(g.user, result, context)
             audit(
                 "specialist_agent_orchestrate",
                 "agent_os",
@@ -73,12 +82,14 @@ def api_orchestrate_specialist():
     if error:
         return error
     data = request.get_json(silent=True) or {}
+    context = data.get("context") if isinstance(data.get("context"), dict) else {}
     try:
         result = _attach_handoff(orchestrate_specialist(
             user,
             data.get("message", ""),
-            data.get("context") if isinstance(data.get("context"), dict) else {},
+            context,
         ))
+        result = persist_specialist_result(user, result, context)
         audit(
             "specialist_agent_orchestrate",
             "agent_os",
@@ -118,6 +129,17 @@ def api_confirm_agent_booking():
     if not provider_profile_id or not scheduled_for:
         return _api_error(ValueError("provider_profile_id and scheduled_for are required."))
 
+    # Validate persisted workflow references before creating an appointment so a
+    # stale/cross-patient task or journey cannot create a side effect first.
+    try:
+        validate_booking_confirmation(
+            user,
+            journey_id=data.get("journey_id"),
+            workflow_task_id=data.get("workflow_task_id"),
+        )
+    except (ValueError, LookupError, PermissionError) as exc:
+        return _api_error(exc)
+
     try:
         appointment_id = book_provider_slot(user, provider_profile_id, scheduled_for, reason)
     except (ValueError, PermissionError) as exc:
@@ -131,6 +153,19 @@ def api_confirm_agent_booking():
     except Exception:
         get_db().rollback()
         warnings.append("Appointment was created, but CareLoop linking needs reconciliation.")
+
+    persisted = {"workflow_task": None, "care_journey": None}
+    try:
+        persisted = mark_booking_requested(
+            user,
+            appointment_id=appointment_id,
+            provider_profile_id=provider_profile_id,
+            journey_id=data.get("journey_id"),
+            workflow_task_id=data.get("workflow_task_id"),
+        )
+    except Exception:
+        get_db().rollback()
+        warnings.append("Appointment was created, but Agent OS workflow state needs reconciliation.")
 
     try:
         create_notification(user["id"], "Appointment requested", "Your Agent OS appointment request was saved.")
@@ -147,6 +182,8 @@ def api_confirm_agent_booking():
         "provider_profile_id": provider_profile_id,
         "scheduled_for": scheduled_for,
         "careloop_action_id": careloop_action_id,
+        "workflow_task": persisted.get("workflow_task"),
+        "care_journey": persisted.get("care_journey"),
         "provider_confirmation_state": "requested",
         "payment_executed": False,
         "user_confirmed": True,
