@@ -4,6 +4,7 @@ from .health_access import authorize_patient
 
 TIMELINE_TYPES = (
     "appointment", "appointment_confirmed", "appointment_cancelled", "appointment_completed",
+    "provider_outcome", "follow_up_completed",
     "consultation", "report", "medical_record", "measurement", "medication",
     "vaccination", "procedure", "ai_health_event", "mental_wellness", "fitness",
     "diagnostic_accepted", "diagnostic_sample_collected", "diagnostic_processing",
@@ -86,6 +87,10 @@ def _details_path(item):
     if str(item["source"]).upper() in {"PROVIDER_RECORDED", "OWNER_RECORDED", "USER_REPORTED"}:
         if str(item["event_type"]).startswith(("diagnostic_", "home_health_")):
             return "/operations/fulfilment"
+        if item["event_type"] == "provider_outcome":
+            return "/appointments"
+        if item["event_type"] == "follow_up_completed":
+            return "/agent-os"
     return None
 
 
