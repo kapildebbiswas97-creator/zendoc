@@ -16,14 +16,14 @@
 
 <aside class="trust-note">
   <strong>Consent-first approach</strong><br>
-  Add a family member only when you have their consent or appropriate authority. Information shared with care providers depends on the patient's own privacy settings. Pregnancy is never inferred from age, gender or relationship; a maternity journey must be explicitly selected in a dedicated workflow.
+  Add a family member only when you have their consent or appropriate authority. Information shared with care providers depends on the patient's own privacy settings. Pregnancy, fertility/family-building and menopause status are never inferred from age, gender or relationship; those journeys must be explicitly selected in a dedicated workflow.
 </aside>
 
 <section class="spaced-panel">
   <div class="panel-head">
     <div><p class="eyebrow">Life-stage care</p><h2>Family care programs</h2></div>
   </div>
-  <p class="section-copy">These are care-organization categories, not active paid subscriptions yet. They help ZENDOC organize the right family workflow while permissions and clinical actions remain deterministic.</p>
+  <p class="section-copy">These are care-organization categories, not active paid subscriptions. They organize family workflows and longitudinal continuity while permissions, clinical decisions and payments remain deterministic and outside model control.</p>
   <div class="grid three">
     {% for program in family_programs %}
       <article class="panel">
@@ -37,6 +37,7 @@
         {% else %}
           <span class="status-badge">Care category</span>
         {% endif %}
+        <span class="status-badge">Navigation only</span>
       </article>
     {% endfor %}
   </div>
@@ -184,6 +185,7 @@
     <strong>No payment is executed here.</strong><br>
     {{ payment.truth_notice }}
   </aside>
+  <p class="section-copy">A child living abroad may eventually sponsor a parent's care only through a verified payment provider and explicit payer authorization. Until then, cross-border settlement and family-sponsor payment are disabled.</p>
   <div class="grid three">
     {% for method in payment.methods %}
       <article class="panel">
