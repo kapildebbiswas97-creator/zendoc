@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from flask import Blueprint, jsonify, request
 
+from .appointment_continuity import complete_follow_up
 from .care_action_ledger import create_action, get_action, list_actions, record_outcome, transition_action
 from .care_journey_store import (
     advance_persisted_journey,
@@ -14,6 +15,17 @@ from .routes import require_api_user
 
 
 bp = Blueprint("care_journey", __name__)
+
+# These states are evidence/authority-bound. A generic patient-authenticated
+# transition endpoint must never be able to forge them. Dedicated workflows
+# create the required appointment, provider status, outcome and follow-up proof.
+_EVIDENCE_BOUND_JOURNEY_TARGETS = {
+    "WAITING_PROVIDER",
+    "WAITING_VISIT",
+    "CONSULTATION",
+    "FOLLOW_UP",
+    "COMPLETED",
+}
 
 
 def _error(exc):
@@ -73,11 +85,16 @@ def api_transition_care_journey(journey_id):
     if error:
         return error
     data = request.get_json(silent=True) or {}
+    target_state = str(data.get("target_state") or "").strip().upper()
     try:
+        if target_state in _EVIDENCE_BOUND_JOURNEY_TARGETS:
+            raise PermissionError(
+                "This Care Journey state is evidence-bound and must be advanced by its dedicated booking/provider/outcome/follow-up workflow."
+            )
         journey = advance_persisted_journey(
             user,
             journey_id,
-            target_state=data.get("target_state"),
+            target_state=target_state,
             reason=data.get("reason"),
             actor_type="user",
             next_safe_action=data.get("next_safe_action"),
@@ -89,6 +106,24 @@ def api_transition_care_journey(journey_id):
     except (LookupError, PermissionError, TypeError, ValueError) as exc:
         return _error(exc)
     return jsonify({"status": "updated", "journey": journey})
+
+
+@bp.post("/api/v1/care-journeys/<int:journey_id>/follow-up/complete")
+def api_complete_care_journey_follow_up(journey_id):
+    """Patient-only, evidence-bound completion of a post-visit journey."""
+    user, error = require_api_user()
+    if error:
+        return error
+    data = request.get_json(silent=True) or {}
+    try:
+        result = complete_follow_up(
+            user,
+            journey_id,
+            user_confirmed=data.get("user_confirmed") is True,
+        )
+    except (LookupError, PermissionError, TypeError, ValueError) as exc:
+        return _error(exc)
+    return jsonify({"status": "completed", "follow_up": result})
 
 
 @bp.post("/api/v1/care-journeys/<int:journey_id>/actions")
@@ -134,6 +169,11 @@ def api_transition_care_action(action_id):
         return error
     data = request.get_json(silent=True) or {}
     try:
+        current = get_action(user, action_id)
+        if str(current.get("service_ref") or "").startswith("zendoc_appointment:"):
+            raise PermissionError(
+                "Connected appointment CareLoop actions are synchronized only from the authorized appointment-status workflow."
+            )
         action = transition_action(
             user,
             action_id,
