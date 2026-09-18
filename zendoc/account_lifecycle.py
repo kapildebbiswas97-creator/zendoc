@@ -13,7 +13,7 @@ from __future__ import annotations
 from typing import Any
 
 from flask import current_app
-from werkzeug.security import check_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 
 from .db import get_db, now_iso
 from .record_storage import get_record_storage
@@ -176,9 +176,15 @@ def delete_account(user: Any, *, password: str | None = None, token_authorized: 
     try:
         _delete_directly_attributed_rows(user_id)
 
-        # If a connected provider deletes their account, another patient's
-        # appointment must not retain the provider's account identity.
-        if role in {"doctor", "hospital", "pharmacy"}:
+        provider_tombstone = role in {"doctor", "hospital", "pharmacy", "government"}
+
+        # Provider/staff accounts can be referenced by another patient's
+        # appointment, uploaded report, message or operational history. Hard
+        # deletion could cascade-delete that patient's data because some older
+        # schema relations are intentionally NOT NULL. In that case erase the
+        # account identity and credentials while preserving only a de-identified,
+        # inactive FK anchor.
+        if provider_tombstone:
             db.execute(
                 """
                 UPDATE appointments
@@ -187,6 +193,10 @@ def delete_account(user: Any, *, password: str | None = None, token_authorized: 
                 """,
                 (now_iso(), user_id),
             )
+            db.execute("DELETE FROM provider_profiles WHERE user_id=?", (user_id,))
+            db.execute("DELETE FROM api_tokens WHERE user_id=?", (user_id,))
+            db.execute("DELETE FROM organization_memberships WHERE user_id=?", (user_id,))
+            db.execute("UPDATE provider_network_prospects SET linked_user_id=NULL WHERE linked_user_id=?", (user_id,))
 
         if email:
             db.execute(
@@ -194,21 +204,48 @@ def delete_account(user: Any, *, password: str | None = None, token_authorized: 
                 (email, user_id),
             )
 
-        deleted = db.execute("DELETE FROM users WHERE id=?", (user_id,))
-        if int(getattr(deleted, "rowcount", 0) or 0) != 1:
-            raise RuntimeError("Account deletion did not remove exactly one account.")
+        if provider_tombstone:
+            tombstone_email = f"deleted-provider-{user_id}@zendoc.invalid"
+            db.execute(
+                """
+                UPDATE users
+                SET name='Former ZENDOC provider',
+                    email=?,email_normalized=?,duplicate_of_user_id=NULL,
+                    password_hash=?,phone=NULL,age=NULL,gender=NULL,city=NULL,
+                    emergency_contact=NULL,verified=0,active=0,updated_at=?
+                WHERE id=?
+                """,
+                (
+                    tombstone_email,
+                    tombstone_email,
+                    generate_password_hash(new_token()),
+                    now_iso(),
+                    user_id,
+                ),
+            )
+        else:
+            deleted = db.execute("DELETE FROM users WHERE id=?", (user_id,))
+            if int(getattr(deleted, "rowcount", 0) or 0) != 1:
+                raise RuntimeError("Account deletion did not remove exactly one account.")
         db.commit()
     except Exception:
         db.rollback()
         current_app.logger.exception("Account deletion failed for user_id=%s", user_id)
         raise
 
+    retained_tombstone = role in {"doctor", "hospital", "pharmacy", "government"}
     return {
         "status": "deleted",
         "account_id": user_id,
         "role": role,
         "owned_record_files_deleted": deleted_files,
+        "deidentified_operational_anchor_retained": retained_tombstone,
         "notice": (
+            "The ZENDOC account credentials and directly associated application data were deleted. "
+            "Where another user's care history depends on a former provider/staff reference, only a "
+            "de-identified inactive operational anchor is retained."
+            if retained_tombstone
+            else
             "The ZENDOC account and directly associated application data were deleted. "
             "Operational records needed by another user's care history may remain only in de-identified form."
         ),
