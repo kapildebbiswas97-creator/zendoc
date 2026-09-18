@@ -123,12 +123,15 @@ class S3CompatibleRecordStorage:
             extra["ContentType"] = mimetype
         if settings["sse"]:
             extra["ServerSideEncryption"] = settings["sse"]
-        client.upload_fileobj(
-            upload.stream,
-            settings["bucket"],
-            key,
-            ExtraArgs=extra or None,
-        )
+        if extra:
+            client.upload_fileobj(
+                upload.stream,
+                settings["bucket"],
+                key,
+                ExtraArgs=extra,
+            )
+        else:
+            client.upload_fileobj(upload.stream, settings["bucket"], key)
         head = client.head_object(Bucket=settings["bucket"], Key=key)
         return StoredRecord(self.name, key, int(head.get("ContentLength") or 0))
 
