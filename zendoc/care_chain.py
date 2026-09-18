@@ -374,14 +374,29 @@ def _record_chain_audit(actor: Any, result: dict, chain: dict) -> int:
         f"journey:{int(journey.get('id') or 0)};"
         f"input:{str((chain.get('input') or {}).get('channel') or 'typed')[:32]}"
     )
+    actor_id = _actor_id(actor)
     cursor = get_db().execute(
         """
         INSERT INTO audit_logs (actor_id,action,entity_type,entity_id,created_at)
         VALUES (?,?,?,?,?)
         """,
-        (_actor_id(actor), "care_chain_snapshot", "care_chain", entity_id, now_iso()),
+        (actor_id, "care_chain_snapshot", "care_chain", entity_id, now_iso()),
     )
-    return int(cursor.lastrowid)
+    inserted_id = getattr(cursor, "lastrowid", None)
+    if inserted_id:
+        return int(inserted_id)
+    row = get_db().execute(
+        """
+        SELECT id FROM audit_logs
+        WHERE actor_id=? AND action='care_chain_snapshot'
+          AND entity_type='care_chain' AND entity_id=?
+        ORDER BY id DESC LIMIT 1
+        """,
+        (actor_id, entity_id),
+    ).fetchone()
+    if not row:
+        raise RuntimeError("Care-chain audit evidence could not be resolved.")
+    return int(row["id"])
 
 
 def finalize_care_chain(actor: Any, result: dict, prepared: dict) -> dict:
