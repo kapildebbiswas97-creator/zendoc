@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Confirm Account Deletion — ZENDOC{% endblock %}
+{% block content %}
+<section class="panel">
+  <p class="eyebrow">Account control</p>
+  <h1>Confirm permanent deletion</h1>
+  {% if error %}
+    <div class="flash error">{{ error }}</div>
+  {% elif account %}
+    <p>Delete the ZENDOC account for <strong>{{ account.email }}</strong> ({{ account.role }}) and its directly associated application data?</p>
+    <form method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="token" value="{{ token }}">
+      <input type="hidden" name="confirm_delete" value="yes">
+      <button type="submit" class="danger-action">Permanently delete account</button>
+    </form>
+  {% endif %}
+  <p class="form-note">This confirmation link is time-limited and can be used only for the account to which it was issued.</p>
+</section>
+{% endblock %}
