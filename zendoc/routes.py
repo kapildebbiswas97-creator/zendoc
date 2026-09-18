@@ -21,6 +21,11 @@ from .ai import MODEL_VERSION, assistant_answer, doctor_prediction, mental_healt
 from .auth import ACCOUNT_EXISTS_MESSAGE, INVALID_CREDENTIALS_MESSAGE, email_exists, user_by_normalized_email, validate_email
 from .db import ROLES, get_db, is_integrity_error, now_iso
 from .email_delivery import email_delivery_status, send_transactional_email
+from .email_verification import (
+    email_verification_status,
+    issue_email_verification_token,
+    verify_email_token,
+)
 from .health_analytics import METRIC_TYPES, create_measurement, get_health_trend
 from .healthcare_finder import HealthcareFinder, normalize_query
 from .intelligence import ZendocIntelligence
@@ -122,6 +127,27 @@ def before_request():
 
 def future_iso(minutes):
     return (datetime.now(timezone.utc) + timedelta(minutes=minutes)).isoformat(timespec="seconds")
+
+
+def _verification_url(token):
+    base_url = str(current_app.config.get("PUBLIC_BASE_URL") or "").strip().rstrip("/") or request.url_root.rstrip("/")
+    return f"{base_url}{url_for('main.verify_email', token=token)}"
+
+
+def _send_verification_email(user, token):
+    delivery = email_delivery_status()
+    if not delivery.get("transactional_email"):
+        raise RuntimeError("Transactional email delivery is not configured.")
+    link = _verification_url(token)
+    return send_transactional_email(
+        user["email"],
+        "Verify your ZENDOC email address",
+        (
+            "Verify the email address for your ZENDOC account.\n\n"
+            f"Open this link to verify your email: {link}\n\n"
+            "The link expires in 24 hours. If you did not create or request this account, ignore this message."
+        ),
+    )
 
 
 @bp.app_errorhandler(400)
