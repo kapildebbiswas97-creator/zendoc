@@ -1,3 +1,5 @@
+import json
+
 from zendoc.agent_planner import build_plan
 from zendoc.care_chain import finalize_care_chain, prepare_care_chain
 from zendoc.db import get_db, now_iso
@@ -82,10 +84,12 @@ def test_care_chain_connects_grounding_agent_os_and_metadata_audit_without_overc
             "SELECT metadata_json FROM agent_tasks WHERE id=?",
             (result["workflow_task"]["id"],),
         ).fetchone()
-        metadata = str(task["metadata_json"] or "")
-        assert command not in metadata
-        assert '"raw_prompt_stored":false' in metadata
-        assert '"raw_transcript_stored":false' in metadata
+        metadata_text = str(task["metadata_json"] or "")
+        metadata = json.loads(metadata_text)
+        assert command not in metadata_text
+        assert metadata["raw_prompt_stored"] is False
+        assert metadata["care_chain"]["raw_prompt_stored"] is False
+        assert metadata["care_chain"]["raw_transcript_stored"] is False
 
 
 def test_local_asr_channel_is_verified_only_by_matching_metadata_audit(tmp_path, monkeypatch):
