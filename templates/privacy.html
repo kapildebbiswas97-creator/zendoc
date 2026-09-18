@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Privacy Policy — ZENDOC{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Public policy</p>
+    <h1>ZENDOC Privacy Policy</h1>
+    <p class="section-copy">Effective 18 September 2026. This policy explains what ZENDOC stores, why it is used, and the controls available to users.</p>
+  </div>
+</section>
+
+<section class="panel legal-copy">
+  <h2>1. What ZENDOC is</h2>
+  <p>ZENDOC is a healthcare software platform that provides care discovery, appointments for connected providers, patient-controlled Health Memory, records, wellness features, messaging and bounded AI assistance. ZENDOC is not an emergency dispatch service and does not replace licensed medical professionals.</p>
+
+  <h2>2. Information we may store</h2>
+  <p>Depending on the features you use, ZENDOC may store account details, contact information, health-profile information you enter, appointments, records you upload, measurements, messages, care-workflow state, family-care information, device records you explicitly add, AI interaction metadata and text, security/audit events, and product-usage events.</p>
+  <p>External healthcare listings shown through public or map sources remain discovery references unless ZENDOC has a verified connected-provider integration. ZENDOC does not convert public listings into private patient records automatically.</p>
+
+  <h2>3. Why information is used</h2>
+  <p>Information is used to provide the feature you requested, maintain continuity across your care journey, enforce permissions and consent, prevent abuse, operate the service, improve reliability, and show you your own history. Health data is not used to grant the AI autonomous authority to diagnose, prescribe, change medication, execute payments, or dispatch emergency services.</p>
+
+  <h2>4. AI and Health Memory</h2>
+  <p>ZENDOC keeps provenance boundaries between user-reported, provider-recorded, document-extracted and device-recorded information. Prior AI chat is not treated as medical evidence. When source-level evidence was not recorded, ZENDOC does not invent citations after the fact.</p>
+
+  <h2>5. Sharing and third parties</h2>
+  <p>ZENDOC does not automatically share your Health Memory with another user or external provider merely because they have an account. Access requires the applicable consent/authorization workflow. Third-party links, public directories, maps, email delivery, hosting, database, storage or other configured infrastructure may process only the information necessary for that function under their own terms and privacy practices.</p>
+
+  <h2>6. Data export, retention and deletion</h2>
+  <p>While signed in, you can download a structured export of data associated with your account from your Profile or the <a href="{{ url_for('public_launch.account_export') }}">account export</a> route. Password hashes, access/reset tokens, secret keys and internal medical-record storage object keys are excluded from that export.</p>
+  <p>You can request deletion from the in-app account controls or from the public <a href="{{ url_for('public_launch.account_deletion') }}">account deletion page</a>. Account deletion removes the ZENDOC account and directly associated application data. A limited operational record may remain in de-identified form when another user's care history depends on it. ZENDOC does not represent account deactivation alone as deletion.</p>
+
+  <h2>7. Security</h2>
+  <p>ZENDOC uses authenticated sessions, CSRF protection for browser forms, permission checks, scoped consent, audit controls and production configuration checks. No internet service can promise absolute security. Users should not share passwords or access tokens.</p>
+
+  <h2>8. Children</h2>
+  <p>ZENDOC user accounts are not intended to be independently managed by children. Child or dependent information should be managed by an authorized parent or guardian where applicable.</p>
+
+  <h2>9. Changes</h2>
+  <p>This policy may be updated as the product, integrations, hosting or legal requirements change. Material changes should be reflected by updating the effective date and the deployed policy.</p>
+
+  {% if config.SUPPORT_EMAIL %}
+    <h2>10. Contact</h2>
+    <p>Privacy and support contact: <a href="mailto:{{ config.SUPPORT_EMAIL }}">{{ config.SUPPORT_EMAIL }}</a>.</p>
+  {% endif %}
+</section>
+{% endblock %}

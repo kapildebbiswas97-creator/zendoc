@@ -10,6 +10,8 @@ import json
 
 from flask import current_app
 
+from .provider_service import require_verified_provider
+
 from .db import get_db, now_iso
 from .family_care import authorize_family_patient
 
@@ -32,6 +34,27 @@ MEDICINE_CATALOG = [
 def _user_id(user):
     uid = user["id"] if hasattr(user, "__getitem__") else getattr(user, "id", None)
     return int(uid or 0)
+
+
+def _item_names(items):
+    names = []
+    for item in items or []:
+        if isinstance(item, dict):
+            name = str(item.get("name") or "").strip()
+        else:
+            name = str(item or "").strip()
+        if name:
+            names.append(name)
+    return names
+
+
+def _prescription_required(items):
+    rx_names = {
+        str(item["name"]).strip().casefold()
+        for item in MEDICINE_CATALOG
+        if bool(item.get("rx_required"))
+    }
+    return any(name.casefold() in rx_names for name in _item_names(items))
 
 
 def search_medicines(query=None):
@@ -92,26 +115,45 @@ def create_medicine_order(user, data):
         except (TypeError, ValueError) as error:
             raise ValueError("pharmacy_id must be a valid pharmacy account id.") from error
         pharmacy = db.execute(
-            "SELECT id FROM users WHERE id=? AND role='pharmacy' AND active=1",
+            """
+            SELECT u.id,pp.id provider_profile_id,pp.verification_status
+            FROM users u
+            JOIN provider_profiles pp ON pp.user_id=u.id
+            WHERE u.id=? AND u.role='pharmacy' AND u.active=1
+              AND LOWER(pp.verification_status)='verified'
+            """,
             (pharmacy_id,),
         ).fetchone()
         if not pharmacy:
-            raise ValueError("Selected pharmacy is not an active pharmacy account.")
+            raise ValueError("Selected pharmacy is not an active, verified ZENDOC pharmacy.")
     else:
         pharmacy_id = None
+    requires_prescription = _prescription_required(items)
     if prescription_record_id not in (None, ""):
         try:
             prescription_record_id = int(prescription_record_id)
         except (TypeError, ValueError) as error:
             raise ValueError("prescription_record_id must be a valid record id.") from error
         record = db.execute(
-            "SELECT id, owner_id FROM medical_records WHERE id=?",
+            """
+            SELECT mr.id,mr.owner_id,rm.report_type,mr.category
+            FROM medical_records mr
+            LEFT JOIN report_metadata rm ON rm.record_id=mr.id
+            WHERE mr.id=?
+            """,
             (prescription_record_id,),
         ).fetchone()
         if not record:
             raise LookupError("Prescription medical record not found.")
         if int(record["owner_id"]) != int(patient_id):
             raise PermissionError("Prescription medical record does not belong to the authorized patient.")
+        record_type = str(record["report_type"] or record["category"] or "").strip().lower()
+        if record_type != "prescription":
+            raise ValueError("The attached medical record is not labelled as a prescription.")
+    elif requires_prescription:
+        raise ValueError(
+            "A patient-owned prescription record is required for this prescription-only medicine request."
+        )
     cursor = db.execute(
         """INSERT INTO medicine_orders
         (patient_id, ordered_by, pharmacy_id, items_json, delivery_address, status, prescription_record_id, created_at)
@@ -135,6 +177,8 @@ def create_medicine_order(user, data):
 
 def list_medicine_orders(user):
     """List medicine orders for user."""
+    if user and user["role"] == "pharmacy":
+        require_verified_provider(user, allowed_roles={"pharmacy"})
     uid = _user_id(user)
     rows = get_db().execute(
         """SELECT mo.*, u.name patient_name, pharm.name pharmacy_name
@@ -159,6 +203,8 @@ def list_medicine_orders(user):
 
 def get_medicine_order(user, order_id):
     """Get single medicine order."""
+    if user and user["role"] == "pharmacy":
+        require_verified_provider(user, allowed_roles={"pharmacy"})
     uid = _user_id(user)
     row = get_db().execute(
         """SELECT mo.*, u.name patient_name

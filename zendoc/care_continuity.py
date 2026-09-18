@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .care_action_integration_truth import linked_internal_service
 from .care_action_ledger import ensure_care_action_ledger_schema
 from .care_journey_store import get_persisted_journey
 from .db import get_db
@@ -64,6 +65,19 @@ def get_care_continuity_snapshot(actor: Any, journey_id: int) -> dict:
         None,
     )
 
+    # Resolve the latest care action only when its service_ref still maps to a
+    # truthful ZENDOC-internal source record. This can represent appointments,
+    # pharmacy orders, diagnostics or home-health requests. It never means an
+    # external vendor/hospital system executed the action.
+    linked_action = None
+    integration = None
+    for candidate in reversed(action_rows):
+        resolved = linked_internal_service(candidate)
+        if resolved:
+            linked_action = candidate
+            integration = resolved
+            break
+
     appointment = None
     if linked_appointment_action:
         try:
@@ -113,10 +127,14 @@ def get_care_continuity_snapshot(actor: Any, journey_id: int) -> dict:
     ]
 
     appointment_status = str((appointment or {}).get("status") or "") or None
-    action_status = str((linked_appointment_action or {}).get("status") or "") or None
+    action_status = str((linked_action or {}).get("status") or "") or None
     state = str(journey["state"])
     provider_confirmed = appointment_status in {"confirmed", "completed"}
     provider_completed = appointment_status == "completed"
+    service_confirmed = bool(
+        integration and action_status in {"CONFIRMED", "IN_PROGRESS", "COMPLETED"}
+    )
+    service_completed = bool(integration and action_status == "COMPLETED")
     outcome_verified = bool(outcome and str(outcome.get("status")) == "VERIFIED")
     memory_recorded = bool(memory_event)
 
@@ -140,13 +158,28 @@ def get_care_continuity_snapshot(actor: Any, journey_id: int) -> dict:
             "status": appointment_status,
         },
         "careloop": {
-            "action_id": int(linked_appointment_action["id"]) if linked_appointment_action else None,
+            "action_id": int(linked_action["id"]) if linked_action else None,
             "status": action_status,
-            "linked": bool(linked_appointment_action),
+            "linked": bool(linked_action),
+        },
+        "service": {
+            "action_id": int(linked_action["id"]) if linked_action else None,
+            "action_type": linked_action.get("action_type") if linked_action else None,
+            "status": action_status,
+            "provider_name": linked_action.get("provider_name") if linked_action else None,
+            "service_ref": linked_action.get("service_ref") if linked_action else None,
+            "internally_integrated": bool(integration),
+            "integration_source_type": integration.get("source_type") if integration else None,
+            "integration_source_id": integration.get("source_id") if integration else None,
+            "execution_scope": integration.get("execution_scope") if integration else None,
+            "external_execution": False,
         },
         "evidence": {
             "provider_confirmed": provider_confirmed,
+            "service_confirmed": service_confirmed,
+            "authoritative_confirmation": bool(provider_confirmed or service_confirmed),
             "visit_completed_by_provider_state": provider_completed,
+            "service_completed": service_completed,
             "verified_outcome_id": int(outcome["id"]) if outcome else None,
             "verified_outcome_present": outcome_verified,
             "health_memory_event_id": int(memory_event["id"]) if memory_event else None,
@@ -160,5 +193,6 @@ def get_care_continuity_snapshot(actor: Any, journey_id: int) -> dict:
             "missing_evidence_becomes_verified": False,
             "payment_executed_by_agent": False,
             "clinical_findings_inferred_from_completion": False,
+            "internal_service_state_is_external_execution": False,
         },
     }

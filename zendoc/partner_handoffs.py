@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from .db import get_db, is_integrity_error, now_iso
-from .provider_service import available_slots, get_public_provider_profile
+from .provider_service import available_slots, get_public_provider_profile, require_verified_provider
 from .partner_audit import record_partner_audit_event
 from .notification_providers import deliver_notification
 from .security import assert_owner
@@ -194,12 +194,7 @@ def list_partner_booking_handoffs(identity: dict, *, limit: int = 100) -> list[d
 
 
 def list_provider_booking_handoffs(user: Any, *, limit: int = 100) -> list[dict]:
-    if not user or user["role"] not in {"doctor", "hospital", "pharmacy"}:
-        raise PermissionError("Only provider accounts may view provider handoffs.")
-    profile = get_db().execute(
-        "SELECT id FROM provider_profiles WHERE user_id=?",
-        (int(user["id"]),),
-    ).fetchone()
+    profile = require_verified_provider(user)
     if not profile:
         return []
     limit = max(1, min(int(limit or 100), 500))
@@ -224,8 +219,7 @@ def provider_update_partner_booking_handoff(
     status: str,
     status_note: str | None = None,
 ) -> dict:
-    if not user or user["role"] not in {"doctor", "hospital", "pharmacy"}:
-        raise PermissionError("Only provider accounts may review provider handoffs.")
+    require_verified_provider(user)
     clean = str(status or "").strip().lower()
     if clean not in {"pending", "accepted", "rejected", "cancelled"}:
         raise ValueError("Unsupported handoff status.")

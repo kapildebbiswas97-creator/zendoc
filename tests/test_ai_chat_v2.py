@@ -29,6 +29,7 @@ def test_new_chat_creates_separate_conversations(tmp_path):
 
     first = _post_chat(client, "I have a mild cough for two days")
     assert first.status_code == 200
+    assert b"I have a mild cough for two days" in first.data
 
     second_page = client.get("/ai?new=1")
     second_token = csrf(second_page.data.decode())
@@ -41,10 +42,15 @@ def test_new_chat_creates_separate_conversations(tmp_path):
 
     with app.app_context():
         rows = get_db().execute(
-            "SELECT id FROM ai_conversations WHERE user_id=(SELECT id FROM users WHERE email_normalized=?) ORDER BY id",
+            "SELECT id,title FROM ai_conversations WHERE user_id=(SELECT id FROM users WHERE email_normalized=?) ORDER BY id",
             ("separate-chat@example.com",),
         ).fetchall()
         assert len(rows) == 2
+        counts = [
+            get_db().execute("SELECT COUNT(*) c FROM ai_interactions WHERE conversation_id=?", (row["id"],)).fetchone()["c"]
+            for row in rows
+        ]
+        assert counts == [1, 1]
 
 
 def test_doctor_ai_rejects_unrelated_general_task(tmp_path):
@@ -56,7 +62,11 @@ def test_doctor_ai_rejects_unrelated_general_task(tmp_path):
     token = csrf(page.data.decode())
     response = client.post(
         "/ai",
-        data={"csrf_token": token, "mode": "doctor", "message": "Write Python code to sort a list"},
+        data={
+            "csrf_token": token,
+            "mode": "doctor",
+            "message": "Write Python code to sort a list",
+        },
         follow_redirects=True,
     )
     assert response.status_code == 200
@@ -68,7 +78,6 @@ def test_legacy_doctor_form_emergency_still_shows_emergency_state(tmp_path):
     _app, client = make_client(tmp_path)
     register_web(client, "patient", "doctor-emergency-v2@example.com", "Doctor Emergency")
     login_web(client, "patient", "doctor-emergency-v2@example.com")
-
     page = client.get("/ai?new=1")
     token = csrf(page.data.decode())
     response = client.post(

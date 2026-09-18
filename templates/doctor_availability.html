@@ -2,7 +2,7 @@
 {% block title %}Doctor Availability - ZENDOC{% endblock %}
 {% block content %}
 <section class="section-head">
-  <div><p class="eyebrow">Telehealth</p><h1>Doctor Availability</h1><p class="section-copy">Control when patients can request chat, voice, or video consultation. Media never starts automatically.</p></div>
+  <div><p class="eyebrow">Telehealth</p><h1>Doctor Availability</h1><p class="section-copy">Control availability only for consultation channels supported by this deployment. Unsupported media channels cannot be enabled.</p></div>
   <a href="{{ url_for('milestone7.telehealth_page') }}" class="secondary-action">Consultations</a>
 </section>
 <form method="post" class="panel">
@@ -14,10 +14,14 @@
       {% endfor %}
     </select>
   </label>
+  <aside class="trust-note">
+    <strong>Configured provider: {{ telehealth_status.provider }}</strong><br>
+    {{ telehealth_status.message or 'Telehealth provider status is unavailable.' }}
+  </aside>
   <div class="checkbox-grid">
-    <label class="check-option"><input type="checkbox" name="accepts_chat" value="1" {% if not availability or availability.accepts_chat %}checked{% endif %}> Chat</label>
-    <label class="check-option"><input type="checkbox" name="accepts_voice" value="1" {% if availability and availability.accepts_voice %}checked{% endif %}> Voice</label>
-    <label class="check-option"><input type="checkbox" name="accepts_video" value="1" {% if availability and availability.accepts_video %}checked{% endif %}> Video</label>
+    <label class="check-option"><input type="checkbox" name="accepts_chat" value="1" {% if not telehealth_status.supports_chat %}disabled{% elif not availability or availability.accepts_chat %}checked{% endif %}> Chat{% if not telehealth_status.supports_chat %} · integration required{% endif %}</label>
+    <label class="check-option"><input type="checkbox" name="accepts_voice" value="1" {% if not telehealth_status.supports_voice %}disabled{% elif availability and availability.accepts_voice %}checked{% endif %}> Voice{% if not telehealth_status.supports_voice %} · integration required{% endif %}</label>
+    <label class="check-option"><input type="checkbox" name="accepts_video" value="1" {% if not telehealth_status.supports_video %}disabled{% elif availability and availability.accepts_video %}checked{% endif %}> Video{% if not telehealth_status.supports_video %} · integration required{% endif %}</label>
   </div>
   <label>Patient Message Policy
     <select name="patient_message_policy">
@@ -28,8 +32,8 @@
     </select>
   </label>
   <div class="checkbox-grid">
-    <label class="check-option"><input type="checkbox" name="allow_voice_requests" value="1" {% if availability and availability.allow_voice_requests %}checked{% endif %}> Allow Voice Requests</label>
-    <label class="check-option"><input type="checkbox" name="allow_video_requests" value="1" {% if availability and availability.allow_video_requests %}checked{% endif %}> Allow Video Requests</label>
+    <label class="check-option"><input type="checkbox" name="allow_voice_requests" value="1" {% if not telehealth_status.supports_voice %}disabled{% elif availability and availability.allow_voice_requests %}checked{% endif %}> Allow Voice Requests</label>
+    <label class="check-option"><input type="checkbox" name="allow_video_requests" value="1" {% if not telehealth_status.supports_video %}disabled{% elif availability and availability.allow_video_requests %}checked{% endif %}> Allow Video Requests</label>
     <label class="check-option"><input type="checkbox" name="allow_new_consultation_requests" value="1" {% if not availability or availability.allow_new_consultation_requests %}checked{% endif %}> Allow New Consultation Requests</label>
   </div>
   <label>Note <input name="note" value="{{ availability.note if availability else '' }}" placeholder="Available after 5 PM"></label>

@@ -45,12 +45,39 @@ def _passport(row):
         "emergency": bool(item.get("emergency")),
         "success": bool(item.get("success")),
         "latency_ms": item.get("latency_ms"),
-        "generation": {"model_version": item.get("model_version") or "not_recorded", "provider": item.get("provider") or "not_recorded"},
-        "patient_data_used": {"recorded": ["current user message"], "notice": "The historical interaction log does not prove that any additional Health Memory context was used, so ZENDOC does not claim it here."},
-        "source_level_evidence": {"status": "not_recorded", "sources": [], "notice": "This historical interaction record does not contain source-level citations. ZENDOC will not invent citations after the fact."},
-        "uncertainty": {"status": "not_calibrated", "notice": "No calibrated confidence score is stored for this historical interaction."},
-        "human_review": {"state": "not_recorded", "notice": "The interaction log does not record a clinician review state unless another workflow explicitly stores one."},
-        "policy": {"prohibited_actions": list(PROHIBITED_ACTIONS), "human_confirmation_required_for_real_world_actions": True},
+        "generation": {
+            "model_version": item.get("model_version") or "not_recorded",
+            "provider": item.get("provider") or "not_recorded",
+        },
+        "patient_data_used": {
+            "recorded": ["current user message"],
+            "notice": (
+                "The historical interaction log does not prove that any additional Health Memory context was used, "
+                "so ZENDOC does not claim it here."
+            ),
+        },
+        "source_level_evidence": {
+            "status": "not_recorded",
+            "sources": [],
+            "notice": (
+                "This historical interaction record does not contain source-level citations. "
+                "ZENDOC will not invent citations after the fact."
+            ),
+        },
+        "uncertainty": {
+            "status": "not_calibrated",
+            "notice": "No calibrated confidence score is stored for this historical interaction.",
+        },
+        "human_review": {
+            "state": "not_recorded",
+            "notice": (
+                "The interaction log does not record a clinician review state unless another workflow explicitly stores one."
+            ),
+        },
+        "policy": {
+            "prohibited_actions": list(PROHIBITED_ACTIONS),
+            "human_confirmation_required_for_real_world_actions": True,
+        },
     }
 
 

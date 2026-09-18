@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% block title %}Health Hub — ZENDOC{% endblock %}
+
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Daily health learning &amp; action</p>
+    <h1>ZENDOC Health Hub</h1>
+    <p class="section-copy">A health-first home for useful learning, family continuity, real video discovery and truthful product handoffs.</p>
+  </div>
+  <div class="form-actions">
+    <a href="{{ url_for('family.family_page') }}" class="secondary-action">Family Care</a>
+    <a href="{{ url_for('ecosystem.marketplace_page') }}" class="secondary-action">Marketplace</a>
+  </div>
+</section>
+
+<aside class="trust-note">
+  <strong>Healthy engagement, not addiction.</strong><br>
+  {{ engagement.summary }} ZENDOC does not optimize for compulsive screen time, health-anxiety targeting, illness-based advertising or personality manipulation of children.
+</aside>
+
+<section class="spaced-panel">
+  <div class="panel-head">
+    <div><p class="eyebrow">Explore</p><h2>Health content lanes</h2></div>
+  </div>
+  <div class="grid three">
+    {% for lane in content_lanes %}
+      <article class="panel">
+        <h3>{{ lane.label }}</h3>
+        <p>{{ lane.summary }}</p>
+        <p class="section-copy">{{ lane.clinical_boundary }}</p>
+      </article>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="spaced-panel">
+  <div class="panel-head">
+    <div><p class="eyebrow">Real topic discovery</p><h2>Health videos</h2></div>
+  </div>
+  <form method="get" action="{{ url_for('health_hub.health_hub_page') }}">
+    <label>Topic
+      <input type="text" name="topic" value="{{ topic }}" placeholder="e.g. healthy lunch ideas for children">
+    </label>
+    <button type="submit">Find videos</button>
+  </form>
+
+  {% if videos.query %}
+    {% if videos.results %}
+      <div class="grid three spaced-panel">
+        {% for video in videos.results %}
+          <article class="panel">
+            <h3>{{ video.title }}</h3>
+            <p>{{ video.channel }}</p>
+            <a class="secondary-action" href="{{ video.url }}" target="_blank" rel="noopener noreferrer">Open video</a>
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <aside class="trust-note spaced-panel">
+        <strong>No fabricated video cards.</strong><br>
+        {{ videos.reason }}
+        {% if videos.search_url %}
+          <div class="form-actions spaced-panel">
+            <a class="secondary-action" href="{{ videos.search_url }}" target="_blank" rel="noopener noreferrer">Open exact YouTube search</a>
+          </div>
+        {% endif %}
+      </aside>
+    {% endif %}
+  {% endif %}
+</section>
+
+<section class="spaced-panel">
+  <div class="panel-head">
+    <div><p class="eyebrow">Health commerce discovery</p><h2>Find health-related products</h2></div>
+    <span class="status-badge">External discovery only</span>
+  </div>
+  <p class="section-copy">Search external merchants without pretending ZENDOC knows live stock, price, seller quality or medical suitability. No affiliate/referral relationship is configured by this feature.</p>
+
+  <form method="get" action="{{ url_for('health_hub.health_hub_page') }}">
+    <label>Product
+      <input type="text" name="product_q" value="{{ product_query }}" placeholder="e.g. blue light glasses">
+    </label>
+    <label>Category
+      <select name="product_category">
+        {% for category in commerce_categories %}
+          <option value="{{ category.id }}" {% if category.id == product_category %}selected{% endif %}>{{ category.label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit">Search external stores</button>
+  </form>
+
+  {% if products.query %}
+    <aside class="trust-note spaced-panel">
+      <strong>Commerce boundary</strong><br>
+      {{ products.truth_notice }}<br>
+      {{ products.safety_note }}
+    </aside>
+
+    {% if products.medicine_query %}
+      <div class="panel spaced-panel">
+        <h3>Medicine query detected</h3>
+        <p>Prescription and medicine searches stay in ZENDOC's pharmacy safety flow rather than general ecommerce marketplaces.</p>
+        {% if products.pharmacy_handoff %}
+          <a class="primary-action" href="{{ products.pharmacy_handoff }}">Continue to Pharmacy</a>
+        {% endif %}
+      </div>
+    {% elif products.results %}
+      <div class="grid three spaced-panel">
+        {% for item in products.results %}
+          <article class="panel">
+            <h3>{{ item.label }}</h3>
+            <p>{{ item.relationship_status.replace('_', ' ').title() }}</p>
+            <span class="status-badge">Stock not verified</span>
+            <span class="status-badge">Price not verified</span>
+            <div class="form-actions spaced-panel">
+              <a class="secondary-action" href="{{ item.url }}" target="_blank" rel="noopener noreferrer">Open external search</a>
+            </div>
+          </article>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endif %}
+</section>
+
+<section class="spaced-panel">
+  <div class="panel-head">
+    <div><p class="eyebrow">Child continuity</p><h2>Healthy development companion</h2></div>
+    <span class="status-badge">Non-diagnostic</span>
+  </div>
+  <p class="section-copy">{{ child.summary }}</p>
+  <form method="get" action="{{ url_for('health_hub.health_hub_page') }}">
+    <label>Child age
+      <input type="number" min="0" max="17" name="child_age" value="{{ child_age }}" placeholder="e.g. 6">
+    </label>
+    <button type="submit">Show age stage</button>
+  </form>
+  <div class="panel spaced-panel">
+    <h3>{{ child.life_stage.label }}</h3>
+    <p>{{ child.life_stage.focus }}</p>
+  </div>
+  <div class="grid three">
+    {% for domain in child.domains %}
+      <article class="panel">
+        <h3>{{ domain.label }}</h3>
+        <p>{{ domain.summary }}</p>
+      </article>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="spaced-panel">
+  <div class="panel-head">
+    <div><p class="eyebrow">Genomics boundary</p><h2>Newborn &amp; child genetics — future verified integration</h2></div>
+    <span class="status-badge">Integration required</span>
+  </div>
+  <aside class="trust-note">
+    <strong>ZENDOC does not infer DNA.</strong><br>
+    {{ genomics.summary }}
+  </aside>
+  <div class="grid three spaced-panel">
+    <article class="panel"><h3>Verified lab result</h3><p>Required before genetics data can enter the care record as evidence.</p></article>
+    <article class="panel"><h3>Qualified interpretation</h3><p>Genetic findings require appropriate professional interpretation and counseling.</p></article>
+    <article class="panel"><h3>Deterministic action</h3><p>AI cannot diagnose a genetic condition, choose treatment or change medicines.</p></article>
+  </div>
+</section>
+
+<section class="spaced-panel">
+  <div class="panel-head">
+    <div><p class="eyebrow">Creator ecosystem</p><h2>Health creator &amp; cross-post studio</h2></div>
+    <span class="status-badge">Readiness only</span>
+  </div>
+  <aside class="trust-note">
+    <strong>Not live yet.</strong><br>
+    {{ creator.truth_notice }}
+  </aside>
+  <p class="section-copy">Before public uploads or creator payouts, ZENDOC needs moderation, copyright/consent controls, minor safety, sponsorship disclosure, reporting/appeals and official OAuth/API integrations.</p>
+  <div class="grid three">
+    {% for requirement in creator.required_before_launch %}
+      <article class="panel"><p>{{ requirement }}</p></article>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

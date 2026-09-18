@@ -68,8 +68,17 @@
             <div>
               <h3>{{ r.service_type.replace('_', ' ').title() }}</h3>
               <p>{{ r.scheduled_date }} · {{ r.city }}{% if r.notes %} · {{ r.notes }}{% endif %}</p>
+              {% if r.provider_confirmed %}
+                <p class="form-note">Confirmed in ZENDOC by verified provider{% if r.provider_name %}: {{ r.provider_name }}{% endif %}.</p>
+              {% elif r.provider_assigned %}
+                <p class="form-note">Verified provider assigned{% if r.provider_name %}: {{ r.provider_name }}{% endif %}; provider acceptance is still pending.</p>
+              {% else %}
+                <p class="form-note">Request recorded only; no provider has been confirmed.</p>
+              {% endif %}
             </div>
-            <span class="status-badge integration">{{ r.status.title() }}</span>
+            <span class="status-badge {% if r.provider_confirmed %}active{% elif r.provider_assigned %}working{% else %}integration{% endif %}">
+              {{ r.status.replace('_',' ').title() }}
+            </span>
           </div>
         {% endfor %}
       </div>

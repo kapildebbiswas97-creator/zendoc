@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Offline — ZENDOC{% endblock %}
+{% block content %}
+<section class="panel">
+  <p class="eyebrow">Connection unavailable</p>
+  <h1>ZENDOC needs a connection for health data</h1>
+  <p>For privacy and freshness, authenticated health pages and API responses are not stored for offline use by the service worker. Reconnect and try again.</p>
+  <button type="button" onclick="window.location.reload()">Try again</button>
+</section>
+{% endblock %}

@@ -14,8 +14,10 @@
   <div class="panel-head"><div><p class="eyebrow">One request → specialist fleet</p><h2>Give Agent OS a task</h2></div><span class="status-badge beta">Competition Beta</span></div>
   <form method="post">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <label>What should ZENDOC do?
-      <textarea name="command" rows="3" maxlength="2000" required placeholder="Example: Book an appointment with a cardiologist in Kalyani next week">{{ command }}</textarea>
+    <input type="hidden" name="input_channel" value="typed">
+    <input type="hidden" name="asr_audit_log_id" value="">
+    <label for="assistant-message">What should ZENDOC do?
+      <textarea id="assistant-message" name="command" rows="3" maxlength="2000" required placeholder="Example: Book an appointment with a cardiologist in Kalyani next week">{{ command }}</textarea>
     </label>
     <details class="progressive-fields">
       <summary>Continue a booking/product workflow</summary>
@@ -39,9 +41,13 @@
         </label>
       </div>
     </details>
-    <button type="submit" class="primary-action" data-submitting-label="Running bounded workflow…">Run specialist workflow</button>
+    <div class="form-actions">
+      <button type="button" id="edgecare-voice-input-toggle" class="secondary-action" aria-pressed="false">Use local voice input</button>
+      <button type="submit" class="primary-action" data-submitting-label="Running bounded workflow…">Run specialist workflow</button>
+    </div>
+    <p id="edgecare-voice-input-status" class="form-note" role="status" aria-live="polite">Voice input uses the configured local speech runtime. Review the transcript before running Agent OS; nothing is auto-submitted.</p>
   </form>
-  <p class="form-note">The model cannot execute payment, prescribe, change medication, dispatch emergency services, run arbitrary code/SQL/shell, read secrets, expand its own permissions, disable safeguards or deploy itself.</p>
+  <p class="form-note">The local model is advisory only. It cannot execute payment, prescribe, change medication, dispatch emergency services, run arbitrary code/SQL/shell, read secrets, expand its own permissions, disable safeguards or deploy itself.</p>
 </section>
 
 {% if follow_up_journey %}
@@ -79,6 +85,28 @@
   </div>
   {% endif %}
 
+  {% if persisted_care_chain %}
+  <div class="panel subtle-panel" style="margin-top:16px;" aria-label="Persisted canonical care chain">
+    <div class="panel-head">
+      <div><p class="eyebrow">Persisted care-chain evidence</p><h3>Authoritative downstream state</h3></div>
+      <span class="status-badge {{ 'active' if persisted_care_chain.outcome.verified else 'beta' }}">{{ persisted_care_chain.state.replace('_',' ') }}</span>
+    </div>
+    <div class="grid two">
+      <div>
+        <p><strong>Provider state:</strong> {{ persisted_care_chain.provider_confirmation.appointment_status or 'not yet linked' }}</p>
+        <p><strong>Provider confirmed:</strong> {{ 'Yes' if persisted_care_chain.provider_confirmation.provider_confirmed else 'No' }}</p>
+        <p><strong>Verified outcome:</strong> {{ 'Yes' if persisted_care_chain.outcome.verified else 'No' }}</p>
+      </div>
+      <div>
+        <p><strong>Longitudinal memory:</strong> {{ 'Provider-recorded' if persisted_care_chain.longitudinal_memory.provider_recorded else 'Awaiting authoritative outcome' }}</p>
+        <p><strong>Memory provenance:</strong> {{ persisted_care_chain.longitudinal_memory.provenance or 'not recorded yet' }}</p>
+        <p><strong>Care-chain audit snapshots:</strong> {{ persisted_care_chain.audit_snapshot_count }}</p>
+      </div>
+    </div>
+    <p class="form-note">This view is rebuilt from persisted appointment, outcome, Health Memory and audit evidence. Missing evidence stays missing; model text never becomes provider confirmation.</p>
+  </div>
+  {% endif %}
+
   {% if follow_up_journey.state == 'FOLLOW_UP' and current_user.role == 'patient' %}
     <p>Verified provider visit-completion evidence already exists in CareLoop and Health Memory. Mark this follow-up complete only after you have actually completed the non-clinical post-visit step.</p>
     <form method="post" action="{{ url_for('specialist_agents.agent_os_follow_up_complete', journey_id=follow_up_journey.id) }}">
@@ -101,6 +129,60 @@
   </div>
   <p>{{ result.message }}</p>
   {% if result.human_gate %}<p class="form-note"><strong>Current human gate:</strong> {{ result.human_gate.replace('_',' ') }}</p>{% endif %}
+
+  {% if result.care_chain %}
+  <div class="panel subtle-panel" style="margin-top:16px;" aria-label="Canonical care chain evidence">
+    <div class="panel-head">
+      <div><p class="eyebrow">Canonical care chain</p><h3>Input → grounding → action → evidence</h3></div>
+      <span class="status-badge active">Audit {{ result.care_chain.audit.status if result.care_chain.audit else 'pending' }}</span>
+    </div>
+    <div class="appointment-list">
+      <article class="appointment-card">
+        <div><p class="eyebrow">1 · Local voice / ASR</p><h3>{{ result.care_chain.input.status.replace('_',' ') }}</h3><p>{{ result.care_chain.input.channel.replace('_',' ') }} · manual submit required</p></div>
+        <span class="status-badge {{ 'active' if result.care_chain.input.asr_audit_log_id else 'beta' }}">{{ 'Verified' if result.care_chain.input.asr_audit_log_id else 'Typed / not used' }}</span>
+      </article>
+      <article class="appointment-card">
+        <div><p class="eyebrow">2 · Health Memory</p><h3>{{ result.care_chain.health_memory.status.replace('_',' ') }}</h3><p>{{ result.care_chain.health_memory.total_events }} authorized recent event(s); raw records are not copied into chain metadata.</p></div>
+        <span class="status-badge active">Provenance kept</span>
+      </article>
+      <article class="appointment-card">
+        <div><p class="eyebrow">3 · Medical RAG</p><h3>{{ result.care_chain.rag.status.replace('_',' ') }}</h3><p>{{ result.care_chain.rag.evidence_count or 0 }} approved evidence item(s); logistics do not pretend RAG was required.</p></div>
+        <span class="status-badge {{ 'active' if result.care_chain.rag.evidence_count else 'beta' }}">Evidence only</span>
+      </article>
+      <article class="appointment-card">
+        <div><p class="eyebrow">4 · Local LLM / SLM advisory</p><h3>{{ result.care_chain.local_advisory.status.replace('_',' ') }}</h3><p>{{ result.care_chain.local_advisory.provider or 'deterministic fallback' }}{% if result.care_chain.local_advisory.model %} · {{ result.care_chain.local_advisory.model }}{% endif %}</p></div>
+        <span class="status-badge {{ 'active' if result.care_chain.local_advisory.local_model_used else 'beta' }}">No tool authority</span>
+      </article>
+      <article class="appointment-card">
+        <div><p class="eyebrow">5 · Agent OS</p><h3>{{ result.care_chain.agent_os.assigned_agent }}</h3><p>{{ result.care_chain.agent_os.status.replace('_',' ') }} · server-validated bounded plan</p></div>
+        <span class="status-badge active">Deterministic gate</span>
+      </article>
+      <article class="appointment-card">
+        <div><p class="eyebrow">6 · Safe action</p><h3>{{ result.care_chain.safe_action.status.replace('_',' ') }}</h3><p>{{ result.care_chain.safe_action.human_gate.replace('_',' ') if result.care_chain.safe_action.human_gate else 'No consequential action executed by the model.' }}</p></div>
+        <span class="status-badge {{ 'beta' if result.care_chain.safe_action.requires_confirmation else 'active' }}">{{ 'Human confirmation' if result.care_chain.safe_action.requires_confirmation else 'Bounded read-only' }}</span>
+      </article>
+      <article class="appointment-card">
+        <div><p class="eyebrow">7 · Provider/service confirmation</p><h3>{{ result.care_chain.provider_confirmation.status.replace('_',' ') }}</h3><p>Only authoritative connected-provider state can confirm real fulfilment.</p></div>
+        <span class="status-badge {{ 'active' if result.care_chain.provider_confirmation.provider_confirmed else 'beta' }}">Truth boundary</span>
+      </article>
+      <article class="appointment-card">
+        <div><p class="eyebrow">8 · Outcome</p><h3>{{ result.care_chain.outcome.status.replace('_',' ') }}</h3><p>No diagnosis or clinical finding is inferred from appointment completion.</p></div>
+        <span class="status-badge {{ 'active' if result.care_chain.outcome.care_outcome_id else 'beta' }}">Evidence-backed</span>
+      </article>
+      <article class="appointment-card">
+        <div><p class="eyebrow">9 · Longitudinal memory</p><h3>{{ result.care_chain.longitudinal_memory.status.replace('_',' ') }}</h3><p>Provider-recorded and patient-reported provenance remain separate.</p></div>
+        <span class="status-badge {{ 'active' if result.care_chain.longitudinal_memory.health_memory_event_id else 'beta' }}">Health Memory</span>
+      </article>
+      <article class="appointment-card">
+        <div><p class="eyebrow">10 · Audit evidence</p><h3>Metadata-only audit #{{ result.care_chain.audit.audit_log_id }}</h3><p>Prompt, transcript, audio and raw Health Memory are not copied into this audit record.</p></div>
+        <span class="status-badge active">Recorded</span>
+      </article>
+    </div>
+    {% if result.care_chain.local_advisory.text %}
+      <p class="form-note"><strong>Non-executable local advisory:</strong> {{ result.care_chain.local_advisory.text }}</p>
+    {% endif %}
+  </div>
+  {% endif %}
 
   {% if result.workflow_task or result.care_journey %}
   <div class="panel subtle-panel" style="margin-top:16px;">
@@ -208,6 +290,32 @@
     <p class="form-note">{{ result.payload.truth_notice }}</p>
   {% endif %}
 
+  {% if result.intent == 'health_records' and result.payload %}
+    <div class="panel subtle-panel" style="margin-top:16px;" aria-label="Health Memory retrieval evidence">
+      <div class="panel-head">
+        <div><p class="eyebrow">Authorized Health Memory RAG</p><h3>Matching longitudinal evidence</h3></div>
+        <span class="status-badge {{ 'active' if result.payload.retrieval.matches else 'beta' }}">{{ result.payload.retrieval.match_count or 0 }} match(es)</span>
+      </div>
+      {% for item in result.payload.retrieval.matches %}
+        <article class="appointment-card">
+          <div>
+            <p class="eyebrow">{{ item.provenance.replace('_',' ') }}</p>
+            <h3>{{ item.title or item.event_type.replace('_',' ').title() }}</h3>
+            {% if item.summary %}<p>{{ item.summary }}</p>{% endif %}
+            <p class="form-note">{{ item.event_at }} · evidence {{ item.evidence_id }}</p>
+          </div>
+          <span class="status-badge active">Stored evidence</span>
+        </article>
+      {% else %}
+        <div class="empty-state">
+          <h3>No matching stored evidence</h3>
+          <p>ZENDOC did not substitute unrelated Health Memory or prior AI chat as medical evidence.</p>
+        </div>
+      {% endfor %}
+      <p class="form-note">{{ result.payload.retrieval.truth_notice }}</p>
+    </div>
+  {% endif %}
+
   {% if result.intent in ['preventive_care','lifecycle','health_learning','provider_discovery','diagnostics','pharmacy','carefin'] and result.payload %}
     <details style="margin-top:16px;"><summary>View structured specialist result</summary><pre style="white-space:pre-wrap;overflow:auto;">{{ result.payload|tojson(indent=2) }}</pre></details>
   {% endif %}
@@ -238,4 +346,5 @@
     <p class="form-note">Unknown actions fail closed until explicitly classified and tested.</p>
   </article>
 </section>
+<script src="{{ url_for('static', filename='edgecare_voice.js') }}" defer></script>
 {% endblock %}

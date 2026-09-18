@@ -12,6 +12,19 @@ def test_natural_pharmacy_location_shorthand_is_understood():
     assert category == "pharmacy"
 
 
+def test_competition_kalyani_healthcare_queries_are_understood():
+    cases = {
+        "pharmacy Kalyani": ("Kalyani", "pharmacy"),
+        "medical store Kalyani": ("Kalyani", "pharmacy"),
+        "clinics in Kalyani": ("Kalyani", "clinic"),
+        "hospitals in Kalyani": ("Kalyani", "hospital"),
+        "cardiologist in Kalyani": ("Kalyani", "doctor"),
+    }
+    for query, expected in cases.items():
+        _term, location, category = _text_parts(query)
+        assert (location, category) == expected
+
+
 def test_named_hospital_search_is_not_misread_as_location():
     term, location, category = _text_parts("Apollo Hospital")
     assert term == "Apollo Hospital"

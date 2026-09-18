@@ -459,6 +459,18 @@ def _health_memory_context(actor, arguments):
     }
 
 
+def _search_health_memory_evidence(actor, arguments):
+    from .health_memory_rag import search_health_memory_evidence
+
+    patient_id = _patient_target(actor, arguments, "health_memory_view")
+    return search_health_memory_evidence(
+        actor,
+        str(arguments.get("query") or "")[:500],
+        patient_id=patient_id,
+        limit=arguments.get("limit", 5),
+    )
+
+
 TOOL_HANDLERS = {
     "get_platform_summary": _platform_summary,
     "get_failed_operations": _failed_operations,
@@ -482,4 +494,5 @@ TOOL_HANDLERS = {
     "get_diagnostic_options": _diagnostic_options,
     "get_unified_healthcare_inbox": _unified_inbox,
     "get_health_memory_context": _health_memory_context,
+    "search_health_memory_evidence": _search_health_memory_evidence,
 }

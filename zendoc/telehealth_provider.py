@@ -9,7 +9,8 @@ from .security import hash_token
 
 
 class LocalDemoTelehealthProvider:
-    name = "local_demo"
+    def __init__(self, name: str = "local_demo"):
+        self.name = name
 
     def create_room(self, consultation_id: int) -> dict:
         room_token = secrets.token_urlsafe(32)
@@ -17,14 +18,17 @@ class LocalDemoTelehealthProvider:
             "provider": self.name,
             "room_token_hash": hash_token(room_token),
             "status": "waiting",
-            "integration_status": "beta_local_only",
+            "integration_status": "chat_only_no_webrtc" if self.name == "internal_chat" else "beta_local_only",
         }
 
     def status(self):
         return {
             "provider": self.name,
-            "status": "beta",
-            "message": "Local consultation state and chat work; production WebRTC is Integration Required.",
+            "status": "working_chat_only" if self.name == "internal_chat" else "beta",
+            "supports_chat": True,
+            "supports_voice": False,
+            "supports_video": False,
+            "message": "Local consultation state and chat work; production voice/video WebRTC is Integration Required.",
         }
 
 
@@ -36,11 +40,19 @@ class UnavailableTelehealthProvider:
         raise RuntimeError(f"Telehealth provider '{self.name}' is Integration Required.")
 
     def status(self):
-        return {"provider": self.name, "status": "integration_required"}
+        return {
+            "provider": self.name,
+            "status": "integration_required",
+            "supports_chat": False,
+            "supports_voice": False,
+            "supports_video": False,
+        }
 
 
 def get_telehealth_provider():
     provider = str(current_app.config.get("TELEHEALTH_PROVIDER") or "local_demo").strip().lower()
     if provider == "local_demo":
-        return LocalDemoTelehealthProvider()
+        return LocalDemoTelehealthProvider("local_demo")
+    if provider == "internal_chat":
+        return LocalDemoTelehealthProvider("internal_chat")
     return UnavailableTelehealthProvider(provider)

@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block title %}Founder Readiness — ZENDOC{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Founder pre-call console</p>
+    <h1>Founder Readiness</h1>
+    <p class="section-copy">One evidence-bound view for a DHN demo, investor call or pilot discussion. No readiness percentage is invented.</p>
+  </div>
+  <span class="status-badge {{ 'active' if snapshot.meeting_mode == 'LIVE_LOCAL_DEMO_MODE' else 'working' }}">{{ snapshot.meeting_mode|replace('_',' ') }}</span>
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <div><p class="eyebrow">Meeting mode</p><h2>{{ snapshot.meeting_mode|replace('_',' ') }}</h2></div>
+  </div>
+  <p>{{ snapshot.meeting_note }}</p>
+  <div class="form-actions">
+    <a class="primary-action" href="{{ url_for('showcase.showcase_page') }}">Open Public Showcase</a>
+    <a class="secondary-action" href="{{ url_for('edgecare.edgecare_admin_page') }}">AI Runtime Evidence</a>
+    <a class="secondary-action" href="{{ url_for('main.startup_command_center') }}">Startup Evidence</a>
+    <a class="secondary-action" href="{{ url_for('main.startup_investor_snapshot_export', days=snapshot.window_days) }}">Export Investor Evidence</a>
+  </div>
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head">
+    <div><p class="eyebrow">Software completion</p><h2>{{ snapshot.software.status|replace('_',' ') }}</h2></div>
+    <span class="status-badge {{ 'active' if snapshot.software.status == 'SOFTWARE_IMPLEMENTATION_COMPLETE' else 'working' }}">{{ snapshot.software.blockers|length }} blocker(s)</span>
+  </div>
+  <div class="summary-row"><span>Required routes</span><strong>{{ snapshot.software.route_count }}</strong></div>
+  <div class="summary-row"><span>Release/security artifacts</span><strong>{{ snapshot.software.artifact_count }}</strong></div>
+  <div class="summary-row"><span>Required regression files</span><strong>{{ snapshot.software.regression_file_count }}</strong></div>
+  <div class="summary-row"><span>Exact-head validation</span><strong>{{ snapshot.software.validation_status|replace('_',' ') }}</strong></div>
+  {% if snapshot.software.blockers %}
+    <h3>Software blockers</h3>
+    <ul>{% for item in snapshot.software.blockers %}<li><strong>{{ item.key|replace('_',' ')|title }}:</strong> {{ item.message }}{% if item.detail %} — {{ item.detail }}{% endif %}</li>{% endfor %}</ul>
+  {% else %}
+    <p class="form-note">The checked repository-owned software contract is complete. Exact-head CI still must pass before this commit is called validated.</p>
+  {% endif %}
+  <p class="form-note">{{ snapshot.software.truth_notice }}</p>
+</section>
+
+<section class="grid two spaced-panel">
+  <article class="panel">
+    <div class="panel-head"><div><p class="eyebrow">Virtual demo</p><h2>Route + runtime contract</h2></div></div>
+    <div class="summary-row"><span>Required routes registered</span><strong>{{ snapshot.demo.route_contract.registered_count }}/{{ snapshot.demo.route_contract.required|length }}</strong></div>
+    <div class="summary-row"><span>Local AI</span><strong>{{ snapshot.demo.local_ai.status|default('unknown')|replace('_',' ') }}</strong></div>
+    <div class="summary-row"><span>Local ASR</span><strong>{{ snapshot.demo.local_asr.status|default('unknown')|replace('_',' ') }}</strong></div>
+    <div class="summary-row"><span>Typed fallback</span><strong>Available</strong></div>
+    <div class="summary-row"><span>Deterministic safety fallback</span><strong>Available</strong></div>
+    {% if snapshot.demo.route_contract.missing %}
+      <p class="form-note"><strong>Missing routes:</strong> {{ snapshot.demo.route_contract.missing|join(', ') }}</p>
+    {% endif %}
+    <p class="form-note">{{ snapshot.demo.route_contract.truth_notice }}</p>
+  </article>
+
+  <article class="panel">
+    <div class="panel-head"><div><p class="eyebrow">Pilot</p><h2>{{ snapshot.pilot.status|replace('_',' ') }}</h2></div></div>
+    <div class="summary-row"><span>Blocking conditions</span><strong>{{ snapshot.pilot.blockers|length }}</strong></div>
+    <div class="summary-row"><span>Warnings</span><strong>{{ snapshot.pilot.warnings|length }}</strong></div>
+    <div class="summary-row"><span>Checked conditions passed</span><strong>{{ snapshot.pilot.passed|length }}</strong></div>
+    <div class="summary-row"><span>Real active users counted</span><strong>{{ snapshot.pilot.counts.active_non_admin_users }}</strong></div>
+    <div class="summary-row"><span>Real verified providers counted</span><strong>{{ snapshot.pilot.counts.verified_providers }}</strong></div>
+    <p class="form-note">{{ snapshot.pilot.truth_notice }}</p>
+  </article>
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head">
+    <div><p class="eyebrow">Public launch gate</p><h2>{{ snapshot.public_launch.status|replace('_',' ') }}</h2></div>
+    <span class="status-badge {{ 'active' if snapshot.public_launch.status == 'PUBLIC_LAUNCH_READY' else 'working' }}">{{ snapshot.public_launch.blockers|length }} blocker(s)</span>
+  </div>
+  <div class="grid two">
+    <div>
+      <h3>Launch blockers</h3>
+      {% if snapshot.public_launch.blockers %}
+        <ul>{% for item in snapshot.public_launch.blockers %}<li><strong>{{ item.key|replace('_',' ')|title }}:</strong> {{ item.message }}</li>{% endfor %}</ul>
+      {% else %}
+        <p class="form-note">No software/deployment blocker is reported by the public launch gate.</p>
+      {% endif %}
+    </div>
+    <div>
+      <h3>Warnings</h3>
+      {% if snapshot.public_launch.warnings %}
+        <ul>{% for item in snapshot.public_launch.warnings %}<li><strong>{{ item.key|replace('_',' ')|title }}:</strong> {{ item.message }}</li>{% endfor %}</ul>
+      {% else %}
+        <p class="form-note">No launch warning is currently reported.</p>
+      {% endif %}
+    </div>
+  </div>
+  <p class="form-note">{{ snapshot.public_launch.truth_notice }}</p>
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head">
+    <div><p class="eyebrow">Fundraising evidence</p><h2>{{ snapshot.funding.status|replace('_',' ') }}</h2></div>
+    <span class="status-badge {{ 'active' if not snapshot.funding.missing else 'working' }}">{{ snapshot.funding.present_count }}/{{ snapshot.funding.required_signal_count }} evidence signals present</span>
+  </div>
+  <div class="grid two">
+    <div>
+      <h3>Observed evidence present</h3>
+      {% if snapshot.funding.present %}
+        <ul>{% for item in snapshot.funding.present %}<li>{{ item.label }}</li>{% endfor %}</ul>
+      {% else %}
+        <p class="form-note">No tracked fundraising evidence signal is present yet. Keep collecting real usage, provider, pilot and finance evidence.</p>
+      {% endif %}
+    </div>
+    <div>
+      <h3>Evidence still missing</h3>
+      {% if snapshot.funding.missing %}
+        <ul>{% for item in snapshot.funding.missing %}<li>{{ item.label }}</li>{% endfor %}</ul>
+      {% else %}
+        <p class="form-note">All tracked evidence-presence signals have observations. This is still not an investment recommendation or guarantee.</p>
+      {% endif %}
+    </div>
+  </div>
+  <p class="form-note">{{ snapshot.funding.truth_notice }}</p>
+</section>
+
+<section class="grid two spaced-panel">
+  <article class="panel">
+    <p class="eyebrow">Pilot blockers</p>
+    <h2>What must be fixed</h2>
+    {% if snapshot.pilot.blockers %}
+      <ul>{% for item in snapshot.pilot.blockers %}<li><strong>{{ item.key|replace('_',' ')|title }}:</strong> {{ item.message }}</li>{% endfor %}</ul>
+    {% else %}
+      <p class="form-note">No hard first-50 software/deployment blocker is currently reported.</p>
+    {% endif %}
+  </article>
+  <article class="panel">
+    <p class="eyebrow">Pilot warnings</p>
+    <h2>What needs evidence or operations</h2>
+    {% if snapshot.pilot.warnings %}
+      <ul>{% for item in snapshot.pilot.warnings %}<li><strong>{{ item.key|replace('_',' ')|title }}:</strong> {{ item.message }}</li>{% endfor %}</ul>
+    {% else %}
+      <p class="form-note">No warning is currently reported by the first-50 readiness engine.</p>
+    {% endif %}
+  </article>
+</section>
+
+<aside class="trust-note">
+  <strong>Founder truth boundary</strong><br>
+  {{ snapshot.truth_notice }} Synthetic DEMO ONLY records never count as traction, local-runtime configuration is not Snapdragon/NPU proof, and software workflow state is not external provider fulfilment.
+</aside>
+{% endblock %}

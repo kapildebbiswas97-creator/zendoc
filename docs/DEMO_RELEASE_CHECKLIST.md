@@ -1,36 +1,89 @@
-# Demo Release Checklist
+# ZENDOC Demo Release Checklist
 
-Status is evidence-based as of Milestone 8.3 + Selection Beta Hardening. `PASS` means covered by the automated suite or repository audit. `FAIL` means a required external condition has not been configured or verified.
+Use this checklist immediately before recording a competition submission.
 
-| Check | Result | Evidence / blocker |
-| --- | --- | --- |
-| Registration works | PASS | Patient and provider registration tests |
-| Duplicate registration handled | PASS | Normalized duplicate returns login guidance |
-| Login works | PASS | Web/API patient, provider, and configured-owner tests |
-| Logout works | PASS | Rotated session plus CSRF-protected production POST |
-| Login again works | PASS | Logout/login and restart integration tests |
-| App restart preserves account | PASS | Same isolated database reopened by a new Flask app |
-| Role preserved | PASS | Stable patient/doctor/owner IDs and roles verified |
-| Profile/data preserved | PASS | Profile, metric, notification, appointment, provider schedule, conversation, and message verified |
-| Admin remains owner-only | PASS | Public/Admin manipulation blocked; owner preserved after restart |
-| Patient isolation works | PASS | Existing record/grant tests plus post-restart notification isolation |
-| Provider isolation works | PASS | Existing provider/consultation/message authorization tests |
-| Major demo routes return successfully | PASS | Representative patient and doctor route smoke test |
-| No fake integrations | PASS | Password recovery and persistence use truthful status labels |
-| Mobile critical flow usable | PASS | Existing responsive/auth/API tests; device-level visual QA remains recommended |
-| All POST forms have CSRF protection | PASS | AUD-01: 18 forms across 10 templates fixed; re-scan shows 0 missing |
-| IoT device sync measurements persist | PASS | AUD-02: `get_db().commit()` added to `create_measurement()`; end-to-end verified |
-| Ambulance endpoint and response key correct | PASS | AUD-03: `/api/v1/ambulance/requests`, key `ambulance_request`; confirmed in test suite |
-| Doctor availability status values correct | PASS | AUD-04: `"available"/"busy"/"offline"/"consultation_only"`; confirmed in test suite |
-| Complete automated suite green | PASS | **192 passed, 1 warning in 206.76 seconds** (includes 10-suite hardening regression) |
-| Production persistence configured | **FAIL** | No durable hosted database credentials/infrastructure configured — intentional pre-selection decision |
-| Production restart/redeploy persistence manually verified | **FAIL** | Requires controlled verification against the configured production store |
-| No secrets committed | PASS | Placeholder-only configuration; final secret scan required before production deploy |
+## 1. Freeze the exact source
 
-## Release decision
+- [ ] Confirm the recording uses `competition/edgecare-ai-2026`.
+- [ ] Record the exact Git commit SHA.
+- [ ] Confirm the exact SHA has a green ZENDOC Production Gate.
+- [ ] Do not merge PR #68 into production `main` for the competition recording.
 
-Permanent production persistence is intentionally not configured before the selection round. This limitation is disclosed to all testers and does **not** block the Selection Beta.
+## 2. Local runtime readiness
 
-**SELECTION BETA READY — PERSISTENCE LIMITATION DISCLOSED**
+- [ ] Start ZENDOC locally.
+- [ ] Open `/admin/edgecare` as the owner.
+- [ ] Local LLM status = `ready`.
+- [ ] Local ASR status = `ready`.
+- [ ] Harmless local-model smoke test passes.
+- [ ] Microphone recording works from the browser.
+- [ ] Transcript appears as editable text.
+- [ ] Transcript is not automatically submitted.
+- [ ] Manual Send works.
 
-All P0/P1 issues found during the final hardening audit have been fixed and verified. The persistence limitation is a known, pre-declared selection-beta condition, not a regression or blocking defect. See `docs/FINAL_RELEASE_AUDIT.md` for full audit detail.
+## 3. Demo flow
+
+- [ ] Login works.
+- [ ] Patient dashboard loads without 404/500.
+- [ ] Health Memory loads.
+- [ ] Find Care loads.
+- [ ] Search returns only truthful local/verified/public results according to provenance.
+- [ ] If using synthetic competition data, **DEMO ONLY** labels remain visible.
+- [ ] Provider profile loads.
+- [ ] A published slot can be selected for the synthetic deterministic fixture.
+- [ ] Appointment request is persisted and shown as requested/pending provider confirmation.
+- [ ] ZENDOC AI loads.
+- [ ] Mental Wellness & Awareness is visible and remains non-diagnostic.
+- [ ] Messaging page loads and follows the current role/permission policy.
+- [ ] Family/connected-care page used in the recording loads.
+
+## 4. Truthful narration
+
+Allowed when demonstrated:
+
+- "ZENDOC has a working product foundation."
+- "ZENDOC can run its local AI software path on the demo machine."
+- "Voice input creates editable text and requires manual Send."
+- "High-risk clinical and permission-changing actions are not model-controlled."
+
+Not allowed without external evidence:
+
+- "This runs on the Snapdragon NPU" unless real Qualcomm/physical-device evidence confirms it.
+- Fabricated NPU latency, throughput, power, benchmark or accuracy values.
+- Claims that public/map discovery listings are directly bookable without a real integration.
+- Claims of real pharmacy stock/order fulfilment, ambulance dispatch, payment, insurer approval or provider confirmation without the connected external system proving it.
+- Claims of users, pilots, hospitals, doctors, revenue, clinical outcomes, regulatory approval or partnerships that are not independently verified.
+
+## 5. Qualcomm evidence, when available
+
+- [ ] Save Qualcomm AI Hub profile/job identifier.
+- [ ] Save exact target device/chipset.
+- [ ] Save exact model and runtime/provider.
+- [ ] Save measured performance exactly as reported.
+- [ ] Save explicit NPU/HTP evidence only if the source reports it.
+- [ ] Store no API token in screenshots, repository, benchmark metadata or video.
+
+## 6. Recording assets
+
+- [ ] Clean browser profile / no private tabs.
+- [ ] No real patient data visible.
+- [ ] No passwords, API keys or environment secrets visible.
+- [ ] Notifications disabled during recording.
+- [ ] Demo fixture prepared before recording.
+- [ ] Pitch script open on a second device or printed.
+- [ ] Final deck uses real screenshots and leaves unverified metrics out.
+
+## 7. Competition-specific framing
+
+### SBI / IIT Delhi Youth Ideathon
+Lead with the patient problem, entrepreneurship, scale, accessibility and continuous-care vision. Do not make the pitch depend on Snapdragon evidence. Use `docs/SBI_IIT_DELHI_YOUTH_IDEATHON_2026.md`.
+
+### DHN / IIT Kanpur
+Lead with healthcare relevance, patient outcomes, interoperability/privacy, credible data and pilot readiness. Use `docs/DHN_IIT_KANPUR_SUBMISSION_PACKAGE.md`.
+
+### Qualcomm
+Lead with on-device privacy, local AI/ASR, deterministic healthcare safety and measured Snapdragon evidence. Use `docs/QUALCOMM_AI_HUB_RUNTIME_SETUP.md`.
+
+## Final stop condition
+
+Record only after the exact source SHA is green and every page intended for the demo has passed this checklist on the actual recording machine. Repository CI cannot replace microphone, local-model or Snapdragon hardware validation.

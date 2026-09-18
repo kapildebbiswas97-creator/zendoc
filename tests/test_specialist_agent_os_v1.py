@@ -56,6 +56,7 @@ def test_agent_os_route_is_registered(tmp_path):
     rules = {rule.rule for rule in app.url_map.iter_rules()}
     assert "/agent-os" in rules
     assert "/api/v1/agent/orchestrate" in rules
+    assert "/api/v1/agent/care-journeys/<int:journey_id>/chain" in rules
     assert "/api/v1/agent/autonomy" in rules
 
 

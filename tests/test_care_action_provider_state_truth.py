@@ -41,7 +41,9 @@ def test_patient_ledger_transition_cannot_assert_registered_provider_confirmatio
     assert response.status_code == 302
 
     with app.app_context():
-        appointment = get_db().execute("SELECT id FROM appointments ORDER BY id DESC LIMIT 1").fetchone()
+        appointment = get_db().execute(
+            "SELECT id FROM appointments ORDER BY id DESC LIMIT 1"
+        ).fetchone()
         appointment_id = int(appointment["id"])
         action = get_db().execute(
             "SELECT id,status FROM care_actions WHERE service_ref=?",
@@ -61,10 +63,15 @@ def test_patient_ledger_transition_cannot_assert_registered_provider_confirmatio
         },
     )
     assert denied.status_code == 403
-    assert "appointment lifecycle" in denied.get_json()["error"]["message"].lower()
+    message = denied.get_json()["error"]["message"].lower()
+    assert "appointment" in message
+    assert "synchron" in message
 
     with app.app_context():
-        action = get_db().execute("SELECT status FROM care_actions WHERE id=?", (action_id,)).fetchone()
+        action = get_db().execute(
+            "SELECT status FROM care_actions WHERE id=?",
+            (action_id,),
+        ).fetchone()
         assert action["status"] == "STAGED"
         fake_event = get_db().execute(
             "SELECT id FROM care_action_events WHERE action_id=? AND status='CONFIRMED'",
@@ -84,10 +91,16 @@ def test_patient_ledger_transition_cannot_assert_registered_provider_confirmatio
     assert confirmed.status_code == 302
 
     with app.app_context():
-        action = get_db().execute("SELECT status FROM care_actions WHERE id=?", (action_id,)).fetchone()
+        action = get_db().execute(
+            "SELECT status FROM care_actions WHERE id=?",
+            (action_id,),
+        ).fetchone()
         assert action["status"] == "CONFIRMED"
         event = get_db().execute(
-            "SELECT event_type,provenance_json FROM care_action_events WHERE action_id=? AND status='CONFIRMED' ORDER BY id DESC LIMIT 1",
+            """SELECT event_type,provenance_json
+               FROM care_action_events
+               WHERE action_id=? AND status='CONFIRMED'
+               ORDER BY id DESC LIMIT 1""",
             (action_id,),
         ).fetchone()
         assert event["event_type"] == "INTERNAL_APPOINTMENT_SYNC"

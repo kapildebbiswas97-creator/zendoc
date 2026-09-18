@@ -12,7 +12,7 @@ MARKETPLACE_CATEGORIES = [
         "badge": "Working Now",
         "badge_color": "success",
         "icon": "user-md",
-        "description": "Find verified clinicians, search specialties, check schedules, and book direct consultations.",
+        "description": "Discover healthcare options and, for active verified ZENDOC providers with published schedules, request connected appointments. External/public listings remain discovery-only.",
         "url": "/finder",
     },
     {
@@ -25,12 +25,25 @@ MARKETPLACE_CATEGORIES = [
         "url": "/family",
     },
     {
+        "id": "health_hub",
+        "title": "Health Hub",
+        "badge": "Competition Beta",
+        "badge_color": "primary",
+        "icon": "heartbeat",
+        "description": (
+            "Daily health learning, child-development continuity, real video discovery and truthful "
+            "health-product search handoffs. Creator publishing, cross-posting and affiliate attribution "
+            "remain disabled until real integrations are configured."
+        ),
+        "url": "/health-hub",
+    },
+    {
         "id": "home_health",
         "title": "Home Healthcare",
-        "badge": "Beta",
-        "badge_color": "primary",
+        "badge": "Request Workflow",
+        "badge_color": "warning",
         "icon": "home",
-        "description": "Doctor home visits, nursing care, physiotherapy, elder attendants, and medical equipment rental.",
+        "description": "Record home-care requests. Real provider assignment and acceptance appear only when an active verified ZENDOC provider has published that service capability.",
         "url": "/home-health",
     },
     {
@@ -45,19 +58,19 @@ MARKETPLACE_CATEGORIES = [
     {
         "id": "pharmacy",
         "title": "Pharmacy & Medicines",
-        "badge": "Working Now",
-        "badge_color": "success",
+        "badge": "Verified Request Workflow",
+        "badge_color": "primary",
         "icon": "pills",
-        "description": "Medicine catalog search, nearby pharmacy finder, delivery requests, and refill reminders.",
+        "description": "Medicine reference search, verified-pharmacy discovery, reminders, and pharmacy-request tracking. Stock, price, prescription acceptance and delivery require pharmacy confirmation.",
         "url": "/pharmacy",
     },
     {
         "id": "iot_hub",
         "title": "IoT Health Device Hub",
-        "badge": "Working Now",
-        "badge_color": "success",
+        "badge": "Registration Only",
+        "badge_color": "warning",
         "icon": "laptop-medical",
-        "description": "Connect smartwatches, BP monitors, glucometers, scales, and pulse oximeters with provenance tracking.",
+        "description": "Register personal device inventory records. Live pairing and automatic manufacturer/device sync are Integration Required; manual values are not labelled as trusted device evidence.",
         "url": "/iot-hub",
     },
     {
@@ -75,7 +88,7 @@ MARKETPLACE_CATEGORIES = [
         "badge": "Working Now",
         "badge_color": "success",
         "icon": "file-medical-alt",
-        "description": "Upload lab reports, automated structured extraction, lab trends, and longitudinal health timeline.",
+        "description": "Upload health records, maintain report metadata and manually structured results, review longitudinal trends, and use the Health Timeline. Extraction status stays explicit when automation is unavailable.",
         "url": "/records",
     },
     {
@@ -84,7 +97,7 @@ MARKETPLACE_CATEGORIES = [
         "badge": "Working Now",
         "badge_color": "success",
         "icon": "robot",
-        "description": "24/7 AI health guidance with emergency safety checks, symptom evaluation, and instant service routing.",
+        "description": "Bounded educational health guidance, deterministic emergency-first safety checks, non-diagnostic symptom guidance, and permissioned service navigation.",
         "url": "/ai",
     },
 ]

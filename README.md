@@ -4,6 +4,63 @@ ZENDOC is an AI-powered healthcare platform foundation with secure auth, role-ba
 
 ZENDOC follows one product rule across the stack: **recorded or configured is not the same as externally confirmed**. Providers, inventory, prices, availability, verification, dispatch, delivery, approvals, model health, and other external facts are never fabricated.
 
+## Snapdragon AI Lab 2026 — EdgeCare AI competition build
+
+The `competition/edgecare-ai-2026` branch is the isolated **ZENDOC EdgeCare AI** build prepared for Qualcomm's **Snapdragon® AI Lab Build & Present Challenge 2026**. ZENDOC existed before the challenge; this branch significantly modifies the product with local open-source AI paths, local speech-to-text, manual-review voice interaction, EdgeCare runtime/evidence states, Qualcomm AI Hub profiling guidance, and deterministic healthcare safety around model use.
+
+**Developer**
+
+- Kapil Deb Biswas — GitHub: https://github.com/kapildebbiswas97-creator — email: kapildebbiswas97@gmail.com
+
+**Challenge positioning**
+
+- Designed/intended for optimisation on Snapdragon-powered HP PCs.
+- Local Ollama/Faster-Whisper testing proves the software flow on the demo machine; it does **not** prove Snapdragon/NPU execution.
+- Snapdragon/NPU claims are made only after real Qualcomm AI Hub or physical Snapdragon evidence exists.
+- External/public/map provider results remain discovery results unless an actual integration proves booking/order capability.
+- Diagnosis, prescribing, medicine changes, emergency actions, payments, arbitrary code/SQL/filesystem execution, and permission changes remain deterministic/non-model-controlled.
+
+For the exact 2026 Qualcomm proposal wording, evaluation mapping and final form answer bank, see `docs/QUALCOMM_SNAPDRAGON_AI_LAB_2026_SUBMISSION.md`.
+
+### Competition setup from scratch
+
+Requirements: Git, Python 3.11 x86-64/AMD64, and Windows 11 recommended for the local EdgeCare demo. Ollama is optional for the local-model path; `requirements-edgecare-demo.txt` contains the optional local speech dependencies.
+
+```powershell
+git clone https://github.com/kapildebbiswas97-creator/zendoc.git
+cd zendoc
+git checkout competition/edgecare-ai-2026
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python -m pip install -r requirements-edgecare-demo.txt
+```
+
+For the complete local LLM, local ASR, microphone, synthetic-demo-data and safe recording workflow, follow `docs/EDGECARE_LOCAL_DEMO_SETUP.md`.
+
+For genuine Qualcomm AI Hub / Snapdragon profiling, follow `docs/QUALCOMM_AI_HUB_RUNTIME_SETUP.md`. Do not place Qualcomm API tokens, passwords, patient data, or private health records in source control, screenshots, or recordings.
+
+### Run and verify
+
+```powershell
+python run.py
+```
+
+Open `http://127.0.0.1:5000`.
+
+Run the full repository test suite with:
+
+```powershell
+python -m pytest -q
+```
+
+The exact submission commit should also have a green **ZENDOC Production Gate** before the final submission freeze. Competition branches intentionally skip production Render deployment verification; production deployment verification applies to `main` only.
+
+### License
+
+This repository includes the Apache License 2.0 in `LICENSE`. Third-party libraries, models, datasets, and services retain their own licenses and terms.
+
 ## Run Locally
 
 ```powershell
@@ -108,6 +165,11 @@ Healthcare finder external integrations are controlled by `ZENDOC_PLACES_PROVIDE
 
 Relevant documentation:
 
+- `docs/QUALCOMM_SNAPDRAGON_AI_LAB_2026_SUBMISSION.md` — exact Qualcomm 2026 proposal package and answer bank
+- `docs/EDGECARE_AI_2026.md` — EdgeCare competition architecture and truth boundaries
+- `docs/EDGECARE_LOCAL_DEMO_SETUP.md` — one-machine local demo setup
+- `docs/QUALCOMM_AI_HUB_RUNTIME_SETUP.md` — genuine Snapdragon/Qualcomm profiling workflow
+- `docs/DEMO_RELEASE_CHECKLIST.md` — recording freeze checklist
 - `docs/STARTUP_STRATEGY.md` — startup operating model, growth strategy, rollout, monetization, and investor path
 - `docs/INVESTOR_READINESS.md` — evidence, traction, diligence, data room, metrics, and funding-readiness checklist
 - `docs/ROADMAP.md` — product and infrastructure roadmap

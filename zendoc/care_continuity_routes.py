@@ -8,8 +8,7 @@ from .care_journey_store import list_patient_journeys
 from .clinician_handoff import build_clinician_handoff_packet
 from .db import get_db
 from .evidence_passport import get_evidence_passport, list_evidence_passports
-from .routes import audit
-from .security import login_required
+from .routes import audit, login_required
 
 bp = Blueprint("care_continuity", __name__)
 
@@ -25,9 +24,12 @@ def _journey_cards(user):
         actions = list_actions(user, journey["id"])
         cards.append({
             "journey": journey,
-            "open_actions": [a for a in actions if a.get("status") not in {"COMPLETED", "BLOCKED", "CANCELLED"}],
-            "completed_actions": [a for a in actions if a.get("status") == "COMPLETED"],
-            "outcome_count": sum(len(a.get("outcomes") or []) for a in actions),
+            "open_actions": [
+                action for action in actions
+                if action.get("status") not in {"COMPLETED", "BLOCKED", "CANCELLED"}
+            ],
+            "completed_actions": [action for action in actions if action.get("status") == "COMPLETED"],
+            "outcome_count": sum(len(action.get("outcomes") or []) for action in actions),
         })
     return cards
 
