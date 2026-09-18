@@ -10,6 +10,8 @@ import json
 
 from flask import current_app
 
+from .provider_service import require_verified_provider
+
 from .db import get_db, now_iso
 from .family_care import authorize_family_patient
 
@@ -175,6 +177,8 @@ def create_medicine_order(user, data):
 
 def list_medicine_orders(user):
     """List medicine orders for user."""
+    if user and user["role"] == "pharmacy":
+        require_verified_provider(user, allowed_roles={"pharmacy"})
     uid = _user_id(user)
     rows = get_db().execute(
         """SELECT mo.*, u.name patient_name, pharm.name pharmacy_name
@@ -199,6 +203,8 @@ def list_medicine_orders(user):
 
 def get_medicine_order(user, order_id):
     """Get single medicine order."""
+    if user and user["role"] == "pharmacy":
+        require_verified_provider(user, allowed_roles={"pharmacy"})
     uid = _user_id(user)
     row = get_db().execute(
         """SELECT mo.*, u.name patient_name
