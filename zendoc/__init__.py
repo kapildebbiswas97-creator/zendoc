@@ -53,6 +53,7 @@ from .preventive_care import ensure_preventive_care_schema
 from .preventive_care_routes import bp as preventive_care_bp
 from .public_ingestion_routes import bp as public_ingestion_bp
 from .provider_onboarding_routes import bp as provider_onboarding_bp
+from .public_launch_routes import bp as public_launch_bp
 from .release_health_routes import bp as release_health_bp
 from .showcase_routes import bp as showcase_bp
 from .specialist_agent_routes import bp as specialist_agents_bp
@@ -142,6 +143,7 @@ def create_app(test_config=None):
     app.register_blueprint(public_ingestion_bp)
     app.register_blueprint(dataset_snapshot_ingestion_bp)
     app.register_blueprint(provider_onboarding_bp)
+    app.register_blueprint(public_launch_bp)
     app.register_blueprint(global_data_bp)
     app.register_blueprint(showcase_bp)
     app.register_blueprint(specialist_agents_bp)
