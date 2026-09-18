@@ -1,3 +1,5 @@
+import pytest
+
 from zendoc.db import get_db, now_iso
 from zendoc.pharmacy_order_routes import update_medicine_order_status
 from zendoc.pharmacy_service import create_medicine_order
@@ -92,12 +94,12 @@ def test_unverified_or_unassigned_pharmacy_order_is_not_marked_integrated(tmp_pa
         db.commit()
         patient = {"id": patient_id, "role": "patient"}
 
-        unverified = create_medicine_order(patient, {
-            "items": [{"name": "ORS", "quantity": 1}],
-            "delivery_address": "Truth address",
-            "pharmacy_id": unverified_pharmacy_id,
-        })
-        assert _care_action_for_order(db, unverified["id"]) is None
+        with pytest.raises(ValueError, match="active, verified ZENDOC pharmacy"):
+            create_medicine_order(patient, {
+                "items": [{"name": "ORS", "quantity": 1}],
+                "delivery_address": "Truth address",
+                "pharmacy_id": unverified_pharmacy_id,
+            })
 
         unassigned = create_medicine_order(patient, {
             "items": [{"name": "ORS", "quantity": 1}],
