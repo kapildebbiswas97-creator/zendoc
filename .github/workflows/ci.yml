@@ -65,6 +65,7 @@ jobs:
           tests/test_email_delivery_v1.py
           tests/test_submission_smoke_matrix_v1.py
           tests/test_telehealth_truth_v1.py
+          tests/test_policy_acceptance_v1.py
 
   full-sqlite-tests:
     name: Full SQLite Test Suite
