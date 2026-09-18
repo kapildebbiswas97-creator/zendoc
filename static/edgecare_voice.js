@@ -7,6 +7,22 @@
   const form = input.closest("form");
   const csrfInput = form && form.querySelector("input[name='csrf_token']");
   const endpoint = "/edgecare/asr/transcribe";
+
+  const ensureHidden = (name, value = "") => {
+    if (!form) return null;
+    let field = form.querySelector(`input[name='${name}']`);
+    if (!field) {
+      field = document.createElement("input");
+      field.type = "hidden";
+      field.name = name;
+      form.appendChild(field);
+    }
+    if (value !== undefined) field.value = String(value ?? "");
+    return field;
+  };
+
+  const inputChannel = ensureHidden("input_channel", "typed");
+  const asrAuditLogId = ensureHidden("asr_audit_log_id", "");
   const maxClientBytes = 8 * 1024 * 1024;
   const maxRecordingMs = 30 * 1000;
 
@@ -124,6 +140,8 @@
       }
 
       appendTranscript(result.text);
+      if (inputChannel) inputChannel.value = "local_asr_transcript";
+      if (asrAuditLogId) asrAuditLogId.value = String(result.audit_log_id || "");
       status.textContent = `Local transcript added${result.model ? ` using ${result.model}` : ""}. Review it, then press Send when ready.`;
     } catch (_error) {
       status.textContent = "The local speech runtime could not be reached. Type your request below.";
