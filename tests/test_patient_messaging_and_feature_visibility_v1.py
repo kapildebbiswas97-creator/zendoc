@@ -189,6 +189,11 @@ def test_patient_dashboard_surfaces_new_tools_and_ai_surfaces_mental_awareness(t
     assert 'href="/health-hub"' in body
     assert "Mental Wellness &amp; Awareness" in body
     assert "#mental-awareness" in body
+    # The same high-value capabilities must remain reachable from the global
+    # navigation, not only from cards on the dashboard.
+    assert body.count('href="/agent-os"') >= 2
+    assert body.count('href="/health-hub"') >= 2
+    assert body.count('href="/ai#mental-awareness"') >= 2
 
     ai_page = client.get("/ai")
     assert ai_page.status_code == 200
