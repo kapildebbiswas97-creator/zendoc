@@ -20,7 +20,6 @@ from typing import Any
 
 from .care_continuity import get_care_continuity_snapshot
 from .db import get_db, now_iso
-from .edgecare_asr import get_edgecare_asr
 from .health_memory_continuity import get_health_memory_provenance_summary
 from .knowledge_agent import run_knowledge_agent
 from .model_router import (
@@ -107,7 +106,15 @@ def _input_evidence(actor: Any, input_channel: str, asr_audit_log_id: Any) -> di
     actor_id = _actor_id(actor)
     requested = str(input_channel or "typed").strip().lower()
     asr_audit = _validated_asr_audit(actor_id, asr_audit_log_id)
-    asr_status = get_edgecare_asr().status(check_health=False)
+
+    provider = None
+    model = None
+    runtime_status = "not_evidenced"
+    if asr_audit:
+        parts = str(asr_audit.get("entity_id") or "").split(":", 2)
+        provider = parts[0] or None if parts else None
+        model = parts[1] or None if len(parts) > 1 else None
+        runtime_status = "success" if len(parts) > 2 and parts[2] == "success" else "recorded"
 
     if requested == "local_asr_transcript" and asr_audit:
         status = "VERIFIED_LOCAL_ASR_TRANSCRIPT"
@@ -125,11 +132,12 @@ def _input_evidence(actor: Any, input_channel: str, asr_audit_log_id: Any) -> di
         "channel": channel,
         "manual_submit_required": True,
         "asr_audit_log_id": int(asr_audit["id"]) if asr_audit else None,
-        "asr_runtime_status": str(asr_status.get("status") or "unknown"),
-        "asr_provider": asr_status.get("provider"),
-        "asr_model": asr_status.get("model"),
+        "asr_runtime_status": runtime_status,
+        "asr_provider": provider,
+        "asr_model": model,
         "transcript_persisted_by_chain": False,
         "audio_persisted_by_chain": False,
+        "input_adapter": "audit_evidence_contract",
     }
 
 
