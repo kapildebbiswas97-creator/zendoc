@@ -2096,6 +2096,35 @@ def require_api_user():
         return None, (jsonify({"error": "Unauthorized"}), 401)
     if user["role"] == "admin" and not is_owner(user):
         return None, (jsonify({"error": {"code": 403, "message": "Only the ZENDOC owner may access Admin operations."}}), 403)
+
+    if (
+        current_app.config.get("PUBLIC_RELEASE_REQUIRED")
+        and user["role"] in PROVIDER_ROLES
+    ):
+        profile = get_provider_profile_for_user(user["id"])
+        verified = bool(profile and str(profile["verification_status"]) == "verified")
+        if not verified:
+            allowed_paths = {
+                "/api/v1/provider/onboarding",
+                "/api/v1/provider/evidence",
+                "/api/v1/account/export",
+                "/api/v1/account",
+                "/api/v1/auth/logout",
+            }
+            path = str(request.path or "")
+            if path not in allowed_paths and not path.startswith("/api/v1/provider/public-entity-claims"):
+                return None, (
+                    jsonify({
+                        "error": {
+                            "code": 403,
+                            "message": (
+                                "Provider verification is required before using operational provider capabilities."
+                            ),
+                        }
+                    }),
+                    403,
+                )
+
     g.observability_actor = user
     return user, None
 
