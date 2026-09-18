@@ -1,4 +1,4 @@
-from tests.test_milestone1 import make_app
+from tests.test_milestone1 import make_app, make_client, register_web
 from zendoc.email_delivery import email_delivery_status, send_transactional_email
 
 
@@ -78,3 +78,36 @@ def test_smtp_delivery_uses_configured_provider(tmp_path, monkeypatch):
         assert instance.logged_in == ("mailer", "secret")
         assert len(instance.messages) == 1
         assert instance.messages[0]["To"] == "patient@example.test"
+
+
+def test_password_recovery_response_does_not_enumerate_account_on_delivery_failure(tmp_path, monkeypatch):
+    _app, client = make_client(tmp_path)
+    existing_email = "smtp-enumeration@example.com"
+    register_web(client, "patient", existing_email, "SMTP Enumeration")
+
+    from zendoc import routes
+
+    monkeypatch.setattr(
+        routes,
+        "email_delivery_status",
+        lambda: {"transactional_email": True, "provider": "smtp", "status": "configured"},
+    )
+
+    def fail_delivery(*_args, **_kwargs):
+        raise RuntimeError("simulated provider failure")
+
+    monkeypatch.setattr(routes, "send_transactional_email", fail_delivery)
+
+    existing = client.post(
+        "/api/v1/auth/forgot-password",
+        json={"email": existing_email},
+    )
+    missing = client.post(
+        "/api/v1/auth/forgot-password",
+        json={"email": "smtp-missing@example.com"},
+    )
+
+    assert existing.status_code == 202
+    assert missing.status_code == 202
+    assert existing.get_json() == missing.get_json()
+    assert existing.get_json()["status"] == "accepted"
