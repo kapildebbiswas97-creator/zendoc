@@ -1,5 +1,7 @@
 from io import BytesIO
 
+import pytest
+
 from werkzeug.datastructures import FileStorage
 
 from tests.test_milestone1 import csrf, login_web, make_client, register_web
@@ -7,6 +9,7 @@ from zendoc.db import get_db, now_iso
 from zendoc.record_storage import S3CompatibleRecordStorage
 from zendoc.launch_readiness import public_launch_readiness
 from zendoc.account_lifecycle import delete_account
+from zendoc.config import ConfigError, validate_startup_config
 
 
 def test_public_launch_legal_pwa_and_deletion_routes_exist(tmp_path):
@@ -354,3 +357,96 @@ def test_provider_account_deletion_deidentifies_without_cascading_patient_histor
         assert record is not None
         assert record["owner_id"] == patient["id"]
         assert record["uploaded_by"] == doctor["id"]
+
+
+def test_security_headers_cover_dynamic_responses_and_hsts_in_production(tmp_path):
+    app, client = make_client(tmp_path)
+
+    response = client.get("/privacy")
+    assert response.status_code == 200
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    assert response.headers["X-Frame-Options"] == "DENY"
+    assert response.headers["Referrer-Policy"] == "strict-origin-when-cross-origin"
+    assert "frame-ancestors 'none'" in response.headers["Content-Security-Policy"]
+    assert "geolocation=(self)" in response.headers["Permissions-Policy"]
+
+    app.config["ZENDOC_ENV"] = "production"
+    production_response = client.get("/privacy")
+    assert production_response.headers["Strict-Transport-Security"].startswith("max-age=31536000")
+    assert "no-store" in production_response.headers.get("Cache-Control", "")
+
+
+def test_public_release_startup_guard_blocks_unverified_configuration(tmp_path):
+    app, _client = make_client(tmp_path)
+    app.config.update(
+        TESTING=False,
+        ZENDOC_ENV="production",
+        SECRET_KEY="test-public-release-secret",
+        ADMIN_EMAIL="owner@example.test",
+        ADMIN_PASSWORD="Strong-Owner-Password-123",
+        DATABASE_DURABILITY="durable_configured",
+        REQUIRE_DURABLE_DATABASE=True,
+        PUBLIC_RELEASE_REQUIRED=True,
+        PUBLIC_BASE_URL="https://zendoc.example.test",
+        SUPPORT_EMAIL="support@zendoc.example.test",
+        PERSISTENCE_VERIFIED=True,
+        BACKUP_VERIFIED=False,
+        EMAIL_PROVIDER="smtp",
+        EMAIL_VERIFIED=False,
+        SMTP_HOST="smtp.example.test",
+        SMTP_FROM_EMAIL="noreply@zendoc.example.test",
+        STORAGE_PROVIDER="s3",
+        STORAGE_VERIFIED=False,
+        S3_BUCKET="zendoc-records",
+        S3_ACCESS_KEY_ID="test-access",
+        S3_SECRET_ACCESS_KEY="test-secret",
+        CONNECTED_CARE_DATA_MODE="LIVE",
+        TELEHEALTH_PROVIDER="internal_chat",
+    )
+    with pytest.raises(ConfigError) as exc:
+        validate_startup_config(app)
+    message = str(exc.value)
+    assert "ZENDOC_BACKUP_VERIFIED=true" in message
+    assert "ZENDOC_EMAIL_VERIFIED=true" in message
+    assert "ZENDOC_STORAGE_VERIFIED=true" in message
+
+    app.config.update(
+        BACKUP_VERIFIED=True,
+        EMAIL_VERIFIED=True,
+        STORAGE_VERIFIED=True,
+    )
+    validate_startup_config(app)
+
+
+def test_public_release_startup_guard_rejects_demo_telehealth_and_data_mode(tmp_path):
+    app, _client = make_client(tmp_path)
+    app.config.update(
+        TESTING=False,
+        ZENDOC_ENV="production",
+        SECRET_KEY="test-public-release-secret",
+        ADMIN_EMAIL="owner@example.test",
+        ADMIN_PASSWORD="Strong-Owner-Password-123",
+        DATABASE_DURABILITY="durable_configured",
+        REQUIRE_DURABLE_DATABASE=True,
+        PUBLIC_RELEASE_REQUIRED=True,
+        PUBLIC_BASE_URL="https://zendoc.example.test",
+        SUPPORT_EMAIL="support@zendoc.example.test",
+        PERSISTENCE_VERIFIED=True,
+        BACKUP_VERIFIED=True,
+        EMAIL_PROVIDER="smtp",
+        EMAIL_VERIFIED=True,
+        SMTP_HOST="smtp.example.test",
+        SMTP_FROM_EMAIL="noreply@zendoc.example.test",
+        STORAGE_PROVIDER="s3",
+        STORAGE_VERIFIED=True,
+        S3_BUCKET="zendoc-records",
+        S3_ACCESS_KEY_ID="test-access",
+        S3_SECRET_ACCESS_KEY="test-secret",
+        CONNECTED_CARE_DATA_MODE="DEMO",
+        TELEHEALTH_PROVIDER="local_demo",
+    )
+    with pytest.raises(ConfigError) as exc:
+        validate_startup_config(app)
+    message = str(exc.value)
+    assert "ZENDOC_CONNECTED_CARE_DATA_MODE=LIVE" in message
+    assert "non-demo ZENDOC_TELEHEALTH_PROVIDER" in message
