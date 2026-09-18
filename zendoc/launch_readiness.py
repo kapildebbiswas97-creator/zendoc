@@ -339,6 +339,41 @@ def public_launch_readiness() -> dict:
             "message": "Public support contact is configured.",
         })
 
+    connected_mode = str(current_app.config.get("CONNECTED_CARE_DATA_MODE") or "LIVE").strip().upper()
+    if connected_mode == "DEMO":
+        blockers.append({
+            "key": "connected_care_demo_mode",
+            "message": "Public launch cannot run with ZENDOC_CONNECTED_CARE_DATA_MODE=DEMO.",
+        })
+    else:
+        passed.append({
+            "key": "connected_care_live_mode",
+            "message": "Connected Care is not using synthetic DEMO operational data.",
+        })
+
+    telehealth_provider = str(current_app.config.get("TELEHEALTH_PROVIDER") or "local_demo").strip().lower()
+    if telehealth_provider == "local_demo":
+        blockers.append({
+            "key": "telehealth_demo_mode",
+            "message": (
+                "Public launch cannot use TELEHEALTH_PROVIDER=local_demo. "
+                "Use internal_chat for real in-app chat only, or configure a verified external media provider."
+            ),
+        })
+    elif telehealth_provider == "internal_chat":
+        passed.append({
+            "key": "telehealth_mode",
+            "message": "Telehealth is configured for real in-app chat only; voice/video remain unavailable.",
+        })
+    else:
+        warnings.append({
+            "key": "telehealth_mode",
+            "message": (
+                f"Telehealth provider '{telehealth_provider}' must be independently verified before "
+                "claiming voice/video or external consultation fulfilment."
+            ),
+        })
+
     package_name = str(current_app.config.get("ANDROID_PACKAGE_NAME") or "").strip()
     fingerprint = str(current_app.config.get("ANDROID_SHA256_CERT_FINGERPRINT") or "").strip()
     if package_name and not fingerprint:
