@@ -161,4 +161,4 @@ def test_public_release_blocks_government_self_registration(tmp_path):
         },
     )
     assert api.status_code == 403
-    assert "controlled provisioning" in api.get_json()["error"]["message"]
+    assert "controlled onboarding" in api.get_json()["error"]["message"]
