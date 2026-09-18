@@ -178,8 +178,11 @@ def iot_hub_page():
                     "model": request.form.get("model"),
                     "device_identifier": request.form.get("device_identifier"),
                 })
-                audit("connect", "health_device", str(dev["id"]))
-                flash(f"Device '{dev['device_name']}' connected successfully!", "success")
+                audit("register", "health_device", str(dev["id"]))
+                flash(
+                    f"Device record '{dev['device_name']}' registered. Live device sync is Integration Required.",
+                    "success",
+                )
             except (ValueError, PermissionError) as err:
                 flash(str(err), "error")
 
@@ -191,9 +194,8 @@ def iot_hub_page():
             try:
                 sync_device_measurement(g.user, device_id, metric_type, metric_value, unit=unit)
                 audit("sync", "health_device", str(device_id))
-                flash("Measurement synced from device into Health Memory!", "success")
             except Exception as err:
-                flash(str(err), "error")
+                flash(str(err), "warning")
 
         return redirect(url_for("ecosystem.iot_hub_page"))
 
@@ -349,7 +351,7 @@ def api_connect_device():
     data = request.get_json(silent=True) or {}
     try:
         dev = connect_device(user, data)
-        audit("connect", "health_device", str(dev["id"]), actor=user)
+        audit("register", "health_device", str(dev["id"]), actor=user)
         return jsonify({"health_device": dev}), 201
     except (ValueError, PermissionError) as err:
         return _api_error(err)
@@ -377,7 +379,17 @@ def api_sync_device(device_id):
         )
         audit("sync", "health_device", str(device_id), actor=user)
         return jsonify({"synced_measurement": res}), 201
-    except (LookupError, PermissionError, ValueError) as err:
+    except LookupError as err:
+        return _api_error(err)
+    except PermissionError as err:
+        return _api_error(err)
+    except ValueError as err:
+        if "Integration Required" in str(err):
+            return jsonify({
+                "status": "integration_required",
+                "error": {"code": 409, "message": str(err)},
+                "trusted_device_provenance_created": False,
+            }), 409
         return _api_error(err)
 
 
