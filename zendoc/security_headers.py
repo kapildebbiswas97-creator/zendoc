@@ -1,7 +1,7 @@
 """Central response-security headers for ZENDOC public deployments."""
 from __future__ import annotations
 
-from flask import current_app
+from flask import current_app, request
 
 
 def apply_security_headers(response):
@@ -40,5 +40,9 @@ def apply_security_headers(response):
             "Strict-Transport-Security",
             "max-age=31536000; includeSubDomains",
         )
-        response.headers.setdefault("Cache-Control", response.headers.get("Cache-Control", "no-store"))
+        if (
+            request.path.startswith("/api/")
+            or response.mimetype in {"text/html", "application/json"}
+        ):
+            response.headers.setdefault("Cache-Control", "no-store")
     return response
