@@ -140,3 +140,25 @@ def test_registration_page_links_public_policy_documents(tmp_path):
     assert 'name="accept_privacy"' in body
     assert 'name="accept_terms"' in body
     assert "required" in body
+
+
+def test_public_release_blocks_government_self_registration(tmp_path):
+    app, client = make_client(tmp_path)
+    app.config["PUBLIC_RELEASE_REQUIRED"] = True
+
+    web = client.get("/register/government")
+    assert web.status_code == 403
+
+    api = client.post(
+        "/api/v1/auth/register",
+        json={
+            "name": "Public Government Attempt",
+            "email": "gov-public@example.com",
+            "password": "StrongPass123",
+            "role": "government",
+            "accept_privacy": True,
+            "accept_terms": True,
+        },
+    )
+    assert api.status_code == 403
+    assert "controlled provisioning" in api.get_json()["error"]["message"]
