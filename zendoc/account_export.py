@@ -11,6 +11,7 @@ from typing import Any
 
 from .db import get_db, now_iso
 from .policy_acceptance import list_policy_acceptances
+from .email_verification import email_verification_status
 
 
 def _value(user: Any, key: str, default=None):
@@ -94,6 +95,7 @@ def build_account_export(user: Any) -> dict:
         "export_version": "zendoc-account-export-v1",
         "generated_at": now_iso(),
         "account": account,
+        "email_verification": email_verification_status(account),
         "policy_acceptances": list_policy_acceptances(user_id),
         "communications": _conversation_export(user_id),
         "scope_notice": (
