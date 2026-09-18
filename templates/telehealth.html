@@ -2,21 +2,30 @@
 {% block title %}Telehealth — ZENDOC{% endblock %}
 {% block content %}
 <section class="section-head">
-  <div><p class="eyebrow">Telehealth · Beta</p><h1>Telehealth consultations</h1><p class="section-copy">Request secure chat, voice, or video with a reviewed provider. The provider must accept before consultation controls become available.</p></div>
+  <div><p class="eyebrow">Telehealth · Beta</p><h1>Telehealth consultations</h1><p class="section-copy">Request only the consultation channels that are actually available on this deployment. A reviewed provider must accept before consultation controls become available.</p></div>
   {% if current_user.role in ['doctor','hospital'] %}<a href="{{ url_for('milestone7.doctor_availability_page') }}" class="secondary-action">Manage availability</a>{% endif %}
 </section>
-<aside class="trust-note warning"><strong>Beta workflow</strong><br>Consultation requests, secure messages, and browser-local camera controls are available. This is not yet a production telemedicine service.</aside>
+<aside class="trust-note warning"><strong>Telehealth capability boundary</strong><br>{{ telehealth_status.message or 'Telehealth integration status is not available.' }} Provider: {{ telehealth_status.provider }}. Voice/video are shown only when the configured provider supports them.</aside>
 
 <section class="{% if current_user.role == 'patient' %}grid two{% endif %} spaced-panel">
   {% if current_user.role == 'patient' %}
   <form method="post" class="panel">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="request_consultation">
     <p class="eyebrow">New request</p><h2>Ask for a consultation</h2>
-    {% if doctors %}
+    {% set channel_available = telehealth_status.supports_chat or telehealth_status.supports_voice or telehealth_status.supports_video %}
+    {% if doctors and channel_available %}
       <label>Provider <select name="doctor_id" required><option value="">Choose a provider</option>{% for doctor in doctors %}<option value="{{ doctor.id }}">{{ doctor.organization or doctor.name }}{% if doctor.specialty %} · {{ doctor.specialty }}{% endif %}</option>{% endfor %}</select></label>
-      <label>How would you like to connect? <select name="consultation_type"><option value="chat">Secure chat</option><option value="voice">Voice call request</option><option value="video">Video call request</option></select></label>
+      <label>How would you like to connect?
+        <select name="consultation_type" required>
+          {% if telehealth_status.supports_chat %}<option value="chat">Secure chat</option>{% endif %}
+          {% if telehealth_status.supports_voice %}<option value="voice">Voice call</option>{% endif %}
+          {% if telehealth_status.supports_video %}<option value="video">Video call</option>{% endif %}
+        </select>
+      </label>
       <label>Reason for consultation <textarea name="reason" rows="3" maxlength="500" placeholder="Brief, non-emergency reason" required></textarea></label>
       <button type="submit" data-submitting-label="Sending request…">Request consultation</button>
+    {% elif not channel_available %}
+      <div class="empty-state"><h3>Telehealth channel integration required</h3><p>This deployment does not currently expose a verified chat, voice, or video consultation channel.</p><a href="{{ url_for('main.finder') }}" class="secondary-action">Find in-person care</a></div>
     {% else %}
       <div class="empty-state"><h3>No telehealth provider is available</h3><p>A reviewed doctor must be available before you can send a consultation request.</p><a href="{{ url_for('main.finder') }}" class="secondary-action">Find care</a></div>
     {% endif %}
