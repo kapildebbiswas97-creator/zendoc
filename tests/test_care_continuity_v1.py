@@ -13,6 +13,7 @@ def test_patient_can_open_care_continuity_console(tmp_path):
     assert "Clinician handoff packet" in body
     assert "AI Evidence Passport" in body
     assert "never sent automatically" in body
+    assert "Care continuity" in body
 
 
 def test_non_patient_cannot_open_patient_continuity_console(tmp_path):
