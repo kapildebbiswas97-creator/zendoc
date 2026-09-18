@@ -188,7 +188,10 @@ def delete_account(user: Any, *, password: str | None = None, token_authorized: 
             db.execute(
                 """
                 UPDATE appointments
-                SET provider_name='Former ZENDOC provider', provider_id=NULL, updated_at=?
+                SET provider_name='Former ZENDOC provider',
+                    provider_id=NULL,
+                    provider_profile_id=NULL,
+                    updated_at=?
                 WHERE provider_id=?
                 """,
                 (now_iso(), user_id),
