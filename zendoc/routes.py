@@ -1855,34 +1855,60 @@ def provider_verification_status(profile_id):
     return redirect(url_for("main.admin"))
 
 
+def _api_token_row(token, token_type):
+    digest = hash_token(str(token or ""))
+    row = get_db().execute(
+        """
+        SELECT u.*, t.id AS token_id, t.expires_at AS token_expires_at,
+               t.token_type AS authenticated_token_type
+        FROM api_tokens t
+        JOIN users u ON u.id=t.user_id
+        WHERE t.token_hash=? AND t.token_type=? AND t.revoked_at IS NULL AND u.active=1
+        """,
+        (digest, token_type),
+    ).fetchone()
+    if row:
+        return row
+
+    # Legacy plaintext-token migration remains available outside strict public
+    # release mode. Public release never accepts indefinite plaintext legacy tokens.
+    if current_app.config.get("PUBLIC_RELEASE_REQUIRED"):
+        return None
+    legacy = get_db().execute(
+        """
+        SELECT u.*, t.id AS token_id, t.expires_at AS token_expires_at,
+               t.token_type AS authenticated_token_type
+        FROM api_tokens t
+        JOIN users u ON u.id=t.user_id
+        WHERE t.token=? AND t.token_type=? AND t.revoked_at IS NULL AND u.active=1
+        """,
+        (token, token_type),
+    ).fetchone()
+    if legacy:
+        get_db().execute(
+            "UPDATE api_tokens SET token_hash=? WHERE id=? AND token_hash IS NULL",
+            (digest, legacy["token_id"]),
+        )
+        get_db().commit()
+    return legacy
+
+
+def _token_is_current(row):
+    if not row:
+        return False
+    expires_at = row["token_expires_at"] if "token_expires_at" in row.keys() else None
+    if not expires_at:
+        return not current_app.config.get("PUBLIC_RELEASE_REQUIRED")
+    return str(expires_at) > now_iso()
+
+
 def api_user():
     auth = request.headers.get("Authorization", "")
     token = auth.removeprefix("Bearer ").strip()
     if not token:
         return None
-    token_digest = hash_token(token)
-    user = get_db().execute(
-        """
-        SELECT u.*, t.id AS token_id FROM api_tokens t
-        JOIN users u ON u.id=t.user_id
-        WHERE t.token_hash=? AND t.token_type='access' AND t.revoked_at IS NULL AND u.active=1
-        """,
-        (token_digest,),
-    ).fetchone()
-    if user:
-        return user
-    legacy = get_db().execute(
-        """
-        SELECT u.*, t.id AS token_id FROM api_tokens t
-        JOIN users u ON u.id=t.user_id
-        WHERE t.token=? AND t.token_type='access' AND t.revoked_at IS NULL AND u.active=1
-        """,
-        (token,),
-    ).fetchone()
-    if legacy:
-        get_db().execute("UPDATE api_tokens SET token_hash=? WHERE id=? AND token_hash IS NULL", (token_digest, legacy["token_id"]))
-        get_db().commit()
-    return legacy
+    row = _api_token_row(token, "access")
+    return row if _token_is_current(row) else None
 
 
 def require_api_user():
@@ -2474,14 +2500,41 @@ def api_login():
                 "reason": "email_verification_required",
             }
         }), 403
-    token = new_token()
+    access_token = new_token()
+    refresh_token = new_token()
+    access_expires_at = future_iso(
+        int(current_app.config.get("API_ACCESS_TOKEN_MINUTES", 60))
+    )
+    refresh_expires_at = future_iso(
+        int(current_app.config.get("API_REFRESH_TOKEN_DAYS", 30)) * 24 * 60
+    )
+    now = now_iso()
     get_db().execute(
-        "INSERT INTO api_tokens (user_id,token_hash,token_type,created_at) VALUES (?,?,'access',?)",
-        (user["id"], hash_token(token), now_iso()),
+        """
+        INSERT INTO api_tokens
+        (user_id,token_hash,token_type,expires_at,created_at)
+        VALUES (?,?,'access',?,?)
+        """,
+        (user["id"], hash_token(access_token), access_expires_at, now),
+    )
+    get_db().execute(
+        """
+        INSERT INTO api_tokens
+        (user_id,token_hash,token_type,expires_at,created_at)
+        VALUES (?,?,'refresh',?,?)
+        """,
+        (user["id"], hash_token(refresh_token), refresh_expires_at, now),
     )
     record_product_activity(user, event_type="session_login")
     get_db().commit()
-    return jsonify({"token": token, "user": {"id": user["id"], "name": user["name"], "role": user["role"]}})
+    return jsonify({
+        "token": access_token,
+        "access_token": access_token,
+        "access_token_expires_at": access_expires_at,
+        "refresh_token": refresh_token,
+        "refresh_token_expires_at": refresh_expires_at,
+        "user": {"id": user["id"], "name": user["name"], "role": user["role"]},
+    })
 
 
 @bp.post("/api/v1/auth/logout")
@@ -2490,13 +2543,76 @@ def api_logout():
     if error:
         return error
     auth = request.headers.get("Authorization", "")
-    token = auth.removeprefix("Bearer ").strip()
+    access_token = auth.removeprefix("Bearer ").strip()
+    data = request.get_json(silent=True) or {}
+    refresh_token = str(data.get("refresh_token") or "").strip()
+    now = now_iso()
     get_db().execute(
         "UPDATE api_tokens SET revoked_at=? WHERE token_hash=? AND user_id=?",
-        (now_iso(), hash_token(token), user["id"]),
+        (now, hash_token(access_token), user["id"]),
     )
+    if refresh_token:
+        get_db().execute(
+            """
+            UPDATE api_tokens SET revoked_at=?
+            WHERE token_hash=? AND token_type='refresh' AND user_id=? AND revoked_at IS NULL
+            """,
+            (now, hash_token(refresh_token), user["id"]),
+        )
     get_db().commit()
     return jsonify({"status": "revoked"})
+
+
+@bp.post("/api/v1/auth/refresh")
+def api_refresh_token():
+    data = request.get_json(silent=True) or {}
+    refresh_token = str(data.get("refresh_token") or "").strip()
+    if not refresh_token:
+        return jsonify({"error": {"code": 400, "message": "refresh_token is required"}}), 400
+
+    row = _api_token_row(refresh_token, "refresh")
+    if not _token_is_current(row):
+        return jsonify({"error": {"code": 401, "message": "Refresh token is invalid or expired."}}), 401
+
+    now = now_iso()
+    # Rotation revokes the token that was just presented.
+    get_db().execute(
+        "UPDATE api_tokens SET revoked_at=? WHERE id=?",
+        (now, row["token_id"]),
+    )
+
+    new_access_token = new_token()
+    new_refresh_token = new_token()
+    access_expires_at = future_iso(
+        int(current_app.config.get("API_ACCESS_TOKEN_MINUTES", 60))
+    )
+    refresh_expires_at = future_iso(
+        int(current_app.config.get("API_REFRESH_TOKEN_DAYS", 30)) * 24 * 60
+    )
+    get_db().execute(
+        """
+        INSERT INTO api_tokens
+        (user_id,token_hash,token_type,expires_at,created_at)
+        VALUES (?,?,'access',?,?)
+        """,
+        (row["id"], hash_token(new_access_token), access_expires_at, now),
+    )
+    get_db().execute(
+        """
+        INSERT INTO api_tokens
+        (user_id,token_hash,token_type,expires_at,created_at)
+        VALUES (?,?,'refresh',?,?)
+        """,
+        (row["id"], hash_token(new_refresh_token), refresh_expires_at, now),
+    )
+    get_db().commit()
+    return jsonify({
+        "token": new_access_token,
+        "access_token": new_access_token,
+        "access_token_expires_at": access_expires_at,
+        "refresh_token": new_refresh_token,
+        "refresh_token_expires_at": refresh_expires_at,
+    })
 
 
 @bp.post("/api/v1/auth/forgot-password")
