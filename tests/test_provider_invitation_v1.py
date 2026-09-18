@@ -182,3 +182,52 @@ def test_provider_invitation_rejects_public_role_escalation_and_duplicate_email(
     )
     assert duplicate.status_code == 200
     assert "already exists" in duplicate.get_data(as_text=True)
+
+
+def test_new_provider_invitation_revokes_older_pending_role_for_same_email(tmp_path, monkeypatch):
+    app, client = make_client(tmp_path)
+    app.config.update(
+        EMAIL_PROVIDER="smtp",
+        SMTP_HOST="smtp.example.test",
+        SMTP_FROM_EMAIL="noreply@zendoc.example.test",
+        SMTP_USE_TLS=True,
+        PUBLIC_BASE_URL="https://zendoc.example.test",
+    )
+    sent = []
+    from zendoc import routes
+    monkeypatch.setattr(
+        routes,
+        "send_transactional_email",
+        lambda to_email, subject, text_body: sent.append((to_email, subject, text_body)) or {"status": "sent"},
+    )
+
+    login_web(client, "admin", "admin@example.com", "AdminStrong123")
+
+    first_page = client.get("/admin")
+    first = client.post(
+        "/admin/provider-invitations",
+        data={
+            "csrf_token": csrf(first_page.get_data(as_text=True)),
+            "email": "role-change@example.com",
+            "role": "doctor",
+        },
+    )
+    assert first.status_code == 302
+    first_token = _token_from_mail(sent[-1][2])
+
+    second_page = client.get("/admin")
+    second = client.post(
+        "/admin/provider-invitations",
+        data={
+            "csrf_token": csrf(second_page.get_data(as_text=True)),
+            "email": "role-change@example.com",
+            "role": "pharmacy",
+        },
+    )
+    assert second.status_code == 302
+    second_token = _token_from_mail(sent[-1][2])
+
+    assert client.get(f"/provider-invitation/accept?token={first_token}").status_code == 400
+    fresh = client.get(f"/provider-invitation/accept?token={second_token}")
+    assert fresh.status_code == 200
+    assert "Pharmacy" in fresh.get_data(as_text=True)
