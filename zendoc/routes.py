@@ -132,6 +132,49 @@ def before_request():
         return auth_response
     check_rate_limit()
 
+    # In strict public release, invited provider accounts may sign in to finish
+    # onboarding, but they cannot use operational provider surfaces until their
+    # provider profile is owner-verified.
+    if (
+        current_app.config.get("PUBLIC_RELEASE_REQUIRED")
+        and g.get("user") is not None
+        and g.user["role"] in PROVIDER_ROLES
+    ):
+        profile = get_provider_profile_for_user(g.user["id"])
+        verified = bool(profile and str(profile["verification_status"]) == "verified")
+        if not verified:
+            endpoint = str(request.endpoint or "")
+            allowed_endpoints = {
+                "main.provider_profile",
+                "main.provider_evidence_submit_web",
+                "main.provider_public_entity_claim_submit_web",
+                "main.finder",
+                "main.provider_detail",
+                "main.profile",
+                "main.logout",
+            }
+            if (
+                endpoint
+                and endpoint not in allowed_endpoints
+                and not endpoint.startswith("provider_onboarding.")
+                and not endpoint.startswith("public_launch.")
+                and endpoint != "static"
+            ):
+                if request.path.startswith("/api/"):
+                    return jsonify({
+                        "error": {
+                            "code": 403,
+                            "message": (
+                                "Provider verification is required before using operational provider capabilities."
+                            ),
+                        }
+                    }), 403
+                flash(
+                    "Complete provider verification before using operational provider capabilities.",
+                    "warning",
+                )
+                return redirect(url_for("main.provider_profile"))
+
 
 def future_iso(minutes):
     return (datetime.now(timezone.utc) + timedelta(minutes=minutes)).isoformat(timespec="seconds")
@@ -287,7 +330,26 @@ def check_rate_limit():
 
 @bp.app_context_processor
 def globals_for_templates():
-    return {"csrf_token": csrf_token(), "current_user": g.get("user"), "roles": ROLES, "specialties": SPECIALTIES}
+    user = g.get("user")
+    provider_verification_status = None
+    provider_operational_access = True
+    if user is not None and user["role"] in PROVIDER_ROLES:
+        profile = get_provider_profile_for_user(user["id"])
+        provider_verification_status = (
+            str(profile["verification_status"]) if profile else "profile_required"
+        )
+        provider_operational_access = (
+            not current_app.config.get("PUBLIC_RELEASE_REQUIRED")
+            or provider_verification_status == "verified"
+        )
+    return {
+        "csrf_token": csrf_token(),
+        "current_user": user,
+        "roles": ROLES,
+        "specialties": SPECIALTIES,
+        "provider_verification_status": provider_verification_status,
+        "provider_operational_access": provider_operational_access,
+    }
 
 
 def normalize_role(role):
@@ -1343,16 +1405,22 @@ def provider_profile():
     evidence = []
     listing_claims = []
     partner_handoffs = []
-    provider_operations = provider_operational_metrics(g.user)
+    provider_operations = None
+    operational_access = (
+        not current_app.config.get("PUBLIC_RELEASE_REQUIRED")
+        or bool(profile_row and str(profile_row["verification_status"]) == "verified")
+    )
     if profile_row:
-        schedules = get_db().execute(
-            "SELECT * FROM provider_schedules WHERE provider_profile_id=? ORDER BY weekday,start_time",
-            (profile_row["id"],),
-        ).fetchall()
         onboarding = provider_onboarding_status(profile_row["id"])
         evidence = list_provider_evidence(profile_row["id"])
         listing_claims = list_my_public_entity_claims(g.user)
-        partner_handoffs = list_provider_booking_handoffs(g.user)
+        if operational_access:
+            schedules = get_db().execute(
+                "SELECT * FROM provider_schedules WHERE provider_profile_id=? ORDER BY weekday,start_time",
+                (profile_row["id"],),
+            ).fetchall()
+            partner_handoffs = list_provider_booking_handoffs(g.user)
+            provider_operations = provider_operational_metrics(g.user)
     return render_template(
         "provider_profile.html",
         profile=profile_row,
@@ -1363,6 +1431,7 @@ def provider_profile():
         listing_claims=listing_claims,
         partner_handoffs=partner_handoffs,
         provider_operations=provider_operations,
+        provider_operational_access=operational_access,
     )
 
 
