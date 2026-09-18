@@ -27,13 +27,16 @@ Required environment values include:
 
     ZENDOC_ENV=production
     ZENDOC_PUBLIC_BASE_URL=https://your-domain.example
+    ZENDOC_PUBLIC_RELEASE_REQUIRED=true
     ZENDOC_SUPPORT_EMAIL=support@your-domain.example
 
     DATABASE_URL=postgresql://...
     ZENDOC_PERSISTENCE_VERIFIED=true
     ZENDOC_REQUIRE_DURABLE_DATABASE=true
+    ZENDOC_BACKUP_VERIFIED=true
 
     ZENDOC_EMAIL_PROVIDER=smtp
+    ZENDOC_EMAIL_VERIFIED=true
     ZENDOC_SMTP_HOST=...
     ZENDOC_SMTP_PORT=587
     ZENDOC_SMTP_USERNAME=...
@@ -43,6 +46,7 @@ Required environment values include:
 
     ZENDOC_STORAGE_PROVIDER=s3
     ZENDOC_STORAGE_VERIFIED=false
+    ZENDOC_TELEHEALTH_PROVIDER=internal_chat
     ZENDOC_S3_ENDPOINT_URL=...
     ZENDOC_S3_REGION=...
     ZENDOC_S3_BUCKET=...
@@ -57,13 +61,18 @@ After the real object-storage smoke test succeeds, set ZENDOC_STORAGE_VERIFIED=t
 2. Deploy the exact validated release commit with PostgreSQL and production secrets.
 3. Configure S3-compatible record storage.
 4. In the target deployment environment run: python scripts/verify_record_storage.py
-5. Configure SMTP and test both password reset and account deletion email.
-6. Buy/connect the domain and enable HTTPS.
-7. Set ZENDOC_PUBLIC_BASE_URL to that exact HTTPS origin.
-8. Configure a real support email.
-9. Run: python scripts/verify_public_launch.py https://your-domain.example
-10. Open Founder Readiness and require zero Public Launch blockers.
-11. Test using a separate user account and physical phone before inviting real users.
+5. Configure SMTP and run: python scripts/verify_transactional_email.py you@example.com
+6. Configure a protected scratch PostgreSQL database and run the guarded restore test:
+   DATABASE_URL=<production-db> ZENDOC_BACKUP_VERIFY_DATABASE_URL=<scratch-verify-db> ZENDOC_BACKUP_VERIFY_ALLOW_RESET=true python scripts/verify_postgres_backup_restore.py
+7. Verify the hosting provider's scheduled backup/PITR retention, then set ZENDOC_BACKUP_VERIFIED=true.
+8. Buy/connect the domain and enable HTTPS.
+9. Set ZENDOC_PUBLIC_BASE_URL to that exact HTTPS origin.
+10. Configure a real support email.
+11. Set ZENDOC_EMAIL_VERIFIED=true and ZENDOC_STORAGE_VERIFIED=true only after their real smoke tests pass.
+12. Set ZENDOC_PUBLIC_RELEASE_REQUIRED=true only when the complete public configuration is ready.
+13. Run: python scripts/verify_public_launch.py https://your-domain.example
+14. Open Founder Readiness and require zero Public Launch blockers.
+15. Test using a separate user account and physical phone before inviting real users.
 
 ## Public resources
 
