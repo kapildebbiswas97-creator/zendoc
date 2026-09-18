@@ -1,4 +1,4 @@
-"""Owner-controlled provider account invitations for public ZENDOC."""
+"""Owner-controlled provider and institution account invitations for public ZENDOC."""
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
