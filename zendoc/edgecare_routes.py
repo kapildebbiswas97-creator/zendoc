@@ -39,6 +39,108 @@ def _api_owner():
     return user, None
 
 
+def _care_chain_readiness(router_status: dict, asr_status: dict) -> dict:
+    """Report software, live-runtime and real-world evidence gates separately."""
+    local_ai = router_status.get("local_ai") or {}
+    local_ai_ready = local_ai.get("status") == "ready"
+    local_asr_ready = asr_status.get("status") == "ready"
+
+    approved_chunks = 0
+    try:
+        row = get_db().execute(
+            """
+            SELECT COUNT(*) AS c
+            FROM medical_knowledge_chunks c
+            JOIN medical_knowledge_documents d ON d.document_uid=c.document_uid
+            WHERE d.review_status='APPROVED'
+            """
+        ).fetchone()
+        approved_chunks = int(row["c"] or 0) if row else 0
+    except Exception:
+        # The readiness surface must fail safe rather than making the owner
+        # console unavailable when a knowledge index is not present yet.
+        approved_chunks = 0
+
+    stages = [
+        {
+            "key": "local_voice_asr",
+            "label": "Local voice / ASR",
+            "status": "READY" if local_asr_ready else "RUNTIME_REQUIRED",
+            "detail": "Live local speech runtime health check; transcript remains editable and manual-submit only.",
+        },
+        {
+            "key": "local_llm_slm",
+            "label": "Local LLM / SLM advisory",
+            "status": "READY" if local_ai_ready else "RUNTIME_REQUIRED",
+            "detail": "Live local model health check; model output has no direct tool authority.",
+        },
+        {
+            "key": "agent_os",
+            "label": "Agent OS bounded execution",
+            "status": "IMPLEMENTED",
+            "detail": "Server planner, tool allowlists and deterministic safety gates control executable work.",
+        },
+        {
+            "key": "health_memory",
+            "label": "Health Memory context",
+            "status": "IMPLEMENTED",
+            "detail": "Minimum-necessary, authorized context with provenance; raw lifetime memory is not copied into audit metadata.",
+        },
+        {
+            "key": "rag",
+            "label": "Approved medical RAG",
+            "status": "EVIDENCE_READY" if approved_chunks else "NO_APPROVED_EVIDENCE",
+            "detail": (
+                f"{approved_chunks} approved indexed chunk(s) available."
+                if approved_chunks
+                else "Retrieval code is present, but no approved indexed evidence is currently available in this database."
+            ),
+        },
+        {
+            "key": "safe_actions",
+            "label": "Safe actions / human gates",
+            "status": "IMPLEMENTED",
+            "detail": "Consequential actions require deterministic authorization and explicit human confirmation.",
+        },
+        {
+            "key": "provider_confirmation",
+            "label": "Provider/service confirmation",
+            "status": "EVIDENCE_DRIVEN",
+            "detail": "Request creation never becomes provider acceptance until an authoritative connected state says so.",
+        },
+        {
+            "key": "outcome",
+            "label": "Outcome verification",
+            "status": "EVIDENCE_DRIVEN",
+            "detail": "Verified outcomes come from authoritative persisted service state, not model text.",
+        },
+        {
+            "key": "longitudinal_memory",
+            "label": "Longitudinal Health Memory",
+            "status": "IMPLEMENTED",
+            "detail": "Provider-recorded and patient-reported events remain provenance-separated across follow-up.",
+        },
+        {
+            "key": "audit",
+            "label": "Audit evidence",
+            "status": "IMPLEMENTED",
+            "detail": "Metadata-only links connect ASR, model execution, Agent OS task, Care Journey and outcome evidence.",
+        },
+    ]
+    return {
+        "software_chain_present": True,
+        "demo_runtime_ready": bool(local_ai_ready and local_asr_ready),
+        "runtime_gate": "READY" if local_ai_ready and local_asr_ready else "LOCAL_RUNTIME_REQUIRED",
+        "approved_rag_chunks": approved_chunks,
+        "stages": stages,
+        "truth": {
+            "software_implemented_means_real_world_confirmed": False,
+            "runtime_config_means_snapdragon_npu_proven": False,
+            "model_output_means_provider_confirmation": False,
+        },
+    }
+
+
 def _runtime_snapshot(check_health: bool = True):
     settings = EdgeCareSettings.from_runtime()
     router_status = get_model_router().status(check_health=check_health)
@@ -51,7 +153,11 @@ def _runtime_snapshot(check_health: bool = True):
     )
     edgecare["local_asr"] = asr_status
     edgecare["claims"]["local_asr_ready"] = asr_status.get("status") == "ready"
-    return {"edgecare": edgecare, "model_router": router_status}
+    return {
+        "edgecare": edgecare,
+        "model_router": router_status,
+        "care_chain": _care_chain_readiness(router_status, asr_status),
+    }
 
 
 @bp.get("/admin/edgecare")
