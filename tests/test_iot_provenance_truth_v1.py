@@ -79,5 +79,5 @@ def test_ai_iot_guidance_never_claims_live_connection(tmp_path):
     assert payload["intent"] == "iot_hub"
     message = payload["message"].lower()
     assert "integration required" in message
-    assert "does not create trusted device provenance" in message
+    assert "do not create trusted device provenance" in message
     assert "connects your smartwatch" not in message
