@@ -65,7 +65,25 @@ def test_public_web_registration_requires_email_verification_before_login(tmp_pa
     assert blocked.status_code == 403
     assert "Email verification is required" in blocked.get_data(as_text=True)
 
-    verified = client.get(f"/verify-email?token={token}", follow_redirects=False)
+    review = client.get(f"/verify-email?token={token}")
+    assert review.status_code == 200
+    review_body = review.get_data(as_text=True)
+    assert "Verify this email" in review_body
+
+    still_blocked = client.post(
+        "/api/v1/auth/login",
+        json={"email": "verify-web@example.com", "password": "StrongPass123"},
+    )
+    assert still_blocked.status_code == 403
+
+    verified = client.post(
+        "/verify-email",
+        data={
+            "csrf_token": csrf(review_body),
+            "token": token,
+        },
+        follow_redirects=False,
+    )
     assert verified.status_code == 302
     assert "/login" in verified.headers["Location"]
 
