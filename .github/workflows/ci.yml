@@ -68,6 +68,7 @@ jobs:
           tests/test_policy_acceptance_v1.py
           tests/test_email_verification_v1.py
           tests/test_public_registration_roles_v1.py
+          tests/test_provider_invitation_v1.py
           tests/test_api_token_lifecycle_v1.py
           tests/test_auth_rate_limit_v1.py
           tests/test_account_export_v1.py
