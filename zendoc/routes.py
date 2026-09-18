@@ -147,6 +147,7 @@ def before_request():
             allowed_endpoints = {
                 "main.provider_profile",
                 "main.provider_evidence_submit_web",
+                "main.provider_schedule",
                 "main.provider_public_entity_claim_submit_web",
                 "main.finder",
                 "main.provider_detail",
@@ -1414,11 +1415,11 @@ def provider_profile():
         onboarding = provider_onboarding_status(profile_row["id"])
         evidence = list_provider_evidence(profile_row["id"])
         listing_claims = list_my_public_entity_claims(g.user)
+        schedules = get_db().execute(
+            "SELECT * FROM provider_schedules WHERE provider_profile_id=? ORDER BY weekday,start_time",
+            (profile_row["id"],),
+        ).fetchall()
         if operational_access:
-            schedules = get_db().execute(
-                "SELECT * FROM provider_schedules WHERE provider_profile_id=? ORDER BY weekday,start_time",
-                (profile_row["id"],),
-            ).fetchall()
             partner_handoffs = list_provider_booking_handoffs(g.user)
             provider_operations = provider_operational_metrics(g.user)
     return render_template(
