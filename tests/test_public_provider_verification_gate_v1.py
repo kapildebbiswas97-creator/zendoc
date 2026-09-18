@@ -7,6 +7,7 @@ from zendoc.email_verification import mark_email_verified
 from zendoc.human_operations import create_staff_task
 from zendoc.partner_handoffs import list_provider_booking_handoffs
 from zendoc.pharmacy_service import list_medicine_orders
+from zendoc.provider_onboarding import review_provider_evidence, set_provider_verification_status, submit_provider_evidence
 from zendoc.provider_service import available_slots, create_schedule, get_provider_profile_for_user, upsert_provider_profile
 from zendoc.telehealth import set_doctor_availability
 
@@ -435,3 +436,66 @@ def test_patient_direct_conversation_with_pending_provider_is_rejected(tmp_path)
     )
     assert response.status_code == 403
     assert "not verified" in response.get_json()["error"]["message"].lower()
+
+
+def test_owner_can_verify_provider_only_after_readiness_requirements(tmp_path):
+    app, client = make_client(tmp_path)
+    email = "ready-public-doctor@example.com"
+    register_web(client, "doctor", email, "Ready Public Doctor")
+
+    with app.app_context():
+        db = get_db()
+        doctor = db.execute(
+            "SELECT * FROM users WHERE email_normalized=?",
+            (email,),
+        ).fetchone()
+        owner = db.execute(
+            "SELECT * FROM users WHERE role='admin' ORDER BY id LIMIT 1"
+        ).fetchone()
+
+        upsert_provider_profile(
+            doctor,
+            {
+                "specialty": "General Medicine",
+                "qualifications": "MBBS",
+                "license_identifier": "READY-PUBLIC-TEST",
+                "organization": "Ready Public Clinic",
+                "address": "1 Test Road",
+                "city": "Kalyani",
+                "state": "West Bengal",
+                "public_phone": "9000000000",
+            },
+        )
+        create_schedule(
+            doctor,
+            {
+                "weekday": 1,
+                "start_time": "09:00",
+                "end_time": "12:00",
+                "slot_minutes": 30,
+            },
+        )
+        evidence = submit_provider_evidence(
+            doctor,
+            evidence_type="professional_registration",
+            identifier="READY-PUBLIC-TEST",
+            source_name="Official registration record",
+            source_url="https://example.org/provider/ready-public-test",
+        )
+        review_provider_evidence(
+            owner,
+            evidence["id"],
+            status="verified",
+            notes="Owner-reviewed test evidence.",
+        )
+        result = set_provider_verification_status(
+            owner,
+            get_provider_profile_for_user(doctor["id"])["id"],
+            status="verified",
+            notes="All readiness requirements satisfied.",
+        )
+
+        assert result["verification_status"] == "verified"
+        assert result["verification_ready"] is True
+        assert result["verified_evidence_count"] == 1
+        assert result["active_schedule_count"] == 1
