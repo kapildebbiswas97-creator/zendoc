@@ -24,6 +24,7 @@ from .email_delivery import email_delivery_status, send_transactional_email
 from .email_verification import (
     email_verification_status,
     issue_email_verification_token,
+    resolve_email_verification_token,
     verify_email_token,
 )
 from .health_analytics import METRIC_TYPES, create_measurement, get_health_trend
@@ -197,6 +198,7 @@ def check_rate_limit():
             "/forgot-password",
             "/reset-password",
             "/resend-verification",
+            "/verify-email",
             "/account-deletion",
             "/account-deletion/confirm",
         }
@@ -553,16 +555,25 @@ def login(role=None):
     return render_template("login.html", role=display_role)
 
 
-@bp.get("/verify-email")
+@bp.route("/verify-email", methods=("GET", "POST"))
 def verify_email():
-    token = str(request.args.get("token") or "").strip()
+    token = str(request.values.get("token") or "").strip()
     try:
-        verify_email_token(token)
+        token_row = resolve_email_verification_token(token)
     except PermissionError:
         flash("This email-verification link is invalid or expired. Request a new verification message.", "error")
         return redirect(url_for("main.resend_verification"))
-    flash("Email verified successfully. You can now sign in to ZENDOC.", "success")
-    return redirect(url_for("main.login"))
+
+    if request.method == "POST":
+        verify_email_token(token)
+        flash("Email verified successfully. You can now sign in to ZENDOC.", "success")
+        return redirect(url_for("main.login"))
+
+    return render_template(
+        "verify_email.html",
+        token=token,
+        email=token_row["email"],
+    )
 
 
 @bp.route("/resend-verification", methods=("GET", "POST"))
