@@ -11,6 +11,8 @@ from flask import current_app
 from .database_reliability import backup_readiness, readiness_report
 from .db import get_db
 from .demo_truth import synthetic_demo_provider_profile_ids, synthetic_demo_user_ids
+from .email_delivery import email_delivery_status
+from .record_storage import get_record_storage
 from .pilot_analytics import pilot_scorecard
 from .state_geography_bootstrap import state_coverage_summary
 
@@ -171,5 +173,189 @@ def first50_launch_readiness() -> dict:
             "PILOT_READY means the checked ZENDOC software/deployment conditions are green. Synthetic competition fixtures are excluded from user/provider counts. "
             "It does not claim that every locality has a connected provider, real-time stock, beds, ambulance dispatch, "
             "or any external partner integration."
+        ),
+    }
+
+
+
+def public_launch_readiness() -> dict:
+    """Readiness gate for opening ZENDOC to ordinary public web/mobile users.
+
+    This gate is stricter than the first-50 pilot report. It requires durable
+    persistence, real password-recovery delivery, durable medical-record storage,
+    an HTTPS public base URL, and the public privacy/deletion/PWA routes.
+    """
+    pilot = first50_launch_readiness()
+    blockers = []
+    warnings = []
+    passed = []
+
+    environment = str(current_app.config.get("ZENDOC_ENV") or "development").lower()
+    public_base_url = str(current_app.config.get("PUBLIC_BASE_URL") or "").strip().rstrip("/")
+
+    if environment != "production":
+        blockers.append({
+            "key": "production_environment",
+            "message": "Public launch must run with ZENDOC_ENV=production.",
+        })
+    else:
+        passed.append({"key": "production_environment", "message": "Production mode is active."})
+
+    if not public_base_url:
+        blockers.append({
+            "key": "public_base_url",
+            "message": "ZENDOC_PUBLIC_BASE_URL is not configured.",
+        })
+    elif not public_base_url.lower().startswith("https://"):
+        blockers.append({
+            "key": "public_base_url",
+            "message": "Public launch URL must use HTTPS.",
+        })
+    else:
+        passed.append({
+            "key": "public_base_url",
+            "message": f"HTTPS public base URL configured: {public_base_url}",
+        })
+
+    database = pilot.get("database") or {}
+    if database.get("status") != "ready":
+        blockers.append({
+            "key": "database",
+            "message": "Database readiness is not green.",
+        })
+    elif environment == "production" and not bool(current_app.config.get("PERSISTENCE_VERIFIED")):
+        blockers.append({
+            "key": "persistence",
+            "message": "Production persistence has not been explicitly verified.",
+        })
+    else:
+        passed.append({
+            "key": "persistence",
+            "message": "Database and persistence readiness are green.",
+        })
+
+    email = email_delivery_status()
+    if not email.get("transactional_email"):
+        blockers.append({
+            "key": "transactional_email",
+            "message": (
+                "Transactional email is required for public password recovery "
+                "and off-app account-deletion confirmation."
+            ),
+            "detail": email,
+        })
+    else:
+        passed.append({
+            "key": "transactional_email",
+            "message": "Transactional SMTP delivery is configured.",
+        })
+
+    storage = get_record_storage().status()
+    storage_provider = str(storage.get("provider") or "unknown")
+    if storage_provider == "local":
+        blockers.append({
+            "key": "durable_record_storage",
+            "message": (
+                "Local filesystem medical-record storage is not acceptable for a public hosted launch. "
+                "Configure and verify S3-compatible durable object storage."
+            ),
+            "detail": storage,
+        })
+    elif storage.get("status") == "integration_required":
+        blockers.append({
+            "key": "durable_record_storage",
+            "message": "Durable medical-record storage is not fully configured.",
+            "detail": storage,
+        })
+    elif not bool(current_app.config.get("STORAGE_VERIFIED")):
+        blockers.append({
+            "key": "durable_record_storage",
+            "message": (
+                "Durable object storage is configured but has not been marked verified after a real "
+                "save/read/delete smoke test."
+            ),
+            "detail": storage,
+        })
+    else:
+        passed.append({
+            "key": "durable_record_storage",
+            "message": "Durable record storage is configured and marked verified.",
+        })
+
+    required_routes = {
+        "privacy": "/privacy",
+        "terms": "/terms",
+        "medical_disclaimer": "/medical-disclaimer",
+        "account_deletion": "/account-deletion",
+        "manifest": "/manifest.webmanifest",
+        "service_worker": "/sw.js",
+        "health": "/healthz",
+    }
+    registered = {str(rule.rule) for rule in current_app.url_map.iter_rules()}
+    missing_routes = [path for path in required_routes.values() if path not in registered]
+    if missing_routes:
+        blockers.append({
+            "key": "public_launch_routes",
+            "message": "Required public launch routes are missing.",
+            "detail": {"missing": missing_routes},
+        })
+    else:
+        passed.append({
+            "key": "public_launch_routes",
+            "message": "Privacy, terms, deletion, PWA and health routes are registered.",
+        })
+
+    if not str(current_app.config.get("SUPPORT_EMAIL") or "").strip():
+        warnings.append({
+            "key": "support_contact",
+            "message": "ZENDOC_SUPPORT_EMAIL is not configured for public user support.",
+        })
+    else:
+        passed.append({
+            "key": "support_contact",
+            "message": "Public support contact is configured.",
+        })
+
+    package_name = str(current_app.config.get("ANDROID_PACKAGE_NAME") or "").strip()
+    fingerprint = str(current_app.config.get("ANDROID_SHA256_CERT_FINGERPRINT") or "").strip()
+    if package_name and not fingerprint:
+        warnings.append({
+            "key": "android_asset_links",
+            "message": "Android package is configured but signing-certificate fingerprint is missing.",
+        })
+    elif package_name and fingerprint:
+        passed.append({
+            "key": "android_asset_links",
+            "message": "Android Digital Asset Links configuration is present.",
+        })
+    else:
+        warnings.append({
+            "key": "android_packaging",
+            "message": "Android package/signing configuration is not set yet; web launch can still proceed.",
+        })
+
+    # Carry hard pilot blockers into the public gate because public launch must
+    # never be weaker than the first-50 operational gate.
+    for item in pilot.get("blockers") or []:
+        blockers.append({
+            "key": f"pilot_{item.get('key')}",
+            "message": item.get("message"),
+        })
+
+    status = "PUBLIC_LAUNCH_BLOCKED" if blockers else "PUBLIC_LAUNCH_READY_WITH_WARNINGS" if warnings else "PUBLIC_LAUNCH_READY"
+    return {
+        "status": status,
+        "target": "public_web_and_mobile",
+        "blockers": blockers,
+        "warnings": warnings,
+        "passed": passed,
+        "pilot_status": pilot.get("status"),
+        "email": email,
+        "record_storage": storage,
+        "public_base_url": public_base_url or None,
+        "truth_notice": (
+            "PUBLIC_LAUNCH_READY means only that the checked software/deployment controls are present and configured. "
+            "It does not prove legal/regulatory approval, clinical effectiveness, external provider coverage, "
+            "Snapdragon/NPU execution, or Google Play review approval."
         ),
     }
