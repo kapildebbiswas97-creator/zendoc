@@ -407,6 +407,7 @@ def test_persisted_chain_tracks_verified_internal_pharmacy_service_confirmation_
         assert confirmed["outcome"]["verified"] is False
 
         update_medicine_order_status(pharmacy, int(order["id"]), "preparing")
+        update_medicine_order_status(pharmacy, int(order["id"]), "dispatched")
         update_medicine_order_status(pharmacy, int(order["id"]), "completed")
         completed = build_persisted_care_chain(patient, journey_id)
         completed_state = completed["provider_confirmation"]
