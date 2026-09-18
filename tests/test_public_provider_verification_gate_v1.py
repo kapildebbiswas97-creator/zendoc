@@ -1,6 +1,6 @@
 import pytest
 
-from tests.test_milestone1 import make_client, register_web
+from tests.test_milestone1 import csrf, login_web, make_client, register_web
 from zendoc.db import get_db, now_iso
 from zendoc.email_verification import mark_email_verified
 from zendoc.human_operations import create_staff_task
@@ -232,3 +232,94 @@ def test_pending_pharmacy_cannot_read_assigned_orders_in_public_mode(tmp_path):
 
         with pytest.raises(PermissionError, match="Provider verification is required"):
             list_medicine_orders(pharmacy)
+
+
+def test_pending_provider_browser_is_quarantined_to_onboarding(tmp_path):
+    app, client = make_client(tmp_path)
+    email = "pending-browser-doctor@example.com"
+    _prepare_pending_doctor(app, client, email)
+
+    with app.app_context():
+        app.config["PUBLIC_RELEASE_REQUIRED"] = True
+
+    login = login_web(client, "doctor", email)
+    assert login.status_code == 200
+
+    dashboard = client.get("/dashboard", follow_redirects=False)
+    assert dashboard.status_code == 302
+    assert "/provider/profile" in dashboard.headers["Location"]
+
+    availability = client.get("/doctor/availability", follow_redirects=False)
+    assert availability.status_code == 302
+    assert "/provider/profile" in availability.headers["Location"]
+
+    profile = client.get("/provider/profile")
+    assert profile.status_code == 200
+    body = profile.get_data(as_text=True)
+    assert "Not patient-visible yet" in body
+    assert "Provider operations" not in body
+    assert "Complete Verification" in body
+    assert "/appointments" not in body
+    assert "/doctor/availability" not in body
+
+
+def test_pending_provider_api_operational_availability_is_forbidden(tmp_path):
+    app, client = make_client(tmp_path)
+    email = "pending-api-doctor@example.com"
+    _prepare_pending_doctor(app, client, email)
+
+    with app.app_context():
+        app.config["PUBLIC_RELEASE_REQUIRED"] = True
+
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": "StrongPass123"},
+    )
+    assert login.status_code == 200
+    access = login.get_json()["access_token"]
+
+    response = client.put(
+        "/api/v1/doctor/availability",
+        headers={"Authorization": f"Bearer {access}"},
+        json={"status": "available", "accepts_chat": True},
+    )
+    assert response.status_code == 403
+    assert "Provider verification is required" in response.get_json()["error"]["message"]
+
+
+def test_verified_provider_browser_operational_navigation_returns(tmp_path):
+    app, client = make_client(tmp_path)
+    email = "verified-browser-doctor@example.com"
+    register_web(client, "doctor", email, "Verified Browser Doctor")
+
+    with app.app_context():
+        db = get_db()
+        doctor = db.execute(
+            "SELECT * FROM users WHERE email_normalized=?",
+            (email,),
+        ).fetchone()
+        upsert_provider_profile(
+            doctor,
+            {
+                "specialty": "General Medicine",
+                "qualifications": "MBBS",
+                "license_identifier": "VERIFIED-BROWSER-TEST",
+                "organization": "Verified Browser Clinic",
+                "city": "Kalyani",
+                "state": "West Bengal",
+            },
+        )
+        db.execute(
+            "UPDATE provider_profiles SET verification_status='verified' WHERE user_id=?",
+            (doctor["id"],),
+        )
+        mark_email_verified(doctor["id"], email)
+        db.commit()
+        app.config["PUBLIC_RELEASE_REQUIRED"] = True
+
+    login_web(client, "doctor", email)
+    dashboard = client.get("/dashboard")
+    assert dashboard.status_code == 200
+    body = dashboard.get_data(as_text=True)
+    assert "/appointments" in body
+    assert "/doctor/availability" in body
