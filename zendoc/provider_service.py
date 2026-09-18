@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
+from flask import current_app
+
 from .db import get_db, is_integrity_error, now_iso
 from .geospatial import bounding_box, nearby_records
 from .organization_service import provider_resource_context
@@ -52,6 +54,8 @@ def require_verified_provider(user, *, allowed_roles=None):
     if role not in allowed:
         raise PermissionError("This account is not an allowed provider role for this operation.")
     profile = get_provider_profile_for_user(user["id"])
+    if not current_app.config.get("PUBLIC_RELEASE_REQUIRED"):
+        return profile
     if not profile:
         raise PermissionError("Complete the provider profile before using provider operations.")
     if str(profile["verification_status"]) != "verified":
@@ -211,6 +215,8 @@ def _normalize_schedule_time(value):
 
 def create_schedule(user, data):
     profile = require_verified_provider(user)
+    if not profile:
+        raise ValueError("Create a provider profile before adding schedule.")
     try:
         weekday = int(data.get("weekday"))
     except (TypeError, ValueError) as exc:
