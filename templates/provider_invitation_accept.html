@@ -4,9 +4,9 @@
 <section class="auth-panel">
   <div class="auth-panel-header">
     <p class="eyebrow">Controlled provider onboarding</p>
-    <h1>Accept ZENDOC provider invitation</h1>
+    <h1>Accept controlled ZENDOC invitation</h1>
     {% if invitation %}
-      <p class="section-copy">This invitation is for <strong>{{ invitation.email }}</strong> as a <strong>{{ invitation.role|title }}</strong>. Accepting it creates the account and proves control of this email only.</p>
+      <p class="section-copy">This invitation is for <strong>{{ invitation.email }}</strong> as a <strong>{{ invitation.role|title }}</strong>. Accepting it creates the controlled account and proves control of this email only.</p>
     {% else %}
       <p class="section-copy">This provider invitation cannot be used.</p>
     {% endif %}
@@ -17,10 +17,17 @@
   {% endif %}
 
   {% if invitation %}
+  {% if invitation.role in ['doctor','hospital','pharmacy'] %}
   <aside class="trust-note warning">
     <strong>Provider verification remains separate</strong><br>
     After account creation you must complete your provider profile and submit official evidence. ZENDOC owner review is still required before the provider can be represented as verified or publicly bookable.
   </aside>
+  {% else %}
+  <aside class="trust-note">
+    <strong>Institution account boundary</strong><br>
+    This invitation creates a controlled government/institution workspace account. It does not grant provider verification, clinical authority, or owner/admin privileges.
+  </aside>
+  {% endif %}
   <form method="post">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="token" value="{{ token }}">
