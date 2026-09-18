@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Accept Provider Invitation — ZENDOC{% endblock %}
+{% block content %}
+<section class="auth-panel">
+  <div class="auth-panel-header">
+    <p class="eyebrow">Controlled provider onboarding</p>
+    <h1>Accept ZENDOC provider invitation</h1>
+    {% if invitation %}
+      <p class="section-copy">This invitation is for <strong>{{ invitation.email }}</strong> as a <strong>{{ invitation.role|title }}</strong>. Accepting it creates the account and proves control of this email only.</p>
+    {% else %}
+      <p class="section-copy">This provider invitation cannot be used.</p>
+    {% endif %}
+  </div>
+
+  {% if error %}
+    <aside class="trust-note warning"><strong>Invitation unavailable</strong><br>{{ error }}</aside>
+  {% endif %}
+
+  {% if invitation %}
+  <aside class="trust-note warning">
+    <strong>Provider verification remains separate</strong><br>
+    After account creation you must complete your provider profile and submit official evidence. ZENDOC owner review is still required before the provider can be represented as verified or publicly bookable.
+  </aside>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="token" value="{{ token }}">
+    <label>Your name
+      <input name="name" value="{{ invitation.invited_name or '' }}" autocomplete="name" maxlength="160" required>
+    </label>
+    <label>Create password
+      <input name="password" type="password" autocomplete="new-password" minlength="8" required>
+    </label>
+    <fieldset class="policy-consent">
+      <legend>Privacy and Terms</legend>
+      <label class="check-option">
+        <input type="checkbox" name="accept_privacy" value="1" required>
+        <span>I have read and accept the <a href="{{ url_for('public_launch.privacy_policy') }}" target="_blank" rel="noopener">Privacy Policy</a>.</span>
+      </label>
+      <label class="check-option">
+        <input type="checkbox" name="accept_terms" value="1" required>
+        <span>I have read and accept the <a href="{{ url_for('public_launch.terms_of_service') }}" target="_blank" rel="noopener">Terms of Service</a>.</span>
+      </label>
+    </fieldset>
+    <button type="submit" data-submitting-label="Creating account…">Create provider account</button>
+  </form>
+  {% else %}
+    <div class="form-actions"><a class="secondary-action" href="{{ url_for('main.login') }}">Return to sign in</a></div>
+  {% endif %}
+</section>
+{% endblock %}
