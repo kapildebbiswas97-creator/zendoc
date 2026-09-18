@@ -6,6 +6,8 @@ it never invents external backup, recovery, or partner readiness.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 from flask import current_app
 
 from .database_reliability import backup_readiness, readiness_report
@@ -15,6 +17,211 @@ from .email_delivery import email_delivery_status
 from .record_storage import get_record_storage
 from .pilot_analytics import pilot_scorecard
 from .state_geography_bootstrap import state_coverage_summary
+
+
+
+def software_completion_readiness() -> dict:
+    """Check only repository-owned/free software completion.
+
+    This intentionally ignores domain purchase, external SMTP/S3/PostgreSQL
+    credentials, hosting backup evidence, Google Play review/testing, provider
+    coverage, and Snapdragon hardware measurements. Those are separate real-world
+    deployment/evidence gates.
+    """
+    repo_root = Path(current_app.root_path).resolve().parent
+    blockers = []
+    passed = []
+
+    required_routes = {
+        "home": "/",
+        "login": "/login",
+        "patient_registration": "/register/<role>",
+        "dashboard": "/dashboard",
+        "finder": "/finder",
+        "appointments": "/appointments",
+        "messages": "/messages",
+        "health_summary": "/health-summary",
+        "timeline": "/timeline",
+        "records": "/records",
+        "agent_os": "/agent-os",
+        "care_continuity": "/care-continuity",
+        "privacy": "/privacy",
+        "terms": "/terms",
+        "medical_disclaimer": "/medical-disclaimer",
+        "account_deletion": "/account-deletion",
+        "account_export": "/account/export",
+        "email_verification": "/verify-email",
+        "resend_verification": "/resend-verification",
+        "mobile_refresh": "/api/v1/auth/refresh",
+        "mobile_account_delete": "/api/v1/account",
+        "provider_invitation_accept": "/provider-invitation/accept",
+        "provider_invitation_admin": "/admin/provider-invitations",
+        "manifest": "/manifest.webmanifest",
+        "service_worker": "/sw.js",
+        "asset_links": "/.well-known/assetlinks.json",
+        "health": "/healthz",
+        "readiness": "/api/v1/ready",
+    }
+    registered = {str(rule.rule) for rule in current_app.url_map.iter_rules()}
+    missing_routes = [path for path in required_routes.values() if path not in registered]
+    if missing_routes:
+        blockers.append({
+            "key": "route_contract",
+            "message": "One or more required software-completion routes are missing.",
+            "detail": {"missing": missing_routes},
+        })
+    else:
+        passed.append({
+            "key": "route_contract",
+            "message": f"All {len(required_routes)} required public/core/mobile/provider routes are registered.",
+        })
+
+    required_files = [
+        "zendoc/security_headers.py",
+        "zendoc/email_delivery.py",
+        "zendoc/email_verification.py",
+        "zendoc/account_lifecycle.py",
+        "zendoc/account_export.py",
+        "zendoc/provider_invitation.py",
+        "zendoc/record_storage.py",
+        "zendoc/health_memory_rag.py",
+        "templates/privacy.html",
+        "templates/terms.html",
+        "templates/medical_disclaimer.html",
+        "templates/account_deletion.html",
+        "templates/provider_invitation_accept.html",
+        "static/sw.js",
+        "static/pwa.js",
+        "static/icons/zendoc-192.png",
+        "static/icons/zendoc-512.png",
+        "static/icons/zendoc-maskable-512.png",
+        "scripts/verify_public_launch.py",
+        "scripts/verify_record_storage.py",
+        "scripts/verify_transactional_email.py",
+        "scripts/verify_postgres_backup_restore.py",
+        "scripts/verify_android_release.py",
+        "scripts/bootstrap_android_twa.ps1",
+        "scripts/bootstrap_android_twa.sh",
+        "docs/PUBLIC_WEB_AND_PLAY_STORE_RELEASE.md",
+        "docs/GOOGLE_PLAY_DATA_SAFETY_DRAFT.md",
+        "docs/PLAY_STORE_LISTING_DRAFT.md",
+        ".github/workflows/ci.yml",
+    ]
+    missing_files = [
+        relative for relative in required_files
+        if not (repo_root / relative).is_file()
+    ]
+    empty_files = [
+        relative for relative in required_files
+        if (repo_root / relative).is_file() and (repo_root / relative).stat().st_size == 0
+    ]
+    if missing_files or empty_files:
+        blockers.append({
+            "key": "release_artifacts",
+            "message": "Required release/security/PWA artifacts are missing or empty.",
+            "detail": {"missing": missing_files, "empty": empty_files},
+        })
+    else:
+        passed.append({
+            "key": "release_artifacts",
+            "message": f"All {len(required_files)} required release/security/PWA artifacts are present and non-empty.",
+        })
+
+    required_tests = [
+        "tests/test_submission_smoke_matrix_v1.py",
+        "tests/test_public_launch_v1.py",
+        "tests/test_email_delivery_v1.py",
+        "tests/test_email_verification_v1.py",
+        "tests/test_policy_acceptance_v1.py",
+        "tests/test_public_registration_roles_v1.py",
+        "tests/test_provider_invitation_v1.py",
+        "tests/test_api_token_lifecycle_v1.py",
+        "tests/test_auth_rate_limit_v1.py",
+        "tests/test_telehealth_truth_v1.py",
+        "tests/test_account_export_v1.py",
+        "tests/test_health_memory_rag_v1.py",
+        "tests/test_careloop_consent_scope_boundary.py",
+        "tests/test_care_action_provider_state_truth.py",
+    ]
+    missing_tests = [
+        relative for relative in required_tests
+        if not (repo_root / relative).is_file()
+    ]
+    if missing_tests:
+        blockers.append({
+            "key": "regression_contract",
+            "message": "One or more required regression test files are missing.",
+            "detail": {"missing": missing_tests},
+        })
+    else:
+        passed.append({
+            "key": "regression_contract",
+            "message": f"All {len(required_tests)} required launch/privacy/safety regression files are present.",
+        })
+
+    config_contract = {
+        "PUBLIC_RELEASE_REQUIRED": "PUBLIC_RELEASE_REQUIRED" in current_app.config,
+        "AUTH_RATE_LIMIT_PER_MINUTE": int(current_app.config.get("AUTH_RATE_LIMIT_PER_MINUTE") or 0) > 0,
+        "API_ACCESS_TOKEN_MINUTES": 5 <= int(current_app.config.get("API_ACCESS_TOKEN_MINUTES") or 0) <= 1440,
+        "API_REFRESH_TOKEN_DAYS": 1 <= int(current_app.config.get("API_REFRESH_TOKEN_DAYS") or 0) <= 180,
+        "EMAIL_PROVIDER": "EMAIL_PROVIDER" in current_app.config,
+        "STORAGE_PROVIDER": "STORAGE_PROVIDER" in current_app.config,
+        "BACKUP_VERIFIED": "BACKUP_VERIFIED" in current_app.config,
+        "ANDROID_PACKAGE_NAME": "ANDROID_PACKAGE_NAME" in current_app.config,
+    }
+    failed_config = [key for key, ok in config_contract.items() if not ok]
+    if failed_config:
+        blockers.append({
+            "key": "configuration_contract",
+            "message": "One or more required launch/security configuration controls are absent or invalid.",
+            "detail": {"failed": failed_config},
+        })
+    else:
+        passed.append({
+            "key": "configuration_contract",
+            "message": "Public-release, auth-token, storage, backup, email and Android configuration controls are present.",
+        })
+
+    workflow_path = repo_root / ".github" / "workflows" / "ci.yml"
+    workflow_text = workflow_path.read_text(encoding="utf-8", errors="replace") if workflow_path.is_file() else ""
+    workflow_requirements = {
+        "manual_dispatch": "workflow_dispatch:" in workflow_text,
+        "competition_branch": "competition/edgecare-ai-2026" in workflow_text,
+        "public_launch_tests": "tests/test_public_launch_v1.py" in workflow_text,
+        "email_verification_tests": "tests/test_email_verification_v1.py" in workflow_text,
+        "provider_invitation_tests": "tests/test_provider_invitation_v1.py" in workflow_text,
+        "mobile_token_tests": "tests/test_api_token_lifecycle_v1.py" in workflow_text,
+    }
+    workflow_missing = [key for key, ok in workflow_requirements.items() if not ok]
+    if workflow_missing:
+        blockers.append({
+            "key": "ci_contract",
+            "message": "The Production Gate is missing one or more required exact-head validation hooks.",
+            "detail": {"missing": workflow_missing},
+        })
+    else:
+        passed.append({
+            "key": "ci_contract",
+            "message": "Production Gate includes competition-branch/manual validation and the critical public-launch regressions.",
+        })
+
+    status = "SOFTWARE_IMPLEMENTATION_COMPLETE" if not blockers else "SOFTWARE_IMPLEMENTATION_INCOMPLETE"
+    return {
+        "status": status,
+        "target": "repository_owned_free_software_scope",
+        "blockers": blockers,
+        "passed": passed,
+        "route_count": len(required_routes),
+        "artifact_count": len(required_files),
+        "regression_file_count": len(required_tests),
+        "validation_status": "EXACT_HEAD_CI_STILL_REQUIRED",
+        "truth_notice": (
+            "SOFTWARE_IMPLEMENTATION_COMPLETE means the checked repository-owned software contract is present. "
+            "It does not mean the exact commit passed CI, nor does it prove live domain/SMTP/S3/PostgreSQL backup, "
+            "provider coverage, Google Play approval, regulatory approval, or Snapdragon/NPU measurements."
+        ),
+    }
+
 
 
 def first50_launch_readiness() -> dict:
