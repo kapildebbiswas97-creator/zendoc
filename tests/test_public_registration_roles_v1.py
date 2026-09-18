@@ -46,3 +46,23 @@ def test_non_public_controlled_environment_preserves_provider_registration_flow(
     )
     assert response.status_code == 201
     assert response.get_json()["email_verification_required"] is False
+
+
+def test_public_home_and_provider_login_do_not_offer_provider_self_registration(tmp_path):
+    app, client = make_client(tmp_path)
+    app.config["PUBLIC_RELEASE_REQUIRED"] = True
+
+    home = client.get("/")
+    assert home.status_code == 200
+    home_body = home.get_data(as_text=True)
+    assert "/register/patient" in home_body
+    assert "/register/doctor" not in home_body
+    assert "/register/hospital" not in home_body
+    assert "/register/pharmacy" not in home_body
+    assert "invitation-only" in home_body
+
+    provider_login = client.get("/login/doctor")
+    assert provider_login.status_code == 200
+    body = provider_login.get_data(as_text=True)
+    assert "/register/doctor" not in body
+    assert "Provider accounts are invitation-only" in body
