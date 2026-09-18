@@ -624,6 +624,17 @@ def login(role=None):
             record_product_activity(user, event_type="session_login")
             audit("login", "user", str(user["id"]))
             get_db().commit()
+            if (
+                current_app.config.get("PUBLIC_RELEASE_REQUIRED")
+                and user["role"] in PROVIDER_ROLES
+            ):
+                provider_profile_row = get_provider_profile_for_user(user["id"])
+                if not provider_profile_row or str(provider_profile_row["verification_status"]) != "verified":
+                    flash(
+                        "Complete provider profile and verification before operational access.",
+                        "warning",
+                    )
+                    return redirect(url_for("main.provider_profile"))
             return redirect(url_for("main.dashboard"))
         flash(INVALID_CREDENTIALS_MESSAGE, "error")
     return render_template("login.html", role=display_role)
@@ -2735,12 +2746,34 @@ def api_login():
     )
     record_product_activity(user, event_type="session_login")
     get_db().commit()
+
+    provider_verification_status = None
+    provider_operational_access = True
+    if user["role"] in PROVIDER_ROLES:
+        provider_profile_row = get_provider_profile_for_user(user["id"])
+        provider_verification_status = (
+            str(provider_profile_row["verification_status"])
+            if provider_profile_row
+            else "profile_required"
+        )
+        provider_operational_access = (
+            not current_app.config.get("PUBLIC_RELEASE_REQUIRED")
+            or provider_verification_status == "verified"
+        )
+
     return jsonify({
         "token": access_token,
         "access_token": access_token,
         "access_token_expires_at": access_expires_at,
         "refresh_token": refresh_token,
         "refresh_token_expires_at": refresh_expires_at,
+        "provider_verification_status": provider_verification_status,
+        "provider_operational_access": provider_operational_access,
+        "next_action": (
+            "complete_provider_verification"
+            if user["role"] in PROVIDER_ROLES and not provider_operational_access
+            else "dashboard"
+        ),
         "user": {"id": user["id"], "name": user["name"], "role": user["role"]},
     })
 
