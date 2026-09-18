@@ -244,10 +244,33 @@ def public_launch_readiness() -> dict:
             ),
             "detail": email,
         })
+    elif not bool(current_app.config.get("EMAIL_VERIFIED")):
+        blockers.append({
+            "key": "transactional_email",
+            "message": (
+                "Transactional SMTP is configured but has not been marked verified "
+                "after a real delivery smoke test."
+            ),
+            "detail": email,
+        })
     else:
         passed.append({
             "key": "transactional_email",
-            "message": "Transactional SMTP delivery is configured.",
+            "message": "Transactional email is configured and marked verified.",
+        })
+
+    if not bool(current_app.config.get("BACKUP_VERIFIED")):
+        blockers.append({
+            "key": "backup_recovery",
+            "message": (
+                "Public healthcare launch requires a verified database backup/restore or PITR process. "
+                "Set ZENDOC_BACKUP_VERIFIED=true only after a real recovery test for this deployment."
+            ),
+        })
+    else:
+        passed.append({
+            "key": "backup_recovery",
+            "message": "Database backup/recovery has been marked verified for this deployment.",
         })
 
     storage = get_record_storage().status()
