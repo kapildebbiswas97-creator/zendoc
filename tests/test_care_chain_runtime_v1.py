@@ -45,6 +45,7 @@ def test_care_chain_connects_grounding_agent_os_and_metadata_audit_without_overc
         assert prepared["input"]["manual_submit_required"] is True
         assert prepared["health_memory"]["status"] == "AUTHORIZED_MINIMUM_METADATA"
         assert prepared["health_memory"]["raw_events_exposed_to_chain"] is False
+        assert prepared["health_memory"]["local_advisory_fields"] == ["city"]
         assert prepared["rag"]["status"] == "NOT_REQUIRED_FOR_LOGISTICS"
         assert prepared["local_advisory"]["tool_execution_authority"] is False
         assert prepared["local_advisory"]["cloud_allowed"] is False
