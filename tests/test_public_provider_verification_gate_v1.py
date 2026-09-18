@@ -323,3 +323,32 @@ def test_verified_provider_browser_operational_navigation_returns(tmp_path):
     body = dashboard.get_data(as_text=True)
     assert "/appointments" in body
     assert "/doctor/availability" in body
+
+
+def test_pending_provider_api_quarantine_allows_only_onboarding_and_account_controls(tmp_path):
+    app, client = make_client(tmp_path)
+    email = "pending-api-quarantine@example.com"
+    _prepare_pending_doctor(app, client, email)
+
+    with app.app_context():
+        app.config["PUBLIC_RELEASE_REQUIRED"] = True
+
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": "StrongPass123"},
+    )
+    assert login.status_code == 200
+    access = login.get_json()["access_token"]
+    headers = {"Authorization": f"Bearer {access}"}
+
+    blocked = client.get("/api/v1/dashboard", headers=headers)
+    assert blocked.status_code == 403
+    assert "Provider verification is required" in blocked.get_json()["error"]["message"]
+
+    onboarding = client.get("/api/v1/provider/onboarding", headers=headers)
+    assert onboarding.status_code == 200
+    assert onboarding.get_json()["status"] in {"PROFILE_REQUIRED", "PENDING", "READY_FOR_REVIEW", "VERIFIED"}
+
+    exported = client.get("/api/v1/account/export", headers=headers)
+    assert exported.status_code == 200
+    assert exported.get_json()["account"]["email_normalized"] == email
