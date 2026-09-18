@@ -50,6 +50,32 @@
 
 <section class="panel spaced-panel">
   <div class="panel-head">
+    <div><p class="eyebrow">Public launch gate</p><h2>{{ snapshot.public_launch.status|replace('_',' ') }}</h2></div>
+    <span class="status-badge {{ 'active' if snapshot.public_launch.status == 'PUBLIC_LAUNCH_READY' else 'working' }}">{{ snapshot.public_launch.blockers|length }} blocker(s)</span>
+  </div>
+  <div class="grid two">
+    <div>
+      <h3>Launch blockers</h3>
+      {% if snapshot.public_launch.blockers %}
+        <ul>{% for item in snapshot.public_launch.blockers %}<li><strong>{{ item.key|replace('_',' ')|title }}:</strong> {{ item.message }}</li>{% endfor %}</ul>
+      {% else %}
+        <p class="form-note">No software/deployment blocker is reported by the public launch gate.</p>
+      {% endif %}
+    </div>
+    <div>
+      <h3>Warnings</h3>
+      {% if snapshot.public_launch.warnings %}
+        <ul>{% for item in snapshot.public_launch.warnings %}<li><strong>{{ item.key|replace('_',' ')|title }}:</strong> {{ item.message }}</li>{% endfor %}</ul>
+      {% else %}
+        <p class="form-note">No launch warning is currently reported.</p>
+      {% endif %}
+    </div>
+  </div>
+  <p class="form-note">{{ snapshot.public_launch.truth_notice }}</p>
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head">
     <div><p class="eyebrow">Fundraising evidence</p><h2>{{ snapshot.funding.status|replace('_',' ') }}</h2></div>
     <span class="status-badge {{ 'active' if not snapshot.funding.missing else 'working' }}">{{ snapshot.funding.present_count }}/{{ snapshot.funding.required_signal_count }} evidence signals present</span>
   </div>
