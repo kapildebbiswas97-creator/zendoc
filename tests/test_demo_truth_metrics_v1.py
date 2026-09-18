@@ -2,6 +2,7 @@ from zendoc.db import get_db, now_iso
 from zendoc.edgecare_demo_data import DEMO_PATIENT_EMAIL, seed_edgecare_demo_data
 from zendoc.investor_dashboard import investor_traction_snapshot
 from zendoc.launch_readiness import first50_launch_readiness
+from zendoc.pilot_analytics import pilot_scorecard
 from zendoc.startup_analytics import (
     care_journey_conversion,
     provider_onboarding_funnel,
@@ -53,6 +54,37 @@ def test_synthetic_demo_fixture_never_inflates_fundraising_metrics(tmp_path, mon
             """,
             (int(patient["id"]), int(patient["id"]), stamp, stamp),
         )
+
+        doctor = db.execute(
+            "SELECT id FROM users WHERE email_normalized='demo-doctor@zendoc.local'"
+        ).fetchone()
+        doctor_id = int(doctor["id"])
+
+        db.execute(
+            """
+            INSERT INTO medicine_orders
+            (patient_id,ordered_by,pharmacy_id,items_json,delivery_address,status,created_at,
+             acknowledgement_status,acknowledged_at,tracking_status,data_mode,updated_at)
+            VALUES (?,?,?,'[]','DEMO ONLY address','pending',?,'accepted',?,'SUBMITTED','LIVE',?)
+            """,
+            (int(patient["id"]), int(patient["id"]), doctor_id, stamp, stamp, stamp),
+        )
+        db.execute(
+            """
+            INSERT INTO consultation_requests
+            (patient_id,doctor_id,consultation_type,status,reason,created_at,updated_at)
+            VALUES (?,?,'chat','rejected','DEMO ONLY reason',?,?)
+            """,
+            (int(patient["id"]), doctor_id, stamp, stamp),
+        )
+        db.execute(
+            """
+            INSERT INTO request_observations
+            (correlation_id,actor_id,actor_role,method,route_pattern,status_code,duration_ms,error_class,created_at)
+            VALUES ('demo-only-observation',?,'patient','GET','/finder',200,10,NULL,?)
+            """,
+            (int(patient["id"]), stamp),
+        )
         db.commit()
 
         owner = _owner()
@@ -62,6 +94,7 @@ def test_synthetic_demo_fixture_never_inflates_fundraising_metrics(tmp_path, mon
         providers = provider_onboarding_funnel(owner, days=90)
         launch = first50_launch_readiness()
         investor = investor_traction_snapshot(owner, days=30)
+        pilot = pilot_scorecard()
 
         assert product["healthcare_searches"] == 0
         assert product["active_search_users"] == 0
@@ -83,3 +116,10 @@ def test_synthetic_demo_fixture_never_inflates_fundraising_metrics(tmp_path, mon
         assert investor["readiness"]["product_usage_observed"] is False
         assert investor["readiness"]["provider_network_observed"] is False
         assert investor["readiness"]["patient_activation_measurable"] is False
+
+        assert pilot["providers"]["profiles_total"] == 0
+        assert pilot["care_journeys"]["total"] == 0
+        assert pilot["provider_responsiveness"]["medicine_orders"]["submitted"] == 0
+        assert pilot["provider_responsiveness"]["consultations"]["requested"] == 0
+        assert pilot["engagement"]["authenticated_active_users_30d"] == 0
+        assert "exclude synthetic competition fixture" in pilot["measurement_boundary"].lower()
