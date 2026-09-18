@@ -181,12 +181,15 @@ class S3CompatibleRecordStorage:
                 "scope": "durable_object_storage",
                 "message": str(exc),
             }
+        endpoint_url = settings["endpoint_url"]
+        transport_secure = endpoint_url is None or str(endpoint_url).lower().startswith("https://")
         return {
             "provider": self.name,
             "status": "configured_unverified",
             "scope": "durable_object_storage",
             "bucket": settings["bucket"],
-            "endpoint_configured": bool(settings["endpoint_url"]),
+            "endpoint_configured": bool(endpoint_url),
+            "transport_secure": transport_secure,
             "truth_notice": (
                 "Configuration is present. A real object operation is still required "
                 "to prove remote storage availability."
