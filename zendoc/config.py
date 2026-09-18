@@ -151,6 +151,12 @@ def load_config(base_dir, overrides=None):
         "AUTH_RATE_LIMIT_PER_MINUTE": env_int(
             "ZENDOC_AUTH_RATE_LIMIT_PER_MINUTE", 20, minimum=3, maximum=300
         ),
+        "API_ACCESS_TOKEN_MINUTES": env_int(
+            "ZENDOC_API_ACCESS_TOKEN_MINUTES", 60, minimum=5, maximum=1440
+        ),
+        "API_REFRESH_TOKEN_DAYS": env_int(
+            "ZENDOC_API_REFRESH_TOKEN_DAYS", 30, minimum=1, maximum=180
+        ),
         "OBSERVABILITY_RETENTION_DAYS": env_int(
             "ZENDOC_OBSERVABILITY_RETENTION_DAYS", 30, minimum=1, maximum=365
         ),
