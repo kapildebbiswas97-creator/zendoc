@@ -83,6 +83,7 @@ def _journey_view(journey: dict | None) -> dict | None:
 
 def _task_metadata(result: dict, context: dict) -> dict:
     plan = result.get("plan") if isinstance(result.get("plan"), dict) else {}
+    care_chain = result.get("care_chain") if isinstance(result.get("care_chain"), dict) else {}
     chain = result.get("handoff_chain")
     if not isinstance(chain, list):
         chain = handoff_for_intent(result.get("intent"))
@@ -104,6 +105,25 @@ def _task_metadata(result: dict, context: dict) -> dict:
             for stage in chain
             if isinstance(stage, dict)
         ],
+        "care_chain": {
+            "version": str(care_chain.get("version") or "")[:40] or None,
+            "input_channel": str((care_chain.get("input") or {}).get("channel") or "typed")[:40],
+            "asr_audit_log_id": (care_chain.get("input") or {}).get("asr_audit_log_id"),
+            "health_memory_total_events": int((care_chain.get("health_memory") or {}).get("total_events") or 0),
+            "health_memory_status": str((care_chain.get("health_memory") or {}).get("status") or "")[:80],
+            "rag_status": str((care_chain.get("rag") or {}).get("status") or "")[:80],
+            "rag_evidence_ids": [
+                str(item.get("evidence_id") or "")[:120]
+                for item in (care_chain.get("rag") or {}).get("evidence", [])
+                if isinstance(item, dict) and item.get("evidence_id")
+            ][:8],
+            "local_advisory_status": str((care_chain.get("local_advisory") or {}).get("status") or "")[:80],
+            "local_model_used": bool((care_chain.get("local_advisory") or {}).get("local_model_used")),
+            "model_execution_log_id": (care_chain.get("local_advisory") or {}).get("model_execution_log_id"),
+            "raw_prompt_stored": False,
+            "raw_transcript_stored": False,
+            "raw_health_memory_stored": False,
+        },
         "raw_prompt_stored": False,
         "tool_payload_stored": False,
     }
