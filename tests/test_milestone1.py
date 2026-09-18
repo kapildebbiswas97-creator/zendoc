@@ -14,6 +14,7 @@ def make_app(tmp_path):
             "ADMIN_EMAIL": "admin@example.com",
             "ADMIN_PASSWORD": "AdminStrong123",
             "RATE_LIMIT_PER_MINUTE": 1000,
+            "AUTH_RATE_LIMIT_PER_MINUTE": 1000,
         }
     )
 
