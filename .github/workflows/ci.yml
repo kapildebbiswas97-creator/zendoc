@@ -72,6 +72,7 @@ jobs:
           tests/test_symptom_guidance_boundary_v1.py
           tests/test_iot_provenance_truth_v1.py
           tests/test_pharmacy_truth_v1.py
+          tests/test_request_fulfilment_truth_v1.py
 
   full-sqlite-tests:
     name: Full SQLite Test Suite
