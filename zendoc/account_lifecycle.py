@@ -148,6 +148,8 @@ def _delete_directly_attributed_rows(user_id: int):
         ("DELETE FROM product_analytics_events WHERE user_id=?", (user_id,)),
         ("DELETE FROM product_feedback WHERE user_id=?", (user_id,)),
         ("DELETE FROM request_observations WHERE actor_id=?", (user_id,)),
+        ("DELETE FROM user_policy_acceptances WHERE user_id=?", (user_id,)),
+        ("DELETE FROM user_email_verifications WHERE user_id=?", (user_id,)),
         ("DELETE FROM user_email_verifications WHERE user_id=?", (user_id,)),
         ("DELETE FROM user_policy_acceptances WHERE user_id=?", (user_id,)),
     )
