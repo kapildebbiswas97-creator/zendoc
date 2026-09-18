@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from tests.test_milestone1 import make_app
 from zendoc.agent_handoffs import handoff_for_intent
 from zendoc.appointment_continuity import complete_follow_up, sync_provider_appointment_status
+from zendoc.care_chain import build_persisted_care_chain
 from zendoc.db import get_db, now_iso
 from zendoc.health_memory_continuity import determine_next_safe_actions, get_health_memory_provenance_summary
 from zendoc.specialist_agent_routes import _confirm_connected_booking
@@ -188,3 +189,14 @@ def test_one_request_one_journey_through_provider_evidence_memory_and_follow_up(
         final_memory = get_health_memory_provenance_summary(patient["id"], actor=patient)
         assert any(event["event_type"] == "provider_outcome" for event in final_memory["by_provenance"]["PROVIDER_RECORDED"])
         assert any(event["event_type"] == "follow_up_completed" for event in final_memory["by_provenance"]["USER_REPORTED"])
+
+        canonical = build_persisted_care_chain(patient, journey_id)
+        assert canonical["state"] == "COMPLETED"
+        assert canonical["provider_confirmation"]["appointment_status"] == "completed"
+        assert canonical["provider_confirmation"]["provider_confirmed"] is True
+        assert canonical["outcome"]["verified"] is True
+        assert canonical["outcome"]["care_outcome_id"] == completed["care_outcome_id"]
+        assert canonical["longitudinal_memory"]["provider_recorded"] is True
+        assert canonical["longitudinal_memory"]["provenance"] == "PROVIDER_RECORDED"
+        assert canonical["truth"]["model_claim_is_provider_confirmation"] is False
+        assert canonical["truth"]["patient_report_is_provider_recorded"] is False

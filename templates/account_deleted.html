@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Account Deleted — ZENDOC{% endblock %}
+{% block content %}
+<section class="panel">
+  <p class="eyebrow">Account control</p>
+  <h1>Your ZENDOC account was deleted</h1>
+  <p>{{ result.notice }}</p>
+  <p>Owned medical-record file(s) deleted: {{ result.owned_record_files_deleted }}.</p>
+  <a class="primary-action" href="{{ url_for('main.home') }}">Return to ZENDOC</a>
+</section>
+{% endblock %}

@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Deletion Request — ZENDOC{% endblock %}
+{% block content %}
+<section class="panel">
+  <p class="eyebrow">Account control</p>
+  <h1>Deletion request received</h1>
+  {% if email_available %}
+    <p>If the email belongs to an eligible ZENDOC account, a time-limited confirmation link has been sent. This page does not confirm whether the account exists.</p>
+  {% else %}
+    <p>Email delivery is not configured on this deployment. Sign in and use the password-confirmed deletion path from the account-deletion page.</p>
+  {% endif %}
+  <a class="secondary-action" href="{{ url_for('public_launch.account_deletion') }}">Back to account deletion</a>
+</section>
+{% endblock %}

@@ -16,13 +16,26 @@ def _user(db, name, email, role):
     ).lastrowid)
 
 
+def _verify_pharmacy(db, pharmacy_id):
+    stamp = now_iso()
+    db.execute(
+        """
+        INSERT INTO provider_profiles
+        (user_id,provider_type,verification_status,created_at,updated_at)
+        VALUES (?,'pharmacy','verified',?,?)
+        """,
+        (pharmacy_id, stamp, stamp),
+    )
+    db.commit()
+
+
 def test_assigned_pharmacy_can_see_incoming_order(tmp_path):
     app = make_app(tmp_path)
     with app.app_context():
         db = get_db()
         patient_id = _user(db, "Pilot Patient", "pharmacy-patient@example.com", "patient")
         pharmacy_id = _user(db, "Pilot Pharmacy", "pharmacy-provider@example.com", "pharmacy")
-        db.commit()
+        _verify_pharmacy(db, pharmacy_id)
         patient = {"id": patient_id, "role": "patient"}
         pharmacy = {"id": pharmacy_id, "role": "pharmacy"}
 
@@ -42,7 +55,7 @@ def test_order_rejects_inactive_or_non_pharmacy_assignment(tmp_path):
         patient_id = _user(db, "Pilot Patient", "pharmacy-patient2@example.com", "patient")
         doctor_id = _user(db, "Pilot Doctor", "pharmacy-doctor@example.com", "doctor")
         db.commit()
-        with pytest.raises(ValueError, match="active pharmacy"):
+        with pytest.raises(ValueError, match="active, verified ZENDOC pharmacy"):
             create_medicine_order(
                 {"id": patient_id, "role": "patient"},
                 {"items": [{"name": "Test", "quantity": 1}], "delivery_address": "Address", "pharmacy_id": doctor_id},

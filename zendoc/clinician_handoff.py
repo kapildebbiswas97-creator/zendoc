@@ -77,11 +77,16 @@ def build_clinician_handoff_packet(actor, *, reason_for_visit=None, questions=No
         "date_of_birth": profile.get("date_of_birth"),
     }
     missing = []
-    if not important["allergies"]: missing.append("allergies not recorded")
-    if not important["current_medications"]: missing.append("current medications not recorded")
-    if not important["chronic_conditions"]: missing.append("chronic conditions not recorded")
-    if not summary.get("recent_reports"): missing.append("no recent reports in ZENDOC")
-    if not summary.get("recent_measurements"): missing.append("no recent measurements in ZENDOC")
+    if not important["allergies"]:
+        missing.append("allergies not recorded")
+    if not important["current_medications"]:
+        missing.append("current medications not recorded")
+    if not important["chronic_conditions"]:
+        missing.append("chronic conditions not recorded")
+    if not summary.get("recent_reports"):
+        missing.append("no recent reports in ZENDOC")
+    if not summary.get("recent_measurements"):
+        missing.append("no recent measurements in ZENDOC")
     return {
         "packet_version": PACKET_VERSION,
         "generated_at": now_iso(),
@@ -99,7 +104,10 @@ def build_clinician_handoff_packet(actor, *, reason_for_visit=None, questions=No
         "sharing": {
             "automatic_external_sharing": False,
             "patient_controlled": True,
-            "notice": "This packet is prepared for the patient to review and share. ZENDOC does not automatically send it to a clinician or external service.",
+            "notice": (
+                "This packet is prepared for the patient to review and share. "
+                "ZENDOC does not automatically send it to a clinician or external service."
+            ),
         },
         "provenance": {
             "profile": "ZENDOC patient Health Memory",
@@ -108,7 +116,12 @@ def build_clinician_handoff_packet(actor, *, reason_for_visit=None, questions=No
             "measurements": "ZENDOC health measurements",
             "timeline": "ZENDOC Health Timeline",
             "care_actions": "ZENDOC Care Action Ledger",
-            "patient_entered_context": "Reason for visit and clinician questions are entered by the patient for this packet.",
+            "patient_entered_context": (
+                "Reason for visit and clinician questions are entered by the patient for this packet."
+            ),
         },
-        "safety_notice": "Human handoff summary only. ZENDOC does not diagnose, prescribe, or certify that this packet is clinically complete.",
+        "safety_notice": (
+            "Human handoff summary only. ZENDOC does not diagnose, prescribe, "
+            "or certify that this packet is clinically complete."
+        ),
     }

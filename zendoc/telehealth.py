@@ -2,6 +2,7 @@ import hashlib
 
 from .db import get_db, is_integrity_error, now_iso
 from .organization_service import provider_resource_context, assert_resource_tenant
+from .provider_service import require_verified_provider, require_verified_provider_id
 from .security import is_owner
 from .telehealth_provider import get_telehealth_provider
 
@@ -47,9 +48,17 @@ def set_doctor_availability(actor, data):
         raise PermissionError("Doctors can only update their own availability.")
     if not _doctor_row(doctor_id):
         raise LookupError("Doctor account not found.")
+    require_verified_provider_id(doctor_id, allowed_roles={"doctor", "hospital"})
+    if _value(actor, "role") in {"doctor", "hospital"}:
+        require_verified_provider(actor, allowed_roles={"doctor", "hospital"})
     status = str(data.get("status") or "offline").strip().lower()
     if status not in DOCTOR_STATUSES:
         raise ValueError("Invalid doctor availability status.")
+    provider_status = get_telehealth_provider().status()
+    if data.get("accepts_voice") and not provider_status.get("supports_voice"):
+        raise ValueError("Voice telehealth is not available on this deployment.")
+    if data.get("accepts_video") and not provider_status.get("supports_video"):
+        raise ValueError("Video telehealth is not available on this deployment.")
     patient_message_policy = str(data.get("patient_message_policy") or "accepted_consultation").strip().lower()
     if patient_message_policy not in PATIENT_MESSAGE_POLICIES:
         raise ValueError("Invalid patient message policy.")
@@ -91,6 +100,7 @@ def set_doctor_availability(actor, data):
 
 
 def get_doctor_availability(doctor_id):
+    require_verified_provider_id(doctor_id, allowed_roles={"doctor", "hospital"})
     row = get_db().execute(
         """
         SELECT da.*, u.name doctor_name
@@ -125,9 +135,16 @@ def request_consultation(actor, data):
     doctor_id = int(data.get("doctor_id") or 0)
     if not _doctor_row(doctor_id):
         raise LookupError("Doctor account not found.")
+    require_verified_provider_id(doctor_id, allowed_roles={"doctor", "hospital"})
     consultation_type = str(data.get("consultation_type") or "chat").strip().lower()
     if consultation_type not in CONSULTATION_TYPES:
         raise ValueError("Invalid consultation type.")
+    provider_status = get_telehealth_provider().status()
+    capability_key = f"supports_{consultation_type}"
+    if not provider_status.get(capability_key):
+        raise ValueError(
+            f"{consultation_type.title()} telehealth is not available on this deployment."
+        )
     reason = str(data.get("reason") or "").strip()
     if not reason:
         raise ValueError("Consultation reason is required.")
@@ -206,6 +223,7 @@ def list_consultations(actor):
         where = "1=1"
         params = ()
     elif role in {"doctor", "hospital"}:
+        require_verified_provider(actor, allowed_roles={"doctor", "hospital"})
         where = "cr.doctor_id=?"
         params = (uid,)
     else:
@@ -248,6 +266,7 @@ def get_consultation(actor, consultation_id):
     elif uid not in {row["patient_id"], row["doctor_id"]}:
         raise PermissionError("You cannot access another consultation.")
     if role in {"doctor", "hospital"}:
+        require_verified_provider(actor, allowed_roles={"doctor", "hospital"})
         assert_resource_tenant(actor, dict(row))
     return dict(row)
 

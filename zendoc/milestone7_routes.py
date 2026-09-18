@@ -19,6 +19,7 @@ from .human_operations import create_staff_task, list_staff_tasks, update_staff_
 from .pose_coach import POSE_EXERCISES, list_pose_sessions, save_pose_session
 from .routes import audit, require_api_user
 from .security import assert_owner, login_required, owner_required, role_required
+from .telehealth_provider import get_telehealth_provider
 from .telehealth import (
     get_consultation,
     get_doctor_availability,
@@ -78,7 +79,11 @@ def doctor_availability_page():
         availability = get_doctor_availability(g.user["id"])
     except LookupError:
         availability = None
-    return render_template("doctor_availability.html", availability=availability)
+    return render_template(
+        "doctor_availability.html",
+        availability=availability,
+        telehealth_status=get_telehealth_provider().status(),
+    )
 
 
 @bp.route("/messages", methods=("GET", "POST"))
@@ -197,7 +202,12 @@ def telehealth_page():
             ORDER BY COALESCE(p.organization,u.name),p.specialty
             """
         ).fetchall()
-    return render_template("telehealth.html", consultations=list_consultations(g.user), doctors=doctors)
+    return render_template(
+        "telehealth.html",
+        consultations=list_consultations(g.user),
+        doctors=doctors,
+        telehealth_status=get_telehealth_provider().status(),
+    )
 
 
 @bp.get("/telehealth/<int:consultation_id>")
@@ -280,7 +290,7 @@ def api_get_doctor_availability(doctor_id):
         return error
     try:
         return jsonify({"doctor_availability": get_doctor_availability(doctor_id)})
-    except LookupError as error:
+    except (LookupError, PermissionError) as error:
         return _api_error(error)
 
 

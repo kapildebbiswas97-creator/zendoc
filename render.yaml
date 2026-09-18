@@ -37,5 +37,3 @@ services:
         sync: false
       - key: ZENDOC_PLACES_TIMEOUT_SECONDS
         value: "8"
-      - key: ZENDOC_OSM_POI_ENABLED
-        value: "true"

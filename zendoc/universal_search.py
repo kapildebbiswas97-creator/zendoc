@@ -5,11 +5,54 @@ Classifies search queries across doctors, symptoms, diagnostic reports, pharmaci
 ambulance, fitness, family records, and direct platform features.
 """
 
-from .db import get_db
+from flask import has_app_context
+
 from .exercise_library import list_exercises
 from .family_care import list_family_members
-from .healthcare_finder import HealthcareFinder
-from .healthcare_finder import normalize_query
+from .universal_health_search import universal_search as search_healthcare
+
+
+HEALTHCARE_QUERY_TERMS = (
+    "doctor", "doctors", "cardiologist", "dermatologist", "physician", "specialist",
+    "hospital", "hospitals", "clinic", "clinics", "pharmacy", "pharmacies", "chemist",
+    "medical store", "medical shop", "diagnostic", "diagnostics", "laboratory", "lab",
+    "health centre", "health center", "phc", "chc", "nursing home", "blood bank",
+    "emergency care",
+)
+
+
+def _healthcare_search_items(clean_q):
+    """Reuse the canonical healthcare discovery parser for the legacy global search.
+
+    This keeps shorthand such as ``medical store Fulia`` or ``clinic near Nairobi``
+    aligned with the dedicated Universal Healthcare Search. Results retain their
+    source/verification truth and public/external listings are never promoted to
+    connected ZENDOC booking.
+    """
+    result = search_healthcare(clean_q)
+    items = []
+    for item in result.get("results", [])[:8]:
+        location = item.get("city") or item.get("district") or item.get("state") or item.get("address") or ""
+        source = item.get("source") or "healthcare discovery"
+        verification = item.get("verification_status") or "not_verified"
+        detail = item.get("specialty") or item.get("category") or "Healthcare"
+        subtitle_parts = [str(detail).replace("_", " ").title()]
+        if location:
+            subtitle_parts.append(str(location))
+        if source != "zendoc_provider_network":
+            subtitle_parts.append("External/public discovery")
+        elif verification == "verified":
+            subtitle_parts.append("ZENDOC verified")
+        items.append({
+            "title": item.get("name") or item.get("provider_name") or item.get("organization") or "Healthcare provider",
+            "subtitle": " • ".join(subtitle_parts),
+            "url": f"/universal-search?q={clean_q}",
+            "type": "provider",
+            "source": source,
+            "verification_status": verification,
+            "bookable_in_zendoc": bool(item.get("bookable_in_zendoc")),
+        })
+    return items
 
 
 def search_all(user, query):
@@ -43,26 +86,15 @@ def search_all(user, query):
                 ],
             })
 
-    # 2. Healthcare Provider Search (Doctor, Specialist, Hospital, Pharmacy)
-    if any(k in lower for k in ("doctor", "cardiologist", "dermatologist", "physician", "hospital", "pharmacy", "clinic", "specialist")):
-        category = "pharmacy" if "pharmacy" in lower else "hospital" if "hospital" in lower else "doctor"
-        specialty = clean_q if category == "doctor" and clean_q.lower() not in {"doctor", "specialist"} else ""
-        finder_results = HealthcareFinder().search(normalize_query(category=category, specialty=specialty))
-        external_places = finder_results.get("external_places", {})
-        items = finder_results.get("registered_providers", []) + external_places.get("results", [])
-        if items:
+    # 2. Healthcare discovery. Use the same parser/data tiers as the dedicated
+    # Universal Healthcare Search instead of maintaining a weaker duplicate.
+    if any(term in lower for term in HEALTHCARE_QUERY_TERMS):
+        healthcare_items = _healthcare_search_items(clean_q)
+        if healthcare_items:
             results.append({
                 "category": "Healthcare Providers",
                 "label": "Doctors & Facilities",
-                "items": [
-                    {
-                        "title": item.get("name") or item.get("organization", "Provider"),
-                        "subtitle": f"{item.get('specialty') or item.get('provider_type', 'Healthcare')} • {item.get('city', '')}",
-                        "url": f"/finder?q={clean_q}",
-                        "type": "provider",
-                    }
-                    for item in items[:5]
-                ],
+                "items": healthcare_items,
             })
 
     # 3. Emergency / Transport
@@ -72,8 +104,8 @@ def search_all(user, query):
             "label": "Ambulance Services",
             "items": [
                 {
-                    "title": "Request Medical Transport / Ambulance",
-                    "subtitle": "Emergency 108, BLS, ALS, & Patient Transport",
+                    "title": "Medical Transport Request Intake",
+                    "subtitle": "Request categories and emergency guidance · no ZENDOC dispatch confirmation",
                     "url": "/ambulance",
                     "type": "ambulance",
                 }
@@ -81,14 +113,14 @@ def search_all(user, query):
         })
 
     # 4. Medicine / Pharmacy
-    if any(k in lower for k in ("medicine", "pharmacy", "drug", "tablet", "pill", "prescription")):
+    if any(k in lower for k in ("medicine", "pharmacy", "chemist", "medical store", "medical shop", "drug", "tablet", "pill", "prescription")):
         results.append({
             "category": "Pharmacy & Medicines",
             "label": "Medicine Services",
             "items": [
                 {
                     "title": f"Search Medicines for '{clean_q}'",
-                    "subtitle": "Order delivery & locate nearby pharmacies",
+                    "subtitle": "Medicine safety flow & nearby pharmacy discovery",
                     "url": f"/pharmacy?q={clean_q}",
                     "type": "pharmacy",
                 }
@@ -96,7 +128,11 @@ def search_all(user, query):
         })
 
     # 5. Fitness & Exercises
-    ex_res = list_exercises(q=clean_q, limit=5)
+    # Direct service-level callers may use search_all without a Flask app
+    # context (for example truth-boundary/unit tests). DB-backed exercise
+    # lookup is optional in that case; real web/API requests always have an
+    # app context and retain the full exercise search.
+    ex_res = list_exercises(q=clean_q, limit=5) if has_app_context() else {"exercises": []}
     if ex_res.get("exercises"):
         results.append({
             "category": "Fitness & Exercises",
@@ -188,11 +224,11 @@ def search_all(user, query):
     # 9. AI Health Assistant
     results.append({
         "category": "ZENDOC AI",
-        "label": "AI Health Consultation",
+        "label": "AI Health Guidance",
         "items": [
             {
                 "title": f"Ask ZENDOC AI about '{clean_q}'",
-                "subtitle": "Get instant educational advice & symptom guidance",
+                "subtitle": "Get educational health guidance with deterministic safety boundaries",
                 "url": f"/ai?prompt={clean_q}",
                 "type": "ai_assistant",
             }
@@ -201,4 +237,3 @@ def search_all(user, query):
 
     total_matches = sum(len(c["items"]) for c in results)
     return {"query": clean_q, "categories": results, "total_matches": total_matches}
-

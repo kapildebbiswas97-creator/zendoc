@@ -92,7 +92,19 @@ INTENT_KEYWORDS = {
 class IntentRouter:
     def detect(self, message):
         text = (message or "").lower()
+
+        # Fulfilment/service intents must win over incidental destination words.
+        # Example: "patient transport for a routine clinic visit" is a transport
+        # request, not merely a clinic-search query. Emergency safety assessment
+        # still runs separately and can override this routing decision.
+        priority_intents = ("ambulance", "home_health", "telehealth", "iot_hub")
+        for intent in priority_intents:
+            if any(keyword in text for keyword in INTENT_KEYWORDS.get(intent, ())):
+                return intent
+
         for intent, keywords in INTENT_KEYWORDS.items():
+            if intent in priority_intents:
+                continue
             if any(keyword in text for keyword in keywords):
                 return intent
         return "general_assistant"

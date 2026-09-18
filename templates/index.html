@@ -343,9 +343,14 @@
         <div>
           <h3>Register New Account</h3>
           <div class="button-list">
-            {% for role in ['patient','doctor','hospital','pharmacy','government'] %}
-              <a href="{{ url_for('main.register', role=role) }}" class="secondary-action">Register as {{ role.replace('_',' ').title() }}</a>
-            {% endfor %}
+            {% if config.PUBLIC_RELEASE_REQUIRED %}
+              <a href="{{ url_for('main.register', role='patient') }}" class="secondary-action">Register as Patient</a>
+              <p class="form-note">Doctor, hospital and pharmacy accounts are invitation-only and require ZENDOC verification before they are represented as verified providers.</p>
+            {% else %}
+              {% for role in ['patient','doctor','hospital','pharmacy','government'] %}
+                <a href="{{ url_for('main.register', role=role) }}" class="secondary-action">Register as {{ role.replace('_',' ').title() }}</a>
+              {% endfor %}
+            {% endif %}
           </div>
         </div>
       </div>

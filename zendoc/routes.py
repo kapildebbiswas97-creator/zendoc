@@ -20,6 +20,13 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from .ai import MODEL_VERSION, assistant_answer, doctor_prediction, mental_health_support
 from .auth import ACCOUNT_EXISTS_MESSAGE, INVALID_CREDENTIALS_MESSAGE, email_exists, user_by_normalized_email, validate_email
 from .db import ROLES, get_db, is_integrity_error, now_iso
+from .email_delivery import email_delivery_status, send_transactional_email
+from .email_verification import (
+    email_verification_status,
+    issue_email_verification_token,
+    resolve_email_verification_token,
+    verify_email_token,
+)
 from .health_analytics import METRIC_TYPES, create_measurement, get_health_trend
 from .healthcare_finder import HealthcareFinder, normalize_query
 from .intelligence import ZendocIntelligence
@@ -30,11 +37,18 @@ from .provider_network import (
     provider_network_metrics,
     update_provider_prospect,
 )
+from .provider_invitation import (
+    accept_provider_invitation,
+    create_provider_invitation,
+    list_provider_invitations,
+    resolve_provider_invitation,
+)
 from .provider_onboarding import (
     EVIDENCE_TYPES,
     list_provider_evidence,
     provider_onboarding_status,
     review_provider_evidence,
+    set_provider_verification_status,
     submit_provider_evidence,
 )
 from .provider_service import (
@@ -46,6 +60,7 @@ from .provider_service import (
     create_schedule,
     get_provider_profile_for_user,
     get_public_provider_profile,
+    require_verified_provider,
     search_registered_providers,
     upsert_provider_profile,
 )
@@ -63,6 +78,7 @@ from .security import csrf_token, hash_token, is_owner, load_user_and_check_csrf
 from .startup_analytics import care_journey_conversion, india_coverage_quality, provider_onboarding_funnel, record_finder_search, record_product_activity, retention_metrics, startup_metrics, submit_finder_feedback, user_activation_funnel
 from .startup_finance import create_financial_entry, create_financial_snapshot, financial_kpis, list_financial_entries
 from .investor_dashboard import investor_traction_snapshot
+from .founder_readiness import founder_readiness_snapshot
 from .business_api import (
     BusinessApiRateLimitError,
     authenticate_business_api_key,
@@ -75,6 +91,7 @@ from .business_api import (
     revoke_business_api_key,
     update_business_api_client,
 )
+from .policy_acceptance import record_registration_policy_acceptance
 from .partner_audit import list_partner_audit_events, partner_audit_metrics
 from .partner_handoffs import create_partner_booking_handoff, get_partner_booking_handoff, list_all_partner_booking_handoffs, list_partner_booking_handoffs, list_provider_booking_handoffs, owner_update_partner_booking_handoff, partner_operations_metrics, provider_update_partner_booking_handoff
 from .institution_pilots import (
@@ -116,9 +133,75 @@ def before_request():
         return auth_response
     check_rate_limit()
 
+    # In strict public release, invited provider accounts may sign in to finish
+    # onboarding, but they cannot use operational provider surfaces until their
+    # provider profile is owner-verified.
+    if (
+        current_app.config.get("PUBLIC_RELEASE_REQUIRED")
+        and g.get("user") is not None
+        and g.user["role"] in PROVIDER_ROLES
+    ):
+        profile = get_provider_profile_for_user(g.user["id"])
+        verified = bool(profile and str(profile["verification_status"]) == "verified")
+        if not verified:
+            endpoint = str(request.endpoint or "")
+            allowed_endpoints = {
+                "main.provider_profile",
+                "main.provider_evidence_submit_web",
+                "main.provider_schedule",
+                "main.provider_public_entity_claim_submit_web",
+                "main.finder",
+                "main.provider_detail",
+                "main.profile",
+                "main.notifications",
+                "main.logout",
+            }
+            if (
+                endpoint
+                and endpoint not in allowed_endpoints
+                and not endpoint.startswith("provider_onboarding.")
+                and not endpoint.startswith("public_launch.")
+                and endpoint != "static"
+            ):
+                if request.path.startswith("/api/"):
+                    return jsonify({
+                        "error": {
+                            "code": 403,
+                            "message": (
+                                "Provider verification is required before using operational provider capabilities."
+                            ),
+                        }
+                    }), 403
+                flash(
+                    "Complete provider verification before using operational provider capabilities.",
+                    "warning",
+                )
+                return redirect(url_for("main.provider_profile"))
+
 
 def future_iso(minutes):
     return (datetime.now(timezone.utc) + timedelta(minutes=minutes)).isoformat(timespec="seconds")
+
+
+def _verification_url(token):
+    base_url = str(current_app.config.get("PUBLIC_BASE_URL") or "").strip().rstrip("/") or request.url_root.rstrip("/")
+    return f"{base_url}{url_for('main.verify_email', token=token)}"
+
+
+def _send_verification_email(user, token):
+    delivery = email_delivery_status()
+    if not delivery.get("transactional_email"):
+        raise RuntimeError("Transactional email delivery is not configured.")
+    link = _verification_url(token)
+    return send_transactional_email(
+        user["email"],
+        "Verify your ZENDOC email address",
+        (
+            "Verify the email address for your ZENDOC account.\n\n"
+            f"Open this link to verify your email: {link}\n\n"
+            "The link expires in 24 hours. If you did not create or request this account, ignore this message."
+        ),
+    )
 
 
 @bp.app_errorhandler(400)
@@ -159,23 +242,47 @@ def render_error(error, status, message):
 
 
 def check_rate_limit():
-    if not request.path.startswith("/api/"):
+    path = str(request.path or "")
+    sensitive_web_post = request.method == "POST" and (
+        path == "/login"
+        or path.startswith("/login/")
+        or path.startswith("/register/")
+        or path in {
+            "/forgot-password",
+            "/reset-password",
+            "/resend-verification",
+            "/verify-email",
+            "/provider-invitation/accept",
+            "/account-deletion",
+            "/account-deletion/confirm",
+        }
+    )
+    sensitive_api = path.startswith("/api/v1/auth/") or path == "/api/v1/account"
+    is_api = path.startswith("/api/")
+
+    if sensitive_web_post or sensitive_api:
+        limit = int(current_app.config.get("AUTH_RATE_LIMIT_PER_MINUTE", 20))
+        scope = "auth"
+    elif is_api:
+        limit = int(current_app.config.get("RATE_LIMIT_PER_MINUTE", 120))
+        scope = "api"
+    else:
         return
-    limit = int(current_app.config.get("RATE_LIMIT_PER_MINUTE", 120))
+
     remote = request.headers.get("X-Forwarded-For", request.remote_addr or "unknown")
     remote = str(remote).split(",", 1)[0].strip()
     client_hash = hashlib.sha256(remote.encode("utf-8")).hexdigest()[:32]
-    bucket_key = f"{client_hash}:{request.path}"
+    bucket_key = f"{client_hash}:{scope}:{path}"
     window = int(time.time()) // 60
 
-    # Tests intentionally keep an in-memory limiter so isolated test databases
-    # are not polluted by rate-limit bookkeeping and deterministic fixtures
-    # remain fast. Production/development use the shared database bucket so
-    # multiple workers/instances enforce one limit.
+    # Keep isolated test apps independent from one another while preserving
+    # deterministic throttling inside each app instance.
     if current_app.config.get("TESTING"):
-        bucket = RATE_BUCKETS.get(bucket_key)
+        test_scope = str(current_app.config.get("DATABASE") or id(current_app._get_current_object()))
+        test_bucket_key = f"{test_scope}:{bucket_key}"
+        bucket = RATE_BUCKETS.get(test_bucket_key)
         if not bucket or bucket["window"] != window:
-            RATE_BUCKETS[bucket_key] = {"window": window, "count": 1}
+            RATE_BUCKETS[test_bucket_key] = {"window": window, "count": 1}
             return
         bucket["count"] += 1
         if bucket["count"] > limit:
@@ -201,9 +308,6 @@ def check_rate_limit():
                     (bucket_key, window, now),
                 )
             except Exception as error:
-                # A concurrent worker may have created the same bucket after
-                # our SELECT. Roll back only this transaction and retry the
-                # atomic increment.
                 if not is_integrity_error(error):
                     raise
                 db.rollback()
@@ -219,7 +323,6 @@ def check_rate_limit():
         if current and int(current["count"]) > limit:
             abort(429)
 
-        # Opportunistic cleanup avoids an unbounded bookkeeping table.
         if window % 10 == 0:
             db.execute("DELETE FROM api_rate_limit_buckets WHERE window_id<?", (window - 120,))
             db.commit()
@@ -230,7 +333,26 @@ def check_rate_limit():
 
 @bp.app_context_processor
 def globals_for_templates():
-    return {"csrf_token": csrf_token(), "current_user": g.get("user"), "roles": ROLES, "specialties": SPECIALTIES}
+    user = g.get("user")
+    provider_verification_status = None
+    provider_operational_access = True
+    if user is not None and user["role"] in PROVIDER_ROLES:
+        profile = get_provider_profile_for_user(user["id"])
+        provider_verification_status = (
+            str(profile["verification_status"]) if profile else "profile_required"
+        )
+        provider_operational_access = (
+            not current_app.config.get("PUBLIC_RELEASE_REQUIRED")
+            or provider_verification_status == "verified"
+        )
+    return {
+        "csrf_token": csrf_token(),
+        "current_user": user,
+        "roles": ROLES,
+        "specialties": SPECIALTIES,
+        "provider_verification_status": provider_verification_status,
+        "provider_operational_access": provider_operational_access,
+    }
 
 
 def normalize_role(role):
@@ -339,11 +461,34 @@ def stats_for(user):
     if user["role"] == "admin":
         if not is_owner(user):
             raise PermissionError("Only the configured ZENDOC owner may view global platform statistics.")
+
+        from .demo_truth import synthetic_demo_provider_profile_ids, synthetic_demo_user_ids
+
+        demo_user_ids = synthetic_demo_user_ids(db)
+        demo_profile_ids = synthetic_demo_provider_profile_ids(db)
+        user_rows = db.execute("SELECT id FROM users").fetchall()
+        appointment_rows = db.execute(
+            "SELECT patient_id,provider_id FROM appointments"
+        ).fetchall()
+        record_rows = db.execute("SELECT owner_id FROM medical_records").fetchall()
+        provider_rows = db.execute("SELECT id FROM provider_profiles").fetchall()
+
         return {
-            "Users": db.execute("SELECT COUNT(*) c FROM users").fetchone()["c"],
-            "Appointments": db.execute("SELECT COUNT(*) c FROM appointments").fetchone()["c"],
-            "Records": db.execute("SELECT COUNT(*) c FROM medical_records").fetchone()["c"],
-            "Providers": db.execute("SELECT COUNT(*) c FROM provider_profiles").fetchone()["c"],
+            "Users": sum(1 for row in user_rows if int(row["id"]) not in demo_user_ids),
+            "Appointments": sum(
+                1
+                for row in appointment_rows
+                if int(row["patient_id"]) not in demo_user_ids
+                and (row["provider_id"] is None or int(row["provider_id"]) not in demo_user_ids)
+            ),
+            "Records": sum(
+                1 for row in record_rows
+                if int(row["owner_id"]) not in demo_user_ids
+            ),
+            "Providers": sum(
+                1 for row in provider_rows
+                if int(row["id"]) not in demo_profile_ids
+            ),
         }
     return {
         "Appointments": db.execute(
@@ -369,8 +514,18 @@ def register(role):
     role = normalize_role(role)
     if role == "admin":
         abort(403)
+    if current_app.config.get("PUBLIC_RELEASE_REQUIRED") and role != "patient":
+        abort(403)
     if request.method == "POST":
         if not require_form_fields("name", "email", "password"):
+            return render_template("register.html", role=role), 400
+        terms_accepted = bool(request.form.get("accept_terms"))
+        privacy_accepted = bool(request.form.get("accept_privacy"))
+        if terms_accepted != privacy_accepted or (
+            current_app.config.get("PUBLIC_RELEASE_REQUIRED")
+            and not (terms_accepted and privacy_accepted)
+        ):
+            flash("You must accept both the Privacy Policy and Terms of Service to create a public ZENDOC account.", "error")
             return render_template("register.html", role=role), 400
         password = request.form.get("password", "")
         try:
@@ -408,9 +563,28 @@ def register(role):
                 ),
             )
             created_user = get_db().execute("SELECT * FROM users WHERE id=?", (int(cursor.lastrowid),)).fetchone()
+            if terms_accepted and privacy_accepted:
+                record_registration_policy_acceptance(created_user["id"], source="web_registration")
+            verification_token = None
+            if current_app.config.get("PUBLIC_RELEASE_REQUIRED"):
+                verification_token = issue_email_verification_token(created_user)
             record_product_activity(created_user, event_type="account_registered")
             get_db().commit()
-            flash("Registration complete. Please log in.", "success")
+            if verification_token:
+                try:
+                    _send_verification_email(created_user, verification_token)
+                except Exception:
+                    current_app.logger.exception(
+                        "Registration email verification delivery failed for user_id=%s",
+                        created_user["id"],
+                    )
+                flash(
+                    "Registration complete. Verify your email address before signing in. "
+                    "If the message does not arrive, use Resend verification.",
+                    "success",
+                )
+            else:
+                flash("Registration complete. Please log in.", "success")
             return redirect(url_for("main.login", role=role))
         except Exception as error:
             if not is_integrity_error(error):
@@ -436,40 +610,203 @@ def login(role=None):
         if user and user["role"] == "admin" and not is_owner(user):
             user = None
         if user and check_password_hash(user["password_hash"], request.form.get("password", "")):
+            if (
+                current_app.config.get("PUBLIC_RELEASE_REQUIRED")
+                and user["role"] != "admin"
+                and not email_verification_status(user).get("verified")
+            ):
+                flash(
+                    "Email verification is required before public ZENDOC access. "
+                    "Use Resend verification if you need a new link.",
+                    "warning",
+                )
+                return render_template("login.html", role=display_role), 403
             start_user_session(user, remember=bool(request.form.get("remember_me")))
             record_product_activity(user, event_type="session_login")
             audit("login", "user", str(user["id"]))
             get_db().commit()
+            if (
+                current_app.config.get("PUBLIC_RELEASE_REQUIRED")
+                and user["role"] in PROVIDER_ROLES
+            ):
+                provider_profile_row = get_provider_profile_for_user(user["id"])
+                if not provider_profile_row or str(provider_profile_row["verification_status"]) != "verified":
+                    flash(
+                        "Complete provider profile and verification before operational access.",
+                        "warning",
+                    )
+                    return redirect(url_for("main.provider_profile"))
             return redirect(url_for("main.dashboard"))
         flash(INVALID_CREDENTIALS_MESSAGE, "error")
     return render_template("login.html", role=display_role)
 
 
+@bp.route("/verify-email", methods=("GET", "POST"))
+def verify_email():
+    token = str(request.values.get("token") or "").strip()
+    try:
+        token_row = resolve_email_verification_token(token)
+    except PermissionError:
+        flash("This email-verification link is invalid or expired. Request a new verification message.", "error")
+        return redirect(url_for("main.resend_verification"))
+
+    if request.method == "POST":
+        verify_email_token(token)
+        flash("Email verified successfully. You can now sign in to ZENDOC.", "success")
+        return redirect(url_for("main.login"))
+
+    return render_template(
+        "verify_email.html",
+        token=token,
+        email=token_row["email"],
+    )
+
+
+@bp.route("/resend-verification", methods=("GET", "POST"))
+def resend_verification():
+    if request.method == "POST":
+        email = ""
+        try:
+            email = validate_email(request.form.get("email", ""))
+        except ValueError:
+            pass
+
+        user = user_by_normalized_email(email) if email else None
+        if (
+            user
+            and user["role"] != "admin"
+            and not email_verification_status(user).get("verified")
+            and email_delivery_status().get("transactional_email")
+        ):
+            token = issue_email_verification_token(user)
+            get_db().commit()
+            try:
+                _send_verification_email(user, token)
+            except Exception:
+                current_app.logger.exception(
+                    "Resend email verification delivery failed for user_id=%s",
+                    user["id"],
+                )
+
+        # Existing/missing/already-verified/delivery-failure cases intentionally
+        # use one response so this page cannot enumerate ZENDOC accounts.
+        flash(
+            "If the email belongs to an unverified ZENDOC account, a new verification message has been requested.",
+            "success",
+        )
+        return redirect(url_for("main.login"))
+    return render_template("resend_verification.html")
+
+
+@bp.post("/api/v1/auth/verify-email")
+def api_verify_email():
+    data = request.get_json(silent=True) or {}
+    token = str(data.get("token") or "").strip()
+    if not token:
+        return jsonify({"error": {"code": 400, "message": "token is required"}}), 400
+    try:
+        result = verify_email_token(token)
+    except PermissionError as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+    return jsonify(result), 200
+
+
+@bp.post("/api/v1/auth/resend-verification")
+def api_resend_verification():
+    data = request.get_json(silent=True) or {}
+    email = ""
+    try:
+        email = validate_email(data.get("email", ""))
+    except ValueError:
+        pass
+
+    user = user_by_normalized_email(email) if email else None
+    if (
+        user
+        and user["role"] != "admin"
+        and not email_verification_status(user).get("verified")
+        and email_delivery_status().get("transactional_email")
+    ):
+        token = issue_email_verification_token(user)
+        get_db().commit()
+        try:
+            _send_verification_email(user, token)
+        except Exception:
+            current_app.logger.exception(
+                "API resend email verification delivery failed for user_id=%s",
+                user["id"],
+            )
+
+    return jsonify({
+        "status": "accepted",
+        "message": (
+            "If the email belongs to an unverified ZENDOC account, "
+            "a new verification message has been requested."
+        ),
+    }), 202
+
+
 @bp.route("/forgot-password", methods=("GET", "POST"))
 def forgot_password():
     if request.method == "POST":
-        if current_app.config.get("PASSWORD_RECOVERY_MODE") != "local_demo":
-            flash(
-                "Password recovery delivery is not integrated yet. Contact the ZENDOC owner for controlled account recovery.",
-                "warning",
-            )
-            return render_template("forgot_password.html"), 503
         email = ""
         try:
             email = validate_email(request.form.get("email", ""))
         except ValueError:
             pass
         user = user_by_normalized_email(email) if email else None
-        if user:
-            token = new_token()
-            get_db().execute(
-                "INSERT INTO api_tokens (user_id, token_hash, token_type, expires_at, created_at) VALUES (?, ?, 'password_reset', ?, ?)",
-                (user["id"], hash_token(token), future_iso(30), now_iso()),
-            )
-            get_db().commit()
-            flash("Local beta recovery token generated. It expires in 30 minutes; email delivery is not connected.", "success")
-            return redirect(url_for("main.reset_password", token=token))
-        flash("If the account exists, instructions have been generated.", "success")
+        delivery = email_delivery_status()
+
+        if delivery.get("transactional_email"):
+            if user:
+                token = new_token()
+                get_db().execute(
+                    "UPDATE api_tokens SET revoked_at=? WHERE user_id=? AND token_type='password_reset' AND revoked_at IS NULL",
+                    (now_iso(), user["id"]),
+                )
+                get_db().execute(
+                    "INSERT INTO api_tokens (user_id, token_hash, token_type, expires_at, created_at) VALUES (?, ?, 'password_reset', ?, ?)",
+                    (user["id"], hash_token(token), future_iso(30), now_iso()),
+                )
+                base_url = str(current_app.config.get("PUBLIC_BASE_URL") or "").strip().rstrip("/") or request.url_root.rstrip("/")
+                reset_link = f"{base_url}{url_for('main.reset_password', token=token)}"
+                try:
+                    send_transactional_email(
+                        user["email"],
+                        "Reset your ZENDOC password",
+                        (
+                            "A password reset was requested for your ZENDOC account.\n\n"
+                            f"Open this link to set a new password: {reset_link}\n\n"
+                            "The link expires in 30 minutes. If you did not request this, ignore this email."
+                        ),
+                    )
+                    get_db().commit()
+                except Exception:
+                    get_db().rollback()
+                    current_app.logger.exception("Password-reset email delivery failed.")
+            # Keep the same response for existing and non-existing accounts,
+            # including provider-delivery failures, to prevent account enumeration.
+            flash("If the account exists, password-reset instructions have been sent.", "success")
+            return redirect(url_for("main.login"))
+
+        if current_app.config.get("PASSWORD_RECOVERY_MODE") == "local_demo":
+            if user:
+                token = new_token()
+                get_db().execute(
+                    "INSERT INTO api_tokens (user_id, token_hash, token_type, expires_at, created_at) VALUES (?, ?, 'password_reset', ?, ?)",
+                    (user["id"], hash_token(token), future_iso(30), now_iso()),
+                )
+                get_db().commit()
+                flash("Local beta recovery token generated. It expires in 30 minutes; email delivery is not connected.", "success")
+                return redirect(url_for("main.reset_password", token=token))
+            flash("If the account exists, instructions have been generated.", "success")
+            return render_template("forgot_password.html")
+
+        flash(
+            "Password recovery delivery is not configured on this deployment.",
+            "warning",
+        )
+        return render_template("forgot_password.html"), 503
     return render_template("forgot_password.html")
 
 
@@ -782,6 +1119,7 @@ def appointment_status(appointment_id):
         abort(403)
     else:
         try:
+            require_verified_provider(g.user, allowed_roles={"doctor", "hospital"})
             assert_resource_tenant(g.user, dict(row))
         except PermissionError:
             abort(403)
@@ -1081,16 +1419,22 @@ def provider_profile():
     evidence = []
     listing_claims = []
     partner_handoffs = []
-    provider_operations = provider_operational_metrics(g.user)
+    provider_operations = None
+    operational_access = (
+        not current_app.config.get("PUBLIC_RELEASE_REQUIRED")
+        or bool(profile_row and str(profile_row["verification_status"]) == "verified")
+    )
     if profile_row:
+        onboarding = provider_onboarding_status(profile_row["id"])
+        evidence = list_provider_evidence(profile_row["id"])
+        listing_claims = list_my_public_entity_claims(g.user)
         schedules = get_db().execute(
             "SELECT * FROM provider_schedules WHERE provider_profile_id=? ORDER BY weekday,start_time",
             (profile_row["id"],),
         ).fetchall()
-        onboarding = provider_onboarding_status(profile_row["id"])
-        evidence = list_provider_evidence(profile_row["id"])
-        listing_claims = list_my_public_entity_claims(g.user)
-        partner_handoffs = list_provider_booking_handoffs(g.user)
+        if operational_access:
+            partner_handoffs = list_provider_booking_handoffs(g.user)
+            provider_operations = provider_operational_metrics(g.user)
     return render_template(
         "provider_profile.html",
         profile=profile_row,
@@ -1101,6 +1445,7 @@ def provider_profile():
         listing_claims=listing_claims,
         partner_handoffs=partner_handoffs,
         provider_operations=provider_operations,
+        provider_operational_access=operational_access,
     )
 
 
@@ -1297,6 +1642,46 @@ def startup_command_center():
         investor_snapshot=investor_snapshot,
         claims=claims,
     )
+
+
+@bp.get("/admin/founder-readiness")
+@owner_required
+def founder_readiness_page():
+    """Owner-only pre-call view for demo, pilot and fundraising evidence gates."""
+    raw = str(request.args.get("runtime", "1") or "1").strip().lower()
+    check_runtime = raw not in {"0", "false", "no", "off"}
+    return render_template(
+        "founder_readiness.html",
+        snapshot=founder_readiness_snapshot(
+            g.user,
+            check_runtime=check_runtime,
+            days=request.args.get("days", 30),
+            finance_month=request.args.get("finance_month"),
+        ),
+    )
+
+
+@bp.get("/admin/startup/investor-snapshot.json")
+@owner_required
+def startup_investor_snapshot_export():
+    """Export aggregated fundraising evidence without patient clinical content."""
+    days = request.args.get("days", 30)
+    try:
+        days_int = max(1, min(int(days), 365))
+    except (TypeError, ValueError):
+        days_int = 30
+    snapshot = investor_traction_snapshot(
+        g.user,
+        days=days_int,
+        finance_month=request.args.get("finance_month"),
+    )
+    return jsonify({
+        "schema_version": "2026.1",
+        "generated_at": now_iso(),
+        "scope": "aggregated_owner_investor_evidence",
+        "contains_patient_clinical_content": False,
+        "snapshot": snapshot,
+    })
 
 
 @bp.post("/admin/startup/booking-handoffs/<int:handoff_id>")
@@ -1518,6 +1903,105 @@ def admin():
         providers=providers,
         audits=audits,
         provider_evidence=provider_evidence,
+        provider_invitations=list_provider_invitations(),
+    )
+
+
+@bp.post("/admin/provider-invitations")
+@owner_required
+def create_provider_invitation_web():
+    try:
+        token, invitation = create_provider_invitation(
+            g.user,
+            email=request.form.get("email"),
+            role=request.form.get("role"),
+            invited_name=request.form.get("name"),
+        )
+        base_url = str(current_app.config.get("PUBLIC_BASE_URL") or "").strip().rstrip("/") or request.url_root.rstrip("/")
+        link = f"{base_url}{url_for('main.accept_provider_invitation_web')}?token={token}"
+        delivery = email_delivery_status()
+        if not delivery.get("transactional_email"):
+            flash(
+                "Invitation created, but transactional email is not configured. "
+                "Do not treat the account as onboarded until the invitation is delivered and accepted.",
+                "warning",
+            )
+        else:
+            try:
+                send_transactional_email(
+                    invitation["email"],
+                    "You are invited to join ZENDOC",
+                    (
+                        "The ZENDOC owner invited this email to create a controlled ZENDOC account.\n\n"
+                        f"Role: {invitation['role']}\n"
+                        f"Accept the invitation: {link}\n\n"
+                        "The invitation expires in 72 hours. Accepting the invitation verifies control "
+                        "of this email only. Provider roles still require separate professional/provider verification; "
+                        "institutional roles do not receive provider or admin privileges."
+                    ),
+                )
+                flash("Controlled account invitation sent.", "success")
+            except Exception:
+                current_app.logger.exception(
+                    "Provider invitation delivery failed for invitation_id=%s",
+                    invitation["id"],
+                )
+                flash(
+                    "Invitation was created but email delivery failed. Retry after fixing SMTP.",
+                    "warning",
+                )
+        audit("create", "provider_invitation", str(invitation["id"]))
+        get_db().commit()
+    except ValueError as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("main.admin"))
+
+
+@bp.route("/provider-invitation/accept", methods=("GET", "POST"))
+def accept_provider_invitation_web():
+    token = str(request.values.get("token") or "").strip()
+    try:
+        invitation = resolve_provider_invitation(token)
+    except PermissionError as exc:
+        return render_template(
+            "provider_invitation_accept.html",
+            invitation=None,
+            token="",
+            error=str(exc),
+        ), 400
+
+    if request.method == "POST":
+        try:
+            result = accept_provider_invitation(
+                token,
+                name=request.form.get("name"),
+                password=request.form.get("password"),
+                accept_privacy=bool(request.form.get("accept_privacy")),
+                accept_terms=bool(request.form.get("accept_terms")),
+            )
+        except (PermissionError, ValueError) as exc:
+            return render_template(
+                "provider_invitation_accept.html",
+                invitation=invitation,
+                token=token,
+                error=str(exc),
+            ), 400
+        flash(
+            (
+                "Account created. Sign in and complete your provider profile and verification evidence. "
+                "The account is not a verified provider yet."
+                if result["user"]["role"] in {"doctor", "hospital", "pharmacy"}
+                else "Institution account created. Sign in to the controlled government workspace."
+            ),
+            "success",
+        )
+        return redirect(url_for("main.login", role=result["user"]["role"]))
+
+    return render_template(
+        "provider_invitation_accept.html",
+        invitation=invitation,
+        token=token,
+        error=None,
     )
 
 
@@ -1552,14 +2036,67 @@ def provider_verification_status(profile_id):
     status = request.form.get("verification_status", "pending")
     if status not in VERIFICATION_STATES:
         abort(400)
-    get_db().execute(
-        "UPDATE provider_profiles SET verification_status=?, updated_at=? WHERE id=?",
-        (status, now_iso(), profile_id),
-    )
-    audit("provider_verification", "provider_profile", f"{profile_id}:{status}")
-    get_db().commit()
-    flash("Provider verification status updated.", "success")
+    try:
+        set_provider_verification_status(
+            g.user,
+            profile_id,
+            status=status,
+            notes=request.form.get("notes"),
+        )
+        audit("provider_verification", "provider_profile", f"{profile_id}:{status}")
+        get_db().commit()
+        flash("Provider verification status updated.", "success")
+    except (LookupError, ValueError, PermissionError) as error:
+        get_db().rollback()
+        flash(str(error), "error")
     return redirect(url_for("main.admin"))
+
+
+def _api_token_row(token, token_type):
+    digest = hash_token(str(token or ""))
+    row = get_db().execute(
+        """
+        SELECT u.*, t.id AS token_id, t.expires_at AS token_expires_at,
+               t.token_type AS authenticated_token_type
+        FROM api_tokens t
+        JOIN users u ON u.id=t.user_id
+        WHERE t.token_hash=? AND t.token_type=? AND t.revoked_at IS NULL AND u.active=1
+        """,
+        (digest, token_type),
+    ).fetchone()
+    if row:
+        return row
+
+    # Legacy plaintext-token migration remains available outside strict public
+    # release mode. Public release never accepts indefinite plaintext legacy tokens.
+    if current_app.config.get("PUBLIC_RELEASE_REQUIRED"):
+        return None
+    legacy = get_db().execute(
+        """
+        SELECT u.*, t.id AS token_id, t.expires_at AS token_expires_at,
+               t.token_type AS authenticated_token_type
+        FROM api_tokens t
+        JOIN users u ON u.id=t.user_id
+        WHERE t.token=? AND t.token_type=? AND t.revoked_at IS NULL AND u.active=1
+        """,
+        (token, token_type),
+    ).fetchone()
+    if legacy:
+        get_db().execute(
+            "UPDATE api_tokens SET token_hash=? WHERE id=? AND token_hash IS NULL",
+            (digest, legacy["token_id"]),
+        )
+        get_db().commit()
+    return legacy
+
+
+def _token_is_current(row):
+    if not row:
+        return False
+    expires_at = row["token_expires_at"] if "token_expires_at" in row.keys() else None
+    if not expires_at:
+        return not current_app.config.get("PUBLIC_RELEASE_REQUIRED")
+    return str(expires_at) > now_iso()
 
 
 def api_user():
@@ -1567,29 +2104,8 @@ def api_user():
     token = auth.removeprefix("Bearer ").strip()
     if not token:
         return None
-    token_digest = hash_token(token)
-    user = get_db().execute(
-        """
-        SELECT u.*, t.id AS token_id FROM api_tokens t
-        JOIN users u ON u.id=t.user_id
-        WHERE t.token_hash=? AND t.token_type='access' AND t.revoked_at IS NULL AND u.active=1
-        """,
-        (token_digest,),
-    ).fetchone()
-    if user:
-        return user
-    legacy = get_db().execute(
-        """
-        SELECT u.*, t.id AS token_id FROM api_tokens t
-        JOIN users u ON u.id=t.user_id
-        WHERE t.token=? AND t.token_type='access' AND t.revoked_at IS NULL AND u.active=1
-        """,
-        (token,),
-    ).fetchone()
-    if legacy:
-        get_db().execute("UPDATE api_tokens SET token_hash=? WHERE id=? AND token_hash IS NULL", (token_digest, legacy["token_id"]))
-        get_db().commit()
-    return legacy
+    row = _api_token_row(token, "access")
+    return row if _token_is_current(row) else None
 
 
 def require_api_user():
@@ -1598,6 +2114,35 @@ def require_api_user():
         return None, (jsonify({"error": "Unauthorized"}), 401)
     if user["role"] == "admin" and not is_owner(user):
         return None, (jsonify({"error": {"code": 403, "message": "Only the ZENDOC owner may access Admin operations."}}), 403)
+
+    if (
+        current_app.config.get("PUBLIC_RELEASE_REQUIRED")
+        and user["role"] in PROVIDER_ROLES
+    ):
+        profile = get_provider_profile_for_user(user["id"])
+        verified = bool(profile and str(profile["verification_status"]) == "verified")
+        if not verified:
+            allowed_paths = {
+                "/api/v1/provider/onboarding",
+                "/api/v1/provider/evidence",
+                "/api/v1/account/export",
+                "/api/v1/account",
+                "/api/v1/auth/logout",
+            }
+            path = str(request.path or "")
+            if path not in allowed_paths and not path.startswith("/api/v1/provider/public-entity-claims"):
+                return None, (
+                    jsonify({
+                        "error": {
+                            "code": 403,
+                            "message": (
+                                "Provider verification is required before using operational provider capabilities."
+                            ),
+                        }
+                    }),
+                    403,
+                )
+
     g.observability_actor = user
     return user, None
 
@@ -2069,6 +2614,28 @@ def api_register():
     role = normalize_role(data.get("role", "patient"))
     if role == "admin":
         return jsonify({"error": "Admin registration is disabled"}), 403
+    if current_app.config.get("PUBLIC_RELEASE_REQUIRED") and role != "patient":
+        return jsonify({
+            "error": {
+                "code": 403,
+                "message": (
+                    "Public self-registration is patient-only. "
+                    "Provider and institutional accounts require controlled onboarding and verification."
+                ),
+            }
+        }), 403
+    terms_accepted = data.get("accept_terms") is True
+    privacy_accepted = data.get("accept_privacy") is True
+    if terms_accepted != privacy_accepted or (
+        current_app.config.get("PUBLIC_RELEASE_REQUIRED")
+        and not (terms_accepted and privacy_accepted)
+    ):
+        return jsonify({
+            "error": {
+                "code": 400,
+                "message": "accept_terms and accept_privacy must both be true for public registration.",
+            }
+        }), 400
     try:
         email = validate_email(data.get("email", ""))
     except ValueError as error:
@@ -2098,9 +2665,30 @@ def api_register():
             ),
         )
         created_user = get_db().execute("SELECT * FROM users WHERE id=?", (int(cursor.lastrowid),)).fetchone()
+        if terms_accepted and privacy_accepted:
+            record_registration_policy_acceptance(created_user["id"], source="api_registration")
+        verification_token = None
+        if current_app.config.get("PUBLIC_RELEASE_REQUIRED"):
+            verification_token = issue_email_verification_token(created_user)
         record_product_activity(created_user, event_type="account_registered")
         get_db().commit()
-        return jsonify({"status": "created"}), 201
+        if verification_token:
+            try:
+                _send_verification_email(created_user, verification_token)
+            except Exception:
+                current_app.logger.exception(
+                    "API registration email verification delivery failed for user_id=%s",
+                    created_user["id"],
+                )
+        return jsonify({
+            "status": "created",
+            "email_verification_required": bool(verification_token),
+            "message": (
+                "Account created. Verify the email address before login."
+                if verification_token
+                else "Account created."
+            ),
+        }), 201
     except Exception as error:
         if not is_integrity_error(error):
             raise
@@ -2126,14 +2714,75 @@ def api_login():
         user = None
     if not user or not check_password_hash(user["password_hash"], data.get("password", "")):
         return jsonify({"error": INVALID_CREDENTIALS_MESSAGE}), 401
-    token = new_token()
+    if (
+        current_app.config.get("PUBLIC_RELEASE_REQUIRED")
+        and user["role"] != "admin"
+        and not email_verification_status(user).get("verified")
+    ):
+        return jsonify({
+            "error": {
+                "code": 403,
+                "message": "Email verification is required before public ZENDOC access.",
+                "reason": "email_verification_required",
+            }
+        }), 403
+    access_token = new_token()
+    refresh_token = new_token()
+    access_expires_at = future_iso(
+        int(current_app.config.get("API_ACCESS_TOKEN_MINUTES", 60))
+    )
+    refresh_expires_at = future_iso(
+        int(current_app.config.get("API_REFRESH_TOKEN_DAYS", 30)) * 24 * 60
+    )
+    now = now_iso()
     get_db().execute(
-        "INSERT INTO api_tokens (user_id,token_hash,token_type,created_at) VALUES (?,?,'access',?)",
-        (user["id"], hash_token(token), now_iso()),
+        """
+        INSERT INTO api_tokens
+        (user_id,token_hash,token_type,expires_at,created_at)
+        VALUES (?,?,'access',?,?)
+        """,
+        (user["id"], hash_token(access_token), access_expires_at, now),
+    )
+    get_db().execute(
+        """
+        INSERT INTO api_tokens
+        (user_id,token_hash,token_type,expires_at,created_at)
+        VALUES (?,?,'refresh',?,?)
+        """,
+        (user["id"], hash_token(refresh_token), refresh_expires_at, now),
     )
     record_product_activity(user, event_type="session_login")
     get_db().commit()
-    return jsonify({"token": token, "user": {"id": user["id"], "name": user["name"], "role": user["role"]}})
+
+    provider_verification_status = None
+    provider_operational_access = True
+    if user["role"] in PROVIDER_ROLES:
+        provider_profile_row = get_provider_profile_for_user(user["id"])
+        provider_verification_status = (
+            str(provider_profile_row["verification_status"])
+            if provider_profile_row
+            else "profile_required"
+        )
+        provider_operational_access = (
+            not current_app.config.get("PUBLIC_RELEASE_REQUIRED")
+            or provider_verification_status == "verified"
+        )
+
+    return jsonify({
+        "token": access_token,
+        "access_token": access_token,
+        "access_token_expires_at": access_expires_at,
+        "refresh_token": refresh_token,
+        "refresh_token_expires_at": refresh_expires_at,
+        "provider_verification_status": provider_verification_status,
+        "provider_operational_access": provider_operational_access,
+        "next_action": (
+            "complete_provider_verification"
+            if user["role"] in PROVIDER_ROLES and not provider_operational_access
+            else "dashboard"
+        ),
+        "user": {"id": user["id"], "name": user["name"], "role": user["role"]},
+    })
 
 
 @bp.post("/api/v1/auth/logout")
@@ -2142,37 +2791,144 @@ def api_logout():
     if error:
         return error
     auth = request.headers.get("Authorization", "")
-    token = auth.removeprefix("Bearer ").strip()
+    access_token = auth.removeprefix("Bearer ").strip()
+    data = request.get_json(silent=True) or {}
+    refresh_token = str(data.get("refresh_token") or "").strip()
+    now = now_iso()
     get_db().execute(
         "UPDATE api_tokens SET revoked_at=? WHERE token_hash=? AND user_id=?",
-        (now_iso(), hash_token(token), user["id"]),
+        (now, hash_token(access_token), user["id"]),
     )
+    if refresh_token:
+        get_db().execute(
+            """
+            UPDATE api_tokens SET revoked_at=?
+            WHERE token_hash=? AND token_type='refresh' AND user_id=? AND revoked_at IS NULL
+            """,
+            (now, hash_token(refresh_token), user["id"]),
+        )
     get_db().commit()
     return jsonify({"status": "revoked"})
 
 
+@bp.post("/api/v1/auth/refresh")
+def api_refresh_token():
+    data = request.get_json(silent=True) or {}
+    refresh_token = str(data.get("refresh_token") or "").strip()
+    if not refresh_token:
+        return jsonify({"error": {"code": 400, "message": "refresh_token is required"}}), 400
+
+    row = _api_token_row(refresh_token, "refresh")
+    if not _token_is_current(row):
+        return jsonify({"error": {"code": 401, "message": "Refresh token is invalid or expired."}}), 401
+
+    now = now_iso()
+    # Rotation revokes the token that was just presented.
+    get_db().execute(
+        "UPDATE api_tokens SET revoked_at=? WHERE id=?",
+        (now, row["token_id"]),
+    )
+
+    new_access_token = new_token()
+    new_refresh_token = new_token()
+    access_expires_at = future_iso(
+        int(current_app.config.get("API_ACCESS_TOKEN_MINUTES", 60))
+    )
+    refresh_expires_at = future_iso(
+        int(current_app.config.get("API_REFRESH_TOKEN_DAYS", 30)) * 24 * 60
+    )
+    get_db().execute(
+        """
+        INSERT INTO api_tokens
+        (user_id,token_hash,token_type,expires_at,created_at)
+        VALUES (?,?,'access',?,?)
+        """,
+        (row["id"], hash_token(new_access_token), access_expires_at, now),
+    )
+    get_db().execute(
+        """
+        INSERT INTO api_tokens
+        (user_id,token_hash,token_type,expires_at,created_at)
+        VALUES (?,?,'refresh',?,?)
+        """,
+        (row["id"], hash_token(new_refresh_token), refresh_expires_at, now),
+    )
+    get_db().commit()
+    return jsonify({
+        "token": new_access_token,
+        "access_token": new_access_token,
+        "access_token_expires_at": access_expires_at,
+        "refresh_token": new_refresh_token,
+        "refresh_token_expires_at": refresh_expires_at,
+    })
+
+
 @bp.post("/api/v1/auth/forgot-password")
 def api_forgot_password():
-    if current_app.config.get("PASSWORD_RECOVERY_MODE") != "local_demo":
-        return jsonify({
-            "status": "integration_required",
-            "message": "Password recovery delivery is not integrated.",
-        }), 503
     data = request.get_json(silent=True) or {}
     try:
         email = validate_email(data.get("email", ""))
     except ValueError:
         return jsonify({"error": "Email is required"}), 400
+
     user = user_by_normalized_email(email)
-    if user:
-        token = new_token()
-        get_db().execute(
-            "INSERT INTO api_tokens (user_id, token_hash, token_type, expires_at, created_at) VALUES (?, ?, 'password_reset', ?, ?)",
-            (user["id"], hash_token(token), future_iso(30), now_iso()),
-        )
-        get_db().commit()
-        return jsonify({"status": "local_demo_token_generated", "reset_token": token, "message": "Local beta token generated; email delivery is not integrated."})
-    return jsonify({"status": "local_demo_token_generated", "message": "If the account exists, the local beta recovery request was processed."})
+    delivery = email_delivery_status()
+    if delivery.get("transactional_email"):
+        if user:
+            token = new_token()
+            get_db().execute(
+                "UPDATE api_tokens SET revoked_at=? WHERE user_id=? AND token_type='password_reset' AND revoked_at IS NULL",
+                (now_iso(), user["id"]),
+            )
+            get_db().execute(
+                "INSERT INTO api_tokens (user_id, token_hash, token_type, expires_at, created_at) VALUES (?, ?, 'password_reset', ?, ?)",
+                (user["id"], hash_token(token), future_iso(30), now_iso()),
+            )
+            base_url = str(current_app.config.get("PUBLIC_BASE_URL") or "").strip().rstrip("/") or request.url_root.rstrip("/")
+            reset_link = f"{base_url}{url_for('main.reset_password', token=token)}"
+            try:
+                send_transactional_email(
+                    user["email"],
+                    "Reset your ZENDOC password",
+                    (
+                        "A password reset was requested for your ZENDOC account.\n\n"
+                        f"Open this link to set a new password: {reset_link}\n\n"
+                        "The link expires in 30 minutes. If you did not request this, ignore this email."
+                    ),
+                )
+                get_db().commit()
+            except Exception:
+                get_db().rollback()
+                current_app.logger.exception("API password-reset email delivery failed.")
+        # Existing, missing, and provider-delivery-failure cases intentionally
+        # use the same public response to prevent account enumeration.
+        return jsonify({
+            "status": "accepted",
+            "message": "If the account exists, password-reset instructions have been sent.",
+        }), 202
+
+    if current_app.config.get("PASSWORD_RECOVERY_MODE") == "local_demo":
+        if user:
+            token = new_token()
+            get_db().execute(
+                "INSERT INTO api_tokens (user_id, token_hash, token_type, expires_at, created_at) VALUES (?, ?, 'password_reset', ?, ?)",
+                (user["id"], hash_token(token), future_iso(30), now_iso()),
+            )
+            get_db().commit()
+            return jsonify({
+                "status": "local_demo_token_generated",
+                "reset_token": token,
+                "message": "Local beta token generated; email delivery is not integrated.",
+            })
+        return jsonify({
+            "status": "local_demo_token_generated",
+            "message": "If the account exists, the local beta recovery request was processed.",
+        })
+
+    return jsonify({
+        "status": "integration_required",
+        "message": "Password recovery delivery is not configured.",
+    }), 503
 
 
 @bp.post("/api/v1/auth/reset-password")

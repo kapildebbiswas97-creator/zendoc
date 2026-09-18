@@ -167,7 +167,7 @@ def test_production_password_recovery_is_truthfully_integration_required(tmp_pat
     unknown = client.post("/api/v1/auth/forgot-password", json={"email": "unknown@example.com"})
     assert known.status_code == unknown.status_code == 503
     assert known.json == unknown.json == {
-        "message": "Password recovery delivery is not integrated.",
+        "message": "Password recovery delivery is not configured.",
         "status": "integration_required",
     }
 

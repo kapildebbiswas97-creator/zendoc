@@ -148,6 +148,15 @@ def load_config(base_dir, overrides=None):
         "ADMIN_PASSWORD": os.environ.get("ZENDOC_ADMIN_PASSWORD"),
         "CREATE_DEV_ADMIN": env != "production" and env_bool("ZENDOC_CREATE_DEV_ADMIN", True),
         "RATE_LIMIT_PER_MINUTE": int(os.environ.get("ZENDOC_RATE_LIMIT_PER_MINUTE", "120")),
+        "AUTH_RATE_LIMIT_PER_MINUTE": env_int(
+            "ZENDOC_AUTH_RATE_LIMIT_PER_MINUTE", 20, minimum=3, maximum=300
+        ),
+        "API_ACCESS_TOKEN_MINUTES": env_int(
+            "ZENDOC_API_ACCESS_TOKEN_MINUTES", 60, minimum=5, maximum=1440
+        ),
+        "API_REFRESH_TOKEN_DAYS": env_int(
+            "ZENDOC_API_REFRESH_TOKEN_DAYS", 30, minimum=1, maximum=180
+        ),
         "OBSERVABILITY_RETENTION_DAYS": env_int(
             "ZENDOC_OBSERVABILITY_RETENTION_DAYS", 30, minimum=1, maximum=365
         ),
@@ -155,10 +164,37 @@ def load_config(base_dir, overrides=None):
         "VIDEO_PROVIDER": os.environ.get("ZENDOC_VIDEO_PROVIDER", "none"),
         "YOUTUBE_API_KEY": os.environ.get("ZENDOC_YOUTUBE_API_KEY", ""),
         "REQUIRE_DURABLE_DATABASE": env_bool("ZENDOC_REQUIRE_DURABLE_DATABASE", False),
+        "BACKUP_VERIFIED": env_bool("ZENDOC_BACKUP_VERIFIED", False),
         "STORAGE_PROVIDER": os.environ.get("ZENDOC_STORAGE_PROVIDER", "local").strip().lower(),
+        "STORAGE_VERIFIED": env_bool("ZENDOC_STORAGE_VERIFIED", False),
         "TELEHEALTH_PROVIDER": os.environ.get("ZENDOC_TELEHEALTH_PROVIDER", "local_demo").strip().lower(),
         "REALTIME_PROVIDER": os.environ.get("ZENDOC_REALTIME_PROVIDER", "polling").strip().lower(),
         "NOTIFICATION_PROVIDER": os.environ.get("ZENDOC_NOTIFICATION_PROVIDER", "in_app").strip().lower(),
+        "PUBLIC_BASE_URL": os.environ.get("ZENDOC_PUBLIC_BASE_URL", "").strip(),
+        "PUBLIC_RELEASE_REQUIRED": env_bool("ZENDOC_PUBLIC_RELEASE_REQUIRED", False),
+        "SUPPORT_EMAIL": os.environ.get("ZENDOC_SUPPORT_EMAIL", "").strip(),
+        "EMAIL_PROVIDER": os.environ.get("ZENDOC_EMAIL_PROVIDER", "none").strip().lower(),
+        "EMAIL_VERIFIED": env_bool("ZENDOC_EMAIL_VERIFIED", False),
+        "SMTP_HOST": os.environ.get("ZENDOC_SMTP_HOST", "").strip(),
+        "SMTP_PORT": env_int("ZENDOC_SMTP_PORT", 587, minimum=1, maximum=65535),
+        "SMTP_USERNAME": os.environ.get("ZENDOC_SMTP_USERNAME", "").strip(),
+        "SMTP_PASSWORD": os.environ.get("ZENDOC_SMTP_PASSWORD", ""),
+        "SMTP_FROM_EMAIL": os.environ.get("ZENDOC_SMTP_FROM_EMAIL", "").strip(),
+        "SMTP_USE_TLS": env_bool("ZENDOC_SMTP_USE_TLS", True),
+        "SMTP_USE_SSL": env_bool("ZENDOC_SMTP_USE_SSL", False),
+        "SMTP_TIMEOUT": env_int("ZENDOC_SMTP_TIMEOUT", 15, minimum=1, maximum=120),
+        "ANDROID_PACKAGE_NAME": os.environ.get("ZENDOC_ANDROID_PACKAGE_NAME", "").strip(),
+        "ANDROID_SHA256_CERT_FINGERPRINT": os.environ.get(
+            "ZENDOC_ANDROID_SHA256_CERT_FINGERPRINT", ""
+        ).strip(),
+        "S3_ENDPOINT_URL": os.environ.get("ZENDOC_S3_ENDPOINT_URL", "").strip(),
+        "S3_REGION": os.environ.get("ZENDOC_S3_REGION", "auto").strip(),
+        "S3_BUCKET": os.environ.get("ZENDOC_S3_BUCKET", "").strip(),
+        "S3_ACCESS_KEY_ID": os.environ.get("ZENDOC_S3_ACCESS_KEY_ID", "").strip(),
+        "S3_SECRET_ACCESS_KEY": os.environ.get("ZENDOC_S3_SECRET_ACCESS_KEY", ""),
+        "S3_SERVER_SIDE_ENCRYPTION": os.environ.get(
+            "ZENDOC_S3_SERVER_SIDE_ENCRYPTION", "AES256"
+        ).strip(),
         "SLM_ENABLED": env_bool("ZENDOC_SLM_ENABLED", False),
         "SLM_PROVIDER": os.environ.get("ZENDOC_SLM_PROVIDER", "ollama").strip().lower(),
         "SLM_BASE_URL": os.environ.get("ZENDOC_SLM_BASE_URL", "http://127.0.0.1:11434").strip(),
@@ -225,3 +261,57 @@ def validate_startup_config(app):
             if app.config.get("REQUIRE_DURABLE_DATABASE"):
                 raise ConfigError(message)
             app.logger.critical(message)
+
+        if app.config.get("PUBLIC_RELEASE_REQUIRED"):
+            public_missing = []
+            public_base_url = str(app.config.get("PUBLIC_BASE_URL") or "").strip()
+            support_email = str(app.config.get("SUPPORT_EMAIL") or "").strip()
+            storage_provider = str(app.config.get("STORAGE_PROVIDER") or "local").strip().lower()
+            telehealth_provider = str(app.config.get("TELEHEALTH_PROVIDER") or "local_demo").strip().lower()
+            connected_mode = str(app.config.get("CONNECTED_CARE_DATA_MODE") or "LIVE").strip().upper()
+
+            if not public_base_url.lower().startswith("https://"):
+                public_missing.append("HTTPS ZENDOC_PUBLIC_BASE_URL")
+            if not support_email or "@" not in support_email:
+                public_missing.append("ZENDOC_SUPPORT_EMAIL")
+            if not bool(app.config.get("PERSISTENCE_VERIFIED")):
+                public_missing.append("ZENDOC_PERSISTENCE_VERIFIED=true")
+            if not bool(app.config.get("BACKUP_VERIFIED")):
+                public_missing.append("ZENDOC_BACKUP_VERIFIED=true")
+            if str(app.config.get("EMAIL_PROVIDER") or "").strip().lower() != "smtp":
+                public_missing.append("ZENDOC_EMAIL_PROVIDER=smtp")
+            if not str(app.config.get("SMTP_HOST") or "").strip():
+                public_missing.append("ZENDOC_SMTP_HOST")
+            if not str(app.config.get("SMTP_FROM_EMAIL") or "").strip():
+                public_missing.append("ZENDOC_SMTP_FROM_EMAIL")
+            if not (
+                bool(app.config.get("SMTP_USE_TLS"))
+                or bool(app.config.get("SMTP_USE_SSL"))
+            ):
+                public_missing.append("encrypted SMTP transport (TLS or SSL)")
+            if not bool(app.config.get("EMAIL_VERIFIED")):
+                public_missing.append("ZENDOC_EMAIL_VERIFIED=true")
+            if storage_provider == "local":
+                public_missing.append("durable ZENDOC_STORAGE_PROVIDER")
+            if storage_provider in {"s3", "s3_compatible", "r2"}:
+                if not str(app.config.get("S3_BUCKET") or "").strip():
+                    public_missing.append("ZENDOC_S3_BUCKET")
+                if not str(app.config.get("S3_ACCESS_KEY_ID") or "").strip():
+                    public_missing.append("ZENDOC_S3_ACCESS_KEY_ID")
+                if not str(app.config.get("S3_SECRET_ACCESS_KEY") or ""):
+                    public_missing.append("ZENDOC_S3_SECRET_ACCESS_KEY")
+                endpoint_url = str(app.config.get("S3_ENDPOINT_URL") or "").strip()
+                if endpoint_url and not endpoint_url.lower().startswith("https://"):
+                    public_missing.append("HTTPS ZENDOC_S3_ENDPOINT_URL")
+            if not bool(app.config.get("STORAGE_VERIFIED")):
+                public_missing.append("ZENDOC_STORAGE_VERIFIED=true")
+            if connected_mode != "LIVE":
+                public_missing.append("ZENDOC_CONNECTED_CARE_DATA_MODE=LIVE")
+            if telehealth_provider == "local_demo":
+                public_missing.append("non-demo ZENDOC_TELEHEALTH_PROVIDER")
+
+            if public_missing:
+                raise ConfigError(
+                    "Public release startup blocked. Missing or unverified: "
+                    + ", ".join(public_missing)
+                )

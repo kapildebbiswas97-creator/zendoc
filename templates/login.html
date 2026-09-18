@@ -15,9 +15,18 @@
     <label class="check-option"><input type="checkbox" name="remember_me" value="1"> Remember me</label>
     <button type="submit" data-submitting-label="Signing in…">Sign in securely</button>
   </form>
-  <div class="form-actions" style="margin-top:18px;justify-content:space-between;">
+  <div class="form-actions" style="margin-top:18px;justify-content:space-between;gap:12px;flex-wrap:wrap;">
     <a class="text-link" href="{{ url_for('main.forgot_password') }}">Forgot password?</a>
-    {% if role != 'admin' %}<a class="text-link" href="{{ url_for('main.register', role=role) }}">Create an account</a>{% endif %}
+    {% if role != 'admin' %}<a class="text-link" href="{{ url_for('main.resend_verification') }}">Resend verification</a>{% endif %}
+    {% if role != 'admin' %}
+      {% if not config.PUBLIC_RELEASE_REQUIRED or role == 'patient' %}
+        <a class="text-link" href="{{ url_for('main.register', role=role) }}">Create an account</a>
+      {% elif role in ['doctor','hospital','pharmacy'] %}
+        <span class="form-note">Provider accounts are invitation-only in public mode.</span>
+      {% else %}
+        <span class="form-note">This account type requires controlled provisioning.</span>
+      {% endif %}
+    {% endif %}
   </div>
   <p class="form-note" style="margin-top:18px;">Your session may expire for security, but your account and saved information remain available when you sign in again.</p>
 </section>

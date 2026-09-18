@@ -168,8 +168,12 @@ class ZendocIntelligence:
             result = IntelligenceResult(
                 intent="home_health",
                 urgency="routine",
-                message="ZENDOC Home Healthcare offers home doctor visits, nursing care, physiotherapy, elder attendants, sample collection, and equipment rental.",
-                follow_up_questions=["Which home healthcare service do you need today?"],
+                message=(
+                    "ZENDOC can record a home-health service request and, where a verified connected provider "
+                    "has explicitly published that capability, track provider assignment and acceptance. "
+                    "A request alone is not a confirmed home visit or external fulfilment."
+                ),
+                follow_up_questions=["Which home-health service would you like to request?"],
                 possible_actions=[{"type": "home_health", "label": "Book Home Healthcare"}],
                 provider="home_health_service",
             )
@@ -177,8 +181,12 @@ class ZendocIntelligence:
             result = IntelligenceResult(
                 intent="ambulance",
                 urgency="routine",
-                message="For urgent life-threatening emergencies, call 108 immediately. You can also request basic, advanced, or wheelchair patient transport.",
-                follow_up_questions=["Is this an emergency or a scheduled patient transport?"],
+                message=(
+                    "For urgent life-threatening emergencies, contact the appropriate local emergency service directly. "
+                    "ZENDOC can record a medical-transport request, but creating that record is not dispatch confirmation "
+                    "and does not prove an ambulance or vehicle is on the way."
+                ),
+                follow_up_questions=["Is this an emergency or a request you want to record for scheduled transport?"],
                 possible_actions=[{"type": "ambulance", "label": "Request Medical Transport"}],
                 provider="medical_transport",
             )
@@ -186,8 +194,12 @@ class ZendocIntelligence:
             result = IntelligenceResult(
                 intent="pharmacy",
                 urgency="routine",
-                message="ZENDOC Pharmacy lets you search essential medicines, locate nearby pharmacies, request delivery, and set refill reminders.",
-                follow_up_questions=["Would you like to search medicines or find a nearby pharmacy?"],
+                message=(
+                    "ZENDOC provides a medicine reference catalog, verified-pharmacy discovery, reminders, and a "
+                    "medicine-request workflow. Stock, price, prescription acceptance and delivery are not confirmed "
+                    "until a verified pharmacy records the corresponding state."
+                ),
+                follow_up_questions=["Would you like to search the medicine reference catalog or review verified pharmacies?"],
                 possible_actions=[{"type": "pharmacy", "label": "Open Pharmacy Services"}],
                 provider="pharmacy_service",
             )
@@ -195,19 +207,47 @@ class ZendocIntelligence:
             result = IntelligenceResult(
                 intent="iot_hub",
                 urgency="routine",
-                message="ZENDOC IoT Hub connects your smartwatch, BP monitor, glucometer, smart scale, and pulse oximeter directly to your Health Memory.",
-                follow_up_questions=["Would you like to connect a new health device or view synced measurements?"],
+                message=(
+                    "ZENDOC IoT Hub can register a device inventory record. Live pairing and automatic manufacturer "
+                    "sync are Integration Required, so registered devices do not create trusted device provenance. "
+                    "Manual readings should be entered through Health Monitoring as user-reported measurements."
+                ),
+                follow_up_questions=["Would you like to register a device record or open Health Monitoring for a manual reading?"],
                 possible_actions=[{"type": "iot_hub", "label": "Open Connected Devices Hub"}],
                 provider="iot_hub",
             )
         elif intent == "telehealth":
+            from .telehealth_provider import get_telehealth_provider
+
+            telehealth = get_telehealth_provider().status()
+            channels = [
+                label
+                for key, label in (
+                    ("supports_chat", "chat"),
+                    ("supports_voice", "voice"),
+                    ("supports_video", "video"),
+                )
+                if telehealth.get(key)
+            ]
+            if channels:
+                channel_text = ", ".join(channels)
+                message_text = (
+                    f"This deployment currently supports {channel_text} consultation requests. "
+                    "A provider must accept the request before the consultation is treated as accepted. "
+                    "Unsupported channels remain unavailable."
+                )
+            else:
+                message_text = (
+                    "No verified telehealth channel is currently available on this deployment. "
+                    "Use Find Care for other care options."
+                )
             result = IntelligenceResult(
                 intent="telehealth",
                 urgency="routine",
-                message="Telehealth is available as a beta request workflow. A patient may request chat, voice, or video, and the doctor must accept before any room controls appear.",
-                follow_up_questions=["Do you want chat, voice, or video consultation?"],
+                message=message_text,
+                follow_up_questions=["Would you like to open the current Telehealth capability page?"],
                 possible_actions=[{"type": "telehealth", "label": "Open Telehealth"}],
-                provider="doctor_telehealth_agent",
+                provider="telehealth_capability_boundary",
             )
         elif intent == "video_intelligence":
             result = IntelligenceResult(

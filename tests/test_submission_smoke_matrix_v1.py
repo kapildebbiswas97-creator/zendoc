@@ -1,17 +1,27 @@
 from tests.test_milestone1 import login_web, make_client, register_web
 
+
 PUBLIC_CRITICAL_GETS = (
     "/",
     "/login",
     "/register",
     "/healthz",
+    "/privacy",
+    "/terms",
+    "/medical-disclaimer",
+    "/account-deletion",
+    "/resend-verification",
+    "/manifest.webmanifest",
+    "/sw.js",
+    "/offline",
 )
 
 PATIENT_CRITICAL_GETS = (
     "/dashboard",
     "/finder",
     "/universal-search",
-    "/ai",
+    "/ai?new=1",
+    "/ai?mode=doctor&new=1",
     "/appointments",
     "/health-summary",
     "/timeline",
@@ -22,6 +32,9 @@ PATIENT_CRITICAL_GETS = (
     "/family",
     "/videos",
     "/profile",
+    "/agent-os",
+    "/care-continuity",
+    "/account/export",
 )
 
 

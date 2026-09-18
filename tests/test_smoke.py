@@ -14,7 +14,8 @@ def test_existing_smoke_web_and_api_flows(tmp_path):
         data={"csrf_token": token, "feature": "doctor", "symptoms": "fever and cough"},
         follow_redirects=True,
     )
-    assert b"Possible respiratory infection" in response.data
+    assert b"Fever together with cough can have many causes" in response.data
+    assert b"This is not a confirmed diagnosis" in response.data
 
     token = api_token(client, "smoke-mobile@example.com")
     response = client.get("/api/v1/dashboard", headers={"Authorization": f"Bearer {token}"})

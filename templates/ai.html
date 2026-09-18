@@ -16,6 +16,60 @@
   <div class="ai-identity-note">Core Agent handles permissions and workflows. The language layer can suggest; it cannot execute tools or change records.</div>
 </section>
 
+<section id="mental-awareness" class="grid two" aria-labelledby="mental-awareness-title">
+  <article class="panel">
+    <div class="panel-head">
+      <div><p class="eyebrow">Mental wellness &amp; awareness</p><h2 id="mental-awareness-title">A visible place to check in with yourself</h2></div>
+      <span class="status-badge active">Awareness</span>
+    </div>
+    <p>This space is for everyday wellbeing awareness, reflection, and safe next-step guidance. It does not diagnose a mental-health condition and it does not replace a qualified professional.</p>
+    <div class="grid two">
+      <div class="subtle-panel"><strong>Notice</strong><p>Pause and name what you are feeling, what changed recently, and what is making the day harder.</p></div>
+      <div class="subtle-panel"><strong>Stabilize</strong><p>Use simple grounding, sleep, hydration, movement, and social-support steps when they are appropriate for you.</p></div>
+      <div class="subtle-panel"><strong>Reach out</strong><p>If stress is persistent, worsening, or affecting daily life, consider speaking with a qualified healthcare professional.</p></div>
+      <div class="subtle-panel"><strong>Urgent safety</strong><p>If you may hurt yourself or someone else, or you feel in immediate danger, contact local emergency services or a trusted person nearby now.</p></div>
+    </div>
+  </article>
+
+  <form class="panel" method="post" aria-label="Mental wellness check-in">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="feature" value="mental_health">
+    <p class="eyebrow">Private check-in</p>
+    <h2>How are you doing right now?</h2>
+    <p class="form-note">This uses deterministic wellbeing guidance with an emergency-first safety check. It is not a clinical assessment.</p>
+    <label>Age group
+      <select name="age_group">
+        <option>student</option>
+        <option>working professional</option>
+        <option>elderly</option>
+        <option>adult</option>
+      </select>
+    </label>
+    <label>Stress level from 0 to 10
+      <input name="stress_level" type="number" min="0" max="10" value="5">
+    </label>
+    <label>What is happening?
+      <textarea name="context" rows="4" maxlength="1000" placeholder="Share only what you are comfortable sharing."></textarea>
+    </label>
+    <button type="submit">Review safe next steps</button>
+  </form>
+</section>
+
+<section class="panel" aria-labelledby="mental-life-stage-title">
+  <div class="panel-head">
+    <div><p class="eyebrow">Support that matches real life</p><h2 id="mental-life-stage-title">Mental Wellness by life stage</h2></div>
+    <span class="status-badge active">Non-diagnostic</span>
+  </div>
+  <p class="section-copy">Different people face different pressures. These cards make the common concerns visible without labelling, scoring, or diagnosing anyone.</p>
+  <div class="quick-action-grid">
+    <article class="quick-action"><strong>Students</strong><span>Exam pressure, study anxiety, focus, procrastination, loneliness, peer pressure, sleep and career uncertainty.</span><span class="quick-action-arrow">Learn safely</span></article>
+    <article class="quick-action"><strong>Professionals</strong><span>Workload, deadlines, burnout, job uncertainty, workplace stress, recovery time and healthy boundaries.</span><span class="quick-action-arrow">Check in</span></article>
+    <article class="quick-action"><strong>Adults &amp; Parents</strong><span>Family pressure, finances, relationships, parenting load, caregiving and balancing responsibilities.</span><span class="quick-action-arrow">Find support</span></article>
+    <article class="quick-action"><strong>Older Adults</strong><span>Loneliness, retirement changes, worry, sleep, social connection, loss and staying meaningfully engaged.</span><span class="quick-action-arrow">Stay connected</span></article>
+  </div>
+  <p class="form-note">ZENDOC offers awareness and safe next-step guidance only. It does not perform personality scoring, mental-health diagnosis, or autonomous crisis decisions.</p>
+</section>
+
 {% if intelligence_result %}
 <section class="result ai-response {% if intelligence_result.emergency %}emergency{% endif %}" aria-live="polite">
   <div class="panel-head">
@@ -94,8 +148,8 @@
       {% if conversations %}<input type="hidden" name="conversation_id" value="{{ conversations[0].id }}">{% endif %}
       <label for="assistant-message">Your message</label>
       <textarea id="assistant-message" name="message" rows="4" maxlength="1500" data-character-count="assistant-count" placeholder="For example: I have had a fever and cough for two days. What should I do next?" required></textarea>
-      <div class="composer-footer"><small id="assistant-count">0 characters</small><span class="form-actions"><button type="button" id="voice-input-toggle" class="secondary-action" aria-pressed="false">Use voice input</button><button type="submit" data-submitting-label="Reviewing safely…">Send message</button></span></div>
-      <p id="voice-input-status" class="form-note" role="status" aria-live="polite">Voice input is optional. Your message is never sent until you press Send.</p>
+      <div class="composer-footer"><small id="assistant-count">0 characters</small><span class="form-actions"><button type="button" id="edgecare-voice-input-toggle" class="secondary-action" aria-pressed="false">Use local voice input</button><button type="submit" data-submitting-label="Reviewing safely…">Send message</button></span></div>
+      <p id="edgecare-voice-input-status" class="form-note" role="status" aria-live="polite">Voice input uses the configured ZENDOC local speech runtime. Review the transcript first; your message is never sent until you press Send.</p>
     </form>
   </div>
 
@@ -108,6 +162,7 @@
         <button type="button" class="prompt-button" data-prompt="How can I organize my latest blood test report in ZENDOC?">“Help with my report”</button>
         <button type="button" class="prompt-button" data-prompt="I feel stressed and overwhelmed. What are some safe next steps?">“I feel stressed”</button>
       </div>
+      <div class="form-actions"><a href="#mental-awareness" class="secondary-action">Open Mental Awareness</a></div>
     </section>
     <section class="trust-note"><strong>Private by design</strong><br>Use only the detail needed for guidance. ZENDOC does not show internal reasoning and does not let AI bypass permissions or safety rules.</section>
   </aside>
@@ -115,10 +170,10 @@
 
 <details class="guided-tools">
   <summary>More guided tools</summary>
-  <div class="guided-tools-content grid three">
+  <div class="guided-tools-content grid two">
     <form class="panel subtle-panel" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="feature" value="doctor"><h2>Symptom guidance</h2><p class="form-note">Rule-based educational guidance with an emergency-first safety check. Not a diagnosis.</p><label>Symptoms <textarea name="symptoms" rows="4" required></textarea></label><button type="submit">Review symptoms safely</button></form>
     <form class="panel subtle-panel" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="feature" value="assistant"><h2>Platform navigation helper</h2><p class="form-note">Deterministic navigation and workflow guidance only. It does not call a model or execute tools.</p><label>Question <textarea name="message" rows="4" required></textarea></label><button type="submit">Get navigation help</button></form>
-    <form class="panel subtle-panel" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="feature" value="mental_health"><h2>Mental wellness check-in</h2><p class="form-note">Deterministic wellbeing guidance with the same emergency-first safety check. Not a clinical assessment.</p><label>Age group <select name="age_group"><option>student</option><option>working professional</option><option>elderly</option><option>adult</option></select></label><label>Stress level from 0 to 10 <input name="stress_level" type="number" min="0" max="10" value="5"></label><label>What is happening? <textarea name="context" rows="3"></textarea></label><button type="submit">Review next steps</button></form>
   </div>
 </details>
+<script src="{{ url_for('static', filename='edgecare_voice.js') }}" defer></script>
 {% endblock %}

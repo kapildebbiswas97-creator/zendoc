@@ -2,7 +2,7 @@ name: ZENDOC Production Gate
 
 on:
   push:
-    branches: [main, post-submission-production]
+    branches: [main, post-submission-production, competition/edgecare-ai-2026]
   pull_request:
     branches: [main, post-submission-production]
   workflow_dispatch:
@@ -14,6 +14,7 @@ on:
 
 permissions:
   contents: read
+  statuses: write
 
 concurrency:
   group: zendoc-ci-${{ github.workflow }}-${{ github.ref }}
@@ -58,6 +59,27 @@ jobs:
           tests/test_database_reliability_v1.py
           tests/test_observability_incident_v1.py
           tests/test_release_gate_v1.py
+          tests/test_careloop_consent_scope_boundary.py
+          tests/test_care_action_provider_state_truth.py
+          tests/test_health_memory_rag_v1.py
+          tests/test_public_launch_v1.py
+          tests/test_email_delivery_v1.py
+          tests/test_submission_smoke_matrix_v1.py
+          tests/test_telehealth_truth_v1.py
+          tests/test_policy_acceptance_v1.py
+          tests/test_email_verification_v1.py
+          tests/test_public_registration_roles_v1.py
+          tests/test_provider_invitation_v1.py
+          tests/test_public_provider_verification_gate_v1.py
+          tests/test_software_completion_gate_v1.py
+          tests/test_api_token_lifecycle_v1.py
+          tests/test_auth_rate_limit_v1.py
+          tests/test_account_export_v1.py
+          tests/test_symptom_guidance_boundary_v1.py
+          tests/test_iot_provenance_truth_v1.py
+          tests/test_pharmacy_truth_v1.py
+          tests/test_request_fulfilment_truth_v1.py
+          tests/test_public_catalog_truth_v1.py
 
   full-sqlite-tests:
     name: Full SQLite Test Suite
@@ -170,6 +192,7 @@ jobs:
     if: always()
     steps:
       - name: Enforce all blocking jobs
+        id: enforce
         env:
           CRITICAL: ${{ needs.critical-safety-security.result }}
           SQLITE: ${{ needs.full-sqlite-tests.result }}
@@ -184,6 +207,22 @@ jobs:
           test "$SQLITE" = "success"
           test "$POSTGRES" = "success"
           test "$SECURITY" = "success"
+      - name: Publish exact-head Production Gate status
+        if: always()
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const passed = '${{ steps.enforce.outcome }}' === 'success';
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state: passed ? 'success' : 'failure',
+              context: 'ZENDOC Production Gate',
+              description: passed
+                ? 'All blocking ZENDOC Production Gate jobs passed'
+                : 'One or more blocking ZENDOC Production Gate jobs failed'
+            });
 
   deployment-verification:
     name: Deployment Health Verification

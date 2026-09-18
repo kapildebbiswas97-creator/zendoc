@@ -19,10 +19,9 @@ from .routes import require_api_user
 
 bp = Blueprint("care_journey", __name__)
 
-_PROVIDER_SYNCHRONIZED_APPOINTMENT_STATES = {"CONFIRMED", "IN_PROGRESS", "COMPLETED"}
-
-# These states require real appointment/provider/outcome/follow-up evidence.
-# A generic user transition endpoint must never manufacture them.
+# These states are evidence/authority-bound. A generic patient-authenticated
+# transition endpoint must never be able to forge them. Dedicated workflows
+# create the required appointment, provider status, outcome and follow-up proof.
 _EVIDENCE_BOUND_JOURNEY_TARGETS = {
     "WAITING_PROVIDER",
     "WAITING_VISIT",
@@ -68,25 +67,6 @@ def _enforce_careloop_context_scope(user, *, journey_id=None, action_id=None):
     verify_context_authorization(user, int(row["patient_id"]), "care_graph")
 
 
-def _enforce_linked_action_state_authority(user, action_id, target_status):
-    """Keep provider-synchronized appointment state separate from ledger reports.
-
-    A CareLoop action linked to a real registered-provider appointment may expose
-    provider confirmation/completion only when that state arrives through the
-    appointment lifecycle synchronizer. The generic ledger transition endpoint
-    must never be able to manufacture the same provider-backed state.
-    """
-    target = str(target_status or "").strip().upper()
-    if target not in _PROVIDER_SYNCHRONIZED_APPOINTMENT_STATES:
-        return
-    action = get_action(user, action_id)
-    if action.get("integration_source_type") == "appointment":
-        raise PermissionError(
-            "Linked registered-provider appointment confirmation and completion must be "
-            "synchronized from the appointment lifecycle; this ledger endpoint cannot assert provider state."
-        )
-
-
 @bp.post("/api/v1/care-journeys")
 def api_create_care_journey():
     user, error = require_api_user()
@@ -110,11 +90,7 @@ def api_list_care_journeys():
     if error:
         return error
     try:
-        journeys = list_patient_journeys(
-            user,
-            patient_id=request.args.get("patient_id"),
-            limit=request.args.get("limit", 25),
-        )
+        journeys = list_patient_journeys(user, patient_id=request.args.get("patient_id"), limit=request.args.get("limit", 25))
     except (PermissionError, LookupError, TypeError, ValueError) as exc:
         return _error(exc)
     return jsonify({"journeys": journeys})
@@ -134,7 +110,7 @@ def api_get_care_journey(journey_id):
 
 @bp.get("/api/v1/care-journeys/<int:journey_id>/continuity")
 def api_get_care_journey_continuity(journey_id):
-    """Return one permission-checked, evidence-backed longitudinal care snapshot."""
+    """Return one evidence-backed canonical care-chain snapshot."""
     user, error = require_api_user()
     if error:
         return error
@@ -176,7 +152,7 @@ def api_transition_care_journey(journey_id):
 
 @bp.post("/api/v1/care-journeys/<int:journey_id>/follow-up/complete")
 def api_complete_care_journey_follow_up(journey_id):
-    """Patient-only, evidence-bound completion of post-visit follow-up."""
+    """Patient-only, evidence-bound completion of a post-visit journey."""
     user, error = require_api_user()
     if error:
         return error
@@ -239,7 +215,11 @@ def api_transition_care_action(action_id):
     data = request.get_json(silent=True) or {}
     try:
         _enforce_careloop_context_scope(user, action_id=action_id)
-        _enforce_linked_action_state_authority(user, action_id, data.get("target_status"))
+        current = get_action(user, action_id)
+        if str(current.get("service_ref") or "").startswith("zendoc_appointment:"):
+            raise PermissionError(
+                "Connected appointment CareLoop actions are synchronized only from the authorized appointment-status workflow."
+            )
         action = transition_action(
             user,
             action_id,

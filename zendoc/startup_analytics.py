@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from .db import get_db, now_iso
+from .demo_truth import synthetic_demo_provider_profile_ids, synthetic_demo_user_ids
 from .geography_graph import geography_path, normalize_geography_name
 from .india_regions import india_region_catalog
 from .security import assert_owner
@@ -163,6 +164,7 @@ def startup_metrics(actor: Any, *, days: int = 30) -> dict:
     days = max(1, min(int(days or 30), 365))
     cutoff = _cutoff_iso(days)
     db = get_db()
+    demo_user_ids = synthetic_demo_user_ids(db)
 
     rows = db.execute(
         """
@@ -173,6 +175,10 @@ def startup_metrics(actor: Any, *, days: int = 30) -> dict:
         """,
         (cutoff,),
     ).fetchall()
+    rows = [
+        row for row in rows
+        if row["user_id"] is None or int(row["user_id"]) not in demo_user_ids
+    ]
 
     total = len(rows)
     useful = sum(int(row["useful_result"] or 0) for row in rows)
@@ -209,13 +215,17 @@ def startup_metrics(actor: Any, *, days: int = 30) -> dict:
 
     feedback_rows = db.execute(
         """
-        SELECT f.helpful,f.reason_code
+        SELECT f.user_id,f.helpful,f.reason_code
         FROM product_feedback f
         JOIN product_analytics_events e ON e.id=f.analytics_event_id
         WHERE e.event_type='healthcare_search' AND f.created_at>=?
         """,
         (cutoff,),
     ).fetchall()
+    feedback_rows = [
+        row for row in feedback_rows
+        if int(row["user_id"]) not in demo_user_ids
+    ]
     feedback_total = len(feedback_rows)
     helpful_feedback = sum(int(row["helpful"] or 0) for row in feedback_rows)
     reason_counts = Counter(
@@ -248,7 +258,7 @@ def startup_metrics(actor: Any, *, days: int = 30) -> dict:
         "top_canonical_geographies": top_geographies,
         "source_result_totals": dict(source_totals),
         "privacy_notice": (
-            "Metrics exclude clinical text and raw free-text location queries. Canonical geography is stored only "
+            "Metrics exclude synthetic competition fixture accounts, clinical text and raw free-text location queries. Canonical geography is stored only "
             "when an exact unique geography node is resolved; otherwise only a one-way location hash is retained."
         ),
         "metric_notice": (
@@ -264,6 +274,7 @@ def user_activation_funnel(actor: Any, *, days: int = 30) -> dict:
     days = max(1, min(int(days or 30), 365))
     cutoff = _cutoff_iso(days)
     db = get_db()
+    demo_user_ids = synthetic_demo_user_ids(db)
 
     users = db.execute(
         """
@@ -274,6 +285,7 @@ def user_activation_funnel(actor: Any, *, days: int = 30) -> dict:
         """,
         (cutoff,),
     ).fetchall()
+    users = [row for row in users if int(row["id"]) not in demo_user_ids]
     user_ids = [int(row["id"]) for row in users]
     created_at_by_user = {int(row["id"]): str(row["created_at"]) for row in users}
 
@@ -364,7 +376,7 @@ def user_activation_funnel(actor: Any, *, days: int = 30) -> dict:
             "Registered counts come from real patient account rows created in the window. Later stages come only "
             "from privacy-safe product events actually recorded by ZENDOC. Funnel stages are sequential so previous-stage "
             "conversion cannot exceed 100%. Feedback is reported separately because it is not a required step in the booking path. "
-            "No synthetic users or inferred activation is included."
+            "Synthetic competition fixture accounts and inferred activation are excluded."
         ),
     }
 
@@ -499,6 +511,7 @@ def retention_metrics(actor: Any, *, as_of: str | None = None) -> dict:
     """
     assert_owner(actor)
     db = get_db()
+    demo_user_ids = synthetic_demo_user_ids(db)
     now = _parse_timestamp(as_of) if as_of else datetime.now(timezone.utc)
 
     rows = db.execute(
@@ -511,6 +524,7 @@ def retention_metrics(actor: Any, *, as_of: str | None = None) -> dict:
         ORDER BY e.user_id,e.created_at
         """
     ).fetchall()
+    rows = [row for row in rows if int(row["user_id"]) not in demo_user_ids]
 
     activity_dates: dict[int, set] = defaultdict(set)
     for row in rows:
@@ -552,7 +566,7 @@ def retention_metrics(actor: Any, *, as_of: str | None = None) -> dict:
         "d30": _window(30),
         "truth_notice": (
             "Retention is calculated only from privacy-safe product activity currently recorded by ZENDOC. "
-            "Users without recorded product activity are not included in the cohort denominator."
+            "Users without recorded product activity and synthetic competition fixture accounts are not included in the cohort denominator."
         ),
     }
 
@@ -562,16 +576,21 @@ def care_journey_conversion(actor: Any, *, days: int = 30) -> dict:
     days = max(1, min(int(days or 30), 365))
     cutoff = _cutoff_iso(days)
     db = get_db()
+    demo_user_ids = synthetic_demo_user_ids(db)
 
     journeys = db.execute(
         """
-        SELECT id,state,status,created_at
+        SELECT id,patient_id,state,status,created_at
         FROM care_journeys
         WHERE created_at>=?
         ORDER BY created_at
         """,
         (cutoff,),
     ).fetchall()
+    journeys = [
+        row for row in journeys
+        if int(row["patient_id"]) not in demo_user_ids
+    ]
     journey_ids = [int(row["id"]) for row in journeys]
     states_by_journey: dict[int, set[str]] = defaultdict(set)
     for row in journeys:
@@ -624,7 +643,7 @@ def care_journey_conversion(actor: Any, *, days: int = 30) -> dict:
         "blocked_journeys": blocked,
         "waiting_human_journeys": waiting_human,
         "truth_notice": (
-            "This funnel measures workflow states actually persisted in ZENDOC. A staged appointment is not a completed "
+            "This funnel excludes synthetic competition fixture patients and measures workflow states actually persisted in ZENDOC. A staged appointment is not a completed "
             "appointment, and COMPLETED means the care-journey workflow reached its terminal completed state."
         ),
     }
@@ -635,6 +654,7 @@ def provider_onboarding_funnel(actor: Any, *, days: int = 90) -> dict:
     days = max(1, min(int(days or 90), 3650))
     cutoff = _cutoff_iso(days)
     db = get_db()
+    demo_profile_ids = synthetic_demo_provider_profile_ids(db)
 
     profiles = db.execute(
         """
@@ -646,6 +666,7 @@ def provider_onboarding_funnel(actor: Any, *, days: int = 90) -> dict:
         """,
         (cutoff,),
     ).fetchall()
+    profiles = [row for row in profiles if int(row["id"]) not in demo_profile_ids]
     profile_ids = [int(row["id"]) for row in profiles]
     total = len(profiles)
 
@@ -728,7 +749,7 @@ def provider_onboarding_funnel(actor: Any, *, days: int = 90) -> dict:
             for name, ids in stages
         ],
         "truth_notice": (
-            "Stages are independent observed milestones, not a forced linear sequence for every provider type. "
+            "Synthetic competition fixture providers are excluded. Stages are independent observed milestones, not a forced linear sequence for every provider type. "
             "For example, pharmacies may not use appointment schedules."
         ),
     }

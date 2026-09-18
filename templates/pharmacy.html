@@ -40,16 +40,43 @@
               {% if med.rx_required %}
                 <span class="status-badge inactive">Prescription required</span>
               {% else %}
-                <span class="status-badge active">OTC available</span>
+                <span class="status-badge active">OTC reference</span>
               {% endif %}
             </div>
-            <form method="post" action="{{ url_for('ecosystem.pharmacy_page') }}" class="inline-form">
+            <form method="post" action="{{ url_for('ecosystem.pharmacy_page') }}" class="request-form">
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
               <input type="hidden" name="action" value="order">
               <input type="hidden" name="medicine_name" value="{{ med.name }}">
-              <label class="sr-only" for="addr-{{ loop.index }}">Delivery address</label>
-              <input id="addr-{{ loop.index }}" type="text" name="delivery_address" placeholder="Delivery address" required>
-              <button type="submit" class="secondary-action" data-submitting-label="Sending…">Request delivery</button>
+              <label>Verified pharmacy
+                <select name="pharmacy_id" required>
+                  <option value="">Choose a verified ZENDOC pharmacy</option>
+                  {% for p in pharmacies %}
+                    <option value="{{ p.user_id }}">{{ p.organization or p.pharmacy_name }}{% if p.city or p.user_city %} · {{ p.city or p.user_city }}{% endif %}</option>
+                  {% endfor %}
+                </select>
+              </label>
+              {% if med.rx_required %}
+                <label>Prescription record
+                  <select name="prescription_record_id" required>
+                    <option value="">Choose your prescription</option>
+                    {% for prescription in prescriptions %}
+                      <option value="{{ prescription.id }}">{{ prescription.title }}{% if prescription.document_date %} · {{ prescription.document_date[:10] }}{% endif %}</option>
+                    {% endfor %}
+                  </select>
+                </label>
+                {% if not prescriptions %}
+                  <p class="form-note">Upload a record labelled <strong>Prescription</strong> in Records &amp; reports before making this request.</p>
+                  <a class="secondary-action" href="{{ url_for('main.records') }}">Upload prescription</a>
+                {% endif %}
+              {% endif %}
+              <label>Requested delivery address
+                <input id="addr-{{ loop.index }}" type="text" name="delivery_address" placeholder="Delivery address" required>
+              </label>
+              <button type="submit" class="secondary-action" data-submitting-label="Recording…"
+                {% if not pharmacies or (med.rx_required and not prescriptions) %}disabled{% endif %}>
+                Record request with verified pharmacy
+              </button>
+              <p class="form-note">This records a request only. The pharmacy must separately confirm prescription acceptance, stock and fulfilment.</p>
             </form>
           </div>
         {% endfor %}
@@ -134,14 +161,14 @@
 {% if pharmacies %}
 <section class="panel spaced-panel" aria-labelledby="pharmacy-network-title">
   <div class="panel-head">
-    <div><p class="eyebrow">Directory</p><h2 id="pharmacy-network-title">Reviewed network pharmacies</h2></div>
+    <div><p class="eyebrow">Connected network</p><h2 id="pharmacy-network-title">Verified ZENDOC pharmacies</h2></div>
   </div>
   <div class="grid three">
     {% for p in pharmacies %}
       <article class="panel subtle-panel">
         <div class="panel-head">
           <strong>{{ p.pharmacy_name }}</strong>
-          <span class="status-badge active">Reviewed</span>
+          <span class="status-badge active">Verified</span>
         </div>
         <p class="form-note">{{ p.user_city or 'Local' }}{% if p.phone %} · {{ p.phone }}{% endif %}</p>
       </article>

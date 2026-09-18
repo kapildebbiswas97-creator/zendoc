@@ -28,6 +28,12 @@ from .family_care import (
     update_care_task_status,
     update_family_member,
 )
+from .family_lifecycle import (
+    enrich_family_members,
+    family_program_catalog,
+    member_lifecycle,
+    payment_readiness,
+)
 from .routes import audit, require_api_user
 from .security import login_required, role_required
 
@@ -97,13 +103,13 @@ def family_page():
                     flash(str(err), "error")
             return redirect(url_for("family.family_page"))
 
-    members = list_family_members(g.user)
+    members = enrich_family_members(list_family_members(g.user))
     tasks = list_care_tasks(g.user)
     selected_member_id = request.args.get("member_id")
     selected_member = None
     if selected_member_id:
         try:
-            selected_member = get_family_member(g.user, int(selected_member_id))
+            selected_member = member_lifecycle(get_family_member(g.user, int(selected_member_id)))
         except Exception:
             pass
 
@@ -112,6 +118,8 @@ def family_page():
         members=members,
         tasks=tasks,
         selected_member=selected_member,
+        family_programs=family_program_catalog(),
+        payment=payment_readiness(),
     )
 
 
@@ -119,7 +127,7 @@ def family_page():
 @login_required
 @role_required("patient")
 def parent_care_page():
-    members = list_family_members(g.user)
+    members = enrich_family_members(list_family_members(g.user))
     parents = [m for m in members if m.get("is_remote_parent") or m["relationship"] in ("father", "mother", "grandfather", "grandmother")]
     tasks = list_care_tasks(g.user)
     return render_template("parent_care.html", parents=parents, tasks=tasks)
