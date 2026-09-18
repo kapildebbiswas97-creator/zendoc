@@ -214,7 +214,9 @@ def _normalize_schedule_time(value):
 
 
 def create_schedule(user, data):
-    profile = require_verified_provider(user)
+    if not user or user["role"] not in PROVIDER_ROLES:
+        raise PermissionError("Only provider roles can configure provider schedules.")
+    profile = get_provider_profile_for_user(user["id"])
     if not profile:
         raise ValueError("Create a provider profile before adding schedule.")
     try:
@@ -251,7 +253,7 @@ def create_schedule(user, data):
 
 def available_slots(provider_profile_id, date_text):
     profile = get_db().execute("SELECT * FROM provider_profiles WHERE id=?", (provider_profile_id,)).fetchone()
-    if not profile:
+    if not profile or str(profile["verification_status"]) != "verified":
         return []
     account = get_db().execute("SELECT active FROM users WHERE id=?", (profile["user_id"],)).fetchone()
     if not account or not bool(account["active"]):
