@@ -310,6 +310,7 @@ def public_launch_readiness() -> dict:
         "terms": "/terms",
         "medical_disclaimer": "/medical-disclaimer",
         "account_deletion": "/account-deletion",
+        "account_export": "/account/export",
         "manifest": "/manifest.webmanifest",
         "service_worker": "/sw.js",
         "health": "/healthz",
