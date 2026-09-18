@@ -55,6 +55,7 @@ from .preventive_care import ensure_preventive_care_schema
 from .preventive_care_routes import bp as preventive_care_bp
 from .public_ingestion_routes import bp as public_ingestion_bp
 from .provider_onboarding_routes import bp as provider_onboarding_bp
+from .provider_invitation import ensure_provider_invitation_schema
 from .public_launch_routes import bp as public_launch_bp
 from .release_health_routes import bp as release_health_bp
 from .showcase_routes import bp as showcase_bp
@@ -165,6 +166,7 @@ def create_app(test_config=None):
             ensure_email_verification_schema()
             ensure_medical_knowledge_document_schema()
             ensure_medical_rag_schema()
+            ensure_provider_invitation_schema()
             ensure_preventive_care_schema()
             ensure_policy_acceptance_schema()
             ensure_care_action_ledger_schema()
