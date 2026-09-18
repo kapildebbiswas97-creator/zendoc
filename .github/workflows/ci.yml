@@ -61,6 +61,9 @@ jobs:
           tests/test_careloop_consent_scope_boundary.py
           tests/test_care_action_provider_state_truth.py
           tests/test_health_memory_rag_v1.py
+          tests/test_public_launch_v1.py
+          tests/test_email_delivery_v1.py
+          tests/test_submission_smoke_matrix_v1.py
 
   full-sqlite-tests:
     name: Full SQLite Test Suite
