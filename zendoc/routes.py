@@ -59,6 +59,7 @@ from .provider_service import (
     create_schedule,
     get_provider_profile_for_user,
     get_public_provider_profile,
+    require_verified_provider,
     search_registered_providers,
     upsert_provider_profile,
 )
@@ -1042,6 +1043,7 @@ def appointment_status(appointment_id):
         abort(403)
     else:
         try:
+            require_verified_provider(g.user, allowed_roles={"doctor", "hospital"})
             assert_resource_tenant(g.user, dict(row))
         except PermissionError:
             abort(403)
