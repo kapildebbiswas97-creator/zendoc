@@ -13,7 +13,7 @@ from .policy_acceptance import record_registration_policy_acceptance
 from .security import hash_token, new_token
 
 
-INVITABLE_PROVIDER_ROLES = {"doctor", "hospital", "pharmacy"}
+INVITABLE_PROVIDER_ROLES = {"doctor", "hospital", "pharmacy", "government"}
 INVITE_TOKEN_TYPE = "provider_invite"
 INVITE_HOURS = 72
 
@@ -69,7 +69,7 @@ def create_provider_invitation(
     ensure_provider_invitation_schema()
     role = str(role or "").strip().lower()
     if role not in INVITABLE_PROVIDER_ROLES:
-        raise ValueError("Provider invitation role must be doctor, hospital, or pharmacy.")
+        raise ValueError("Controlled invitation role must be doctor, hospital, pharmacy, or government.")
     email = validate_email(email)
 
     db = get_db()
@@ -220,14 +220,19 @@ def accept_provider_invitation(
     )
     db.commit()
     user = db.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+    is_provider_role = str(invite["role"]) in {"doctor", "hospital", "pharmacy"}
     return {
         "status": "accepted",
         "user": dict(user),
         "invitation_id": int(invite["id"]),
-        "provider_verification_status": "profile_required",
+        "provider_verification_status": "profile_required" if is_provider_role else "not_applicable",
         "truth_notice": (
-            "Accepting a provider invitation creates the account and proves control of the invited email. "
-            "It does not verify professional credentials or make the provider publicly bookable."
+            "Accepting the invitation creates the account and proves control of the invited email. "
+            + (
+                "It does not verify professional credentials or make the provider publicly bookable."
+                if is_provider_role
+                else "It does not grant provider verification, clinical authority, or owner/admin privileges."
+            )
         ),
     }
 
