@@ -100,6 +100,7 @@ def set_doctor_availability(actor, data):
 
 
 def get_doctor_availability(doctor_id):
+    require_verified_provider_id(doctor_id, allowed_roles={"doctor", "hospital"})
     row = get_db().execute(
         """
         SELECT da.*, u.name doctor_name
