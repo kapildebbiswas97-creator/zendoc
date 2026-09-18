@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Resend Email Verification — ZENDOC{% endblock %}
+{% block content %}
+<section class="auth-panel">
+  <div class="auth-panel-header">
+    <p class="eyebrow">Account verification</p>
+    <h1>Resend verification email</h1>
+    <p class="section-copy">Enter the email address used for your ZENDOC account. For privacy, this page never confirms whether an account exists.</p>
+  </div>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Email address
+      <input name="email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" required>
+    </label>
+    <button type="submit" data-submitting-label="Requesting verification…">Request verification email</button>
+  </form>
+  <div class="form-actions" style="margin-top:18px;">
+    <a class="text-link" href="{{ url_for('main.login') }}">Back to sign in</a>
+  </div>
+</section>
+{% endblock %}
