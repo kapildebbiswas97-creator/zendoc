@@ -504,8 +504,10 @@ def finalize_care_chain(actor: Any, result: dict, prepared: dict) -> dict:
     chain["continuity"] = continuity
 
     appointment = (continuity or {}).get("appointment") or {}
+    service = (continuity or {}).get("service") or {}
     evidence = (continuity or {}).get("evidence") or {}
     appointment_status = appointment.get("status")
+    service_status = service.get("status")
     if not continuity:
         provider_status = "NOT_APPLICABLE_OR_NOT_LINKED"
     elif appointment_status == "completed":
@@ -514,6 +516,14 @@ def finalize_care_chain(actor: Any, result: dict, prepared: dict) -> dict:
         provider_status = "PROVIDER_CONFIRMED"
     elif appointment_status == "requested":
         provider_status = "WAITING_PROVIDER"
+    elif service.get("internally_integrated") and service_status == "COMPLETED":
+        provider_status = "SERVICE_COMPLETED"
+    elif service.get("internally_integrated") and service_status in {"CONFIRMED", "IN_PROGRESS"}:
+        provider_status = "SERVICE_CONFIRMED"
+    elif service.get("internally_integrated") and service_status == "STAGED":
+        provider_status = "WAITING_SERVICE_CONFIRMATION"
+    elif service.get("internally_integrated") and service_status in {"CANCELLED", "BLOCKED"}:
+        provider_status = "SERVICE_NOT_FULFILLED"
     else:
         provider_status = "NOT_YET_REQUESTED"
 
@@ -521,6 +531,14 @@ def finalize_care_chain(actor: Any, result: dict, prepared: dict) -> dict:
         "status": provider_status,
         "appointment_id": appointment.get("id"),
         "provider_confirmed": bool(evidence.get("provider_confirmed")),
+        "service_confirmed": bool(evidence.get("service_confirmed")),
+        "authoritative_confirmation": bool(evidence.get("authoritative_confirmation")),
+        "care_action_id": service.get("action_id"),
+        "service_ref": service.get("service_ref"),
+        "service_status": service_status,
+        "integration_source_type": service.get("integration_source_type"),
+        "internally_integrated": bool(service.get("internally_integrated")),
+        "external_execution": False,
         "model_can_assert_confirmation": False,
     }
     chain["outcome"] = {
@@ -558,6 +576,7 @@ def build_persisted_care_chain(actor: Any, journey_id: int) -> dict:
     continuity = get_care_continuity_snapshot(actor, int(journey_id))
     evidence = continuity.get("evidence") or {}
     appointment = continuity.get("appointment") or {}
+    service = continuity.get("service") or {}
 
     audit_count = get_db().execute(
         """
@@ -577,6 +596,14 @@ def build_persisted_care_chain(actor: Any, journey_id: int) -> dict:
             "appointment_id": appointment.get("id"),
             "appointment_status": appointment.get("status"),
             "provider_confirmed": bool(evidence.get("provider_confirmed")),
+            "service_confirmed": bool(evidence.get("service_confirmed")),
+            "authoritative_confirmation": bool(evidence.get("authoritative_confirmation")),
+            "care_action_id": service.get("action_id"),
+            "service_ref": service.get("service_ref"),
+            "service_status": service.get("status"),
+            "integration_source_type": service.get("integration_source_type"),
+            "internally_integrated": bool(service.get("internally_integrated")),
+            "external_execution": False,
         },
         "outcome": {
             "verified": bool(evidence.get("verified_outcome_present")),
