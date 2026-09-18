@@ -156,6 +156,7 @@ def load_config(base_dir, overrides=None):
         "YOUTUBE_API_KEY": os.environ.get("ZENDOC_YOUTUBE_API_KEY", ""),
         "REQUIRE_DURABLE_DATABASE": env_bool("ZENDOC_REQUIRE_DURABLE_DATABASE", False),
         "STORAGE_PROVIDER": os.environ.get("ZENDOC_STORAGE_PROVIDER", "local").strip().lower(),
+        "STORAGE_VERIFIED": env_bool("ZENDOC_STORAGE_VERIFIED", False),
         "TELEHEALTH_PROVIDER": os.environ.get("ZENDOC_TELEHEALTH_PROVIDER", "local_demo").strip().lower(),
         "REALTIME_PROVIDER": os.environ.get("ZENDOC_REALTIME_PROVIDER", "polling").strip().lower(),
         "NOTIFICATION_PROVIDER": os.environ.get("ZENDOC_NOTIFICATION_PROVIDER", "in_app").strip().lower(),
