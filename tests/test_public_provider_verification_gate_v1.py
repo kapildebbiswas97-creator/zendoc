@@ -190,15 +190,18 @@ def test_pending_provider_cannot_change_appointment_status_in_public_mode(tmp_pa
     )
     assert login.status_code == 302
 
-    page = client.get("/appointments")
-    body = page.get_data(as_text=True)
-    csrf = body.split('name="csrf_token" value="', 1)[1].split('"', 1)[0]
+    blocked_page = client.get("/appointments", follow_redirects=False)
+    assert blocked_page.status_code == 302
+    assert "/provider/profile" in blocked_page.headers["Location"]
+
+    profile_page = client.get("/provider/profile")
     response = client.post(
         f"/appointments/{appointment_id}/status",
-        data={"csrf_token": csrf, "status": "confirmed"},
+        data={"csrf_token": csrf(profile_page.get_data(as_text=True)), "status": "confirmed"},
         follow_redirects=False,
     )
-    assert response.status_code == 403
+    assert response.status_code == 302
+    assert "/provider/profile" in response.headers["Location"]
 
     with app.app_context():
         row = get_db().execute(
