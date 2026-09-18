@@ -175,14 +175,28 @@ def _health_memory_metadata(actor: Any) -> dict:
 
 
 
-def _minimum_health_context_for_local_advisory(actor: Any) -> dict:
-    """Return only explicitly scoped self-context for the local advisory model.
+def _minimum_health_context_for_local_advisory(actor: Any, intent: str) -> dict:
+    """Return only intent-required self-context for the local advisory model.
 
-    The returned values are used transiently inside the local-only inference
-    prompt and are not copied into care-chain audit/task metadata.
+    The returned values are transient local-inference context and are never
+    copied into care-chain audit/task metadata. A workflow receives no patient
+    field merely because it exists in Health Memory.
     """
     if _actor_role(actor) != "patient":
         return {"status": "NOT_APPLICABLE", "data": {}, "included_fields": []}
+
+    intent = str(intent or "").strip().lower()
+    fields_by_intent = {
+        "appointment_booking": ("city",),
+        "provider_discovery": ("city",),
+        "diagnostics": ("city",),
+        "carefin": ("city",),
+        "pharmacy": ("city", "allergies"),
+        "prescription": ("allergies",),
+        "nutrition": ("allergies",),
+        "preventive_care": ("allergies",),
+    }
+    requested_fields = list(fields_by_intent.get(intent, ()))
 
     try:
         from .context_engine import build_minimum_context_bundle
@@ -192,12 +206,12 @@ def _minimum_health_context_for_local_advisory(actor: Any) -> dict:
             patient_id=_actor_id(actor),
             purpose="health_memory_view",
             action="care_chain_local_advisory",
-            requested_fields=["city", "allergies"],
+            requested_fields=requested_fields,
         )
     except (LookupError, PermissionError, ValueError):
         return {"status": "AUTHORIZATION_REQUIRED", "data": {}, "included_fields": []}
 
-    allowed = {"city", "allergies"}
+    allowed = set(requested_fields)
     data = {
         key: value
         for key, value in (bundle.data or {}).items()
@@ -385,7 +399,7 @@ def prepare_care_chain(
     emergency = bool(safety.get("emergency"))
     input_evidence = _input_evidence(actor, input_channel, asr_audit_log_id)
     memory = _health_memory_metadata(actor)
-    memory_context = _minimum_health_context_for_local_advisory(actor)
+    memory_context = _minimum_health_context_for_local_advisory(actor, str(intent or ""))
     memory["local_advisory_context_status"] = memory_context.get("status")
     memory["local_advisory_fields"] = memory_context.get("included_fields") or []
     rag = _rag_metadata(actor, clean_command, str(intent or ""), emergency)
