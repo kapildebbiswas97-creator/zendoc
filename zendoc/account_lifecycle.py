@@ -204,6 +204,15 @@ def delete_account(user: Any, *, password: str | None = None, token_authorized: 
             db.execute("DELETE FROM api_tokens WHERE user_id=?", (user_id,))
             db.execute("DELETE FROM organization_memberships WHERE user_id=?", (user_id,))
             db.execute("UPDATE provider_network_prospects SET linked_user_id=NULL WHERE linked_user_id=?", (user_id,))
+            tombstone_email = f"deleted-provider-{user_id}@zendoc.invalid"
+            db.execute(
+                """
+                UPDATE provider_invitations
+                SET email=?,email_normalized=?,invited_name=NULL
+                WHERE accepted_user_id=?
+                """,
+                (tombstone_email, tombstone_email, user_id),
+            )
 
         if email:
             db.execute(
