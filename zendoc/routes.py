@@ -77,6 +77,7 @@ from .business_api import (
     revoke_business_api_key,
     update_business_api_client,
 )
+from .policy_acceptance import record_registration_policy_acceptance
 from .partner_audit import list_partner_audit_events, partner_audit_metrics
 from .partner_handoffs import create_partner_booking_handoff, get_partner_booking_handoff, list_all_partner_booking_handoffs, list_partner_booking_handoffs, list_provider_booking_handoffs, owner_update_partner_booking_handoff, partner_operations_metrics, provider_update_partner_booking_handoff
 from .institution_pilots import (
@@ -409,6 +410,14 @@ def register(role):
     if request.method == "POST":
         if not require_form_fields("name", "email", "password"):
             return render_template("register.html", role=role), 400
+        terms_accepted = bool(request.form.get("accept_terms"))
+        privacy_accepted = bool(request.form.get("accept_privacy"))
+        if terms_accepted != privacy_accepted or (
+            current_app.config.get("PUBLIC_RELEASE_REQUIRED")
+            and not (terms_accepted and privacy_accepted)
+        ):
+            flash("You must accept both the Privacy Policy and Terms of Service to create a public ZENDOC account.", "error")
+            return render_template("register.html", role=role), 400
         password = request.form.get("password", "")
         try:
             email = validate_email(request.form.get("email", ""))
@@ -445,6 +454,8 @@ def register(role):
                 ),
             )
             created_user = get_db().execute("SELECT * FROM users WHERE id=?", (int(cursor.lastrowid),)).fetchone()
+            if terms_accepted and privacy_accepted:
+                record_registration_policy_acceptance(created_user["id"], source="web_registration")
             record_product_activity(created_user, event_type="account_registered")
             get_db().commit()
             flash("Registration complete. Please log in.", "success")
@@ -2182,6 +2193,18 @@ def api_register():
     role = normalize_role(data.get("role", "patient"))
     if role == "admin":
         return jsonify({"error": "Admin registration is disabled"}), 403
+    terms_accepted = data.get("accept_terms") is True
+    privacy_accepted = data.get("accept_privacy") is True
+    if terms_accepted != privacy_accepted or (
+        current_app.config.get("PUBLIC_RELEASE_REQUIRED")
+        and not (terms_accepted and privacy_accepted)
+    ):
+        return jsonify({
+            "error": {
+                "code": 400,
+                "message": "accept_terms and accept_privacy must both be true for public registration.",
+            }
+        }), 400
     try:
         email = validate_email(data.get("email", ""))
     except ValueError as error:
@@ -2211,6 +2234,8 @@ def api_register():
             ),
         )
         created_user = get_db().execute("SELECT * FROM users WHERE id=?", (int(cursor.lastrowid),)).fetchone()
+        if terms_accepted and privacy_accepted:
+            record_registration_policy_acceptance(created_user["id"], source="api_registration")
         record_product_activity(created_user, event_type="account_registered")
         get_db().commit()
         return jsonify({"status": "created"}), 201
