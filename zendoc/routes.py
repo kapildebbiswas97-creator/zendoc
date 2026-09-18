@@ -193,7 +193,13 @@ def check_rate_limit():
         path == "/login"
         or path.startswith("/login/")
         or path.startswith("/register/")
-        or path in {"/forgot-password", "/reset-password", "/account-deletion", "/account-deletion/confirm"}
+        or path in {
+            "/forgot-password",
+            "/reset-password",
+            "/resend-verification",
+            "/account-deletion",
+            "/account-deletion/confirm",
+        }
     )
     sensitive_api = path.startswith("/api/v1/auth/") or path == "/api/v1/account"
     is_api = path.startswith("/api/")
@@ -545,6 +551,102 @@ def login(role=None):
             return redirect(url_for("main.dashboard"))
         flash(INVALID_CREDENTIALS_MESSAGE, "error")
     return render_template("login.html", role=display_role)
+
+
+@bp.get("/verify-email")
+def verify_email():
+    token = str(request.args.get("token") or "").strip()
+    try:
+        verify_email_token(token)
+    except PermissionError:
+        flash("This email-verification link is invalid or expired. Request a new verification message.", "error")
+        return redirect(url_for("main.resend_verification"))
+    flash("Email verified successfully. You can now sign in to ZENDOC.", "success")
+    return redirect(url_for("main.login"))
+
+
+@bp.route("/resend-verification", methods=("GET", "POST"))
+def resend_verification():
+    if request.method == "POST":
+        email = ""
+        try:
+            email = validate_email(request.form.get("email", ""))
+        except ValueError:
+            pass
+
+        user = user_by_normalized_email(email) if email else None
+        if (
+            user
+            and user["role"] != "admin"
+            and not email_verification_status(user).get("verified")
+            and email_delivery_status().get("transactional_email")
+        ):
+            token = issue_email_verification_token(user)
+            get_db().commit()
+            try:
+                _send_verification_email(user, token)
+            except Exception:
+                current_app.logger.exception(
+                    "Resend email verification delivery failed for user_id=%s",
+                    user["id"],
+                )
+
+        # Existing/missing/already-verified/delivery-failure cases intentionally
+        # use one response so this page cannot enumerate ZENDOC accounts.
+        flash(
+            "If the email belongs to an unverified ZENDOC account, a new verification message has been requested.",
+            "success",
+        )
+        return redirect(url_for("main.login"))
+    return render_template("resend_verification.html")
+
+
+@bp.post("/api/v1/auth/verify-email")
+def api_verify_email():
+    data = request.get_json(silent=True) or {}
+    token = str(data.get("token") or "").strip()
+    if not token:
+        return jsonify({"error": {"code": 400, "message": "token is required"}}), 400
+    try:
+        result = verify_email_token(token)
+    except PermissionError as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+    return jsonify(result), 200
+
+
+@bp.post("/api/v1/auth/resend-verification")
+def api_resend_verification():
+    data = request.get_json(silent=True) or {}
+    email = ""
+    try:
+        email = validate_email(data.get("email", ""))
+    except ValueError:
+        pass
+
+    user = user_by_normalized_email(email) if email else None
+    if (
+        user
+        and user["role"] != "admin"
+        and not email_verification_status(user).get("verified")
+        and email_delivery_status().get("transactional_email")
+    ):
+        token = issue_email_verification_token(user)
+        get_db().commit()
+        try:
+            _send_verification_email(user, token)
+        except Exception:
+            current_app.logger.exception(
+                "API resend email verification delivery failed for user_id=%s",
+                user["id"],
+            )
+
+    return jsonify({
+        "status": "accepted",
+        "message": (
+            "If the email belongs to an unverified ZENDOC account, "
+            "a new verification message has been requested."
+        ),
+    }), 202
 
 
 @bp.route("/forgot-password", methods=("GET", "POST"))
