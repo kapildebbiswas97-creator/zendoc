@@ -163,13 +163,13 @@ def test_provider_invitation_rejects_public_role_escalation_and_duplicate_email(
         "/admin/provider-invitations",
         data={
             "csrf_token": token,
-            "email": "government-invite@example.com",
-            "role": "government",
+            "email": "patient-invite-through-admin@example.com",
+            "role": "patient",
         },
         follow_redirects=True,
     )
     assert invalid_role.status_code == 200
-    assert "must be doctor, hospital, or pharmacy" in invalid_role.get_data(as_text=True)
+    assert "must be doctor, hospital, pharmacy, or government" in invalid_role.get_data(as_text=True)
 
     duplicate = client.post(
         "/admin/provider-invitations",
@@ -231,3 +231,69 @@ def test_new_provider_invitation_revokes_older_pending_role_for_same_email(tmp_p
     fresh = client.get(f"/provider-invitation/accept?token={second_token}")
     assert fresh.status_code == 200
     assert "Pharmacy" in fresh.get_data(as_text=True)
+
+
+def test_owner_can_invite_government_institution_without_provider_verification(tmp_path, monkeypatch):
+    app, client = make_client(tmp_path)
+    app.config.update(
+        EMAIL_PROVIDER="smtp",
+        SMTP_HOST="smtp.example.test",
+        SMTP_FROM_EMAIL="noreply@zendoc.example.test",
+        SMTP_USE_TLS=True,
+        PUBLIC_BASE_URL="https://zendoc.example.test",
+    )
+    sent = []
+    from zendoc import routes
+    monkeypatch.setattr(
+        routes,
+        "send_transactional_email",
+        lambda to_email, subject, text_body: sent.append((to_email, subject, text_body)) or {"status": "sent"},
+    )
+
+    login_web(client, "admin", "admin@example.com", "AdminStrong123")
+    page = client.get("/admin")
+    response = client.post(
+        "/admin/provider-invitations",
+        data={
+            "csrf_token": csrf(page.get_data(as_text=True)),
+            "name": "District Health Institution",
+            "email": "institution@example.com",
+            "role": "government",
+        },
+    )
+    assert response.status_code == 302
+    invite_token = _token_from_mail(sent[-1][2])
+
+    client.get("/logout", follow_redirects=False)
+    review = client.get(f"/provider-invitation/accept?token={invite_token}")
+    assert review.status_code == 200
+    body = review.get_data(as_text=True)
+    assert "Institution account boundary" in body
+    assert "clinical authority" in body
+
+    accepted = client.post(
+        "/provider-invitation/accept",
+        data={
+            "csrf_token": csrf(body),
+            "token": invite_token,
+            "name": "District Health Institution",
+            "password": "StrongPass123",
+            "accept_privacy": "1",
+            "accept_terms": "1",
+        },
+        follow_redirects=False,
+    )
+    assert accepted.status_code == 302
+    assert "/login/government" in accepted.headers["Location"]
+
+    with app.app_context():
+        user = get_db().execute(
+            "SELECT * FROM users WHERE email_normalized=?",
+            ("institution@example.com",),
+        ).fetchone()
+        assert user["role"] == "government"
+        assert user["verified"] == 0
+        assert get_db().execute(
+            "SELECT id FROM provider_profiles WHERE user_id=?",
+            (user["id"],),
+        ).fetchone() is None
