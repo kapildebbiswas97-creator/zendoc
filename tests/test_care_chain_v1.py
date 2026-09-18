@@ -77,7 +77,7 @@ def test_prepare_and_finalize_chain_persists_only_metadata(tmp_path):
         assert prepared["input"]["status"] == "TYPED_INPUT"
         assert prepared["health_memory"]["status"] == "AUTHORIZED_MINIMUM_METADATA"
         assert prepared["health_memory"]["local_advisory_context_status"] == "AUTHORIZED_MINIMUM_CONTEXT"
-        assert set(prepared["health_memory"]["local_advisory_fields"]) == {"city", "allergies"}
+        assert set(prepared["health_memory"]["local_advisory_fields"]) == {"allergies"}
         assert "data" not in prepared["health_memory"]
         assert prepared["rag"]["status"] in {"NO_APPROVED_EVIDENCE", "EVIDENCE_READY"}
         assert prepared["local_advisory"]["tool_execution_authority"] is False
