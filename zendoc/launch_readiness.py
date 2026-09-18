@@ -553,8 +553,12 @@ def public_launch_readiness() -> dict:
         "medical_disclaimer": "/medical-disclaimer",
         "account_deletion": "/account-deletion",
         "account_export": "/account/export",
+        "mobile_account_export": "/api/v1/account/export",
+        "mobile_account_delete": "/api/v1/account",
         "verify_email": "/verify-email",
         "resend_verification": "/resend-verification",
+        "provider_invitation_accept": "/provider-invitation/accept",
+        "provider_invitation_admin": "/admin/provider-invitations",
         "mobile_token_refresh": "/api/v1/auth/refresh",
         "manifest": "/manifest.webmanifest",
         "service_worker": "/sw.js",
@@ -571,7 +575,7 @@ def public_launch_readiness() -> dict:
     else:
         passed.append({
             "key": "public_launch_routes",
-            "message": "Privacy, terms, deletion, PWA and health routes are registered.",
+            "message": "Privacy, terms, deletion/export, verification, controlled onboarding, mobile auth, PWA and health routes are registered.",
         })
 
     if not str(current_app.config.get("SUPPORT_EMAIL") or "").strip():
