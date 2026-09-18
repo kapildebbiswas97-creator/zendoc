@@ -3,6 +3,7 @@ from zendoc.edgecare_demo_data import DEMO_PATIENT_EMAIL, seed_edgecare_demo_dat
 from zendoc.investor_dashboard import investor_traction_snapshot
 from zendoc.launch_readiness import first50_launch_readiness
 from zendoc.pilot_analytics import pilot_scorecard
+from zendoc.routes import stats_for
 from zendoc.startup_analytics import (
     care_journey_conversion,
     provider_onboarding_funnel,
@@ -123,3 +124,10 @@ def test_synthetic_demo_fixture_never_inflates_fundraising_metrics(tmp_path, mon
         assert pilot["provider_responsiveness"]["consultations"]["requested"] == 0
         assert pilot["engagement"]["authenticated_active_users_30d"] == 0
         assert "exclude synthetic competition fixture" in pilot["measurement_boundary"].lower()
+
+        owner_stats = stats_for(owner)
+        actual_user_count = int(db.execute("SELECT COUNT(*) c FROM users").fetchone()["c"])
+        actual_provider_count = int(db.execute("SELECT COUNT(*) c FROM provider_profiles").fetchone()["c"])
+        assert owner_stats["Users"] == actual_user_count - 2
+        assert owner_stats["Providers"] == actual_provider_count - 1
+        assert owner_stats["Appointments"] == 0

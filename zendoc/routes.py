@@ -340,11 +340,34 @@ def stats_for(user):
     if user["role"] == "admin":
         if not is_owner(user):
             raise PermissionError("Only the configured ZENDOC owner may view global platform statistics.")
+
+        from .demo_truth import synthetic_demo_provider_profile_ids, synthetic_demo_user_ids
+
+        demo_user_ids = synthetic_demo_user_ids(db)
+        demo_profile_ids = synthetic_demo_provider_profile_ids(db)
+        user_rows = db.execute("SELECT id FROM users").fetchall()
+        appointment_rows = db.execute(
+            "SELECT patient_id,provider_id FROM appointments"
+        ).fetchall()
+        record_rows = db.execute("SELECT owner_id FROM medical_records").fetchall()
+        provider_rows = db.execute("SELECT id FROM provider_profiles").fetchall()
+
         return {
-            "Users": db.execute("SELECT COUNT(*) c FROM users").fetchone()["c"],
-            "Appointments": db.execute("SELECT COUNT(*) c FROM appointments").fetchone()["c"],
-            "Records": db.execute("SELECT COUNT(*) c FROM medical_records").fetchone()["c"],
-            "Providers": db.execute("SELECT COUNT(*) c FROM provider_profiles").fetchone()["c"],
+            "Users": sum(1 for row in user_rows if int(row["id"]) not in demo_user_ids),
+            "Appointments": sum(
+                1
+                for row in appointment_rows
+                if int(row["patient_id"]) not in demo_user_ids
+                and (row["provider_id"] is None or int(row["provider_id"]) not in demo_user_ids)
+            ),
+            "Records": sum(
+                1 for row in record_rows
+                if int(row["owner_id"]) not in demo_user_ids
+            ),
+            "Providers": sum(
+                1 for row in provider_rows
+                if int(row["id"]) not in demo_profile_ids
+            ),
         }
     return {
         "Appointments": db.execute(
