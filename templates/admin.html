@@ -37,9 +37,9 @@
 </section>
 <section class="panel">
   <div class="panel-head">
-    <div><p class="eyebrow">Controlled provider onboarding</p><h2>Invite provider account</h2></div>
+    <div><p class="eyebrow">Controlled onboarding</p><h2>Invite provider or institution account</h2></div>
   </div>
-  <p class="form-note">Public self-registration is patient-only. Use this owner-controlled invitation for doctors, hospitals and pharmacies. Invitation acceptance verifies the email only; professional verification still requires profile/evidence review.</p>
+  <p class="form-note">Public self-registration is patient-only. Use this owner-controlled invitation for doctors, hospitals, pharmacies and government/institution accounts. Invitation acceptance verifies the email only. Provider roles still require separate profile/evidence review.</p>
   <form method="post" action="{{ url_for('main.create_provider_invitation_web') }}" class="grid two">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <label>Name (optional)<input name="name" maxlength="160" placeholder="Provider or representative name"></label>
@@ -49,6 +49,7 @@
         <option value="doctor">Doctor</option>
         <option value="hospital">Hospital</option>
         <option value="pharmacy">Pharmacy</option>
+        <option value="government">Government / Institution</option>
       </select>
     </label>
     <div class="form-actions" style="align-self:end"><button type="submit">Create and send invitation</button></div>
