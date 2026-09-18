@@ -152,6 +152,7 @@ def before_request():
                 "main.finder",
                 "main.provider_detail",
                 "main.profile",
+                "main.notifications",
                 "main.logout",
             }
             if (
