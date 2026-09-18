@@ -80,7 +80,7 @@ def test_pending_provider_cannot_use_public_operational_capabilities(tmp_path):
 
 
 def test_verified_provider_can_use_public_availability_and_schedule(tmp_path):
-    app, client = make_client(tmp_path, "verified-public-doctor@example.com")
+    app, client = make_client(tmp_path)
     email = "verified-public-doctor@example.com"
     register_web(client, "doctor", email, "Verified Public Doctor")
 
