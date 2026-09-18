@@ -2257,26 +2257,72 @@ def api_logout():
 
 @bp.post("/api/v1/auth/forgot-password")
 def api_forgot_password():
-    if current_app.config.get("PASSWORD_RECOVERY_MODE") != "local_demo":
-        return jsonify({
-            "status": "integration_required",
-            "message": "Password recovery delivery is not integrated.",
-        }), 503
     data = request.get_json(silent=True) or {}
     try:
         email = validate_email(data.get("email", ""))
     except ValueError:
         return jsonify({"error": "Email is required"}), 400
+
     user = user_by_normalized_email(email)
-    if user:
-        token = new_token()
-        get_db().execute(
-            "INSERT INTO api_tokens (user_id, token_hash, token_type, expires_at, created_at) VALUES (?, ?, 'password_reset', ?, ?)",
-            (user["id"], hash_token(token), future_iso(30), now_iso()),
-        )
-        get_db().commit()
-        return jsonify({"status": "local_demo_token_generated", "reset_token": token, "message": "Local beta token generated; email delivery is not integrated."})
-    return jsonify({"status": "local_demo_token_generated", "message": "If the account exists, the local beta recovery request was processed."})
+    delivery = email_delivery_status()
+    if delivery.get("transactional_email"):
+        if user:
+            token = new_token()
+            get_db().execute(
+                "UPDATE api_tokens SET revoked_at=? WHERE user_id=? AND token_type='password_reset' AND revoked_at IS NULL",
+                (now_iso(), user["id"]),
+            )
+            get_db().execute(
+                "INSERT INTO api_tokens (user_id, token_hash, token_type, expires_at, created_at) VALUES (?, ?, 'password_reset', ?, ?)",
+                (user["id"], hash_token(token), future_iso(30), now_iso()),
+            )
+            base_url = str(current_app.config.get("PUBLIC_BASE_URL") or "").strip().rstrip("/") or request.url_root.rstrip("/")
+            reset_link = f"{base_url}{url_for('main.reset_password', token=token)}"
+            try:
+                send_transactional_email(
+                    user["email"],
+                    "Reset your ZENDOC password",
+                    (
+                        "A password reset was requested for your ZENDOC account.\n\n"
+                        f"Open this link to set a new password: {reset_link}\n\n"
+                        "The link expires in 30 minutes. If you did not request this, ignore this email."
+                    ),
+                )
+                get_db().commit()
+            except Exception:
+                get_db().rollback()
+                current_app.logger.exception("API password-reset email delivery failed.")
+                return jsonify({
+                    "status": "delivery_failed",
+                    "message": "Password recovery email could not be delivered.",
+                }), 503
+        return jsonify({
+            "status": "accepted",
+            "message": "If the account exists, password-reset instructions have been sent.",
+        }), 202
+
+    if current_app.config.get("PASSWORD_RECOVERY_MODE") == "local_demo":
+        if user:
+            token = new_token()
+            get_db().execute(
+                "INSERT INTO api_tokens (user_id, token_hash, token_type, expires_at, created_at) VALUES (?, ?, 'password_reset', ?, ?)",
+                (user["id"], hash_token(token), future_iso(30), now_iso()),
+            )
+            get_db().commit()
+            return jsonify({
+                "status": "local_demo_token_generated",
+                "reset_token": token,
+                "message": "Local beta token generated; email delivery is not integrated.",
+            })
+        return jsonify({
+            "status": "local_demo_token_generated",
+            "message": "If the account exists, the local beta recovery request was processed.",
+        })
+
+    return jsonify({
+        "status": "integration_required",
+        "message": "Password recovery delivery is not configured.",
+    }), 503
 
 
 @bp.post("/api/v1/auth/reset-password")
