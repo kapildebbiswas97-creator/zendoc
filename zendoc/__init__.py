@@ -18,6 +18,7 @@ from .db import close_db, get_db, init_db
 from .connected_care_routes import bp as connected_care_bp
 from .document_extraction_routes import bp as document_extraction_bp
 from .edgecare_routes import bp as edgecare_bp
+from .email_verification import ensure_email_verification_schema
 from .ecosystem_routes import bp as ecosystem_bp
 from .family_routes import bp as family_bp
 from .fitness_routes import bp as fitness_bp
@@ -161,6 +162,7 @@ def create_app(test_config=None):
             init_db()
             ensure_global_data_schema()
             ensure_consent_schema()
+            ensure_email_verification_schema()
             ensure_medical_knowledge_document_schema()
             ensure_medical_rag_schema()
             ensure_preventive_care_schema()
