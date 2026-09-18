@@ -18,6 +18,7 @@ from werkzeug.security import generate_password_hash
 
 from . import create_app
 from .db import get_db, now_iso
+from .demo_truth import SYNTHETIC_DEMO_EMAILS, SYNTHETIC_DEMO_LICENSES
 
 
 DEMO_DOCTOR_EMAIL = "demo-doctor@zendoc.local"
@@ -26,6 +27,11 @@ DEMO_DOCTOR_NAME = "DEMO ONLY — Dr Asha Test"
 DEMO_PATIENT_NAME = "DEMO ONLY — Patient"
 DEMO_ORGANIZATION = "DEMO ONLY — ZENDOC Test Heart Clinic"
 DEMO_LICENSE = "DEMO-NOT-A-LICENSE"
+
+if {DEMO_DOCTOR_EMAIL, DEMO_PATIENT_EMAIL} != set(SYNTHETIC_DEMO_EMAILS):
+    raise RuntimeError("Synthetic demo email truth markers are out of sync.")
+if {DEMO_LICENSE} != set(SYNTHETIC_DEMO_LICENSES):
+    raise RuntimeError("Synthetic demo license truth markers are out of sync.")
 
 
 def _normalized_env(name: str) -> str:
