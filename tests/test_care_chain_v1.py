@@ -18,6 +18,8 @@ from zendoc.care_chain import (
 )
 from zendoc.db import get_db, now_iso
 from zendoc.model_router import ModelResponse, RoutingReason
+from zendoc.pharmacy_order_routes import update_medicine_order_status
+from zendoc.pharmacy_service import create_medicine_order
 from zendoc.specialist_orchestrator import orchestrate_specialist
 from zendoc.specialist_workflow_store import persist_specialist_result
 
@@ -338,4 +340,82 @@ def test_emergency_care_chain_skips_rag_and_local_model_before_agent_execution(t
         assert prepared["local_advisory"]["status"] == "SKIPPED_EMERGENCY_SAFETY"
         assert prepared["local_advisory"]["local_model_used"] is False
         assert prepared["local_advisory"]["tool_execution_authority"] is False
+
+def test_persisted_chain_tracks_verified_internal_pharmacy_service_confirmation_without_external_claim(tmp_path):
+    app = make_app(tmp_path)
+    with app.app_context():
+        db = get_db()
+        patient = _patient(app, "service-pharmacy")
+        stamp = now_iso()
+        pharmacy_id = db.execute(
+            """
+            INSERT INTO users
+            (name,email,email_normalized,password_hash,role,active,created_at,updated_at)
+            VALUES ('Chain Pharmacy','chain-pharmacy@example.test','chain-pharmacy@example.test',
+                    'unused','pharmacy',1,?,?)
+            """,
+            (stamp, stamp),
+        ).lastrowid
+        db.execute(
+            """
+            INSERT INTO provider_profiles
+            (user_id,provider_type,verification_status,created_at,updated_at)
+            VALUES (?,'pharmacy','verified',?,?)
+            """,
+            (pharmacy_id, stamp, stamp),
+        )
+        db.commit()
+
+        order = create_medicine_order(
+            patient,
+            {
+                "items": [{"name": "ORS", "quantity": 1}],
+                "delivery_address": "Care chain test address",
+                "pharmacy_id": int(pharmacy_id),
+            },
+        )
+        action = db.execute(
+            """
+            SELECT * FROM care_actions
+            WHERE service_ref=? AND patient_id=?
+            ORDER BY id DESC LIMIT 1
+            """,
+            (f"zendoc_pharmacy_order:{int(order['id'])}", int(patient["id"])),
+        ).fetchone()
+        assert action is not None
+        journey_id = int(action["journey_id"])
+
+        staged = build_persisted_care_chain(patient, journey_id)
+        staged_confirmation = staged["provider_confirmation"]
+        assert staged_confirmation["status"] == "WAITING_SERVICE_CONFIRMATION"
+        assert staged_confirmation["internally_integrated"] is True
+        assert staged_confirmation["integration_source_type"] == "pharmacy_order"
+        assert staged_confirmation["service_status"] == "STAGED"
+        assert staged_confirmation["service_confirmed"] is False
+        assert staged_confirmation["authoritative_confirmation"] is False
+        assert staged_confirmation["external_execution"] is False
+
+        pharmacy = {"id": int(pharmacy_id), "role": "pharmacy"}
+        update_medicine_order_status(pharmacy, int(order["id"]), "accepted")
+        confirmed = build_persisted_care_chain(patient, journey_id)
+        confirmed_state = confirmed["provider_confirmation"]
+        assert confirmed_state["status"] == "SERVICE_CONFIRMED"
+        assert confirmed_state["service_status"] == "CONFIRMED"
+        assert confirmed_state["service_confirmed"] is True
+        assert confirmed_state["authoritative_confirmation"] is True
+        assert confirmed_state["external_execution"] is False
+        assert confirmed["outcome"]["verified"] is False
+
+        update_medicine_order_status(pharmacy, int(order["id"]), "preparing")
+        update_medicine_order_status(pharmacy, int(order["id"]), "completed")
+        completed = build_persisted_care_chain(patient, journey_id)
+        completed_state = completed["provider_confirmation"]
+        assert completed_state["status"] == "SERVICE_COMPLETED"
+        assert completed_state["service_status"] == "COMPLETED"
+        assert completed_state["authoritative_confirmation"] is True
+        assert completed_state["external_execution"] is False
+        # Internal pharmacy completion is not silently upgraded into a verified
+        # clinical outcome or external fulfilment claim.
+        assert completed["outcome"]["verified"] is False
+        assert completed["truth"]["internal_service_state_is_external_execution"] is False
 
