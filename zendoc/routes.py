@@ -37,6 +37,12 @@ from .provider_network import (
     provider_network_metrics,
     update_provider_prospect,
 )
+from .provider_invitation import (
+    accept_provider_invitation,
+    create_provider_invitation,
+    list_provider_invitations,
+    resolve_provider_invitation,
+)
 from .provider_onboarding import (
     EVIDENCE_TYPES,
     list_provider_evidence,
@@ -1811,6 +1817,100 @@ def admin():
         providers=providers,
         audits=audits,
         provider_evidence=provider_evidence,
+        provider_invitations=list_provider_invitations(),
+    )
+
+
+@bp.post("/admin/provider-invitations")
+@owner_required
+def create_provider_invitation_web():
+    try:
+        token, invitation = create_provider_invitation(
+            g.user,
+            email=request.form.get("email"),
+            role=request.form.get("role"),
+            invited_name=request.form.get("name"),
+        )
+        base_url = str(current_app.config.get("PUBLIC_BASE_URL") or "").strip().rstrip("/") or request.url_root.rstrip("/")
+        link = f"{base_url}{url_for('main.accept_provider_invitation_web')}?token={token}"
+        delivery = email_delivery_status()
+        if not delivery.get("transactional_email"):
+            flash(
+                "Invitation created, but transactional email is not configured. "
+                "Do not treat the provider as onboarded until the invitation is delivered and accepted.",
+                "warning",
+            )
+        else:
+            try:
+                send_transactional_email(
+                    invitation["email"],
+                    "You are invited to join ZENDOC as a provider",
+                    (
+                        "The ZENDOC owner invited this email to create a provider account.\n\n"
+                        f"Role: {invitation['role']}\n"
+                        f"Accept the invitation: {link}\n\n"
+                        "The invitation expires in 72 hours. Accepting the invitation verifies control "
+                        "of this email only; professional/provider verification remains a separate ZENDOC review."
+                    ),
+                )
+                flash("Provider invitation sent.", "success")
+            except Exception:
+                current_app.logger.exception(
+                    "Provider invitation delivery failed for invitation_id=%s",
+                    invitation["id"],
+                )
+                flash(
+                    "Invitation was created but email delivery failed. Retry after fixing SMTP.",
+                    "warning",
+                )
+        audit("create", "provider_invitation", str(invitation["id"]))
+        get_db().commit()
+    except ValueError as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("main.admin"))
+
+
+@bp.route("/provider-invitation/accept", methods=("GET", "POST"))
+def accept_provider_invitation_web():
+    token = str(request.values.get("token") or "").strip()
+    try:
+        invitation = resolve_provider_invitation(token)
+    except PermissionError as exc:
+        return render_template(
+            "provider_invitation_accept.html",
+            invitation=None,
+            token="",
+            error=str(exc),
+        ), 400
+
+    if request.method == "POST":
+        try:
+            result = accept_provider_invitation(
+                token,
+                name=request.form.get("name"),
+                password=request.form.get("password"),
+                accept_privacy=bool(request.form.get("accept_privacy")),
+                accept_terms=bool(request.form.get("accept_terms")),
+            )
+        except (PermissionError, ValueError) as exc:
+            return render_template(
+                "provider_invitation_accept.html",
+                invitation=invitation,
+                token=token,
+                error=str(exc),
+            ), 400
+        flash(
+            "Provider account created. Sign in and complete your provider profile and verification evidence. "
+            "The account is not a verified provider yet.",
+            "success",
+        )
+        return redirect(url_for("main.login", role=result["user"]["role"]))
+
+    return render_template(
+        "provider_invitation_accept.html",
+        invitation=invitation,
+        token=token,
+        error=None,
     )
 
 
