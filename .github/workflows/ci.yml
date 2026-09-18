@@ -14,6 +14,7 @@ on:
 
 permissions:
   contents: read
+  statuses: write
 
 concurrency:
   group: zendoc-ci-${{ github.workflow }}-${{ github.ref }}
@@ -191,6 +192,7 @@ jobs:
     if: always()
     steps:
       - name: Enforce all blocking jobs
+        id: enforce
         env:
           CRITICAL: ${{ needs.critical-safety-security.result }}
           SQLITE: ${{ needs.full-sqlite-tests.result }}
@@ -205,6 +207,22 @@ jobs:
           test "$SQLITE" = "success"
           test "$POSTGRES" = "success"
           test "$SECURITY" = "success"
+      - name: Publish exact-head Production Gate status
+        if: always()
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const passed = '${{ steps.enforce.outcome }}' === 'success';
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state: passed ? 'success' : 'failure',
+              context: 'ZENDOC Production Gate',
+              description: passed
+                ? 'All blocking ZENDOC Production Gate jobs passed'
+                : 'One or more blocking ZENDOC Production Gate jobs failed'
+            });
 
   deployment-verification:
     name: Deployment Health Verification
