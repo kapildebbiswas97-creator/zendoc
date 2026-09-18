@@ -61,15 +61,19 @@
             <a href="{{ url_for('family.family_page') }}" {% if endpoint in ['family.family_page','family.parent_care_page'] %}aria-current="page"{% endif %}>Family</a>
             <a href="{{ url_for('fitness.overview') }}" {% if endpoint.startswith('fitness.') or endpoint == 'milestone7.pose_coach_page' %}aria-current="page"{% endif %}>Fitness</a>
           {% elif current_user.role in ['doctor','hospital'] %}
-            <a href="{{ url_for('main.appointments') }}" {% if endpoint == 'main.appointments' %}aria-current="page"{% endif %}>Appointments</a>
-            <a href="{{ url_for('milestone7.doctor_availability_page') }}" {% if endpoint == 'milestone7.doctor_availability_page' %}aria-current="page"{% endif %}>Schedule</a>
-            <a href="{{ url_for('milestone7.messages_page') }}" {% if endpoint == 'milestone7.messages_page' %}aria-current="page"{% endif %}>Messages</a>
-            <a href="{{ url_for('main.records') }}" {% if endpoint == 'main.records' %}aria-current="page"{% endif %}>Shared Records</a>
-            <a href="{{ url_for('main.provider_profile') }}" {% if endpoint == 'main.provider_profile' %}aria-current="page"{% endif %}>Provider Profile</a>
+            {% if provider_operational_access %}
+              <a href="{{ url_for('main.appointments') }}" {% if endpoint == 'main.appointments' %}aria-current="page"{% endif %}>Appointments</a>
+              <a href="{{ url_for('milestone7.doctor_availability_page') }}" {% if endpoint == 'milestone7.doctor_availability_page' %}aria-current="page"{% endif %}>Availability</a>
+              <a href="{{ url_for('milestone7.messages_page') }}" {% if endpoint == 'milestone7.messages_page' %}aria-current="page"{% endif %}>Messages</a>
+              <a href="{{ url_for('main.records') }}" {% if endpoint == 'main.records' %}aria-current="page"{% endif %}>Shared Records</a>
+            {% endif %}
+            <a href="{{ url_for('main.provider_profile') }}" {% if endpoint == 'main.provider_profile' %}aria-current="page"{% endif %}>{{ 'Provider Profile' if provider_operational_access else 'Complete Verification' }}</a>
           {% elif current_user.role == 'pharmacy' %}
-            <a href="{{ url_for('ecosystem.pharmacy_page') }}" {% if endpoint == 'ecosystem.pharmacy_page' %}aria-current="page"{% endif %}>Pharmacy</a>
-            <a href="{{ url_for('milestone7.messages_page') }}" {% if endpoint == 'milestone7.messages_page' %}aria-current="page"{% endif %}>Messages</a>
-            <a href="{{ url_for('main.provider_profile') }}" {% if endpoint == 'main.provider_profile' %}aria-current="page"{% endif %}>Provider Profile</a>
+            {% if provider_operational_access %}
+              <a href="{{ url_for('ecosystem.pharmacy_page') }}" {% if endpoint == 'ecosystem.pharmacy_page' %}aria-current="page"{% endif %}>Pharmacy</a>
+              <a href="{{ url_for('milestone7.messages_page') }}" {% if endpoint == 'milestone7.messages_page' %}aria-current="page"{% endif %}>Messages</a>
+            {% endif %}
+            <a href="{{ url_for('main.provider_profile') }}" {% if endpoint == 'main.provider_profile' %}aria-current="page"{% endif %}>{{ 'Provider Profile' if provider_operational_access else 'Complete Verification' }}</a>
           {% elif current_user.role == 'admin' %}
             <a href="{{ url_for('main.admin') }}" {% if endpoint == 'main.admin' %}aria-current="page"{% endif %}>Admin</a>
             <a href="{{ url_for('milestone7.admin_agent_command_center') }}" {% if endpoint == 'milestone7.admin_agent_command_center' %}aria-current="page"{% endif %}>Agent Center</a>
@@ -84,11 +88,11 @@
           <details class="nav-menu nav-menu-more">
             <summary>More</summary>
             <div class="nav-menu-panel nav-menu-panel-right">
-              <a href="{{ url_for('ecosystem.search_page') }}">Universal search</a>
+              {% if current_user.role not in ['doctor','hospital','pharmacy'] or provider_operational_access %}<a href="{{ url_for('ecosystem.search_page') }}">Universal search</a>{% endif %}
               <a href="{{ url_for('main.notifications') }}">Notifications</a>
-              {% if current_user.role in ['patient','doctor','hospital','admin'] %}<a href="{{ url_for('operational_fulfilment_ui.fulfilment_console') }}">Care tracker</a>{% endif %}
-              <a href="{{ url_for('milestone7.telehealth_page') }}">Telehealth <span class="menu-status">Beta</span></a>
-              <a href="{{ url_for('ecosystem.marketplace_page') }}">All services</a>
+              {% if current_user.role in ['patient','admin'] or (current_user.role in ['doctor','hospital'] and provider_operational_access) %}<a href="{{ url_for('operational_fulfilment_ui.fulfilment_console') }}">Care tracker</a>{% endif %}
+              {% if current_user.role not in ['doctor','hospital','pharmacy'] or provider_operational_access %}<a href="{{ url_for('milestone7.telehealth_page') }}">Telehealth <span class="menu-status">Beta</span></a>{% endif %}
+              {% if current_user.role not in ['doctor','hospital','pharmacy'] or provider_operational_access %}<a href="{{ url_for('ecosystem.marketplace_page') }}">All services</a>{% endif %}
               {% if current_user.role == 'patient' %}
                 <a href="{{ url_for('care_os.care_os_home') }}">Care OS</a>
                 <a href="{{ url_for('specialist_agents.agent_os_page') }}">Agent OS</a>
@@ -105,7 +109,7 @@
                 <a href="{{ url_for('ecosystem.iot_hub_page') }}">Connected devices</a>
                 <a href="{{ url_for('milestone7.videos_page') }}">Health videos</a>
               {% endif %}
-              {% if current_user.role in ['admin','doctor','hospital','pharmacy'] %}<a href="{{ url_for('milestone7.operations_page') }}">Staff operations</a>{% endif %}
+              {% if current_user.role == 'admin' or (current_user.role in ['doctor','hospital','pharmacy'] and provider_operational_access) %}<a href="{{ url_for('milestone7.operations_page') }}">Staff operations</a>{% endif %}
               {% if current_user.role == 'admin' %}
                 <a href="{{ url_for('main.founder_readiness_page') }}">Founder readiness</a>
                 <a href="{{ url_for('edgecare.edgecare_admin_page') }}">AI runtime &amp; care-chain readiness</a>
