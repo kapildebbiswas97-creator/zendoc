@@ -110,7 +110,7 @@ def _delete_owned_files(user_id: int) -> int:
         return 0
     storage = get_record_storage()
     status = storage.status()
-    if status.get("status") != "working":
+    if status.get("status") == "integration_required":
         raise RuntimeError(
             "Account deletion cannot complete while the configured medical-record storage provider is unavailable."
         )
