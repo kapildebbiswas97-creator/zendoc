@@ -135,6 +135,7 @@ def software_completion_readiness() -> dict:
         "tests/test_policy_acceptance_v1.py",
         "tests/test_public_registration_roles_v1.py",
         "tests/test_provider_invitation_v1.py",
+        "tests/test_software_completion_gate_v1.py",
         "tests/test_api_token_lifecycle_v1.py",
         "tests/test_auth_rate_limit_v1.py",
         "tests/test_telehealth_truth_v1.py",
