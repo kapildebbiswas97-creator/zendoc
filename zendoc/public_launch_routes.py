@@ -166,11 +166,23 @@ def web_manifest():
         "categories": ["medical", "health", "lifestyle"],
         "icons": [
             {
-                "src": url_for("static", filename="favicon.svg"),
-                "sizes": "any",
-                "type": "image/svg+xml",
-                "purpose": "any maskable",
-            }
+                "src": url_for("static", filename="icons/zendoc-192.png"),
+                "sizes": "192x192",
+                "type": "image/png",
+                "purpose": "any",
+            },
+            {
+                "src": url_for("static", filename="icons/zendoc-512.png"),
+                "sizes": "512x512",
+                "type": "image/png",
+                "purpose": "any",
+            },
+            {
+                "src": url_for("static", filename="icons/zendoc-maskable-512.png"),
+                "sizes": "512x512",
+                "type": "image/png",
+                "purpose": "maskable",
+            },
         ],
     }
     response = jsonify(payload)
