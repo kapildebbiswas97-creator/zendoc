@@ -154,7 +154,7 @@ def _delete_directly_attributed_rows(user_id: int):
 
 
 def delete_account(user: Any, *, password: str | None = None, token_authorized: bool = False) -> dict:
-    user_id = int(_value(user, "id", 0) or _value(user, "user_id", 0) or 0)
+    user_id = int(_value(user, "user_id", 0) or _value(user, "id", 0) or 0)
     if not user_id:
         raise PermissionError("Authentication is required.")
     persisted = _load_user(user_id)
