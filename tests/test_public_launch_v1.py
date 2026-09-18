@@ -5,6 +5,7 @@ from werkzeug.datastructures import FileStorage
 from tests.test_milestone1 import csrf, login_web, make_client, register_web
 from zendoc.db import get_db, now_iso
 from zendoc.record_storage import S3CompatibleRecordStorage
+from zendoc.launch_readiness import public_launch_readiness
 
 
 def test_public_launch_legal_pwa_and_deletion_routes_exist(tmp_path):
@@ -249,3 +250,23 @@ def test_s3_compatible_storage_save_read_and_delete(tmp_path, monkeypatch):
         assert storage.read_bytes(saved.storage_key, max_bytes=100) == b"hello-health-record"
         storage.delete(saved.storage_key)
         assert ("zendoc-test", saved.storage_key) in fake.deleted
+
+
+def test_public_launch_gate_reports_missing_real_world_configuration(tmp_path):
+    app, _client = make_client(tmp_path)
+    with app.app_context():
+        app.config.update(
+            ZENDOC_ENV="production",
+            PUBLIC_BASE_URL="",
+            EMAIL_PROVIDER="none",
+            STORAGE_PROVIDER="local",
+            STORAGE_VERIFIED=False,
+            PERSISTENCE_VERIFIED=True,
+        )
+        report = public_launch_readiness()
+        assert report["status"] == "PUBLIC_LAUNCH_BLOCKED"
+        keys = {item["key"] for item in report["blockers"]}
+        assert "public_base_url" in keys
+        assert "transactional_email" in keys
+        assert "durable_record_storage" in keys
+        assert "/privacy" not in (report.get("missing_routes") or [])
