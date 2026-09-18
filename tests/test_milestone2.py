@@ -146,4 +146,6 @@ def test_existing_ai_doctor_endpoint_compatibility(tmp_path):
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 200
-    assert response.json["summary"] == "Possible respiratory infection"
+    assert "Fever together with cough can have many causes" in response.json["summary"]
+    assert response.json["scope"] == "non_diagnostic_symptom_guidance"
+    assert response.json["diagnosis"] is None
