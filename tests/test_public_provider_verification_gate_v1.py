@@ -6,7 +6,7 @@ from zendoc.email_verification import mark_email_verified
 from zendoc.human_operations import create_staff_task
 from zendoc.partner_handoffs import list_provider_booking_handoffs
 from zendoc.pharmacy_service import list_medicine_orders
-from zendoc.provider_service import create_schedule, upsert_provider_profile
+from zendoc.provider_service import available_slots, create_schedule, get_provider_profile_for_user, upsert_provider_profile
 from zendoc.telehealth import set_doctor_availability
 
 
@@ -56,16 +56,22 @@ def test_pending_provider_cannot_use_public_operational_capabilities(tmp_path):
                 {"status": "available", "accepts_chat": True},
             )
 
-        with pytest.raises(PermissionError, match="Provider verification is required"):
-            create_schedule(
-                doctor,
-                {
-                    "weekday": 1,
-                    "start_time": "09:00",
-                    "end_time": "12:00",
-                    "slot_minutes": 30,
-                },
-            )
+        create_schedule(
+            doctor,
+            {
+                "weekday": 1,
+                "start_time": "09:00",
+                "end_time": "12:00",
+                "slot_minutes": 30,
+            },
+        )
+        profile = get_provider_profile_for_user(doctor["id"])
+        assert profile is not None
+        assert get_db().execute(
+            "SELECT id FROM provider_schedules WHERE provider_profile_id=?",
+            (profile["id"],),
+        ).fetchone() is not None
+        assert available_slots(profile["id"], "2026-12-15") == []
 
         with pytest.raises(PermissionError, match="Provider verification is required"):
             create_staff_task(
