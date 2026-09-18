@@ -205,6 +205,7 @@ def check_rate_limit():
             "/reset-password",
             "/resend-verification",
             "/verify-email",
+            "/provider-invitation/accept",
             "/account-deletion",
             "/account-deletion/confirm",
         }
