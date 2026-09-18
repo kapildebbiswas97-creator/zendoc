@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Care Continuity — ZENDOC{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Patient-controlled continuity</p>
+    <h1>Care Continuity</h1>
+    <p class="section-copy">Prepare a clinician handoff, review CareLoop follow-through, and see what ZENDOC can actually prove about past AI interactions.</p>
+  </div>
+</section>
+{% include "components/_health_memory_nav.html" %}
+
+<section class="grid two spaced-panel">
+  <form class="panel" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <p class="eyebrow">Clinician handoff packet</p>
+    <h2>Prepare what matters for the next visit</h2>
+    <p class="form-note">Uses only ZENDOC-stored information plus what you type. It is never sent automatically.</p>
+    <label>Reason for visit
+      <textarea name="reason_for_visit" rows="4" maxlength="1000">{{ handoff.reason_for_visit }}</textarea>
+    </label>
+    <label>Questions for the clinician
+      <textarea name="questions" rows="4" maxlength="2400" placeholder="One question per line"></textarea>
+    </label>
+    <button type="submit">Prepare packet</button>
+    <a class="secondary-action" href="{{ url_for('care_continuity.api_clinician_handoff') }}">Structured JSON</a>
+  </form>
+
+  <div class="panel">
+    <p class="eyebrow">Completeness</p>
+    <h2>What the packet contains</h2>
+    <div class="summary-row"><strong>Appointments</strong><span>{{ handoff.recent_appointments|length }}</span></div>
+    <div class="summary-row"><strong>Reports</strong><span>{{ handoff.recent_reports|length }}</span></div>
+    <div class="summary-row"><strong>Measurements</strong><span>{{ handoff.recent_measurements|length }}</span></div>
+    <div class="summary-row"><strong>Open care actions</strong><span>{{ handoff.open_care_actions|length }}</span></div>
+    {% if handoff.completeness_notes %}
+      <div class="trust-note"><strong>Missing/not recorded</strong><br>{{ handoff.completeness_notes|join(' · ') }}</div>
+    {% endif %}
+  </div>
+</section>
+
+{% if prepared %}
+<section class="panel spaced-panel">
+  <div class="panel-head">
+    <div><p class="eyebrow">Prepared for human review</p><h2>{{ handoff.patient.name }} — clinician handoff</h2></div>
+    <span class="status-badge active">Patient controlled</span>
+  </div>
+  <p><strong>Reason:</strong> {{ handoff.reason_for_visit or 'Not entered' }}</p>
+  <p><strong>Allergies:</strong> {{ handoff.important_health_information.allergies|join(', ') if handoff.important_health_information.allergies else 'Not recorded' }}</p>
+  <p><strong>Current medicines:</strong> {{ handoff.important_health_information.current_medications|join(', ') if handoff.important_health_information.current_medications else 'Not recorded' }}</p>
+  {% if handoff.questions_for_clinician %}
+    <h3>Questions to ask</h3>
+    <ol>{% for q in handoff.questions_for_clinician %}<li>{{ q }}</li>{% endfor %}</ol>
+  {% endif %}
+  <p class="privacy-banner">{{ handoff.sharing.notice }} {{ handoff.safety_notice }}</p>
+</section>
+{% endif %}
+
+<section class="panel spaced-panel">
+  <div class="panel-head"><div><p class="eyebrow">Observe → Understand → Plan → Act → Verify → Learn</p><h2>CareLoop journeys</h2></div></div>
+  {% for card in journey_cards %}
+    <article class="grant-row">
+      <div>
+        <strong>{{ card.journey.state.replace('_',' ').title() }}</strong>
+        <p>{{ card.journey.next_safe_action or 'No next action recorded' }}</p>
+        <span>{{ card.open_actions|length }} open · {{ card.completed_actions|length }} completed · {{ card.outcome_count }} outcomes</span>
+      </div>
+    </article>
+  {% else %}
+    <div class="empty-state"><h3>No CareLoop journey yet</h3><p>Your durable care journeys will appear here as ZENDOC moves from information to tracked care actions.</p></div>
+  {% endfor %}
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head">
+    <div><p class="eyebrow">AI Evidence Passport</p><h2>Recorded provenance, without invented citations</h2></div>
+    <a class="secondary-action" href="{{ url_for('care_continuity.api_ai_evidence_passports') }}">JSON</a>
+  </div>
+  <p class="form-note">Historical source-level evidence is shown as “not recorded” when it was not stored. ZENDOC does not reconstruct or fabricate citations.</p>
+  {% for p in passports %}
+    <article class="grant-row">
+      <div>
+        <strong>{{ (p.intent or p.feature or 'AI interaction').replace('_',' ').title() }}</strong>
+        <p>{{ p.created_at }} · {{ p.generation.provider }} · {{ p.generation.model_version }}</p>
+        <span class="status-badge {{ 'inactive' if p.emergency else 'active' }}">{{ p.risk_level }}</span>
+        <p>Evidence: {{ p.source_level_evidence.status.replace('_',' ') }} · Confidence: {{ p.uncertainty.status.replace('_',' ') }}</p>
+      </div>
+    </article>
+  {% else %}
+    <div class="empty-state"><h3>No AI interactions recorded yet</h3><p>Recorded provenance will appear here after you use ZENDOC AI.</p></div>
+  {% endfor %}
+</section>
+{% endblock %}
