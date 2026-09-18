@@ -138,6 +138,38 @@ def resolve_email_verification_token(token: str):
     return row
 
 
+def mark_email_verified(user_id: int, email: str) -> dict:
+    """Mark ownership of an email as verified after another trusted email-link flow.
+
+    This is used by provider invitation acceptance. It proves only control of
+    the invited email address; it does not verify provider credentials.
+    """
+    ensure_email_verification_schema()
+    normalized = normalize_email(email)
+    if not normalized:
+        raise ValueError("A valid email is required.")
+    now = now_iso()
+    db = get_db()
+    db.execute(
+        """
+        INSERT INTO user_email_verifications
+        (user_id,verified_email,verified_at,created_at,updated_at)
+        VALUES (?,?,?,?,?)
+        ON CONFLICT(user_id) DO UPDATE SET
+            verified_email=excluded.verified_email,
+            verified_at=excluded.verified_at,
+            updated_at=excluded.updated_at
+        """,
+        (int(user_id), normalized, now, now, now),
+    )
+    return {
+        "verified": True,
+        "user_id": int(user_id),
+        "email": normalized,
+        "verified_at": now,
+    }
+
+
 def verify_email_token(token: str) -> dict:
     row = resolve_email_verification_token(token)
     ensure_email_verification_schema()
