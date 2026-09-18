@@ -43,6 +43,35 @@ def get_provider_profile_for_user(user_id):
     return get_db().execute("SELECT * FROM provider_profiles WHERE user_id=?", (user_id,)).fetchone()
 
 
+def require_verified_provider(user, *, allowed_roles=None):
+    """Return the provider profile only when the account is operationally verified."""
+    if not user:
+        raise PermissionError("Provider authentication is required.")
+    role = str(user["role"])
+    allowed = set(allowed_roles or PROVIDER_ROLES)
+    if role not in allowed:
+        raise PermissionError("This account is not an allowed provider role for this operation.")
+    profile = get_provider_profile_for_user(user["id"])
+    if not profile:
+        raise PermissionError("Complete the provider profile before using provider operations.")
+    if str(profile["verification_status"]) != "verified":
+        raise PermissionError(
+            "Provider verification is required before using operational provider capabilities."
+        )
+    return profile
+
+
+def require_verified_provider_id(user_id, *, allowed_roles=None):
+    row = get_db().execute(
+        "SELECT * FROM users WHERE id=? AND active=1",
+        (int(user_id),),
+    ).fetchone()
+    if not row:
+        raise PermissionError("Provider account is not active.")
+    return require_verified_provider(row, allowed_roles=allowed_roles)
+
+
+
 def get_public_provider_profile(profile_id):
     """Return one active, internally verified provider for patient discovery."""
     row = get_db().execute(
@@ -181,9 +210,7 @@ def _normalize_schedule_time(value):
 
 
 def create_schedule(user, data):
-    profile = get_provider_profile_for_user(user["id"])
-    if not profile:
-        raise ValueError("Create a provider profile before adding schedule.")
+    profile = require_verified_provider(user)
     try:
         weekday = int(data.get("weekday"))
     except (TypeError, ValueError) as exc:
