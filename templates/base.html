@@ -204,7 +204,9 @@
 
       <div class="footer-col">
         <strong>Care</strong>
-        <a href="{{ url_for('main.appointments') }}">Appointments</a>
+        {% if not current_user or current_user.role == 'patient' or provider_operational_access %}
+          <a href="{{ url_for('main.appointments') }}">Appointments</a>
+        {% endif %}
         <a href="{{ url_for('family.family_page') }}">Family Care</a>
         <a href="{{ url_for('fitness.overview') }}">Fitness &amp; Wellness</a>
         <a href="{{ url_for('main.ai_center') }}">Emergency guidance</a>
