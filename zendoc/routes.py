@@ -48,6 +48,7 @@ from .provider_onboarding import (
     list_provider_evidence,
     provider_onboarding_status,
     review_provider_evidence,
+    set_provider_verification_status,
     submit_provider_evidence,
 )
 from .provider_service import (
@@ -2035,13 +2036,19 @@ def provider_verification_status(profile_id):
     status = request.form.get("verification_status", "pending")
     if status not in VERIFICATION_STATES:
         abort(400)
-    get_db().execute(
-        "UPDATE provider_profiles SET verification_status=?, updated_at=? WHERE id=?",
-        (status, now_iso(), profile_id),
-    )
-    audit("provider_verification", "provider_profile", f"{profile_id}:{status}")
-    get_db().commit()
-    flash("Provider verification status updated.", "success")
+    try:
+        set_provider_verification_status(
+            g.user,
+            profile_id,
+            status=status,
+            notes=request.form.get("notes"),
+        )
+        audit("provider_verification", "provider_profile", f"{profile_id}:{status}")
+        get_db().commit()
+        flash("Provider verification status updated.", "success")
+    except (LookupError, ValueError, PermissionError) as error:
+        get_db().rollback()
+        flash(str(error), "error")
     return redirect(url_for("main.admin"))
 
 
