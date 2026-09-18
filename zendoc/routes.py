@@ -439,7 +439,9 @@ def home():
 @bp.route("/register/<role>", methods=("GET", "POST"))
 def register(role):
     role = normalize_role(role)
-    if role == "admin":
+    if role == "admin" or (
+        current_app.config.get("PUBLIC_RELEASE_REQUIRED") and role == "government"
+    ):
         abort(403)
     if request.method == "POST":
         if not require_form_fields("name", "email", "password"):
@@ -2360,6 +2362,13 @@ def api_register():
     role = normalize_role(data.get("role", "patient"))
     if role == "admin":
         return jsonify({"error": "Admin registration is disabled"}), 403
+    if current_app.config.get("PUBLIC_RELEASE_REQUIRED") and role == "government":
+        return jsonify({
+            "error": {
+                "code": 403,
+                "message": "Government accounts require controlled provisioning.",
+            }
+        }), 403
     terms_accepted = data.get("accept_terms") is True
     privacy_accepted = data.get("accept_privacy") is True
     if terms_accepted != privacy_accepted or (
