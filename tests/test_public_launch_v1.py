@@ -6,6 +6,7 @@ from tests.test_milestone1 import csrf, login_web, make_client, register_web
 from zendoc.db import get_db, now_iso
 from zendoc.record_storage import S3CompatibleRecordStorage
 from zendoc.launch_readiness import public_launch_readiness
+from zendoc.account_lifecycle import delete_account
 
 
 def test_public_launch_legal_pwa_and_deletion_routes_exist(tmp_path):
@@ -270,3 +271,85 @@ def test_public_launch_gate_reports_missing_real_world_configuration(tmp_path):
         assert "transactional_email" in keys
         assert "durable_record_storage" in keys
         assert "/privacy" not in (report.get("missing_routes") or [])
+
+
+def test_provider_account_deletion_deidentifies_without_cascading_patient_history(tmp_path):
+    app, client = make_client(tmp_path)
+    doctor_email = "delete-provider@example.com"
+    patient_email = "provider-history-patient@example.com"
+    register_web(client, "doctor", doctor_email, "Dr Delete Provider")
+    client.get("/logout")
+    register_web(client, "patient", patient_email, "History Patient")
+
+    with app.app_context():
+        db = get_db()
+        doctor = db.execute("SELECT * FROM users WHERE email_normalized=?", (doctor_email,)).fetchone()
+        patient = db.execute("SELECT * FROM users WHERE email_normalized=?", (patient_email,)).fetchone()
+        stamp = now_iso()
+        profile_id = db.execute(
+            """
+            INSERT INTO provider_profiles
+            (user_id,provider_type,specialty,organization,verification_status,created_at,updated_at)
+            VALUES (?,'doctor','Cardiology','History Clinic','verified',?,?)
+            """,
+            (doctor["id"], stamp, stamp),
+        ).lastrowid
+        appointment_id = db.execute(
+            """
+            INSERT INTO appointments
+            (patient_id,provider_id,provider_profile_id,provider_name,specialty,scheduled_for,reason,status,created_at,updated_at)
+            VALUES (?,?,?,?,?,'2026-12-15T10:00','History preservation','completed',?,?)
+            """,
+            (
+                patient["id"],
+                doctor["id"],
+                profile_id,
+                doctor["name"],
+                "Cardiology",
+                stamp,
+                stamp,
+            ),
+        ).lastrowid
+        record_id = db.execute(
+            """
+            INSERT INTO medical_records
+            (owner_id,uploaded_by,title,category,original_filename,stored_filename,mime_type,file_size,created_at)
+            VALUES (?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                patient["id"],
+                doctor["id"],
+                "Provider uploaded patient record",
+                "other",
+                "history.txt",
+                "patient-history-provider-upload.txt",
+                "text/plain",
+                10,
+                stamp,
+            ),
+        ).lastrowid
+        db.commit()
+
+        result = delete_account(doctor, password="StrongPass123")
+        assert result["status"] == "deleted"
+        assert result["deidentified_operational_anchor_retained"] is True
+
+        tombstone = db.execute("SELECT * FROM users WHERE id=?", (doctor["id"],)).fetchone()
+        assert tombstone is not None
+        assert tombstone["active"] == 0
+        assert tombstone["name"] == "Former ZENDOC provider"
+        assert tombstone["email_normalized"].endswith("@zendoc.invalid")
+        assert tombstone["phone"] is None
+
+        assert db.execute("SELECT id FROM provider_profiles WHERE user_id=?", (doctor["id"],)).fetchone() is None
+
+        appointment = db.execute("SELECT * FROM appointments WHERE id=?", (appointment_id,)).fetchone()
+        assert appointment is not None
+        assert appointment["patient_id"] == patient["id"]
+        assert appointment["provider_id"] is None
+        assert appointment["provider_name"] == "Former ZENDOC provider"
+
+        record = db.execute("SELECT * FROM medical_records WHERE id=?", (record_id,)).fetchone()
+        assert record is not None
+        assert record["owner_id"] == patient["id"]
+        assert record["uploaded_by"] == doctor["id"]
