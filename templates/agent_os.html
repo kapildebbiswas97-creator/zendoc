@@ -85,6 +85,28 @@
   </div>
   {% endif %}
 
+  {% if persisted_care_chain %}
+  <div class="panel subtle-panel" style="margin-top:16px;" aria-label="Persisted canonical care chain">
+    <div class="panel-head">
+      <div><p class="eyebrow">Persisted care-chain evidence</p><h3>Authoritative downstream state</h3></div>
+      <span class="status-badge {{ 'active' if persisted_care_chain.outcome.verified else 'beta' }}">{{ persisted_care_chain.state.replace('_',' ') }}</span>
+    </div>
+    <div class="grid two">
+      <div>
+        <p><strong>Provider state:</strong> {{ persisted_care_chain.provider_confirmation.appointment_status or 'not yet linked' }}</p>
+        <p><strong>Provider confirmed:</strong> {{ 'Yes' if persisted_care_chain.provider_confirmation.provider_confirmed else 'No' }}</p>
+        <p><strong>Verified outcome:</strong> {{ 'Yes' if persisted_care_chain.outcome.verified else 'No' }}</p>
+      </div>
+      <div>
+        <p><strong>Longitudinal memory:</strong> {{ 'Provider-recorded' if persisted_care_chain.longitudinal_memory.provider_recorded else 'Awaiting authoritative outcome' }}</p>
+        <p><strong>Memory provenance:</strong> {{ persisted_care_chain.longitudinal_memory.provenance or 'not recorded yet' }}</p>
+        <p><strong>Care-chain audit snapshots:</strong> {{ persisted_care_chain.audit_snapshot_count }}</p>
+      </div>
+    </div>
+    <p class="form-note">This view is rebuilt from persisted appointment, outcome, Health Memory and audit evidence. Missing evidence stays missing; model text never becomes provider confirmation.</p>
+  </div>
+  {% endif %}
+
   {% if follow_up_journey.state == 'FOLLOW_UP' and current_user.role == 'patient' %}
     <p>Verified provider visit-completion evidence already exists in CareLoop and Health Memory. Mark this follow-up complete only after you have actually completed the non-clinical post-visit step.</p>
     <form method="post" action="{{ url_for('specialist_agents.agent_os_follow_up_complete', journey_id=follow_up_journey.id) }}">
