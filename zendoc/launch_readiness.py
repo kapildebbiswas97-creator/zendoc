@@ -311,6 +311,8 @@ def public_launch_readiness() -> dict:
         "medical_disclaimer": "/medical-disclaimer",
         "account_deletion": "/account-deletion",
         "account_export": "/account/export",
+        "verify_email": "/verify-email",
+        "resend_verification": "/resend-verification",
         "manifest": "/manifest.webmanifest",
         "service_worker": "/sw.js",
         "health": "/healthz",
