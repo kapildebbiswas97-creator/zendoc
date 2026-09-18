@@ -60,7 +60,7 @@ def provider_onboarding_status(profile_id: int) -> dict:
     if missing_fields:
         blockers.append("Complete required public profile fields.")
     if not schedule_count and profile["provider_type"] in {"doctor", "hospital"}:
-        blockers.append("Publish at least one active booking schedule.")
+        blockers.append("Configure at least one active booking schedule for verification review.")
     if not verified_evidence:
         blockers.append("At least one official verification evidence item must be owner-reviewed as verified.")
 
@@ -193,6 +193,57 @@ def review_provider_evidence(
     )
     db.commit()
     return get_provider_evidence(evidence_id)
+
+
+
+def set_provider_verification_status(
+    actor: Any,
+    profile_id: int,
+    *,
+    status: str,
+    notes: str | None = None,
+) -> dict:
+    """Owner-controlled provider status transition with readiness enforcement."""
+    assert_owner(actor)
+    status = str(status or "").strip().lower()
+    if status not in {"pending", "verified", "rejected", "suspended"}:
+        raise ValueError("Unsupported provider verification status.")
+
+    readiness = provider_onboarding_status(profile_id)
+    if status == "verified" and not readiness["verification_ready"]:
+        blockers = "; ".join(readiness["blockers"]) or "Verification readiness is incomplete."
+        raise ValueError(f"Provider cannot be verified yet: {blockers}")
+
+    db = get_db()
+    now = now_iso()
+    updated = db.execute(
+        """
+        UPDATE provider_profiles
+        SET verification_status=?,updated_at=?
+        WHERE id=?
+        """,
+        (status, now, int(profile_id)),
+    )
+    if updated.rowcount != 1:
+        raise LookupError(f"Provider profile #{profile_id} not found.")
+
+    _record_event(
+        int(profile_id),
+        "provider_verification_status",
+        status,
+        str(notes or f"Provider profile marked {status}.")[:1000],
+        actor_id=_user_id(actor),
+        metadata={
+            "verification_ready_at_transition": bool(readiness["verification_ready"]),
+            "verified_evidence_count": int(readiness["verified_evidence_count"]),
+            "active_schedule_count": int(readiness["active_schedule_count"]),
+        },
+    )
+    db.commit()
+    result = provider_onboarding_status(profile_id)
+    result["status_changed_to"] = status
+    return result
+
 
 
 def list_provider_onboarding_events(profile_id: int, limit: int = 50) -> list[dict]:
