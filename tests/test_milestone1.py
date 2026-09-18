@@ -48,14 +48,14 @@ def login_web(client, role, email, password="StrongPass123"):
     )
 
 
-def api_token(client, email):
+def api_token(client, email, role="patient"):
     client.post(
         "/api/v1/auth/register",
-        json={"name": email, "email": email, "password": "StrongPass123", "role": "patient"},
+        json={"name": email, "email": email, "password": "StrongPass123", "role": role},
     )
     response = client.post(
         "/api/v1/auth/login",
-        json={"email": email, "password": "StrongPass123", "role": "patient"},
+        json={"email": email, "password": "StrongPass123", "role": role},
     )
     return response.json["token"]
 
