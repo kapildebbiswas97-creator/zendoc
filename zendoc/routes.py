@@ -328,10 +328,14 @@ def log_ai_interaction(user_id, feature, input_text, result, latency_ms=None, co
 def audit(action, entity_type, entity_id=None, actor=None):
     audit_actor = actor or g.get("user")
     actor_id = audit_actor["id"] if audit_actor else None
-    get_db().execute(
+    cursor = get_db().execute(
         "INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, created_at) VALUES (?, ?, ?, ?, ?)",
         (actor_id, action, entity_type, entity_id, now_iso()),
     )
+    # Existing callers may ignore this value. Returning the row ID lets bounded
+    # workflows link later evidence to the exact audit event without storing
+    # raw user content in operational metadata.
+    return int(cursor.lastrowid)
 
 
 def stats_for(user):
