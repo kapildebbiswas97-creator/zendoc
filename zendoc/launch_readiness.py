@@ -59,13 +59,18 @@ def first50_launch_readiness() -> dict:
     else:
         passed.append({"key": "backup", "message": "Local backup readiness is available."})
 
-    if current_app.config.get("PASSWORD_RECOVERY_MODE") != "integrated":
+    recovery_email = email_delivery_status()
+    if not recovery_email.get("transactional_email"):
         warnings.append({
             "key": "password_recovery",
-            "message": "Password-reset delivery is not integrated. First users may require controlled owner-assisted recovery.",
+            "message": "Transactional email is not configured, so password recovery remains integration-required.",
+            "detail": recovery_email,
         })
     else:
-        passed.append({"key": "password_recovery", "message": "Password recovery delivery is integrated."})
+        passed.append({
+            "key": "password_recovery",
+            "message": "Transactional email is configured for password recovery.",
+        })
 
     demo_user_ids = synthetic_demo_user_ids(db)
     demo_profile_ids = synthetic_demo_provider_profile_ids(db)
@@ -200,6 +205,20 @@ def public_launch_readiness() -> dict:
         })
     else:
         passed.append({"key": "production_environment", "message": "Production mode is active."})
+
+    if not bool(current_app.config.get("PUBLIC_RELEASE_REQUIRED")):
+        blockers.append({
+            "key": "public_startup_guard",
+            "message": (
+                "ZENDOC_PUBLIC_RELEASE_REQUIRED must be true for a public launch so startup fails closed "
+                "when required production controls are missing."
+            ),
+        })
+    else:
+        passed.append({
+            "key": "public_startup_guard",
+            "message": "Strict public-release startup guard is enabled.",
+        })
 
     if not public_base_url:
         blockers.append({
