@@ -308,7 +308,7 @@ def test_care_chain_uses_successful_local_slm_only_as_non_executable_advisory(tm
         call = router.calls[0]
         assert call["kwargs"]["allow_cloud"] is False
         assert call["kwargs"]["privacy_class"] == "HEALTH_SENSITIVE"
-        assert call["kwargs"]["risk_class"] == "READ_ONLY"
+        assert call["kwargs"]["risk_class"] == "read_only"
         assert "Never output a diagnosis" in call["kwargs"]["system_prompt"]
         assert prepared["truth"]["model_output_executes_tools"] is False
 
