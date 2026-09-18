@@ -196,6 +196,8 @@ def list_partner_booking_handoffs(identity: dict, *, limit: int = 100) -> list[d
 
 def list_provider_booking_handoffs(user: Any, *, limit: int = 100) -> list[dict]:
     profile = require_verified_provider(user)
+    if not profile:
+        return []
     limit = max(1, min(int(limit or 100), 500))
     rows = get_db().execute(
         """
