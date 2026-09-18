@@ -50,6 +50,11 @@ def set_doctor_availability(actor, data):
     status = str(data.get("status") or "offline").strip().lower()
     if status not in DOCTOR_STATUSES:
         raise ValueError("Invalid doctor availability status.")
+    provider_status = get_telehealth_provider().status()
+    if data.get("accepts_voice") and not provider_status.get("supports_voice"):
+        raise ValueError("Voice telehealth is not available on this deployment.")
+    if data.get("accepts_video") and not provider_status.get("supports_video"):
+        raise ValueError("Video telehealth is not available on this deployment.")
     patient_message_policy = str(data.get("patient_message_policy") or "accepted_consultation").strip().lower()
     if patient_message_policy not in PATIENT_MESSAGE_POLICIES:
         raise ValueError("Invalid patient message policy.")
@@ -128,6 +133,12 @@ def request_consultation(actor, data):
     consultation_type = str(data.get("consultation_type") or "chat").strip().lower()
     if consultation_type not in CONSULTATION_TYPES:
         raise ValueError("Invalid consultation type.")
+    provider_status = get_telehealth_provider().status()
+    capability_key = f"supports_{consultation_type}"
+    if not provider_status.get(capability_key):
+        raise ValueError(
+            f"{consultation_type.title()} telehealth is not available on this deployment."
+        )
     reason = str(data.get("reason") or "").strip()
     if not reason:
         raise ValueError("Consultation reason is required.")
