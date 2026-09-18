@@ -106,44 +106,72 @@ def create_home_health_request(user, data):
     )
     db.commit()
     result = get_home_health_request(user, cursor.lastrowid)
-    result["provider_confirmed"] = False
-    result["fulfilment_status"] = "request_recorded_unconfirmed"
-    result["truth_notice"] = (
-        "This ZENDOC request record does not confirm a home-care provider, booking, price or external fulfilment."
-    )
+    # Fresh intake requests have no provider assignment yet. get_home_health_request
+    # derives later assignment/acceptance truth from the connected-care tables.
     return result
+
+
+def _serialize_request(row):
+    item = dict(row)
+    assigned = bool(item.get("provider_id"))
+    verified = (
+        assigned
+        and bool(item.get("provider_active"))
+        and str(item.get("provider_verification_status") or "").strip().lower() == "verified"
+    )
+    status = str(item.get("status") or "requested").strip().lower()
+    confirmed = verified and status in {"accepted", "in_progress", "completed"}
+    item["provider_assigned"] = verified
+    item["provider_confirmed"] = confirmed
+    if confirmed:
+        item["fulfilment_status"] = f"provider_{status}"
+    elif verified:
+        item["fulfilment_status"] = "verified_provider_assigned_awaiting_acceptance"
+    else:
+        item["fulfilment_status"] = "request_recorded_unconfirmed"
+    item["truth_notice"] = (
+        "Provider confirmation is true only after an active, verified assigned ZENDOC provider "
+        "records acceptance or a later provider-controlled state."
+    )
+    return item
 
 
 def list_home_health_requests(user):
     """List home healthcare requests for user or dependent."""
     uid = _user_id(user)
     rows = get_db().execute(
-        """SELECT hhr.*, u.name patient_name
+        """SELECT hhr.*, u.name patient_name,
+                  a.provider_id,a.provider_profile_id,
+                  provider.name provider_name,provider.active provider_active,
+                  pp.verification_status provider_verification_status
            FROM home_health_requests hhr
            JOIN users u ON u.id=hhr.patient_id
+           LEFT JOIN home_health_assignments a ON a.request_id=hhr.id
+           LEFT JOIN users provider ON provider.id=a.provider_id
+           LEFT JOIN provider_profiles pp ON pp.id=a.provider_profile_id AND pp.user_id=a.provider_id
            WHERE hhr.requested_by=? OR hhr.patient_id=?
            ORDER BY hhr.created_at DESC""",
         (uid, uid),
     ).fetchall()
-    result = []
-    for row in rows:
-        item = dict(row)
-        item["provider_confirmed"] = False
-        item["fulfilment_status"] = "request_recorded_unconfirmed"
-        result.append(item)
-    return result
+    return [_serialize_request(row) for row in rows]
 
 
 def get_home_health_request(user, request_id):
     """Get single home health request."""
     uid = _user_id(user)
     row = get_db().execute(
-        """SELECT hhr.*, u.name patient_name
+        """SELECT hhr.*, u.name patient_name,
+                  a.provider_id,a.provider_profile_id,
+                  provider.name provider_name,provider.active provider_active,
+                  pp.verification_status provider_verification_status
            FROM home_health_requests hhr
            JOIN users u ON u.id=hhr.patient_id
+           LEFT JOIN home_health_assignments a ON a.request_id=hhr.id
+           LEFT JOIN users provider ON provider.id=a.provider_id
+           LEFT JOIN provider_profiles pp ON pp.id=a.provider_profile_id AND pp.user_id=a.provider_id
            WHERE hhr.id=? AND (hhr.requested_by=? OR hhr.patient_id=?)""",
         (request_id, uid, uid),
     ).fetchone()
     if not row:
         raise LookupError("Home health request not found.")
-    return dict(row)
+    return _serialize_request(row)
