@@ -1,6 +1,7 @@
 from io import BytesIO
 
 from zendoc import create_app
+from zendoc.db import get_db
 from zendoc.edgecare_asr import ASRResult
 from tests.test_milestone1 import csrf, register_web
 
@@ -102,8 +103,20 @@ def test_edgecare_asr_route_returns_local_transcript_without_auto_action(tmp_pat
     assert response.json["result"]["success"] is True
     assert response.json["result"]["provider"] == "local_openai_compatible_asr"
     assert response.json["result"]["text"] == "Help me find a cardiologist near Kolkata."
+    assert response.json["result"]["audit_log_id"]
+    assert response.json["result"]["audit_contains_transcript"] is False
+    assert response.json["result"]["audio_persisted"] is False
     assert len(fake.calls) == 1
     assert fake.calls[0]["audio"] == b"fake-audio"
+
+    with _app.app_context():
+        audit_row = get_db().execute(
+            "SELECT action,entity_type,entity_id FROM audit_logs WHERE id=?",
+            (response.json["result"]["audit_log_id"],),
+        ).fetchone()
+        assert audit_row["action"] == "edgecare_asr_transcribe"
+        assert audit_row["entity_type"] == "local_asr"
+        assert "Help me find" not in str(audit_row["entity_id"] or "")
 
 
 def test_edgecare_asr_route_maps_runtime_failure_to_service_unavailable(tmp_path, monkeypatch):
