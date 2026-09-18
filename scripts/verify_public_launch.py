@@ -17,6 +17,8 @@ REQUIRED_PATHS = {
     "/terms": "html",
     "/medical-disclaimer": "html",
     "/account-deletion": "html",
+    "/register/patient": "html",
+    "/resend-verification": "html",
     "/manifest.webmanifest": "json",
     "/sw.js": "javascript",
 }
@@ -78,6 +80,43 @@ def main() -> int:
                 if 'url.pathname.startsWith("/api/")' not in text:
                     ok = False
                     detail["error"] = "service worker does not expose the API-cache exclusion contract"
+            if path == "/register/patient" and ok:
+                text = body.decode("utf-8", "replace")
+                required_markers = (
+                    'name="accept_privacy"',
+                    'name="accept_terms"',
+                    '/privacy',
+                    '/terms',
+                )
+                missing = [marker for marker in required_markers if marker not in text]
+                if missing:
+                    ok = False
+                    detail["error"] = f"public registration is missing policy acceptance markers: {missing}"
+                if 'name="accept_privacy" value="1" required' not in text or 'name="accept_terms" value="1" required' not in text:
+                    ok = False
+                    detail["error"] = "public registration does not require both Privacy and Terms acceptance"
+            if path == "/resend-verification" and ok:
+                text = body.decode("utf-8", "replace")
+                if "never confirms whether an account exists" not in text:
+                    ok = False
+                    detail["error"] = "email-verification resend page is missing the non-enumeration notice"
+            if path == "/privacy" and ok:
+                required_headers = {
+                    "X-Content-Type-Options": "nosniff",
+                    "X-Frame-Options": "DENY",
+                    "Referrer-Policy": "strict-origin-when-cross-origin",
+                }
+                for header, expected in required_headers.items():
+                    if str(headers.get(header) or "") != expected:
+                        ok = False
+                        detail["error"] = f"missing or invalid security header: {header}"
+                        break
+                if ok and "max-age=" not in str(headers.get("Strict-Transport-Security") or ""):
+                    ok = False
+                    detail["error"] = "HSTS is missing from the HTTPS production response"
+                if ok and "frame-ancestors 'none'" not in str(headers.get("Content-Security-Policy") or ""):
+                    ok = False
+                    detail["error"] = "CSP does not enforce frame-ancestors 'none'"
             results.append(detail)
             if not ok:
                 failures.append(detail)
@@ -105,7 +144,7 @@ def main() -> int:
     if failures:
         print("PUBLIC LAUNCH VERIFY: FAILED", file=sys.stderr)
         return 1
-    print("PUBLIC LAUNCH VERIFY: CORE WEB/PWA ROUTES PASS")
+    print("PUBLIC LAUNCH VERIFY: CORE WEB/PWA/ACCOUNT/SECURITY CONTRACTS PASS")
     return 0
 
 
