@@ -162,6 +162,7 @@ def load_config(base_dir, overrides=None):
         "REALTIME_PROVIDER": os.environ.get("ZENDOC_REALTIME_PROVIDER", "polling").strip().lower(),
         "NOTIFICATION_PROVIDER": os.environ.get("ZENDOC_NOTIFICATION_PROVIDER", "in_app").strip().lower(),
         "PUBLIC_BASE_URL": os.environ.get("ZENDOC_PUBLIC_BASE_URL", "").strip(),
+        "PUBLIC_RELEASE_REQUIRED": env_bool("ZENDOC_PUBLIC_RELEASE_REQUIRED", False),
         "SUPPORT_EMAIL": os.environ.get("ZENDOC_SUPPORT_EMAIL", "").strip(),
         "EMAIL_PROVIDER": os.environ.get("ZENDOC_EMAIL_PROVIDER", "none").strip().lower(),
         "EMAIL_VERIFIED": env_bool("ZENDOC_EMAIL_VERIFIED", False),
@@ -251,3 +252,38 @@ def validate_startup_config(app):
             if app.config.get("REQUIRE_DURABLE_DATABASE"):
                 raise ConfigError(message)
             app.logger.critical(message)
+
+        if app.config.get("PUBLIC_RELEASE_REQUIRED"):
+            public_missing = []
+            public_base_url = str(app.config.get("PUBLIC_BASE_URL") or "").strip()
+            support_email = str(app.config.get("SUPPORT_EMAIL") or "").strip()
+            storage_provider = str(app.config.get("STORAGE_PROVIDER") or "local").strip().lower()
+            telehealth_provider = str(app.config.get("TELEHEALTH_PROVIDER") or "local_demo").strip().lower()
+            connected_mode = str(app.config.get("CONNECTED_CARE_DATA_MODE") or "LIVE").strip().upper()
+
+            if not public_base_url.lower().startswith("https://"):
+                public_missing.append("HTTPS ZENDOC_PUBLIC_BASE_URL")
+            if not support_email or "@" not in support_email:
+                public_missing.append("ZENDOC_SUPPORT_EMAIL")
+            if not bool(app.config.get("PERSISTENCE_VERIFIED")):
+                public_missing.append("ZENDOC_PERSISTENCE_VERIFIED=true")
+            if not bool(app.config.get("BACKUP_VERIFIED")):
+                public_missing.append("ZENDOC_BACKUP_VERIFIED=true")
+            if str(app.config.get("EMAIL_PROVIDER") or "").strip().lower() != "smtp":
+                public_missing.append("ZENDOC_EMAIL_PROVIDER=smtp")
+            if not bool(app.config.get("EMAIL_VERIFIED")):
+                public_missing.append("ZENDOC_EMAIL_VERIFIED=true")
+            if storage_provider == "local":
+                public_missing.append("durable ZENDOC_STORAGE_PROVIDER")
+            if not bool(app.config.get("STORAGE_VERIFIED")):
+                public_missing.append("ZENDOC_STORAGE_VERIFIED=true")
+            if connected_mode != "LIVE":
+                public_missing.append("ZENDOC_CONNECTED_CARE_DATA_MODE=LIVE")
+            if telehealth_provider == "local_demo":
+                public_missing.append("non-demo ZENDOC_TELEHEALTH_PROVIDER")
+
+            if public_missing:
+                raise ConfigError(
+                    "Public release startup blocked. Missing or unverified: "
+                    + ", ".join(public_missing)
+                )
