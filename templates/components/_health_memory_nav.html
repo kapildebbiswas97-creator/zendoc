@@ -6,4 +6,5 @@
   <a href="{{ url_for('main.health') }}" {% if memory_endpoint == 'main.health' %}aria-current="page"{% endif %}>Vitals</a>
   <a href="{{ url_for('health_memory.health_profile_page') }}" {% if memory_endpoint == 'health_memory.health_profile_page' %}aria-current="page"{% endif %}>Health profile</a>
   <a href="{{ url_for('health_memory.health_access_page') }}" {% if memory_endpoint == 'health_memory.health_access_page' %}aria-current="page"{% endif %}>Privacy &amp; access</a>
+  <a href="{{ url_for('care_continuity.care_continuity_page') }}" {% if memory_endpoint == 'care_continuity.care_continuity_page' %}aria-current="page"{% endif %}>Care continuity</a>
 </nav>
