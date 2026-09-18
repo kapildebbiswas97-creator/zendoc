@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Delete Account — ZENDOC{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Account control</p>
+    <h1>Delete your ZENDOC account</h1>
+    <p class="section-copy">Deletion is different from deactivation. This flow removes the account and directly associated ZENDOC application data.</p>
+  </div>
+</section>
+
+<section class="panel">
+  {% if error %}<div class="flash error">{{ error }}</div>{% endif %}
+  {% if current_user %}
+    <h2>Delete signed-in account</h2>
+    <p>Signed in as <strong>{{ current_user.email }}</strong>. Medical-record files owned by this account will also be removed. This action cannot be undone.</p>
+    <form method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label>Current password
+        <input type="password" name="password" autocomplete="current-password" required>
+      </label>
+      <label class="confirm-row"><input type="checkbox" required> I understand this permanently deletes my ZENDOC account.</label>
+      <button type="submit" class="danger-action">Delete my account and associated data</button>
+    </form>
+  {% else %}
+    <h2>Delete an account from the web</h2>
+    <p>The most direct path is to <a href="{{ url_for('main.login') }}">sign in</a> and return to this page. That allows immediate password-confirmed deletion.</p>
+    {% if email_status.transactional_email %}
+      <p>You can also request a time-limited deletion link by email.</p>
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label>Account email <input type="email" name="email" autocomplete="email" required></label>
+        <button type="submit">Send account-deletion link</button>
+      </form>
+    {% else %}
+      <div class="trust-note">Email deletion links are not configured on this deployment. Sign in to delete the account directly. No email is displayed or guessed by this page.</div>
+    {% endif %}
+  {% endif %}
+  <p class="form-note">For security, public requests do not reveal whether an email address has a ZENDOC account.</p>
+</section>
+{% endblock %}
