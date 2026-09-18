@@ -48,6 +48,7 @@ from .operational_fulfilment_release import bp as operational_fulfilment_release
 from .operational_fulfilment_ui import bp as operational_fulfilment_ui_bp
 from .organization_routes import bp as provider_organizations_bp
 from .personal_baseline_routes import bp as personal_health_baseline_bp
+from .policy_acceptance import ensure_policy_acceptance_schema
 from .pharmacy_order_routes import bp as pharmacy_order_ops_bp
 from .preventive_care import ensure_preventive_care_schema
 from .preventive_care_routes import bp as preventive_care_bp
@@ -163,6 +164,7 @@ def create_app(test_config=None):
             ensure_medical_knowledge_document_schema()
             ensure_medical_rag_schema()
             ensure_preventive_care_schema()
+            ensure_policy_acceptance_schema()
             ensure_care_action_ledger_schema()
             ensure_operational_fulfilment_schema()
             get_db().commit()
