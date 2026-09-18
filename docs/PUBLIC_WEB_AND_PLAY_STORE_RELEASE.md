@@ -12,7 +12,7 @@ Use one ZENDOC backend/web product:
 - Flask/ZENDOC backend with PostgreSQL.
 - Durable S3-compatible medical-record object storage.
 - HTTPS custom domain.
-- Transactional SMTP for password recovery and off-app account deletion.
+- Transactional SMTP for account email verification, password recovery, and off-app account deletion.
 - Installable PWA for direct mobile installation.
 - Android Trusted Web Activity generated from the live PWA for Play distribution.
 - Digital Asset Links to prove the Android package and website belong together.
@@ -71,8 +71,10 @@ After the real object-storage smoke test succeeds, set ZENDOC_STORAGE_VERIFIED=t
 11. Set ZENDOC_EMAIL_VERIFIED=true and ZENDOC_STORAGE_VERIFIED=true only after their real smoke tests pass.
 12. Set ZENDOC_PUBLIC_RELEASE_REQUIRED=true only when the complete public configuration is ready.
 13. Run: python scripts/verify_public_launch.py https://your-domain.example
-14. Open Founder Readiness and require zero Public Launch blockers.
-15. Test using a separate user account and physical phone before inviting real users.
+14. Create a separate test account, accept the live Privacy Policy and Terms, verify the email link, confirm login is blocked before verification and allowed after verification.
+15. Test account data export, password reset, signed-in deletion and public deletion-request flows using that test account.
+16. Open Founder Readiness and require zero Public Launch blockers.
+17. Test using a physical phone/PWA before inviting real users.
 
 ## Public resources
 
@@ -82,22 +84,30 @@ The following must remain reachable:
 - /terms
 - /medical-disclaimer
 - /account-deletion
+- /register/patient
+- /resend-verification
+- /verify-email
 - /manifest.webmanifest
 - /sw.js
 - /healthz
 
 The service worker intentionally does not cache authenticated HTML or API health data. Offline mode uses a generic connection page.
 
-## Account deletion
+## Account identity, export and deletion
 
-ZENDOC supports:
+For public release, ZENDOC records the Privacy Policy and Terms versions accepted at registration and requires verification of the account email before ordinary user login.
+
+Authenticated users can download a structured account export from Profile. Password hashes, API/reset tokens, secret keys and internal medical-record storage object keys are excluded.
+
+ZENDOC supports account deletion through:
+
 
 - in-app/profile deletion,
 - signed-in web password-confirmed deletion,
 - public web deletion request by email when SMTP is configured,
 - mobile API deletion through DELETE /api/v1/account.
 
-Do not replace deletion with account freezing or deactivation.
+Do not replace deletion with account freezing or deactivation. Provider/staff deletion may retain only a de-identified inactive operational anchor when another patient's care history depends on that foreign-key reference.
 
 ## Android Trusted Web Activity
 
