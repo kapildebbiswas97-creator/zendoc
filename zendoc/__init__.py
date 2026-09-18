@@ -6,6 +6,7 @@ from flask import Flask
 from .config import load_config, validate_startup_config
 from .ai_chat_routes import bp as ai_chat_bp
 from .care_action_ledger import ensure_care_action_ledger_schema
+from .care_continuity_routes import bp as care_continuity_bp
 from .care_os_routes import bp as care_os_bp
 from .carefin_routes import bp as carefin_bp
 from .care_journey_routes import bp as care_journey_bp
@@ -111,6 +112,7 @@ def create_app(test_config=None):
     app.register_blueprint(bp)
     app.register_blueprint(release_health_bp)
     app.register_blueprint(health_memory_bp)
+    app.register_blueprint(care_continuity_bp)
     app.register_blueprint(medical_knowledge_bp)
     app.register_blueprint(personal_health_baseline_bp)
     app.register_blueprint(preventive_care_bp)
