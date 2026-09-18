@@ -26,7 +26,8 @@
   <h2>5. Sharing and third parties</h2>
   <p>ZENDOC does not automatically share your Health Memory with another user or external provider merely because they have an account. Access requires the applicable consent/authorization workflow. Third-party links, public directories, maps, email delivery, hosting, database, storage or other configured infrastructure may process only the information necessary for that function under their own terms and privacy practices.</p>
 
-  <h2>6. Data retention and deletion</h2>
+  <h2>6. Data export, retention and deletion</h2>
+  <p>While signed in, you can download a structured export of data associated with your account from your Profile or the <a href="{{ url_for('public_launch.account_export') }}">account export</a> route. Password hashes, access/reset tokens, secret keys and internal medical-record storage object keys are excluded from that export.</p>
   <p>You can request deletion from the in-app account controls or from the public <a href="{{ url_for('public_launch.account_deletion') }}">account deletion page</a>. Account deletion removes the ZENDOC account and directly associated application data. A limited operational record may remain in de-identified form when another user's care history depends on it. ZENDOC does not represent account deactivation alone as deletion.</p>
 
   <h2>7. Security</h2>
