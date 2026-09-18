@@ -174,6 +174,42 @@ def _health_memory_metadata(actor: Any) -> dict:
     }
 
 
+
+def _minimum_health_context_for_local_advisory(actor: Any) -> dict:
+    """Return only explicitly scoped self-context for the local advisory model.
+
+    The returned values are used transiently inside the local-only inference
+    prompt and are not copied into care-chain audit/task metadata.
+    """
+    if _actor_role(actor) != "patient":
+        return {"status": "NOT_APPLICABLE", "data": {}, "included_fields": []}
+
+    try:
+        from .context_engine import build_minimum_context_bundle
+
+        bundle = build_minimum_context_bundle(
+            actor=actor,
+            patient_id=_actor_id(actor),
+            purpose="health_memory_view",
+            action="care_chain_local_advisory",
+            requested_fields=["city", "allergies"],
+        )
+    except (LookupError, PermissionError, ValueError):
+        return {"status": "AUTHORIZATION_REQUIRED", "data": {}, "included_fields": []}
+
+    allowed = {"city", "allergies"}
+    data = {
+        key: value
+        for key, value in (bundle.data or {}).items()
+        if key in allowed
+    }
+    return {
+        "status": "AUTHORIZED_MINIMUM_CONTEXT",
+        "data": data,
+        "included_fields": sorted(data.keys()),
+        "consent_status": bundle.consent_status,
+    }
+
 def _rag_metadata(actor: Any, command: str, intent: str, emergency: bool) -> dict:
     if emergency:
         return {
@@ -219,18 +255,26 @@ def _rag_metadata(actor: Any, command: str, intent: str, emergency: bool) -> dic
     }
 
 
-def _advisory_prompt(command: str, intent: str, memory: dict, rag: dict) -> str:
+def _advisory_prompt(
+    command: str,
+    intent: str,
+    memory: dict,
+    memory_context: dict,
+    rag: dict,
+) -> str:
     provenance = memory.get("provenance_counts") or {}
     evidence_labels = [
         str(item.get("document_title") or item.get("source_id") or item.get("evidence_id") or "")[:120]
         for item in rag.get("evidence") or []
     ]
+    minimum_context = memory_context.get("data") or {}
     return (
         "Interpret this care goal only as a bounded workflow-planning assistant. "
         "Do not diagnose, prescribe, change medication, claim provider acceptance, "
         "or propose executable tool calls.\n"
         f"Intent: {intent[:80]}\n"
         f"Care goal: {str(command or '').strip()[:1200]}\n"
+        f"Minimum-necessary local patient context: {minimum_context}\n"
         f"Authorized Health Memory event counts by provenance: {provenance}\n"
         f"Approved medical-evidence labels: {evidence_labels[:4]}\n"
         "Return a short user-facing workflow interpretation and mention any human/provider gate."
@@ -245,6 +289,7 @@ def _local_advisory(
     privacy_class: str,
     emergency: bool,
     memory: dict,
+    memory_context: dict,
     rag: dict,
 ) -> dict:
     if emergency:
@@ -260,7 +305,7 @@ def _local_advisory(
         normalized_privacy = PrivacyClass.HEALTH_SENSITIVE
 
     response = get_model_router().route(
-        _advisory_prompt(command, intent, memory, rag),
+        _advisory_prompt(command, intent, memory, memory_context, rag),
         intent=intent,
         task_type="planning_assistance",
         privacy_sensitive=normalized_privacy in {
@@ -340,6 +385,9 @@ def prepare_care_chain(
     emergency = bool(safety.get("emergency"))
     input_evidence = _input_evidence(actor, input_channel, asr_audit_log_id)
     memory = _health_memory_metadata(actor)
+    memory_context = _minimum_health_context_for_local_advisory(actor)
+    memory["local_advisory_context_status"] = memory_context.get("status")
+    memory["local_advisory_fields"] = memory_context.get("included_fields") or []
     rag = _rag_metadata(actor, clean_command, str(intent or ""), emergency)
     advisory = _local_advisory(
         actor,
@@ -348,6 +396,7 @@ def prepare_care_chain(
         privacy_class=privacy_class,
         emergency=emergency,
         memory=memory,
+        memory_context=memory_context,
         rag=rag,
     )
 
@@ -367,6 +416,7 @@ def prepare_care_chain(
             "model_output_executes_tools": False,
             "rag_evidence_is_provider_confirmation": False,
             "health_memory_counts_expose_raw_records": False,
+            "minimum_health_context_persisted_in_audit": False,
             "cloud_model_used_for_health_sensitive_chain": False,
         },
     }
