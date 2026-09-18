@@ -78,6 +78,10 @@ def create_home_health_request(user, data):
         raise PermissionError("Authentication required.")
 
     service_type = str(data.get("service_type") or "").strip()
+    # Preserve compatibility with the historical API value while storing the
+    # canonical catalog identifier.
+    if service_type == "elderly_care":
+        service_type = "elder_care"
     allowed_types = {item["id"] for item in HOME_HEALTH_SERVICES}
     if service_type not in allowed_types:
         raise ValueError("Unsupported home-health service_type.")
