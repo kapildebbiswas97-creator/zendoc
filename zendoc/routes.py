@@ -1845,13 +1845,14 @@ def create_provider_invitation_web():
             try:
                 send_transactional_email(
                     invitation["email"],
-                    "You are invited to join ZENDOC as a provider",
+                    "You are invited to join ZENDOC",
                     (
-                        "The ZENDOC owner invited this email to create a provider account.\n\n"
+                        "The ZENDOC owner invited this email to create a controlled ZENDOC account.\n\n"
                         f"Role: {invitation['role']}\n"
                         f"Accept the invitation: {link}\n\n"
                         "The invitation expires in 72 hours. Accepting the invitation verifies control "
-                        "of this email only; professional/provider verification remains a separate ZENDOC review."
+                        "of this email only. Provider roles still require separate professional/provider verification; "
+                        "institutional roles do not receive provider or admin privileges."
                     ),
                 )
                 flash("Provider invitation sent.", "success")
@@ -1901,8 +1902,12 @@ def accept_provider_invitation_web():
                 error=str(exc),
             ), 400
         flash(
-            "Provider account created. Sign in and complete your provider profile and verification evidence. "
-            "The account is not a verified provider yet.",
+            (
+                "Account created. Sign in and complete your provider profile and verification evidence. "
+                "The account is not a verified provider yet."
+                if result["user"]["role"] in {"doctor", "hospital", "pharmacy"}
+                else "Institution account created. Sign in to the controlled government workspace."
+            ),
             "success",
         )
         return redirect(url_for("main.login", role=result["user"]["role"]))
