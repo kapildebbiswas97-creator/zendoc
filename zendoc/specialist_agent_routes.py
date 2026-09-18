@@ -324,6 +324,18 @@ def api_confirm_agent_booking():
         return _api_error(exc)
 
 
+@bp.get("/api/v1/agent/care-journeys/<int:journey_id>/chain")
+def api_agent_care_chain(journey_id):
+    """Return the authoritative persisted half of one authorized Care Journey."""
+    user, error = require_api_user()
+    if error:
+        return error
+    try:
+        return jsonify(build_persisted_care_chain(user, journey_id))
+    except (ValueError, LookupError, PermissionError) as exc:
+        return _api_error(exc)
+
+
 @bp.get("/api/v1/agent/autonomy")
 def api_agent_autonomy():
     user, error = require_api_user()
