@@ -13,7 +13,7 @@ from flask import current_app
 from .db import now_iso
 from .edgecare_asr import get_edgecare_asr
 from .investor_dashboard import investor_traction_snapshot
-from .launch_readiness import first50_launch_readiness
+from .launch_readiness import first50_launch_readiness, public_launch_readiness
 from .model_router import get_model_router
 from .security import assert_owner
 
@@ -109,6 +109,7 @@ def founder_readiness_snapshot(
     window_days = _bounded_days(days)
 
     launch = first50_launch_readiness()
+    public_launch = public_launch_readiness()
     investor = investor_traction_snapshot(
         actor,
         days=window_days,
@@ -151,6 +152,7 @@ def founder_readiness_snapshot(
             "runtime_health_checked": bool(check_runtime),
         },
         "pilot": launch,
+        "public_launch": public_launch,
         "funding": _funding_evidence(investor.get("readiness") or {}),
         "investor_snapshot": investor,
         "claims": {
