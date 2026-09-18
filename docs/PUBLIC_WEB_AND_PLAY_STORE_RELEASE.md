@@ -19,6 +19,12 @@ Use one ZENDOC backend/web product:
 
 Do not build a second healthcare backend inside Android. The Android application is a distribution shell around the same server-side safety, consent, and data authority.
 
+## Software Completion Gate
+
+Founder Readiness includes a separate **Software Completion Gate**. It checks repository-owned/free implementation only: critical routes, legal/account controls, PWA assets, email verification, mobile token refresh, controlled provider/institution invitations, release scripts, Play preparation documents and required regression files.
+
+`SOFTWARE_IMPLEMENTATION_COMPLETE` does **not** mean the exact commit passed CI and does not prove live SMTP/S3/PostgreSQL backup/domain/Play/Qualcomm evidence. Exact-head Production Gate validation remains separate.
+
 ## Public-launch gate
 
 The Founder Readiness page includes a Public Launch Gate. Do not open the product to ordinary public users while it reports PUBLIC_LAUNCH_BLOCKED.
@@ -92,6 +98,25 @@ The following must remain reachable:
 - /healthz
 
 The service worker intentionally does not cache authenticated HTML or API health data. Offline mode uses a generic connection page.
+
+## Controlled public account lifecycle
+
+Public release intentionally uses patient-only self-registration.
+
+- Patients may self-register, accept the Privacy Policy and Terms, then verify their email before public login.
+- Doctor, hospital, pharmacy and government/institution accounts require owner-controlled email invitations.
+- Accepting an invitation proves control of the invited email only.
+- Doctor/hospital/pharmacy accounts still require provider profile completion, official verification evidence and owner review before they can be represented as verified/publicly bookable providers.
+- Government/institution invitation acceptance does not grant provider verification, clinical authority, or owner/admin privileges.
+- A newer pending invitation for the same email revokes older pending role invitations.
+
+This boundary prevents a public user from obtaining provider/staff privileges merely by selecting a role.
+
+## Mobile/API session lifecycle
+
+API login returns a short-lived access token (default 60 minutes) plus a rotating refresh token (default 30 days), with explicit expiry timestamps. The legacy `token` response alias remains for client compatibility.
+
+Use `POST /api/v1/auth/refresh` to rotate credentials. Reusing an already-rotated refresh token fails. Logout revokes the current access token and, when supplied, its refresh token. Strict public-release mode rejects indefinite legacy access tokens.
 
 ## Account identity, export and deletion
 
