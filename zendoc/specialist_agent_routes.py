@@ -7,11 +7,13 @@ from .agent_autonomy import bounded_autonomy_manifest
 from .agent_fleet import list_fleet_agents
 from .agent_handoffs import handoff_for_intent, handoff_manifest
 from .appointment_continuity import complete_follow_up, sync_provider_appointment_status
+from .care_chain import build_persisted_care_chain, finalize_care_chain, prepare_care_chain
 from .care_continuity import get_care_continuity_snapshot
 from .care_journey_store import get_persisted_journey
 from .careloop_integration import link_registered_appointment
 from .db import get_db
 from .provider_service import book_provider_slot
+from .agent_planner import build_plan
 from .routes import audit, create_notification, login_required, require_api_user
 from .specialist_orchestrator import orchestrate_specialist
 from .specialist_workflow_store import (
@@ -169,11 +171,25 @@ def agent_os_page():
     follow_up_journey = None
     continuity_snapshot = None
     command = request.values.get("command", "")
+    persisted_care_chain = None
     if request.method == "POST":
         try:
             context = _browser_context()
+            preview_plan = build_plan(g.user, command)
+            if preview_plan.authorization_error:
+                raise PermissionError(preview_plan.authorization_error)
+            prepared_chain = prepare_care_chain(
+                g.user,
+                command,
+                intent=preview_plan.intent,
+                privacy_class=preview_plan.privacy_class,
+                input_channel=request.form.get("input_channel", "typed"),
+                asr_audit_log_id=request.form.get("asr_audit_log_id"),
+            )
             result = _attach_handoff(orchestrate_specialist(g.user, command, context))
+            result["care_chain"] = prepared_chain
             result = persist_specialist_result(g.user, result, context)
+            result = finalize_care_chain(g.user, result, prepared_chain)
             audit(
                 "specialist_agent_orchestrate",
                 "agent_os",
@@ -188,6 +204,7 @@ def agent_os_page():
             journey_id = int(request.args.get("journey_id"))
             follow_up_journey = get_persisted_journey(journey_id, g.user)
             continuity_snapshot = get_care_continuity_snapshot(g.user, journey_id)
+            persisted_care_chain = build_persisted_care_chain(g.user, journey_id)
         except (TypeError, ValueError, LookupError, PermissionError) as error:
             flash(str(error), "error")
     return render_template(
@@ -195,6 +212,7 @@ def agent_os_page():
         result=result,
         follow_up_journey=follow_up_journey,
         continuity_snapshot=continuity_snapshot,
+        persisted_care_chain=persisted_care_chain,
         command=command,
         fleet=list_fleet_agents(),
         autonomy=bounded_autonomy_manifest(),
@@ -254,13 +272,27 @@ def api_orchestrate_specialist():
         return error
     data = request.get_json(silent=True) or {}
     context = data.get("context") if isinstance(data.get("context"), dict) else {}
+    message = data.get("message", "")
     try:
+        preview_plan = build_plan(user, message)
+        if preview_plan.authorization_error:
+            raise PermissionError(preview_plan.authorization_error)
+        prepared_chain = prepare_care_chain(
+            user,
+            message,
+            intent=preview_plan.intent,
+            privacy_class=preview_plan.privacy_class,
+            input_channel=data.get("input_channel", "typed"),
+            asr_audit_log_id=data.get("asr_audit_log_id"),
+        )
         result = _attach_handoff(orchestrate_specialist(
             user,
-            data.get("message", ""),
+            message,
             context,
         ))
+        result["care_chain"] = prepared_chain
         result = persist_specialist_result(user, result, context)
+        result = finalize_care_chain(user, result, prepared_chain)
         audit(
             "specialist_agent_orchestrate",
             "agent_os",
