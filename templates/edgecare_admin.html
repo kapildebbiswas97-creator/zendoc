@@ -5,6 +5,7 @@
 {% set claims = edgecare.claims %}
 {% set asr = edgecare.local_asr %}
 {% set local_ai = edgecare.local_ai %}
+{% set care_chain = snapshot.care_chain %}
 
 <section class="section-head">
   <div>
@@ -41,6 +42,30 @@
     {% if asr.latency_ms is defined and asr.latency_ms is not none %}<p><strong>Health-check latency:</strong> {{ asr.latency_ms }} ms</p>{% endif %}
     <span class="status-badge {{ 'active' if claims.local_asr_ready else 'inactive' }}">{{ 'Ready' if claims.local_asr_ready else 'Not verified ready' }}</span>
   </article>
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <p class="eyebrow">Canonical care chain readiness</p>
+      <h2>End-to-end care chain</h2>
+      <p class="section-copy">Software implementation, live local runtime readiness, and real-world provider evidence are reported separately.</p>
+    </div>
+    <span class="status-badge {{ 'active' if care_chain.demo_runtime_ready else 'working' }}">Demo runtime gate: {{ care_chain.runtime_gate.replace('_',' ') }}</span>
+  </div>
+  <div class="appointment-list">
+    {% for stage in care_chain.stages %}
+    <article class="appointment-card">
+      <div>
+        <p class="eyebrow">Stage {{ loop.index }}</p>
+        <h3>{{ stage.label }}</h3>
+        <p>{{ stage.detail }}</p>
+      </div>
+      <span class="status-badge {{ 'active' if stage.status in ['READY','IMPLEMENTED','EVIDENCE_READY'] else 'beta' }}">{{ stage.status.replace('_',' ') }}</span>
+    </article>
+    {% endfor %}
+  </div>
+  <p class="form-note"><strong>Truth boundary:</strong> implemented software is not the same as a live local runtime, and neither is the same as provider-confirmed real-world fulfilment or Snapdragon/NPU measurement evidence.</p>
 </section>
 
 <section class="panel">
