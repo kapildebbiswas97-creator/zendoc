@@ -119,11 +119,10 @@ def issue_email_verification_token(user: Any) -> str:
     return token
 
 
-def verify_email_token(token: str) -> dict:
+def resolve_email_verification_token(token: str):
     digest = hash_token(str(token or ""))
     ensure_email_verification_schema()
-    db = get_db()
-    row = db.execute(
+    row = get_db().execute(
         """
         SELECT t.id token_id,t.user_id,u.email,u.email_normalized,u.active
         FROM api_tokens t
@@ -136,7 +135,13 @@ def verify_email_token(token: str) -> dict:
     ).fetchone()
     if not row:
         raise PermissionError("This email-verification link is invalid or expired.")
+    return row
 
+
+def verify_email_token(token: str) -> dict:
+    row = resolve_email_verification_token(token)
+    ensure_email_verification_schema()
+    db = get_db()
     email = normalize_email(row["email_normalized"] or row["email"])
     now = now_iso()
     db.execute(
