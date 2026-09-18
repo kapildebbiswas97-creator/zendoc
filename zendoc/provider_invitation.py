@@ -89,9 +89,9 @@ def create_provider_invitation(
         """
         UPDATE provider_invitations
         SET revoked_at=?
-        WHERE email_normalized=? AND role=? AND accepted_at IS NULL AND revoked_at IS NULL
+        WHERE email_normalized=? AND accepted_at IS NULL AND revoked_at IS NULL
         """,
-        (now, email, role),
+        (now, email),
     )
 
     token = new_token()
@@ -209,6 +209,14 @@ def accept_provider_invitation(
         WHERE id=? AND accepted_at IS NULL AND revoked_at IS NULL
         """,
         (user_id, now, int(invite["id"])),
+    )
+    db.execute(
+        """
+        UPDATE provider_invitations
+        SET revoked_at=?
+        WHERE email_normalized=? AND id<>? AND accepted_at IS NULL AND revoked_at IS NULL
+        """,
+        (now, email, int(invite["id"])),
     )
     db.commit()
     user = db.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
