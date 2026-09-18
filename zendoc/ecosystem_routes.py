@@ -15,6 +15,7 @@ from flask import (
     url_for,
 )
 
+from .db import get_db
 from .home_health import (
     create_home_health_request,
     list_home_health_requests,
@@ -128,9 +129,13 @@ def pharmacy_page():
                     "items": [{"name": med_name, "quantity": 1}],
                     "delivery_address": address,
                     "pharmacy_id": request.form.get("pharmacy_id"),
+                    "prescription_record_id": request.form.get("prescription_record_id"),
                 })
                 audit("create", "medicine_order", str(order["id"]))
-                flash("Medicine delivery order placed!", "success")
+                flash(
+                    "Medicine request recorded. Stock, prescription acceptance, price and fulfilment remain unconfirmed until the assigned verified pharmacy responds.",
+                    "success",
+                )
             except (LookupError, ValueError, PermissionError) as err:
                 flash(str(err), "error")
 
@@ -154,12 +159,23 @@ def pharmacy_page():
     pharmacies = list_nearby_pharmacies()
     orders = list_medicine_orders(g.user)
     reminders = list_medicine_reminders(g.user)
+    prescriptions = get_db().execute(
+        """
+        SELECT mr.id,mr.title,mr.original_filename,rm.document_date
+        FROM medical_records mr
+        JOIN report_metadata rm ON rm.record_id=mr.id
+        WHERE mr.owner_id=? AND LOWER(rm.report_type)='prescription'
+        ORDER BY COALESCE(rm.document_date,mr.created_at) DESC,mr.id DESC
+        """,
+        (g.user["id"],),
+    ).fetchall()
     return render_template(
         "pharmacy.html",
         medicines=medicines,
         pharmacies=pharmacies,
         orders=orders,
         reminders=reminders,
+        prescriptions=prescriptions,
         q=q,
     )
 
