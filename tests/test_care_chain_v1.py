@@ -17,6 +17,7 @@ from zendoc.care_chain import (
     prepare_care_chain,
 )
 from zendoc.db import get_db, now_iso
+from zendoc.model_router import ModelResponse, RoutingReason
 from zendoc.specialist_orchestrator import orchestrate_specialist
 from zendoc.specialist_workflow_store import persist_specialist_result
 
@@ -258,3 +259,83 @@ def test_persisted_chain_reflects_provider_outcome_and_longitudinal_memory(tmp_p
         assert completed["longitudinal_memory"]["provider_recorded"] is True
         assert completed["longitudinal_memory"]["health_memory_event_id"]
         assert completed["truth"]["clinical_findings_inferred_from_completion"] is False
+
+class _FakeLocalCareChainRouter:
+    def __init__(self):
+        self.calls = []
+
+    def route(self, prompt, *args, **kwargs):
+        self.calls.append({"prompt": prompt, "kwargs": dict(kwargs)})
+        return ModelResponse(
+            text="Local advisory prepared; deterministic Agent OS must decide any action.",
+            provider="local_ollama",
+            model="synthetic-local-care-model",
+            latency_ms=3,
+            success=True,
+            routing_reason=RoutingReason.LOCAL_SLM,
+            task_type=kwargs.get("task_type", "planning_assistance"),
+            privacy_class=kwargs.get("privacy_class", "HEALTH_SENSITIVE"),
+            output={
+                "text": "Local advisory prepared; deterministic Agent OS must decide any action.",
+                "data": {},
+            },
+        )
+
+
+def test_care_chain_uses_successful_local_slm_only_as_non_executable_advisory(tmp_path, monkeypatch):
+    app = make_app(tmp_path)
+    router = _FakeLocalCareChainRouter()
+    monkeypatch.setattr("zendoc.care_chain.get_model_router", lambda: router)
+
+    with app.app_context():
+        patient = _patient(app, "local-slm")
+        prepared = prepare_care_chain(
+            patient,
+            "Help me understand basic nutrition and hydration.",
+            intent="nutrition",
+            privacy_class="PERSONAL",
+        )
+
+        advisory = prepared["local_advisory"]
+        assert advisory["status"] == "LOCAL_MODEL_ADVISORY_USED"
+        assert advisory["local_model_used"] is True
+        assert advisory["provider"] == "local_ollama"
+        assert advisory["model"] == "synthetic-local-care-model"
+        assert advisory["tool_execution_authority"] is False
+        assert advisory["cloud_allowed"] is False
+
+        assert len(router.calls) == 1
+        call = router.calls[0]
+        assert call["kwargs"]["allow_cloud"] is False
+        assert call["kwargs"]["privacy_class"] == "HEALTH_SENSITIVE"
+        assert call["kwargs"]["risk_class"] == "READ_ONLY"
+        assert "Never output a diagnosis" in call["kwargs"]["system_prompt"]
+        assert prepared["truth"]["model_output_executes_tools"] is False
+
+
+def test_emergency_care_chain_skips_rag_and_local_model_before_agent_execution(tmp_path, monkeypatch):
+    app = make_app(tmp_path)
+
+    class _MustNotRunRouter:
+        def route(self, *args, **kwargs):
+            raise AssertionError("Local/cloud model must not run before deterministic emergency safety.")
+
+    monkeypatch.setattr("zendoc.care_chain.get_model_router", lambda: _MustNotRunRouter())
+
+    with app.app_context():
+        patient = _patient(app, "emergency")
+        prepared = prepare_care_chain(
+            patient,
+            "I have severe chest pain and cannot breathe properly.",
+            intent="general_agent",
+            privacy_class="HEALTH_SENSITIVE",
+        )
+
+        assert prepared["safety"]["emergency"] is True
+        assert prepared["safety"]["model_bypasses_safety"] is False
+        assert prepared["rag"]["status"] == "SKIPPED_EMERGENCY_SAFETY"
+        assert prepared["rag"]["retrieval_performed"] is False
+        assert prepared["local_advisory"]["status"] == "SKIPPED_EMERGENCY_SAFETY"
+        assert prepared["local_advisory"]["local_model_used"] is False
+        assert prepared["local_advisory"]["tool_execution_authority"] is False
+
