@@ -6,6 +6,13 @@ PUBLIC_CRITICAL_GETS = (
     "/login",
     "/register",
     "/healthz",
+    "/privacy",
+    "/terms",
+    "/medical-disclaimer",
+    "/account-deletion",
+    "/manifest.webmanifest",
+    "/sw.js",
+    "/offline",
 )
 
 PATIENT_CRITICAL_GETS = (
