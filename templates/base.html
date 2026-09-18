@@ -68,6 +68,7 @@
             <a href="{{ url_for('main.admin') }}" {% if endpoint == 'main.admin' %}aria-current="page"{% endif %}>Admin</a>
             <a href="{{ url_for('milestone7.admin_agent_command_center') }}" {% if endpoint == 'milestone7.admin_agent_command_center' %}aria-current="page"{% endif %}>Agent Center</a>
             <a href="{{ url_for('main.startup_command_center') }}" {% if endpoint == 'main.startup_command_center' %}aria-current="page"{% endif %}>Startup</a>
+            <a href="{{ url_for('main.founder_readiness_page') }}" {% if endpoint == 'main.founder_readiness_page' %}aria-current="page"{% endif %}>Readiness</a>
             <a href="{{ url_for('milestone7.operations_page') }}" {% if endpoint == 'milestone7.operations_page' %}aria-current="page"{% endif %}>Operations</a>
           {% else %}
             <a href="{{ url_for('main.appointments') }}" {% if endpoint == 'main.appointments' %}aria-current="page"{% endif %}>Appointments</a>
@@ -100,6 +101,7 @@
               {% endif %}
               {% if current_user.role in ['admin','doctor','hospital','pharmacy'] %}<a href="{{ url_for('milestone7.operations_page') }}">Staff operations</a>{% endif %}
               {% if current_user.role == 'admin' %}
+                <a href="{{ url_for('main.founder_readiness_page') }}">Founder readiness</a>
                 <a href="{{ url_for('edgecare.edgecare_admin_page') }}">AI runtime &amp; care-chain readiness</a>
                 <a href="{{ url_for('showcase.showcase_page') }}">Public showcase</a>
               {% endif %}

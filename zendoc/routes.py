@@ -63,6 +63,7 @@ from .security import csrf_token, hash_token, is_owner, load_user_and_check_csrf
 from .startup_analytics import care_journey_conversion, india_coverage_quality, provider_onboarding_funnel, record_finder_search, record_product_activity, retention_metrics, startup_metrics, submit_finder_feedback, user_activation_funnel
 from .startup_finance import create_financial_entry, create_financial_snapshot, financial_kpis, list_financial_entries
 from .investor_dashboard import investor_traction_snapshot
+from .founder_readiness import founder_readiness_snapshot
 from .business_api import (
     BusinessApiRateLimitError,
     authenticate_business_api_key,
@@ -1296,6 +1297,23 @@ def startup_command_center():
         finance_entries=finance_entries,
         investor_snapshot=investor_snapshot,
         claims=claims,
+    )
+
+
+@bp.get("/admin/founder-readiness")
+@owner_required
+def founder_readiness_page():
+    """Owner-only pre-call view for demo, pilot and fundraising evidence gates."""
+    raw = str(request.args.get("runtime", "1") or "1").strip().lower()
+    check_runtime = raw not in {"0", "false", "no", "off"}
+    return render_template(
+        "founder_readiness.html",
+        snapshot=founder_readiness_snapshot(
+            g.user,
+            check_runtime=check_runtime,
+            days=request.args.get("days", 30),
+            finance_month=request.args.get("finance_month"),
+        ),
     )
 
 
