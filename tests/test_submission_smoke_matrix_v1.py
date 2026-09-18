@@ -10,6 +10,7 @@ PUBLIC_CRITICAL_GETS = (
     "/terms",
     "/medical-disclaimer",
     "/account-deletion",
+    "/resend-verification",
     "/manifest.webmanifest",
     "/sw.js",
     "/offline",
@@ -33,6 +34,7 @@ PATIENT_CRITICAL_GETS = (
     "/profile",
     "/agent-os",
     "/care-continuity",
+    "/account/export",
 )
 
 
