@@ -520,11 +520,8 @@ def forgot_password():
                 except Exception:
                     get_db().rollback()
                     current_app.logger.exception("Password-reset email delivery failed.")
-                    flash(
-                        "Password recovery email could not be delivered. Please try again later.",
-                        "warning",
-                    )
-                    return render_template("forgot_password.html"), 503
+            # Keep the same response for existing and non-existing accounts,
+            # including provider-delivery failures, to prevent account enumeration.
             flash("If the account exists, password-reset instructions have been sent.", "success")
             return redirect(url_for("main.login"))
 
@@ -2304,10 +2301,8 @@ def api_forgot_password():
             except Exception:
                 get_db().rollback()
                 current_app.logger.exception("API password-reset email delivery failed.")
-                return jsonify({
-                    "status": "delivery_failed",
-                    "message": "Password recovery email could not be delivered.",
-                }), 503
+        # Existing, missing, and provider-delivery-failure cases intentionally
+        # use the same public response to prevent account enumeration.
         return jsonify({
             "status": "accepted",
             "message": "If the account exists, password-reset instructions have been sent.",
