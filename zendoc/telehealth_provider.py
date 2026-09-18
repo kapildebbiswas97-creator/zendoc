@@ -24,7 +24,10 @@ class LocalDemoTelehealthProvider:
         return {
             "provider": self.name,
             "status": "beta",
-            "message": "Local consultation state and chat work; production WebRTC is Integration Required.",
+            "supports_chat": True,
+            "supports_voice": False,
+            "supports_video": False,
+            "message": "Local consultation state and chat work; production voice/video WebRTC is Integration Required.",
         }
 
 
@@ -36,7 +39,13 @@ class UnavailableTelehealthProvider:
         raise RuntimeError(f"Telehealth provider '{self.name}' is Integration Required.")
 
     def status(self):
-        return {"provider": self.name, "status": "integration_required"}
+        return {
+            "provider": self.name,
+            "status": "integration_required",
+            "supports_chat": False,
+            "supports_voice": False,
+            "supports_video": False,
+        }
 
 
 def get_telehealth_provider():
