@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from .db import get_db
+from .demo_truth import synthetic_demo_provider_profile_ids, synthetic_demo_user_ids
 from .diagnostic_service import (
     AVAILABILITY_CONFIRMED,
     AVAILABILITY_OBSERVED,
@@ -18,17 +19,19 @@ from .observability import agent_metrics, request_metrics
 
 def pilot_scorecard() -> dict[str, Any]:
     db = get_db()
+    demo_user_ids = synthetic_demo_user_ids(db)
+    demo_profile_ids = synthetic_demo_provider_profile_ids(db)
 
-    providers = _provider_funnel(db)
-    journeys = _care_journey_metrics(db)
-    carefin = _carefin_metrics(db)
-    fulfilment = _fulfilment_metrics(db)
-    diagnostics = _diagnostic_metrics(db)
+    providers = _provider_funnel(db, demo_profile_ids)
+    journeys = _care_journey_metrics(db, demo_user_ids)
+    carefin = _carefin_metrics(db, demo_user_ids)
+    fulfilment = _fulfilment_metrics(db, demo_user_ids)
+    diagnostics = _diagnostic_metrics(db, demo_user_ids)
     data_coverage = _data_coverage_metrics(db)
-    operations = _operations_metrics(db)
-    provider_responsiveness = _provider_response_metrics(db)
-    data_freshness = _data_freshness_metrics(db)
-    engagement = _engagement_metrics(db)
+    operations = _operations_metrics(db, demo_user_ids)
+    provider_responsiveness = _provider_response_metrics(db, demo_user_ids)
+    data_freshness = _data_freshness_metrics(db, demo_user_ids)
+    engagement = _engagement_metrics(db, demo_user_ids)
     reliability = _reliability_metrics()
     signals = _pilot_signals(
         provider_responsiveness=provider_responsiveness,
@@ -52,7 +55,7 @@ def pilot_scorecard() -> dict[str, Any]:
         "reliability": reliability,
         "signals": signals,
         "measurement_boundary": (
-            "Metrics are computed from ZENDOC database events/records only. "
+            "Metrics are computed from ZENDOC database events/records only and exclude synthetic competition fixture users/providers. "
             "They do not estimate offline outcomes, partner-side actions, clinical efficacy, or unreported savings. "
             "Repeat activity is an observed product-usage proxy, not a cohort-retention claim."
         ),
@@ -60,73 +63,98 @@ def pilot_scorecard() -> dict[str, Any]:
     }
 
 
-def _provider_funnel(db) -> dict:
-    total = _count(db, "SELECT COUNT(*) c FROM provider_profiles")
-    pending = _count(db, "SELECT COUNT(*) c FROM provider_profiles WHERE verification_status='pending'")
-    verified = _count(db, "SELECT COUNT(*) c FROM provider_profiles WHERE verification_status='verified'")
-    rejected = _count(db, "SELECT COUNT(*) c FROM provider_profiles WHERE verification_status='rejected'")
-    suspended = _count(db, "SELECT COUNT(*) c FROM provider_profiles WHERE verification_status='suspended'")
-    with_evidence = _count(
-        db,
-        "SELECT COUNT(DISTINCT provider_profile_id) c FROM provider_verification_evidence",
-    )
-    with_verified_evidence = _count(
-        db,
-        "SELECT COUNT(DISTINCT provider_profile_id) c FROM provider_verification_evidence WHERE status='verified'",
-    )
-    with_schedule = _count(
-        db,
-        "SELECT COUNT(DISTINCT provider_profile_id) c FROM provider_schedules WHERE active=1",
-    )
+def _provider_funnel(db, demo_profile_ids: set[int]) -> dict:
+    rows = db.execute(
+        "SELECT id,verification_status FROM provider_profiles"
+    ).fetchall()
+    profiles = [row for row in rows if int(row["id"]) not in demo_profile_ids]
+    profile_ids = {int(row["id"]) for row in profiles}
+    total = len(profiles)
+    pending = sum(1 for row in profiles if row["verification_status"] == "pending")
+    verified = sum(1 for row in profiles if row["verification_status"] == "verified")
+    rejected = sum(1 for row in profiles if row["verification_status"] == "rejected")
+    suspended = sum(1 for row in profiles if row["verification_status"] == "suspended")
+
+    evidence_rows = db.execute(
+        "SELECT provider_profile_id,status FROM provider_verification_evidence"
+    ).fetchall()
+    with_evidence_ids = {
+        int(row["provider_profile_id"])
+        for row in evidence_rows
+        if int(row["provider_profile_id"]) in profile_ids
+    }
+    with_verified_evidence_ids = {
+        int(row["provider_profile_id"])
+        for row in evidence_rows
+        if int(row["provider_profile_id"]) in profile_ids and row["status"] == "verified"
+    }
+    schedule_rows = db.execute(
+        "SELECT DISTINCT provider_profile_id FROM provider_schedules WHERE active=1"
+    ).fetchall()
+    schedule_ids = {
+        int(row["provider_profile_id"])
+        for row in schedule_rows
+        if int(row["provider_profile_id"]) in profile_ids
+    }
     return {
         "profiles_total": total,
         "pending": pending,
         "verified": verified,
         "rejected": rejected,
         "suspended": suspended,
-        "with_submitted_evidence": with_evidence,
-        "with_verified_evidence": with_verified_evidence,
-        "with_active_schedule": with_schedule,
+        "with_submitted_evidence": len(with_evidence_ids),
+        "with_verified_evidence": len(with_verified_evidence_ids),
+        "with_active_schedule": len(schedule_ids),
         "verified_rate_percent": _percent(verified, total),
-        "evidence_submission_rate_percent": _percent(with_evidence, total),
+        "evidence_submission_rate_percent": _percent(len(with_evidence_ids), total),
     }
 
 
-def _care_journey_metrics(db) -> dict:
-    total = _count(db, "SELECT COUNT(*) c FROM care_journeys")
-    active = _count(db, "SELECT COUNT(*) c FROM care_journeys WHERE status='active'")
-    completed = _count(db, "SELECT COUNT(*) c FROM care_journeys WHERE status='completed'")
-    blocked = _count(db, "SELECT COUNT(*) c FROM care_journeys WHERE status='blocked'")
-    transitions = _count(db, "SELECT COUNT(*) c FROM care_journey_events")
-    states = {
-        row["state"]: row["count"]
-        for row in db.execute(
-            "SELECT state, COUNT(*) count FROM care_journeys GROUP BY state ORDER BY count DESC"
-        ).fetchall()
-    }
+def _care_journey_metrics(db, demo_user_ids: set[int]) -> dict:
+    rows = db.execute(
+        "SELECT id,patient_id,state,status FROM care_journeys"
+    ).fetchall()
+    journeys = [row for row in rows if int(row["patient_id"]) not in demo_user_ids]
+    journey_ids = {int(row["id"]) for row in journeys}
+    total = len(journeys)
+    active = sum(1 for row in journeys if row["status"] == "active")
+    completed = sum(1 for row in journeys if row["status"] == "completed")
+    blocked = sum(1 for row in journeys if row["status"] == "blocked")
+    event_rows = db.execute(
+        "SELECT journey_id,state FROM care_journey_events"
+    ).fetchall()
+    filtered_events = [row for row in event_rows if int(row["journey_id"]) in journey_ids]
+    states: dict[str, int] = {}
+    for row in journeys:
+        state = str(row["state"])
+        states[state] = states.get(state, 0) + 1
     return {
         "total": total,
         "active": active,
         "completed": completed,
         "blocked": blocked,
-        "transition_events": transitions,
+        "transition_events": len(filtered_events),
         "completion_rate_percent": _percent(completed, total),
-        "states": states,
+        "states": dict(sorted(states.items(), key=lambda item: (-item[1], item[0]))),
     }
 
 
-def _carefin_metrics(db) -> dict:
-    discoveries = _count(
-        db,
-        "SELECT COUNT(*) c FROM audit_logs WHERE action='carefin.discovery'",
-    )
-    unique_users = _count(
-        db,
-        "SELECT COUNT(DISTINCT actor_id) c FROM audit_logs WHERE action='carefin.discovery'",
-    )
+def _carefin_metrics(db, demo_user_ids: set[int]) -> dict:
+    rows = db.execute(
+        "SELECT actor_id FROM audit_logs WHERE action='carefin.discovery'"
+    ).fetchall()
+    real_rows = [
+        row for row in rows
+        if row["actor_id"] is None or int(row["actor_id"]) not in demo_user_ids
+    ]
+    unique_users = {
+        int(row["actor_id"])
+        for row in real_rows
+        if row["actor_id"] is not None
+    }
     return {
-        "discovery_runs": discoveries,
-        "unique_users_with_discovery": unique_users,
+        "discovery_runs": len(real_rows),
+        "unique_users_with_discovery": len(unique_users),
         "authoritative_confirmations": 0,
         "confirmed_savings_inr": None,
         "truth_notice": (
@@ -136,55 +164,70 @@ def _carefin_metrics(db) -> dict:
     }
 
 
-def _fulfilment_metrics(db) -> dict:
-    staged = _count(db, "SELECT COUNT(*) c FROM fulfilment_plans")
-    confirmed_plans = _count(
-        db,
-        "SELECT COUNT(*) c FROM fulfilment_plans WHERE confirmed_by_user=1",
-    )
-    orders = _count(db, "SELECT COUNT(*) c FROM medicine_orders")
-    acknowledged = _count(
-        db,
-        "SELECT COUNT(*) c FROM medicine_orders WHERE LOWER(COALESCE(acknowledgement_status,'')) IN ('accepted','acknowledged')",
-    )
-    delivered = _count(
-        db,
-        "SELECT COUNT(*) c FROM medicine_orders WHERE UPPER(COALESCE(tracking_status,''))='DELIVERED'",
+def _fulfilment_metrics(db, demo_user_ids: set[int]) -> dict:
+    plan_rows = db.execute(
+        "SELECT id,patient_id,confirmed_by_user FROM fulfilment_plans"
+    ).fetchall()
+    real_plans = [row for row in plan_rows if int(row["patient_id"]) not in demo_user_ids]
+    staged = len(real_plans)
+    confirmed_plans = sum(1 for row in real_plans if int(row["confirmed_by_user"] or 0) == 1)
+
+    order_rows = db.execute(
+        """
+        SELECT id,patient_id,pharmacy_id,created_at,acknowledgement_status,
+               acknowledged_at,tracking_status
+        FROM medicine_orders
+        """
+    ).fetchall()
+    real_orders = [
+        row for row in order_rows
+        if int(row["patient_id"]) not in demo_user_ids
+        and (row["pharmacy_id"] is None or int(row["pharmacy_id"]) not in demo_user_ids)
+    ]
+    orders = len(real_orders)
+    acknowledged_rows = [
+        row for row in real_orders
+        if str(row["acknowledgement_status"] or "").strip().lower() in {"accepted", "acknowledged"}
+    ]
+    delivered = sum(
+        1 for row in real_orders
+        if str(row["tracking_status"] or "").strip().upper() == "DELIVERED"
     )
     return {
         "fulfilment_plans": staged,
         "user_confirmed_plans": confirmed_plans,
         "orders_submitted": orders,
-        "provider_acknowledged": acknowledged,
+        "provider_acknowledged": len(acknowledged_rows),
         "delivered": delivered,
         "plan_to_order_conversion_percent": _percent(orders, staged),
-        "order_acknowledgement_rate_percent": _percent(acknowledged, orders),
+        "order_acknowledgement_rate_percent": _percent(len(acknowledged_rows), orders),
         "delivery_completion_rate_percent": _percent(delivered, orders),
         "average_acknowledgement_minutes": _average_duration_minutes(
-            db.execute(
-                """
-                SELECT created_at, acknowledged_at
-                FROM medicine_orders
-                WHERE acknowledged_at IS NOT NULL
-                """
-            ).fetchall(),
+            [row for row in real_orders if row["acknowledged_at"] is not None],
             "created_at",
             "acknowledged_at",
         ),
     }
 
 
-def _diagnostic_metrics(db) -> dict:
-    offers = _count(db, "SELECT COUNT(*) c FROM diagnostic_offers")
-    bookings = _count(db, "SELECT COUNT(*) c FROM diagnostic_bookings")
-    completed = _count(
-        db,
-        "SELECT COUNT(*) c FROM diagnostic_bookings WHERE LOWER(status)='completed'",
+def _diagnostic_metrics(db, demo_user_ids: set[int]) -> dict:
+    offer_rows = db.execute(
+        "SELECT id,lab_id FROM diagnostic_offers"
+    ).fetchall()
+    offers = sum(1 for row in offer_rows if int(row["lab_id"]) not in demo_user_ids)
+    booking_rows = db.execute(
+        "SELECT patient_id,status,report_record_id FROM diagnostic_bookings"
+    ).fetchall()
+    real_bookings = [
+        row for row in booking_rows
+        if int(row["patient_id"]) not in demo_user_ids
+    ]
+    bookings = len(real_bookings)
+    completed = sum(
+        1 for row in real_bookings
+        if str(row["status"] or "").strip().lower() == "completed"
     )
-    report_linked = _count(
-        db,
-        "SELECT COUNT(*) c FROM diagnostic_bookings WHERE report_record_id IS NOT NULL",
-    )
+    report_linked = sum(1 for row in real_bookings if row["report_record_id"] is not None)
     return {
         "provider_offers": offers,
         "bookings_requested": bookings,
@@ -222,25 +265,36 @@ def _data_coverage_metrics(db) -> dict:
     }
 
 
-def _provider_response_metrics(db) -> dict:
+def _provider_response_metrics(db, demo_user_ids: set[int]) -> dict:
     order_rows = db.execute(
         """
-        SELECT created_at, acknowledged_at
+        SELECT patient_id,pharmacy_id,created_at,acknowledged_at
         FROM medicine_orders
-        WHERE acknowledged_at IS NOT NULL
         """
     ).fetchall()
-    order_minutes = _duration_values(order_rows, "created_at", "acknowledged_at", unit="minutes")
-    order_total = _count(db, "SELECT COUNT(*) c FROM medicine_orders")
+    order_rows = [
+        row for row in order_rows
+        if int(row["patient_id"]) not in demo_user_ids
+        and (row["pharmacy_id"] is None or int(row["pharmacy_id"]) not in demo_user_ids)
+    ]
+    responded_order_rows = [row for row in order_rows if row["acknowledged_at"] is not None]
+    order_minutes = _duration_values(responded_order_rows, "created_at", "acknowledged_at", unit="minutes")
+    order_total = len(order_rows)
     order_responded = len(order_minutes)
 
     consultation_rows = db.execute(
         """
-        SELECT cr.created_at, cr.updated_at, cr.status, room.created_at room_created_at
+        SELECT cr.patient_id,cr.doctor_id,cr.created_at,cr.updated_at,cr.status,
+               room.created_at room_created_at
         FROM consultation_requests cr
         LEFT JOIN consultation_rooms room ON room.consultation_id=cr.id
         """
     ).fetchall()
+    consultation_rows = [
+        row for row in consultation_rows
+        if int(row["patient_id"]) not in demo_user_ids
+        and int(row["doctor_id"]) not in demo_user_ids
+    ]
     consultation_minutes = []
     responded_consultations = 0
     pending_consultations = 0
@@ -276,18 +330,23 @@ def _provider_response_metrics(db) -> dict:
             "median_response_minutes": _median(consultation_minutes),
         },
         "measurement_note": (
-            "Medicine response uses acknowledged_at. Consultation response uses the first room-creation timestamp "
-            "for accepted/scheduled requests and the terminal update timestamp for rejected requests."
+            "Synthetic competition fixture users/providers are excluded. Medicine response uses acknowledged_at. "
+            "Consultation response uses the first room-creation timestamp for accepted/scheduled requests and the "
+            "terminal update timestamp for rejected requests."
         ),
     }
 
 
-def _data_freshness_metrics(db) -> dict:
+def _data_freshness_metrics(db, demo_user_ids: set[int]) -> dict:
     inventory_counts = {"CONFIRMED": 0, "STALE": 0, "UNKNOWN": 0, "UNAVAILABLE": 0}
     stale_pharmacies = set()
     inventory_rows = db.execute(
         "SELECT pharmacy_id, observed_at, stock_status, quantity_available FROM inventory_observations"
     ).fetchall()
+    inventory_rows = [
+        row for row in inventory_rows
+        if int(row["pharmacy_id"]) not in demo_user_ids
+    ]
     for row in inventory_rows:
         state, _ = evaluate_freshness(row["observed_at"], row["stock_status"])
         if int(row["quantity_available"] or 0) <= 0 and state == "CONFIRMED":
@@ -306,6 +365,10 @@ def _data_freshness_metrics(db) -> dict:
     diagnostic_rows = db.execute(
         "SELECT lab_id, verified, observed_at, created_at FROM diagnostic_offers"
     ).fetchall()
+    diagnostic_rows = [
+        row for row in diagnostic_rows
+        if int(row["lab_id"]) not in demo_user_ids
+    ]
     for row in diagnostic_rows:
         state = diagnostic_availability_state(dict(row))
         diagnostic_counts[state] = diagnostic_counts.get(state, 0) + 1
@@ -337,7 +400,7 @@ def _data_freshness_metrics(db) -> dict:
     }
 
 
-def _engagement_metrics(db) -> dict:
+def _engagement_metrics(db, demo_user_ids: set[int]) -> dict:
     now = datetime.now(timezone.utc)
     cutoff_30 = now - timedelta(days=30)
     cutoff_7 = now - timedelta(days=7)
@@ -358,6 +421,8 @@ def _engagement_metrics(db) -> dict:
         if not created or created < cutoff_30:
             continue
         actor_id = int(row["actor_id"])
+        if actor_id in demo_user_ids:
+            continue
         active_30.add(actor_id)
         days_by_actor.setdefault(actor_id, set()).add(created.date().isoformat())
         if created >= cutoff_7:
@@ -370,7 +435,7 @@ def _engagement_metrics(db) -> dict:
         "repeat_activity_users_30d": len(returning_30),
         "repeat_activity_rate_percent": _percent(len(returning_30), len(active_30)),
         "measurement_note": (
-            "Repeat activity means an authenticated actor generated requests on at least two distinct UTC dates "
+            "Synthetic competition fixture actors are excluded. Repeat activity means an authenticated actor generated requests on at least two distinct UTC dates "
             "within 30 days. It is a product-usage proxy, not formal cohort retention."
         ),
     }
@@ -531,18 +596,34 @@ def _pilot_signals(*, provider_responsiveness: dict, data_freshness: dict, engag
     return signals
 
 
-def _operations_metrics(db) -> dict:
-    agent_tasks = _count(db, "SELECT COUNT(*) c FROM agent_tasks")
-    failed = _count(db, "SELECT COUNT(*) c FROM agent_tasks WHERE status='failed'")
-    waiting = _count(
-        db,
-        "SELECT COUNT(*) c FROM agent_tasks WHERE status IN ('waiting_human','waiting_approval')",
+def _operations_metrics(db, demo_user_ids: set[int]) -> dict:
+    task_rows = db.execute(
+        "SELECT requested_by,status FROM agent_tasks"
+    ).fetchall()
+    task_rows = [
+        row for row in task_rows
+        if row["requested_by"] is None or int(row["requested_by"]) not in demo_user_ids
+    ]
+    agent_tasks = len(task_rows)
+    failed = sum(1 for row in task_rows if row["status"] == "failed")
+    waiting = sum(
+        1 for row in task_rows
+        if row["status"] in {"waiting_human", "waiting_approval"}
     )
     active_alerts = _count(db, "SELECT COUNT(*) c FROM agent_alerts WHERE status='active'")
-    consultations = _count(db, "SELECT COUNT(*) c FROM consultation_requests")
-    consultation_accepted = _count(
-        db,
-        "SELECT COUNT(*) c FROM consultation_requests WHERE status IN ('accepted','confirmed','active','completed')",
+
+    consultation_rows = db.execute(
+        "SELECT patient_id,doctor_id,status FROM consultation_requests"
+    ).fetchall()
+    consultation_rows = [
+        row for row in consultation_rows
+        if int(row["patient_id"]) not in demo_user_ids
+        and int(row["doctor_id"]) not in demo_user_ids
+    ]
+    consultations = len(consultation_rows)
+    consultation_accepted = sum(
+        1 for row in consultation_rows
+        if row["status"] in {"accepted", "confirmed", "active", "completed"}
     )
     return {
         "agent_tasks": agent_tasks,
