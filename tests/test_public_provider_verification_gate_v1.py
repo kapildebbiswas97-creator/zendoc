@@ -347,7 +347,7 @@ def test_pending_provider_api_quarantine_allows_only_onboarding_and_account_cont
 
     onboarding = client.get("/api/v1/provider/onboarding", headers=headers)
     assert onboarding.status_code == 200
-    assert onboarding.get_json()["status"] in {"PROFILE_REQUIRED", "PENDING", "READY_FOR_REVIEW", "VERIFIED"}
+    assert onboarding.get_json()["status"] in {"PROFILE_REQUIRED", "OK"}
 
     exported = client.get("/api/v1/account/export", headers=headers)
     assert exported.status_code == 200
