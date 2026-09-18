@@ -1,9 +1,8 @@
-"""
-Home Healthcare Service.
+"""Home-health request intake.
 
-Services include doctor home visits, nurse visits, physiotherapy, elder care,
-sample collection, and medical equipment rental.
-Transparent status tracking without fabricated doctors or prices.
+The catalog describes request categories, not guaranteed service availability.
+A request is not provider-confirmed until the verified connected-provider
+fulfilment workflow records assignment and provider acceptance.
 """
 
 from .db import get_db, now_iso
@@ -15,48 +14,48 @@ HOME_HEALTH_SERVICES = [
         "id": "doctor_visit",
         "title": "Doctor Home Visit",
         "category": "Medical Care",
-        "description": "General physician or specialist visit at your doorstep.",
-        "status_badge": "Integration Required",
+        "description": "Request category for a doctor home visit; provider availability is not assumed.",
+        "status_badge": "Request Intake",
         "icon": "user-md",
     },
     {
         "id": "nurse_visit",
         "title": "Nursing Care & Dressing",
         "category": "Nursing",
-        "description": "Wound dressing, injections, IV fluids, and vital checks.",
-        "status_badge": "Beta",
+        "description": "Request category for nursing support; provider availability and clinical scope require confirmation.",
+        "status_badge": "Request Intake",
         "icon": "user-nurse",
     },
     {
         "id": "physiotherapy",
         "title": "Home Physiotherapy",
         "category": "Rehabilitation",
-        "description": "Post-op recovery, joint mobility, stroke rehab, and pain management.",
-        "status_badge": "Beta",
+        "description": "Request category for home physiotherapy; a provider must separately accept the request.",
+        "status_badge": "Request Intake",
         "icon": "running",
     },
     {
         "id": "elder_care",
         "title": "Elder Care Attendant",
         "category": "Caregiving",
-        "description": "Full-day or part-day trained attendant for elderly assistance.",
-        "status_badge": "Integration Required",
+        "description": "Request category for elder-care assistance; no attendant is assumed available.",
+        "status_badge": "Request Intake",
         "icon": "heart",
     },
     {
         "id": "sample_collection",
         "title": "Diagnostic Sample Collection",
         "category": "Diagnostics",
-        "description": "Blood and urine sample collection at home for lab testing.",
-        "status_badge": "Integration Required",
+        "description": "Request category for home sample collection; lab/provider fulfilment requires confirmation.",
+        "status_badge": "Request Intake",
         "icon": "vial",
     },
     {
         "id": "equipment_rental",
         "title": "Medical Equipment Rental",
         "category": "Equipment",
-        "description": "Oxygen concentrators, hospital beds, wheelchairs, and CPAP machines.",
-        "status_badge": "Integration Required",
+        "description": "Request category for equipment rental; inventory, price and delivery are not confirmed here.",
+        "status_badge": "Request Intake",
         "icon": "wheelchair",
     },
 ]
@@ -79,8 +78,9 @@ def create_home_health_request(user, data):
         raise PermissionError("Authentication required.")
 
     service_type = str(data.get("service_type") or "").strip()
-    if not service_type:
-        raise ValueError("service_type is required.")
+    allowed_types = {item["id"] for item in HOME_HEALTH_SERVICES}
+    if service_type not in allowed_types:
+        raise ValueError("Unsupported home-health service_type.")
 
     scheduled_date = str(data.get("scheduled_date") or "").strip()
     if not scheduled_date:
@@ -105,7 +105,13 @@ def create_home_health_request(user, data):
         (target_patient_id, uid, service_type, scheduled_date, address, city, "requested", notes, now),
     )
     db.commit()
-    return get_home_health_request(user, cursor.lastrowid)
+    result = get_home_health_request(user, cursor.lastrowid)
+    result["provider_confirmed"] = False
+    result["fulfilment_status"] = "request_recorded_unconfirmed"
+    result["truth_notice"] = (
+        "This ZENDOC request record does not confirm a home-care provider, booking, price or external fulfilment."
+    )
+    return result
 
 
 def list_home_health_requests(user):
@@ -119,7 +125,13 @@ def list_home_health_requests(user):
            ORDER BY hhr.created_at DESC""",
         (uid, uid),
     ).fetchall()
-    return [dict(r) for r in rows]
+    result = []
+    for row in rows:
+        item = dict(row)
+        item["provider_confirmed"] = False
+        item["fulfilment_status"] = "request_recorded_unconfirmed"
+        result.append(item)
+    return result
 
 
 def get_home_health_request(user, request_id):
