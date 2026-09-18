@@ -62,6 +62,7 @@ from .universal_search_routes import bp as universal_search_bp
 from .database_reliability import readiness_report
 from .observability import finish_request_observation, start_request_observation
 from .routes import bp
+from .security_headers import apply_security_headers
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -151,6 +152,7 @@ def create_app(test_config=None):
     app.after_request(finish_operational_careloop_request)
     app.after_request(finish_careloop_request)
     app.after_request(finish_request_observation)
+    app.after_request(apply_security_headers)
     app.teardown_appcontext(close_db)
     validate_startup_config(app)
     with app.app_context():
