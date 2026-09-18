@@ -290,7 +290,7 @@ def api_get_doctor_availability(doctor_id):
         return error
     try:
         return jsonify({"doctor_availability": get_doctor_availability(doctor_id)})
-    except LookupError as error:
+    except (LookupError, PermissionError) as error:
         return _api_error(error)
 
 
