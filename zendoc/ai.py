@@ -4,6 +4,12 @@ from .safety import SafetyEngine
 
 
 def doctor_prediction(symptoms):
+    """Legacy compatibility entry point for non-diagnostic symptom guidance.
+
+    Despite the historical function/route name, this function does not diagnose,
+    prescribe, recommend medicine changes, or claim a likely condition. It only
+    provides a bounded urgency level and safe next-step guidance.
+    """
     text = (symptoms or "").lower()
     safety = SafetyEngine().assess(text)
     if safety["emergency"]:
@@ -12,26 +18,63 @@ def doctor_prediction(symptoms):
             "risk_level": "high",
             "next_steps": safety["guidance"],
             "emergency": True,
+            "scope": "non_diagnostic_symptom_guidance",
+            "diagnosis": None,
+            "prescription": None,
+            "medication_change": None,
         }
 
     rules = [
-        (("fever", "cough"), "Possible respiratory infection", "medium"),
-        (("headache", "nausea"), "Possible migraine, dehydration, or infection", "medium"),
-        (("rash", "itch"), "Possible allergy or skin condition", "low"),
-        (("fatigue", "thirst"), "Possible metabolic, hydration, or lifestyle concern", "medium"),
-        (("stress", "insomnia"), "Possible stress-related sleep disturbance", "medium"),
+        (
+            ("fever", "cough"),
+            "Fever together with cough can have many causes and may need clinical assessment, especially if symptoms persist or worsen.",
+            "medium",
+        ),
+        (
+            ("headache", "nausea"),
+            "Headache together with nausea can have several causes. Hydration, duration, severity, and other symptoms matter for a clinician's assessment.",
+            "medium",
+        ),
+        (
+            ("rash", "itch"),
+            "An itchy rash can have many causes. Avoid guessing the cause from symptoms alone and seek clinical review if it is spreading, severe, or persistent.",
+            "low",
+        ),
+        (
+            ("fatigue", "thirst"),
+            "Fatigue together with increased thirst deserves attention if it persists. A clinician may need history, examination, or tests to understand the cause.",
+            "medium",
+        ),
+        (
+            ("stress", "insomnia"),
+            "Stress and poor sleep can affect wellbeing. If either is persistent, severe, or affecting daily function, consider professional support.",
+            "medium",
+        ),
     ]
     for keywords, summary, risk in rules:
         if all(keyword in text for keyword in keywords):
             return {
                 "summary": summary,
                 "risk_level": risk,
-                "next_steps": "Book a consultation and upload any recent reports for review.",
+                "next_steps": "Consider booking a qualified clinician for assessment. ZENDOC does not diagnose conditions from symptoms.",
+                "emergency": False,
+                "scope": "non_diagnostic_symptom_guidance",
+                "diagnosis": None,
+                "prescription": None,
+                "medication_change": None,
             }
     return {
-        "summary": "More information is required for useful educational guidance.",
+        "summary": "More information is required for useful non-diagnostic guidance.",
         "risk_level": "low",
-        "next_steps": "Add duration, severity, age, medications, and existing conditions. ZENDOC does not diagnose conditions.",
+        "next_steps": (
+            "If symptoms concern you, add duration and severity for context and consider a qualified clinician. "
+            "ZENDOC does not diagnose conditions from symptoms."
+        ),
+        "emergency": False,
+        "scope": "non_diagnostic_symptom_guidance",
+        "diagnosis": None,
+        "prescription": None,
+        "medication_change": None,
     }
 
 
