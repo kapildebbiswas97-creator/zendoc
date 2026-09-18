@@ -10,6 +10,7 @@ from flask import current_app
 
 from .database_reliability import backup_readiness, readiness_report
 from .db import get_db
+from .demo_truth import synthetic_demo_provider_profile_ids, synthetic_demo_user_ids
 from .pilot_analytics import pilot_scorecard
 from .state_geography_bootstrap import state_coverage_summary
 
@@ -64,11 +65,26 @@ def first50_launch_readiness() -> dict:
     else:
         passed.append({"key": "password_recovery", "message": "Password recovery delivery is integrated."})
 
-    user_count = int(db.execute("SELECT COUNT(*) c FROM users WHERE active=1 AND role<>'admin'").fetchone()["c"])
-    verified_providers = int(db.execute(
-        "SELECT COUNT(*) c FROM provider_profiles WHERE verification_status='verified'"
-    ).fetchone()["c"])
-    provider_profiles = int(db.execute("SELECT COUNT(*) c FROM provider_profiles").fetchone()["c"])
+    demo_user_ids = synthetic_demo_user_ids(db)
+    demo_profile_ids = synthetic_demo_provider_profile_ids(db)
+
+    user_rows = db.execute(
+        "SELECT id FROM users WHERE active=1 AND role<>'admin'"
+    ).fetchall()
+    user_count = sum(1 for row in user_rows if int(row["id"]) not in demo_user_ids)
+
+    provider_rows = db.execute(
+        "SELECT id,verification_status FROM provider_profiles"
+    ).fetchall()
+    real_provider_rows = [
+        row for row in provider_rows
+        if int(row["id"]) not in demo_profile_ids
+    ]
+    provider_profiles = len(real_provider_rows)
+    verified_providers = sum(
+        1 for row in real_provider_rows
+        if str(row["verification_status"] or "").strip().lower() == "verified"
+    )
 
     if verified_providers == 0:
         warnings.append({
@@ -152,7 +168,7 @@ def first50_launch_readiness() -> dict:
         "backup": backup,
         "pilot_signals": pilot.get("signals", []),
         "truth_notice": (
-            "PILOT_READY means the checked ZENDOC software/deployment conditions are green. "
+            "PILOT_READY means the checked ZENDOC software/deployment conditions are green. Synthetic competition fixtures are excluded from user/provider counts. "
             "It does not claim that every locality has a connected provider, real-time stock, beds, ambulance dispatch, "
             "or any external partner integration."
         ),
