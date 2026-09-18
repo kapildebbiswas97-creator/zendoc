@@ -141,17 +141,28 @@ def web_edgecare_transcribe():
     # transcript are deliberately excluded from audit_logs.
     from flask import g
 
-    audit_id = audit(
+    audit_entity_id = (
+        f"{str(result.provider or 'local')[:60]}:"
+        f"{str(result.model or 'unknown')[:80]}:"
+        f"{'success' if result.success else str(result.error_category or 'failed')[:60]}"
+    )
+    audit(
         "edgecare_asr_transcribe",
         "local_asr",
-        (
-            f"{str(result.provider or 'local')[:60]}:"
-            f"{str(result.model or 'unknown')[:80]}:"
-            f"{'success' if result.success else str(result.error_category or 'failed')[:60]}"
-        ),
+        audit_entity_id,
         actor=g.user,
     )
+    audit_row = get_db().execute(
+        """
+        SELECT id FROM audit_logs
+        WHERE actor_id=? AND action='edgecare_asr_transcribe'
+          AND entity_type='local_asr' AND entity_id=?
+        ORDER BY id DESC LIMIT 1
+        """,
+        (int(g.user["id"]), audit_entity_id),
+    ).fetchone()
     get_db().commit()
+    audit_id = int(audit_row["id"]) if audit_row else None
 
     payload = result.to_dict()
     payload["audit_log_id"] = audit_id
