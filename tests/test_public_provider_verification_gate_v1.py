@@ -5,6 +5,7 @@ from zendoc.db import get_db, now_iso
 from zendoc.email_verification import mark_email_verified
 from zendoc.human_operations import create_staff_task
 from zendoc.partner_handoffs import list_provider_booking_handoffs
+from zendoc.pharmacy_service import list_medicine_orders
 from zendoc.provider_service import create_schedule, upsert_provider_profile
 from zendoc.telehealth import set_doctor_availability
 
@@ -198,3 +199,30 @@ def test_pending_provider_cannot_change_appointment_status_in_public_mode(tmp_pa
             (appointment_id,),
         ).fetchone()
         assert row["status"] == "requested"
+
+
+def test_pending_pharmacy_cannot_read_assigned_orders_in_public_mode(tmp_path):
+    app, client = make_client(tmp_path)
+    email = "pending-public-pharmacy@example.com"
+    register_web(client, "pharmacy", email, "Pending Public Pharmacy")
+
+    with app.app_context():
+        db = get_db()
+        pharmacy = db.execute(
+            "SELECT * FROM users WHERE email_normalized=?",
+            (email,),
+        ).fetchone()
+        upsert_provider_profile(
+            pharmacy,
+            {
+                "organization": "Pending Public Pharmacy",
+                "city": "Kalyani",
+                "state": "West Bengal",
+            },
+        )
+        mark_email_verified(pharmacy["id"], email)
+        db.commit()
+        app.config["PUBLIC_RELEASE_REQUIRED"] = True
+
+        with pytest.raises(PermissionError, match="Provider verification is required"):
+            list_medicine_orders(pharmacy)
