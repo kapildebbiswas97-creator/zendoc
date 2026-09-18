@@ -278,6 +278,11 @@ def validate_startup_config(app):
                 public_missing.append("ZENDOC_SMTP_HOST")
             if not str(app.config.get("SMTP_FROM_EMAIL") or "").strip():
                 public_missing.append("ZENDOC_SMTP_FROM_EMAIL")
+            if not (
+                bool(app.config.get("SMTP_USE_TLS"))
+                or bool(app.config.get("SMTP_USE_SSL"))
+            ):
+                public_missing.append("encrypted SMTP transport (TLS or SSL)")
             if not bool(app.config.get("EMAIL_VERIFIED")):
                 public_missing.append("ZENDOC_EMAIL_VERIFIED=true")
             if storage_provider == "local":
@@ -289,6 +294,9 @@ def validate_startup_config(app):
                     public_missing.append("ZENDOC_S3_ACCESS_KEY_ID")
                 if not str(app.config.get("S3_SECRET_ACCESS_KEY") or ""):
                     public_missing.append("ZENDOC_S3_SECRET_ACCESS_KEY")
+                endpoint_url = str(app.config.get("S3_ENDPOINT_URL") or "").strip()
+                if endpoint_url and not endpoint_url.lower().startswith("https://"):
+                    public_missing.append("HTTPS ZENDOC_S3_ENDPOINT_URL")
             if not bool(app.config.get("STORAGE_VERIFIED")):
                 public_missing.append("ZENDOC_STORAGE_VERIFIED=true")
             if connected_mode != "LIVE":
