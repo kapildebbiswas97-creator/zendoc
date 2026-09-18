@@ -102,8 +102,8 @@ def search_all(user, query):
             "label": "Ambulance Services",
             "items": [
                 {
-                    "title": "Request Medical Transport / Ambulance",
-                    "subtitle": "Emergency 108, BLS, ALS, & Patient Transport",
+                    "title": "Medical Transport Request Intake",
+                    "subtitle": "Request categories and emergency guidance · no ZENDOC dispatch confirmation",
                     "url": "/ambulance",
                     "type": "ambulance",
                 }
@@ -218,7 +218,7 @@ def search_all(user, query):
     # 9. AI Health Assistant
     results.append({
         "category": "ZENDOC AI",
-        "label": "AI Health Consultation",
+        "label": "AI Health Guidance",
         "items": [
             {
                 "title": f"Ask ZENDOC AI about '{clean_q}'",
