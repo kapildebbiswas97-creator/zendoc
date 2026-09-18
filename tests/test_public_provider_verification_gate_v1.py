@@ -1,6 +1,7 @@
 import pytest
 
 from tests.test_milestone1 import csrf, login_web, make_client, register_web
+from zendoc.communication_policy import discover_contacts, permission_decision
 from zendoc.db import get_db, now_iso
 from zendoc.email_verification import mark_email_verified
 from zendoc.human_operations import create_staff_task
@@ -352,3 +353,82 @@ def test_pending_provider_api_quarantine_allows_only_onboarding_and_account_cont
     exported = client.get("/api/v1/account/export", headers=headers)
     assert exported.status_code == 200
     assert exported.get_json()["account"]["email_normalized"] == email
+
+
+def test_patient_cannot_read_pending_provider_availability_or_discover_contact(tmp_path):
+    app, client = make_client(tmp_path)
+    doctor_email = "pending-read-doctor@example.com"
+    doctor_id = _prepare_pending_doctor(app, client, doctor_email)
+
+    client.get("/logout", follow_redirects=False)
+    patient_email = "pending-read-patient@example.com"
+    register_web(client, "patient", patient_email, "Read Boundary Patient")
+
+    with app.app_context():
+        db = get_db()
+        patient = db.execute(
+            "SELECT * FROM users WHERE email_normalized=?",
+            (patient_email,),
+        ).fetchone()
+        mark_email_verified(patient["id"], patient_email)
+        db.commit()
+        app.config["PUBLIC_RELEASE_REQUIRED"] = True
+
+        contacts = discover_contacts(patient, query="Pending Public", limit=20)
+        assert all(int(item["id"]) != doctor_id for item in contacts)
+
+        decision = permission_decision(patient, doctor_id, channel="chat")
+        assert decision["allowed"] is False
+        assert "not verified" in decision["reason"].lower()
+
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"email": patient_email, "password": "StrongPass123"},
+    )
+    assert login.status_code == 200
+    access = login.get_json()["access_token"]
+
+    availability = client.get(
+        f"/api/v1/doctor/{doctor_id}/availability",
+        headers={"Authorization": f"Bearer {access}"},
+    )
+    assert availability.status_code == 403
+    assert "Provider verification is required" in availability.get_json()["error"]["message"]
+
+
+def test_patient_direct_conversation_with_pending_provider_is_rejected(tmp_path):
+    app, client = make_client(tmp_path)
+    doctor_email = "pending-chat-doctor@example.com"
+    doctor_id = _prepare_pending_doctor(app, client, doctor_email)
+
+    client.get("/logout", follow_redirects=False)
+    patient_email = "pending-chat-patient@example.com"
+    register_web(client, "patient", patient_email, "Chat Boundary Patient")
+
+    with app.app_context():
+        db = get_db()
+        patient = db.execute(
+            "SELECT * FROM users WHERE email_normalized=?",
+            (patient_email,),
+        ).fetchone()
+        mark_email_verified(patient["id"], patient_email)
+        db.commit()
+        app.config["PUBLIC_RELEASE_REQUIRED"] = True
+
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"email": patient_email, "password": "StrongPass123"},
+    )
+    assert login.status_code == 200
+    access = login.get_json()["access_token"]
+
+    response = client.post(
+        "/api/v1/conversations",
+        headers={"Authorization": f"Bearer {access}"},
+        json={
+            "target_user_id": doctor_id,
+            "conversation_type": "direct",
+        },
+    )
+    assert response.status_code == 403
+    assert "not verified" in response.get_json()["error"]["message"].lower()
