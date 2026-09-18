@@ -11,9 +11,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from .db import get_db, is_integrity_error, now_iso
-from .provider_service import available_slots, get_public_provider_profile
+from .provider_service import available_slots, get_public_provider_profile, require_verified_provider
 from .partner_audit import record_partner_audit_event
-from .provider_service import require_verified_provider
 from .notification_providers import deliver_notification
 from .security import assert_owner
 
