@@ -263,6 +263,15 @@ def public_launch_readiness() -> dict:
             ),
             "detail": email,
         })
+    elif not (
+        bool(current_app.config.get("SMTP_USE_TLS"))
+        or bool(current_app.config.get("SMTP_USE_SSL"))
+    ):
+        blockers.append({
+            "key": "transactional_email_transport",
+            "message": "Public transactional email must use SMTP TLS or SSL.",
+            "detail": email,
+        })
     elif not bool(current_app.config.get("EMAIL_VERIFIED")):
         blockers.append({
             "key": "transactional_email",
@@ -275,7 +284,7 @@ def public_launch_readiness() -> dict:
     else:
         passed.append({
             "key": "transactional_email",
-            "message": "Transactional email is configured and marked verified.",
+            "message": "Transactional email is configured, encrypted and marked verified.",
         })
 
     if not bool(current_app.config.get("BACKUP_VERIFIED")):
@@ -309,6 +318,12 @@ def public_launch_readiness() -> dict:
             "message": "Durable medical-record storage is not fully configured.",
             "detail": storage,
         })
+    elif storage.get("transport_secure") is False:
+        blockers.append({
+            "key": "durable_record_storage_transport",
+            "message": "Public medical-record object storage must use HTTPS transport.",
+            "detail": storage,
+        })
     elif not bool(current_app.config.get("STORAGE_VERIFIED")):
         blockers.append({
             "key": "durable_record_storage",
@@ -321,7 +336,7 @@ def public_launch_readiness() -> dict:
     else:
         passed.append({
             "key": "durable_record_storage",
-            "message": "Durable record storage is configured and marked verified.",
+            "message": "Durable record storage is configured, encrypted in transit and marked verified.",
         })
 
     required_routes = {
