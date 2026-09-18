@@ -9,6 +9,9 @@ Do not copy answers blindly into Play Console. Verify them against the exact dep
 - App: ZENDOC
 - Core surface: healthcare services/navigation, patient Health Memory, bounded AI, and wellness.
 - Account creation: yes.
+- Public-release account email verification: yes.
+- Registration records accepted Privacy Policy and Terms versions: yes.
+- Authenticated structured data export: yes.
 - In-app deletion path: Profile -> Delete ZENDOC account.
 - Public deletion resource: https://<production-domain>/account-deletion
 - Privacy policy: https://<production-domain>/privacy
@@ -79,7 +82,7 @@ Complete this table from the actual production deployment.
 | Hosting provider | Web/API hosting | TBD | HTTPS required | TBD | TBD |
 | PostgreSQL host | Durable database | TBD | TBD | TBD | TBD |
 | S3-compatible storage | Medical-record objects | Uploaded files/object metadata | TLS required | TBD | TBD |
-| SMTP/email provider | Password reset/deletion email | Recipient email + transactional content | TLS configured | TBD | TBD |
+| SMTP/email provider | Email verification, password reset, deletion email | Recipient email + transactional content | TLS configured | TBD | TBD |
 | Maps/Places provider | Care discovery if enabled | Search/location query as configured | TBD | TBD | TBD |
 | Cloud AI provider | Only if enabled | Exact configured scope | TBD | TBD | TBD |
 | Video provider | Only if enabled | Search query as configured | TBD | TBD | TBD |
@@ -110,6 +113,8 @@ Current code includes:
 - password hashing;
 - hashed API tokens for newly stored tokens;
 - audit/security boundaries;
+- public-release email ownership verification before ordinary user login;
+- versioned Privacy Policy and Terms acceptance records;
 - no offline service-worker caching of authenticated health HTML/API responses.
 
 Do not select a Play security claim that requires an external certification unless ZENDOC actually has that certification.
@@ -120,6 +125,7 @@ Current deletion implementation:
 
 - hard-deletes the ordinary user account;
 - deletes directly attributed AI/history/analytics/observability rows covered by the deletion service;
+- deletes account email-verification and policy-acceptance records;
 - cascades account-owned database records according to the schema;
 - deletes owned medical-record objects through the configured storage adapter;
 - may preserve another user's necessary operational history only after removing or de-identifying the deleted provider's user identity.
@@ -161,6 +167,9 @@ The store listing should state clearly:
 - [ ] Privacy policy publicly accessible without login and not a PDF.
 - [ ] In-app deletion tested.
 - [ ] Public deletion tested without requiring app reinstall.
+- [ ] Registration policy acceptance tested.
+- [ ] Account email verification and resend tested without account enumeration.
+- [ ] Account structured export tested.
 - [ ] Password-reset email tested.
 - [ ] Record-storage deletion tested.
 - [ ] Every enabled third-party production processor listed above.
