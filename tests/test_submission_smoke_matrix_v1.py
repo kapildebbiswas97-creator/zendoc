@@ -24,6 +24,8 @@ PATIENT_CRITICAL_GETS = (
     "/family",
     "/videos",
     "/profile",
+    "/agent-os",
+    "/care-continuity",
 )
 
 
