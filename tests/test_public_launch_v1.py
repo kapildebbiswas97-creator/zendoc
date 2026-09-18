@@ -289,6 +289,22 @@ def test_provider_account_deletion_deidentifies_without_cascading_patient_histor
         doctor = db.execute("SELECT * FROM users WHERE email_normalized=?", (doctor_email,)).fetchone()
         patient = db.execute("SELECT * FROM users WHERE email_normalized=?", (patient_email,)).fetchone()
         stamp = now_iso()
+        db.execute(
+            """
+            INSERT INTO user_policy_acceptances
+            (user_id,policy_type,policy_version,accepted_at,source)
+            VALUES (?,'privacy','test-v1',?,'test')
+            """,
+            (doctor["id"], stamp),
+        )
+        db.execute(
+            """
+            INSERT INTO user_email_verifications
+            (user_id,verified_email,verified_at,created_at,updated_at)
+            VALUES (?,?,?,?,?)
+            """,
+            (doctor["id"], doctor_email, stamp, stamp, stamp),
+        )
         profile_id = db.execute(
             """
             INSERT INTO provider_profiles
@@ -345,6 +361,8 @@ def test_provider_account_deletion_deidentifies_without_cascading_patient_histor
         assert tombstone["phone"] is None
 
         assert db.execute("SELECT id FROM provider_profiles WHERE user_id=?", (doctor["id"],)).fetchone() is None
+        assert db.execute("SELECT user_id FROM user_policy_acceptances WHERE user_id=?", (doctor["id"],)).fetchone() is None
+        assert db.execute("SELECT user_id FROM user_email_verifications WHERE user_id=?", (doctor["id"],)).fetchone() is None
 
         appointment = db.execute("SELECT * FROM appointments WHERE id=?", (appointment_id,)).fetchone()
         assert appointment is not None
