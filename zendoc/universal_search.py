@@ -5,6 +5,8 @@ Classifies search queries across doctors, symptoms, diagnostic reports, pharmaci
 ambulance, fitness, family records, and direct platform features.
 """
 
+from flask import has_app_context
+
 from .exercise_library import list_exercises
 from .family_care import list_family_members
 from .universal_health_search import universal_search as search_healthcare
@@ -126,7 +128,11 @@ def search_all(user, query):
         })
 
     # 5. Fitness & Exercises
-    ex_res = list_exercises(q=clean_q, limit=5)
+    # Direct service-level callers may use search_all without a Flask app
+    # context (for example truth-boundary/unit tests). DB-backed exercise
+    # lookup is optional in that case; real web/API requests always have an
+    # app context and retain the full exercise search.
+    ex_res = list_exercises(q=clean_q, limit=5) if has_app_context() else {"exercises": []}
     if ex_res.get("exercises"):
         results.append({
             "category": "Fitness & Exercises",
