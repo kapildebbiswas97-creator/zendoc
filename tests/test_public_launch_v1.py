@@ -468,3 +468,46 @@ def test_public_release_startup_guard_rejects_demo_telehealth_and_data_mode(tmp_
     message = str(exc.value)
     assert "ZENDOC_CONNECTED_CARE_DATA_MODE=LIVE" in message
     assert "non-demo ZENDOC_TELEHEALTH_PROVIDER" in message
+
+
+def test_public_release_startup_rejects_plaintext_email_and_record_storage_transport(tmp_path):
+    app, _client = make_client(tmp_path)
+    app.config.update(
+        TESTING=False,
+        ZENDOC_ENV="production",
+        SECRET_KEY="test-public-release-secret",
+        ADMIN_EMAIL="owner@example.test",
+        ADMIN_PASSWORD="Strong-Owner-Password-123",
+        DATABASE_DURABILITY="durable_configured",
+        REQUIRE_DURABLE_DATABASE=True,
+        PUBLIC_RELEASE_REQUIRED=True,
+        PUBLIC_BASE_URL="https://zendoc.example.test",
+        SUPPORT_EMAIL="support@zendoc.example.test",
+        PERSISTENCE_VERIFIED=True,
+        BACKUP_VERIFIED=True,
+        EMAIL_PROVIDER="smtp",
+        EMAIL_VERIFIED=True,
+        SMTP_HOST="smtp.example.test",
+        SMTP_FROM_EMAIL="noreply@zendoc.example.test",
+        SMTP_USE_TLS=False,
+        SMTP_USE_SSL=False,
+        STORAGE_PROVIDER="s3",
+        STORAGE_VERIFIED=True,
+        S3_ENDPOINT_URL="http://storage.example.test",
+        S3_BUCKET="zendoc-records",
+        S3_ACCESS_KEY_ID="test-access",
+        S3_SECRET_ACCESS_KEY="test-value",
+        CONNECTED_CARE_DATA_MODE="LIVE",
+        TELEHEALTH_PROVIDER="internal_chat",
+    )
+    with pytest.raises(ConfigError) as exc:
+        validate_startup_config(app)
+    message = str(exc.value)
+    assert "encrypted SMTP transport" in message
+    assert "HTTPS ZENDOC_S3_ENDPOINT_URL" in message
+
+    app.config.update(
+        SMTP_USE_TLS=True,
+        S3_ENDPOINT_URL="https://storage.example.test",
+    )
+    validate_startup_config(app)
