@@ -1,3 +1,5 @@
+from flask import current_app
+
 from .db import get_db
 from .family_care import has_family_access
 
@@ -43,6 +45,26 @@ def get_user(user_id):
         (int(user_id),),
     ).fetchone()
     return dict(row) if row else None
+
+
+def _provider_is_verified(user_id):
+    row = get_db().execute(
+        """
+        SELECT verification_status
+        FROM provider_profiles
+        WHERE user_id=?
+        """,
+        (int(user_id),),
+    ).fetchone()
+    return bool(row and str(row["verification_status"]) == "verified")
+
+
+def _public_provider_communication_allowed(user):
+    if not current_app.config.get("PUBLIC_RELEASE_REQUIRED"):
+        return True
+    if str(user.get("role") or "") not in {"doctor", "hospital", "pharmacy"}:
+        return True
+    return _provider_is_verified(user["id"])
 
 
 def public_contact(row, reason=None, context=None):
@@ -226,6 +248,19 @@ def permission_decision(actor, target_user_id, context=None, channel="chat"):
         return {"allowed": False, "reason": "Contact not found.", "context": ctx}
     if actor_row["id"] == target["id"]:
         return {"allowed": False, "reason": "Choose another ZENDOC account.", "context": ctx}
+
+    if not _public_provider_communication_allowed(actor_row):
+        return {
+            "allowed": False,
+            "reason": "Provider verification is required before provider communication.",
+            "context": ctx,
+        }
+    if not _public_provider_communication_allowed(target):
+        return {
+            "allowed": False,
+            "reason": "This provider is not verified for public communication.",
+            "context": ctx,
+        }
 
     if _has_explicit_permission(actor_row["id"], target["id"], channel):
         return {"allowed": True, "reason": "Explicit communication permission.", "context": ctx}
