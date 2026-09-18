@@ -136,6 +136,28 @@ def web_edgecare_transcribe():
         filename=upload.filename or "voice.webm",
         mimetype=upload.mimetype or "audio/webm",
     )
+
+    # Keep a metadata-only evidence link for the care chain. The audio and
+    # transcript are deliberately excluded from audit_logs.
+    from flask import g
+
+    audit_id = audit(
+        "edgecare_asr_transcribe",
+        "local_asr",
+        (
+            f"{str(result.provider or 'local')[:60]}:"
+            f"{str(result.model or 'unknown')[:80]}:"
+            f"{'success' if result.success else str(result.error_category or 'failed')[:60]}"
+        ),
+        actor=g.user,
+    )
+    get_db().commit()
+
+    payload = result.to_dict()
+    payload["audit_log_id"] = audit_id
+    payload["audit_contains_transcript"] = False
+    payload["audio_persisted"] = False
+
     if not result.success:
         status = 503 if result.error_category in {
             "disabled",
@@ -146,5 +168,5 @@ def web_edgecare_transcribe():
             "provider_error",
             "unsafe_provider_url",
         } else 400
-        return jsonify({"result": result.to_dict()}), status
-    return jsonify({"result": result.to_dict()})
+        return jsonify({"result": payload}), status
+    return jsonify({"result": payload})
