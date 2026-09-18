@@ -161,23 +161,39 @@ def render_error(error, status, message):
 
 
 def check_rate_limit():
-    if not request.path.startswith("/api/"):
+    path = str(request.path or "")
+    sensitive_web_post = request.method == "POST" and (
+        path == "/login"
+        or path.startswith("/login/")
+        or path.startswith("/register/")
+        or path in {"/forgot-password", "/reset-password", "/account-deletion", "/account-deletion/confirm"}
+    )
+    sensitive_api = path.startswith("/api/v1/auth/") or path == "/api/v1/account"
+    is_api = path.startswith("/api/")
+
+    if sensitive_web_post or sensitive_api:
+        limit = int(current_app.config.get("AUTH_RATE_LIMIT_PER_MINUTE", 20))
+        scope = "auth"
+    elif is_api:
+        limit = int(current_app.config.get("RATE_LIMIT_PER_MINUTE", 120))
+        scope = "api"
+    else:
         return
-    limit = int(current_app.config.get("RATE_LIMIT_PER_MINUTE", 120))
+
     remote = request.headers.get("X-Forwarded-For", request.remote_addr or "unknown")
     remote = str(remote).split(",", 1)[0].strip()
     client_hash = hashlib.sha256(remote.encode("utf-8")).hexdigest()[:32]
-    bucket_key = f"{client_hash}:{request.path}"
+    bucket_key = f"{client_hash}:{scope}:{path}"
     window = int(time.time()) // 60
 
-    # Tests intentionally keep an in-memory limiter so isolated test databases
-    # are not polluted by rate-limit bookkeeping and deterministic fixtures
-    # remain fast. Production/development use the shared database bucket so
-    # multiple workers/instances enforce one limit.
+    # Keep isolated test apps independent from one another while preserving
+    # deterministic throttling inside each app instance.
     if current_app.config.get("TESTING"):
-        bucket = RATE_BUCKETS.get(bucket_key)
+        test_scope = str(current_app.config.get("DATABASE") or id(current_app._get_current_object()))
+        test_bucket_key = f"{test_scope}:{bucket_key}"
+        bucket = RATE_BUCKETS.get(test_bucket_key)
         if not bucket or bucket["window"] != window:
-            RATE_BUCKETS[bucket_key] = {"window": window, "count": 1}
+            RATE_BUCKETS[test_bucket_key] = {"window": window, "count": 1}
             return
         bucket["count"] += 1
         if bucket["count"] > limit:
@@ -203,9 +219,6 @@ def check_rate_limit():
                     (bucket_key, window, now),
                 )
             except Exception as error:
-                # A concurrent worker may have created the same bucket after
-                # our SELECT. Roll back only this transaction and retry the
-                # atomic increment.
                 if not is_integrity_error(error):
                     raise
                 db.rollback()
@@ -221,7 +234,6 @@ def check_rate_limit():
         if current and int(current["count"]) > limit:
             abort(429)
 
-        # Opportunistic cleanup avoids an unbounded bookkeeping table.
         if window % 10 == 0:
             db.execute("DELETE FROM api_rate_limit_buckets WHERE window_id<?", (window - 120,))
             db.commit()
