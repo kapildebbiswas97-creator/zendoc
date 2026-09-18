@@ -14,3 +14,5 @@ def test_startup_command_center_is_owner_only(tmp_path):
     assert allowed.status_code == 200
     assert b"Startup Command Center" in allowed.data
     assert b"India State/UT coverage status" in allowed.data
+    assert b"AI runtime &amp; care-chain readiness" in allowed.data
+    assert b"Public showcase" in allowed.data
