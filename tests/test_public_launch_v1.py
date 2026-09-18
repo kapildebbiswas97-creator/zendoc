@@ -347,6 +347,7 @@ def test_provider_account_deletion_deidentifies_without_cascading_patient_histor
         assert appointment is not None
         assert appointment["patient_id"] == patient["id"]
         assert appointment["provider_id"] is None
+        assert appointment["provider_profile_id"] is None
         assert appointment["provider_name"] == "Former ZENDOC provider"
 
         record = db.execute("SELECT * FROM medical_records WHERE id=?", (record_id,)).fetchone()
