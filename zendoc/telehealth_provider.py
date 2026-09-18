@@ -9,7 +9,8 @@ from .security import hash_token
 
 
 class LocalDemoTelehealthProvider:
-    name = "local_demo"
+    def __init__(self, name: str = "local_demo"):
+        self.name = name
 
     def create_room(self, consultation_id: int) -> dict:
         room_token = secrets.token_urlsafe(32)
@@ -17,13 +18,13 @@ class LocalDemoTelehealthProvider:
             "provider": self.name,
             "room_token_hash": hash_token(room_token),
             "status": "waiting",
-            "integration_status": "beta_local_only",
+            "integration_status": "chat_only_no_webrtc" if self.name == "internal_chat" else "beta_local_only",
         }
 
     def status(self):
         return {
             "provider": self.name,
-            "status": "beta",
+            "status": "working_chat_only" if self.name == "internal_chat" else "beta",
             "supports_chat": True,
             "supports_voice": False,
             "supports_video": False,
@@ -51,5 +52,7 @@ class UnavailableTelehealthProvider:
 def get_telehealth_provider():
     provider = str(current_app.config.get("TELEHEALTH_PROVIDER") or "local_demo").strip().lower()
     if provider == "local_demo":
-        return LocalDemoTelehealthProvider()
+        return LocalDemoTelehealthProvider("local_demo")
+    if provider == "internal_chat":
+        return LocalDemoTelehealthProvider("internal_chat")
     return UnavailableTelehealthProvider(provider)
