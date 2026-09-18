@@ -1,8 +1,12 @@
 """Public launch, legal, PWA, and account-control routes."""
 from __future__ import annotations
 
-from flask import Blueprint, abort, current_app, g, jsonify, make_response, redirect, render_template, request, session, url_for
+import json
+from io import BytesIO
 
+from flask import Blueprint, abort, current_app, g, jsonify, make_response, redirect, render_template, request, send_file, session, url_for
+
+from .account_export import build_account_export
 from .account_lifecycle import (
     create_account_deletion_token,
     delete_account,
@@ -11,7 +15,8 @@ from .account_lifecycle import (
 from .auth import validate_email
 from .db import get_db
 from .email_delivery import email_delivery_status, send_transactional_email
-from .routes import require_api_user
+from .routes import audit, require_api_user
+from .security import login_required
 
 
 bp = Blueprint("public_launch", __name__)
@@ -133,6 +138,33 @@ def confirm_account_deletion():
         token=token,
         account=account,
     )
+
+
+@bp.get("/account/export")
+@login_required
+def account_export():
+    payload = build_account_export(g.user)
+    audit("export", "account_data", str(g.user["id"]))
+    get_db().commit()
+    body = json.dumps(payload, ensure_ascii=False, indent=2, default=str).encode("utf-8")
+    return send_file(
+        BytesIO(body),
+        mimetype="application/json",
+        as_attachment=True,
+        download_name=f"zendoc-account-export-{g.user['id']}.json",
+        max_age=0,
+    )
+
+
+@bp.get("/api/v1/account/export")
+def api_account_export():
+    user, error = require_api_user()
+    if error:
+        return error
+    payload = build_account_export(user)
+    audit("export", "account_data", str(user["id"]), actor=user)
+    get_db().commit()
+    return jsonify(payload)
 
 
 @bp.delete("/api/v1/account")
