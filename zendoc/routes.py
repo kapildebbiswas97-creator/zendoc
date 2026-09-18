@@ -328,28 +328,10 @@ def log_ai_interaction(user_id, feature, input_text, result, latency_ms=None, co
 def audit(action, entity_type, entity_id=None, actor=None):
     audit_actor = actor or g.get("user")
     actor_id = audit_actor["id"] if audit_actor else None
-    cursor = get_db().execute(
+    get_db().execute(
         "INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, created_at) VALUES (?, ?, ?, ?, ?)",
         (actor_id, action, entity_type, entity_id, now_iso()),
     )
-    # Existing callers may ignore this value. Returning the row ID lets bounded
-    # workflows link later evidence to the exact audit event without storing
-    # raw user content in operational metadata. Some PostgreSQL adapters do not
-    # expose lastrowid, so resolve the just-inserted row deterministically.
-    inserted_id = getattr(cursor, "lastrowid", None)
-    if inserted_id:
-        return int(inserted_id)
-    row = get_db().execute(
-        """
-        SELECT id FROM audit_logs
-        WHERE (actor_id=? OR (actor_id IS NULL AND ? IS NULL))
-          AND action=? AND entity_type=?
-          AND ((entity_id IS NULL AND ? IS NULL) OR entity_id=?)
-        ORDER BY id DESC LIMIT 1
-        """,
-        (actor_id, actor_id, action, entity_type, entity_id, entity_id),
-    ).fetchone()
-    return int(row["id"]) if row else None
 
 
 def stats_for(user):
