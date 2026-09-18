@@ -482,9 +482,26 @@ def register(role):
             created_user = get_db().execute("SELECT * FROM users WHERE id=?", (int(cursor.lastrowid),)).fetchone()
             if terms_accepted and privacy_accepted:
                 record_registration_policy_acceptance(created_user["id"], source="web_registration")
+            verification_token = None
+            if current_app.config.get("PUBLIC_RELEASE_REQUIRED"):
+                verification_token = issue_email_verification_token(created_user)
             record_product_activity(created_user, event_type="account_registered")
             get_db().commit()
-            flash("Registration complete. Please log in.", "success")
+            if verification_token:
+                try:
+                    _send_verification_email(created_user, verification_token)
+                except Exception:
+                    current_app.logger.exception(
+                        "Registration email verification delivery failed for user_id=%s",
+                        created_user["id"],
+                    )
+                flash(
+                    "Registration complete. Verify your email address before signing in. "
+                    "If the message does not arrive, use Resend verification.",
+                    "success",
+                )
+            else:
+                flash("Registration complete. Please log in.", "success")
             return redirect(url_for("main.login", role=role))
         except Exception as error:
             if not is_integrity_error(error):
@@ -510,6 +527,17 @@ def login(role=None):
         if user and user["role"] == "admin" and not is_owner(user):
             user = None
         if user and check_password_hash(user["password_hash"], request.form.get("password", "")):
+            if (
+                current_app.config.get("PUBLIC_RELEASE_REQUIRED")
+                and user["role"] != "admin"
+                and not email_verification_status(user).get("verified")
+            ):
+                flash(
+                    "Email verification is required before public ZENDOC access. "
+                    "Use Resend verification if you need a new link.",
+                    "warning",
+                )
+                return render_template("login.html", role=display_role), 403
             start_user_session(user, remember=bool(request.form.get("remember_me")))
             record_product_activity(user, event_type="session_login")
             audit("login", "user", str(user["id"]))
@@ -2262,9 +2290,28 @@ def api_register():
         created_user = get_db().execute("SELECT * FROM users WHERE id=?", (int(cursor.lastrowid),)).fetchone()
         if terms_accepted and privacy_accepted:
             record_registration_policy_acceptance(created_user["id"], source="api_registration")
+        verification_token = None
+        if current_app.config.get("PUBLIC_RELEASE_REQUIRED"):
+            verification_token = issue_email_verification_token(created_user)
         record_product_activity(created_user, event_type="account_registered")
         get_db().commit()
-        return jsonify({"status": "created"}), 201
+        if verification_token:
+            try:
+                _send_verification_email(created_user, verification_token)
+            except Exception:
+                current_app.logger.exception(
+                    "API registration email verification delivery failed for user_id=%s",
+                    created_user["id"],
+                )
+        return jsonify({
+            "status": "created",
+            "email_verification_required": bool(verification_token),
+            "message": (
+                "Account created. Verify the email address before login."
+                if verification_token
+                else "Account created."
+            ),
+        }), 201
     except Exception as error:
         if not is_integrity_error(error):
             raise
@@ -2290,6 +2337,18 @@ def api_login():
         user = None
     if not user or not check_password_hash(user["password_hash"], data.get("password", "")):
         return jsonify({"error": INVALID_CREDENTIALS_MESSAGE}), 401
+    if (
+        current_app.config.get("PUBLIC_RELEASE_REQUIRED")
+        and user["role"] != "admin"
+        and not email_verification_status(user).get("verified")
+    ):
+        return jsonify({
+            "error": {
+                "code": 403,
+                "message": "Email verification is required before public ZENDOC access.",
+                "reason": "email_verification_required",
+            }
+        }), 403
     token = new_token()
     get_db().execute(
         "INSERT INTO api_tokens (user_id,token_hash,token_type,created_at) VALUES (?,?,'access',?)",
