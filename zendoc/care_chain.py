@@ -471,6 +471,33 @@ def _record_chain_audit(actor: Any, result: dict, chain: dict) -> int:
     return int(row["id"])
 
 
+def _confirmation_status(continuity: dict | None) -> str:
+    """Map authoritative persisted appointment/service state to one truthful label."""
+    if not continuity:
+        return "NOT_APPLICABLE_OR_NOT_LINKED"
+
+    appointment = continuity.get("appointment") or {}
+    service = continuity.get("service") or {}
+    appointment_status = appointment.get("status")
+    service_status = service.get("status")
+
+    if appointment_status == "completed":
+        return "PROVIDER_COMPLETED"
+    if appointment_status == "confirmed":
+        return "PROVIDER_CONFIRMED"
+    if appointment_status == "requested":
+        return "WAITING_PROVIDER"
+    if service.get("internally_integrated") and service_status == "COMPLETED":
+        return "SERVICE_COMPLETED"
+    if service.get("internally_integrated") and service_status in {"CONFIRMED", "IN_PROGRESS"}:
+        return "SERVICE_CONFIRMED"
+    if service.get("internally_integrated") and service_status == "STAGED":
+        return "WAITING_SERVICE_CONFIRMATION"
+    if service.get("internally_integrated") and service_status in {"CANCELLED", "BLOCKED"}:
+        return "SERVICE_NOT_FULFILLED"
+    return "NOT_YET_REQUESTED"
+
+
 def finalize_care_chain(actor: Any, result: dict, prepared: dict) -> dict:
     """Attach persisted Agent OS, provider/outcome and audit truth to the chain."""
     chain = dict(prepared or {})
@@ -506,26 +533,8 @@ def finalize_care_chain(actor: Any, result: dict, prepared: dict) -> dict:
     appointment = (continuity or {}).get("appointment") or {}
     service = (continuity or {}).get("service") or {}
     evidence = (continuity or {}).get("evidence") or {}
-    appointment_status = appointment.get("status")
     service_status = service.get("status")
-    if not continuity:
-        provider_status = "NOT_APPLICABLE_OR_NOT_LINKED"
-    elif appointment_status == "completed":
-        provider_status = "PROVIDER_COMPLETED"
-    elif appointment_status == "confirmed":
-        provider_status = "PROVIDER_CONFIRMED"
-    elif appointment_status == "requested":
-        provider_status = "WAITING_PROVIDER"
-    elif service.get("internally_integrated") and service_status == "COMPLETED":
-        provider_status = "SERVICE_COMPLETED"
-    elif service.get("internally_integrated") and service_status in {"CONFIRMED", "IN_PROGRESS"}:
-        provider_status = "SERVICE_CONFIRMED"
-    elif service.get("internally_integrated") and service_status == "STAGED":
-        provider_status = "WAITING_SERVICE_CONFIRMATION"
-    elif service.get("internally_integrated") and service_status in {"CANCELLED", "BLOCKED"}:
-        provider_status = "SERVICE_NOT_FULFILLED"
-    else:
-        provider_status = "NOT_YET_REQUESTED"
+    provider_status = _confirmation_status(continuity)
 
     chain["provider_confirmation"] = {
         "status": provider_status,
@@ -593,6 +602,7 @@ def build_persisted_care_chain(actor: Any, journey_id: int) -> dict:
         "journey_id": int(journey_id),
         "state": continuity.get("state"),
         "provider_confirmation": {
+            "status": _confirmation_status(continuity),
             "appointment_id": appointment.get("id"),
             "appointment_status": appointment.get("status"),
             "provider_confirmed": bool(evidence.get("provider_confirmed")),
