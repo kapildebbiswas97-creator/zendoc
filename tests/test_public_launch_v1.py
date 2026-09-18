@@ -1,0 +1,251 @@
+from io import BytesIO
+
+from werkzeug.datastructures import FileStorage
+
+from tests.test_milestone1 import csrf, login_web, make_client, register_web
+from zendoc.db import get_db, now_iso
+from zendoc.record_storage import S3CompatibleRecordStorage
+
+
+def test_public_launch_legal_pwa_and_deletion_routes_exist(tmp_path):
+    _app, client = make_client(tmp_path)
+
+    for path, marker in (
+        ("/privacy", "ZENDOC Privacy Policy"),
+        ("/terms", "ZENDOC Terms of Service"),
+        ("/medical-disclaimer", "Medical Disclaimer"),
+        ("/account-deletion", "Delete your ZENDOC account"),
+        ("/offline", "ZENDOC needs a connection"),
+    ):
+        response = client.get(path)
+        assert response.status_code == 200
+        assert marker in response.get_data(as_text=True)
+
+    manifest = client.get("/manifest.webmanifest")
+    assert manifest.status_code == 200
+    payload = manifest.get_json()
+    assert payload["name"] == "ZENDOC"
+    assert payload["start_url"] == "/"
+    assert payload["display"] == "standalone"
+
+    sw = client.get("/sw.js")
+    assert sw.status_code == 200
+    text = sw.get_data(as_text=True)
+    assert 'url.pathname.startsWith("/api/")' in text
+    assert "HTML stays network-only" in text
+    assert sw.headers["Service-Worker-Allowed"] == "/"
+
+
+def test_profile_exposes_in_app_account_deletion_path(tmp_path):
+    _app, client = make_client(tmp_path)
+    register_web(client, "patient", "delete-profile@example.com", "Delete Profile")
+    login_web(client, "patient", "delete-profile@example.com")
+
+    response = client.get("/profile")
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "Delete ZENDOC account" in body
+    assert "/account-deletion" in body
+
+
+def test_password_confirmed_account_deletion_removes_account_ai_data_and_owned_file(tmp_path):
+    app, client = make_client(tmp_path)
+    email = "delete-me@example.com"
+    register_web(client, "patient", email, "Delete Me")
+    login_web(client, "patient", email)
+
+    with app.app_context():
+        db = get_db()
+        user = db.execute("SELECT * FROM users WHERE email_normalized=?", (email,)).fetchone()
+        user_id = int(user["id"])
+        upload_root = app.config["UPLOAD_FOLDER"]
+        import os
+        os.makedirs(upload_root, exist_ok=True)
+        stored = "delete-owned-report.txt"
+        with open(os.path.join(upload_root, stored), "wb") as handle:
+            handle.write(b"private report")
+        db.execute(
+            """
+            INSERT INTO medical_records
+            (owner_id,uploaded_by,title,category,original_filename,stored_filename,mime_type,file_size,created_at)
+            VALUES (?,?,?,?,?,?,?,?,?)
+            """,
+            (user_id, user_id, "Delete report", "other", "report.txt", stored, "text/plain", 14, now_iso()),
+        )
+        db.execute(
+            """
+            INSERT INTO ai_interactions
+            (user_id,feature,intent,input_text,output_text,risk_level,model_version,provider,emergency,success,latency_ms,created_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+            """,
+            (user_id, "zendoc_ai", "general", "private question", "private answer", "low", "test", "test", 0, 1, 1, now_iso()),
+        )
+        db.commit()
+
+    page = client.get("/account-deletion")
+    token = csrf(page.data.decode())
+    response = client.post(
+        "/account-deletion",
+        data={"csrf_token": token, "password": "StrongPass123"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 200
+    assert "Your ZENDOC account was deleted" in response.get_data(as_text=True)
+
+    with app.app_context():
+        db = get_db()
+        assert db.execute("SELECT id FROM users WHERE email_normalized=?", (email,)).fetchone() is None
+        assert db.execute("SELECT id FROM ai_interactions WHERE input_text='private question'").fetchone() is None
+        import os
+        assert not os.path.exists(os.path.join(app.config["UPLOAD_FOLDER"], "delete-owned-report.txt"))
+
+
+def test_wrong_password_does_not_delete_account(tmp_path):
+    app, client = make_client(tmp_path)
+    email = "keep-me@example.com"
+    register_web(client, "patient", email, "Keep Me")
+    login_web(client, "patient", email)
+
+    page = client.get("/account-deletion")
+    token = csrf(page.data.decode())
+    response = client.post(
+        "/account-deletion",
+        data={"csrf_token": token, "password": "wrong-password"},
+    )
+    assert response.status_code == 400
+
+    with app.app_context():
+        assert get_db().execute("SELECT id FROM users WHERE email_normalized=?", (email,)).fetchone() is not None
+
+
+def test_public_email_deletion_request_is_non_enumerating_and_sends_link_when_configured(tmp_path, monkeypatch):
+    app, client = make_client(tmp_path)
+    email = "delete-link@example.com"
+    register_web(client, "patient", email, "Delete Link")
+
+    sent = []
+    from zendoc import public_launch_routes
+
+    monkeypatch.setattr(
+        public_launch_routes,
+        "email_delivery_status",
+        lambda: {"transactional_email": True, "provider": "smtp", "status": "configured"},
+    )
+    monkeypatch.setattr(
+        public_launch_routes,
+        "send_transactional_email",
+        lambda to_email, subject, text_body: sent.append((to_email, subject, text_body)) or {"status": "sent"},
+    )
+
+    page = client.get("/account-deletion")
+    token = csrf(page.data.decode())
+    existing = client.post(
+        "/account-deletion",
+        data={"csrf_token": token, "email": email},
+    )
+    assert existing.status_code == 200
+    assert "Deletion request received" in existing.get_data(as_text=True)
+    assert len(sent) == 1
+    assert sent[0][0] == email
+    assert "/account-deletion/confirm?token=" in sent[0][2]
+
+    page = client.get("/account-deletion")
+    token = csrf(page.data.decode())
+    missing = client.post(
+        "/account-deletion",
+        data={"csrf_token": token, "email": "missing-account@example.com"},
+    )
+    assert missing.status_code == 200
+    assert "Deletion request received" in missing.get_data(as_text=True)
+    assert len(sent) == 1
+
+
+def test_api_account_deletion_supports_future_mobile_wrapper(tmp_path):
+    app, client = make_client(tmp_path)
+    email = "mobile-delete@example.com"
+    register_web(client, "patient", email, "Mobile Delete")
+
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": "StrongPass123"},
+    )
+    assert login.status_code == 200
+    bearer = login.get_json()["token"]
+
+    deleted = client.delete(
+        "/api/v1/account",
+        headers={"Authorization": f"Bearer {bearer}"},
+        json={"password": "StrongPass123"},
+    )
+    assert deleted.status_code == 200
+    assert deleted.get_json()["status"] == "deleted"
+
+    with app.app_context():
+        assert get_db().execute("SELECT id FROM users WHERE email_normalized=?", (email,)).fetchone() is None
+
+
+class _FakeBody:
+    def __init__(self, value):
+        self.value = value
+
+    def read(self, _limit=-1):
+        return self.value
+
+
+class _FakeS3:
+    def __init__(self):
+        self.objects = {}
+        self.deleted = []
+
+    def upload_fileobj(self, stream, bucket, key, ExtraArgs=None):
+        self.objects[(bucket, key)] = {
+            "body": stream.read(),
+            "content_type": (ExtraArgs or {}).get("ContentType"),
+            "sse": (ExtraArgs or {}).get("ServerSideEncryption"),
+        }
+
+    def head_object(self, Bucket, Key):
+        item = self.objects[(Bucket, Key)]
+        return {"ContentLength": len(item["body"])}
+
+    def get_object(self, Bucket, Key):
+        item = self.objects[(Bucket, Key)]
+        return {"Body": _FakeBody(item["body"]), "ContentType": item["content_type"]}
+
+    def delete_object(self, Bucket, Key):
+        self.deleted.append((Bucket, Key))
+        self.objects.pop((Bucket, Key), None)
+
+
+def test_s3_compatible_storage_save_read_and_delete(tmp_path, monkeypatch):
+    app, _client = make_client(tmp_path)
+    fake = _FakeS3()
+    storage = S3CompatibleRecordStorage()
+
+    with app.app_context():
+        monkeypatch.setattr(
+            storage,
+            "_client",
+            lambda: (
+                fake,
+                {
+                    "bucket": "zendoc-test",
+                    "endpoint_url": "https://storage.example.test",
+                    "region": "auto",
+                    "access_key": "x",
+                    "secret_key": "y",
+                    "sse": "AES256",
+                },
+            ),
+        )
+        upload = FileStorage(
+            stream=BytesIO(b"hello-health-record"),
+            filename="record.txt",
+            content_type="text/plain",
+        )
+        saved = storage.save(upload, "record.txt")
+        assert saved.provider == "s3"
+        assert saved.size_bytes == len(b"hello-health-record")
+        assert storage.read_bytes(saved.storage_key, max_bytes=100) == b"hello-health-record"
+        storage.delete(saved.storage_key)
+        assert ("zendoc-test", saved.storage_key) in fake.deleted
