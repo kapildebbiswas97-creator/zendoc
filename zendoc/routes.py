@@ -1838,7 +1838,7 @@ def create_provider_invitation_web():
         if not delivery.get("transactional_email"):
             flash(
                 "Invitation created, but transactional email is not configured. "
-                "Do not treat the provider as onboarded until the invitation is delivered and accepted.",
+                "Do not treat the account as onboarded until the invitation is delivered and accepted.",
                 "warning",
             )
         else:
@@ -1855,7 +1855,7 @@ def create_provider_invitation_web():
                         "institutional roles do not receive provider or admin privileges."
                     ),
                 )
-                flash("Provider invitation sent.", "success")
+                flash("Controlled account invitation sent.", "success")
             except Exception:
                 current_app.logger.exception(
                     "Provider invitation delivery failed for invitation_id=%s",
