@@ -6,6 +6,7 @@ from zendoc.agent_planner import build_plan
 from zendoc.db import get_db, now_iso
 from zendoc.health_memory_rag import search_health_memory_evidence
 from zendoc.health_timeline import add_timeline_event
+from zendoc.specialist_orchestrator import orchestrate_specialist
 
 
 def _seed_patient():
@@ -152,3 +153,29 @@ def test_agent_os_health_memory_plan_includes_retrieval_and_executes_it(tmp_path
         retrieval = result["tool_results"][1]["output"]
         assert retrieval["status"] == "OK"
         assert retrieval["matches"][0]["provenance"] == "PROVIDER_RECORDED"
+
+
+def test_specialist_orchestrator_preserves_health_memory_retrieval_payload(tmp_path):
+    app = make_app(tmp_path)
+    with app.app_context():
+        patient = _seed_patient()
+        add_timeline_event(
+            patient["id"],
+            "provider_outcome",
+            "Cardiology continuity evidence",
+            summary="Provider-recorded completion evidence for the connected visit.",
+            source="PROVIDER_RECORDED",
+            created_by=patient["id"],
+        )
+
+        result = orchestrate_specialist(patient, "Search my health memory for cardiology")
+
+        assert result["intent"] == "health_records"
+        assert result["assigned_agent"] == "HealthMemoryAgent"
+        assert result["payload"]["health_memory"]["status"] == "OK"
+        retrieval = result["payload"]["retrieval"]
+        assert retrieval["status"] == "OK"
+        assert retrieval["model_called"] is False
+        assert retrieval["matches"][0]["provenance"] == "PROVIDER_RECORDED"
+        assert result["actions"][0]["type"] == "health_memory_evidence"
+        assert "prior AI chat is excluded" in result["message"]
