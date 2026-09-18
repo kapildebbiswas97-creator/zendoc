@@ -1299,6 +1299,29 @@ def startup_command_center():
     )
 
 
+@bp.get("/admin/startup/investor-snapshot.json")
+@owner_required
+def startup_investor_snapshot_export():
+    """Export aggregated fundraising evidence without patient clinical content."""
+    days = request.args.get("days", 30)
+    try:
+        days_int = max(1, min(int(days), 365))
+    except (TypeError, ValueError):
+        days_int = 30
+    snapshot = investor_traction_snapshot(
+        g.user,
+        days=days_int,
+        finance_month=request.args.get("finance_month"),
+    )
+    return jsonify({
+        "schema_version": "2026.1",
+        "generated_at": now_iso(),
+        "scope": "aggregated_owner_investor_evidence",
+        "contains_patient_clinical_content": False,
+        "snapshot": snapshot,
+    })
+
+
 @bp.post("/admin/startup/booking-handoffs/<int:handoff_id>")
 @owner_required
 def startup_booking_handoff_review_web(handoff_id):
