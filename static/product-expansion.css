@@ -1,0 +1,106 @@
+/* ZENDOC product expansion: community, commerce, payments and wellness.
+   Layout-only additions inherit the existing ZENDOC color/theme variables. */
+
+.stories-strip,
+.people-strip {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  padding: 4px 2px 10px;
+  scroll-snap-type: x proximity;
+}
+
+.story-card,
+.compact-person {
+  min-width: min(280px, 82vw);
+  max-width: 340px;
+  padding: 16px;
+  border: 1px solid var(--border, #dce4e2);
+  border-radius: 18px;
+  background: var(--surface, #fff);
+  scroll-snap-align: start;
+}
+
+.story-card {
+  display: grid;
+  gap: 8px;
+}
+
+.compact-person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.compact-person form {
+  margin-left: auto;
+}
+
+.community-feed {
+  display: grid;
+  gap: 18px;
+  max-width: 820px;
+  margin-inline: auto;
+}
+
+.community-post {
+  display: grid;
+  gap: 14px;
+}
+
+.community-post .form-actions form,
+.community-post details form {
+  margin: 0;
+}
+
+.comment-stack {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--surface-muted, rgba(127, 127, 127, 0.08));
+}
+
+.comment-stack p {
+  margin: 0;
+}
+
+.comment-composer {
+  display: flex;
+  gap: 10px;
+  align-items: end;
+}
+
+.comment-composer input {
+  flex: 1;
+}
+
+.community-post details {
+  min-width: 120px;
+}
+
+.community-post details[open] {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--border, #dce4e2);
+  border-radius: 14px;
+}
+
+.community-post details form {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+@media (max-width: 720px) {
+  .comment-composer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .story-card,
+  .compact-person {
+    min-width: 78vw;
+  }
+}
