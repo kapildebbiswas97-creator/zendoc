@@ -19,7 +19,7 @@ def test_patient_can_reach_new_product_surfaces(tmp_path):
             b"Older Adults",
             b"Non-diagnostic",
         ],
-        "/community": [b"Health-only social community", b"24-hour story", b"Report", b"Block"],
+        "/community": [b"Health-only social community", b"24-hour story", b"reporting", b"blocking"],
         "/health-shop": [b"Health Shop", b"B2C health commerce", b"Clinical independence"],
         "/payments": [b"Payments &amp; invoices", b"Payment truth boundary"],
         "/health-hub": [b"Health Community", b"Health Shop"],
