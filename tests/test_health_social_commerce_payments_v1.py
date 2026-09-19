@@ -358,3 +358,44 @@ def test_native_community_media_upload_is_validated_and_access_controlled(tmp_pa
     )
     assert bad.status_code == 200
     assert b"does not match its declared media type" in bad.data
+
+
+def test_connect_live_fragment_refreshes_authorized_thread(tmp_path):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    register_web(client, "patient", "live-one@example.com", "Live One")
+    register_web(client, "patient", "live-two@example.com", "Live Two")
+    login_web(client, "patient", "live-one@example.com")
+
+    with app.app_context():
+        db = get_db()
+        target = db.execute(
+            "SELECT id FROM users WHERE email_normalized=?",
+            ("live-two@example.com",),
+        ).fetchone()
+        target_id = int(target["id"])
+
+    page = client.get("/messages?q=Live+Two")
+    token = csrf(page.data.decode())
+    started = client.post(
+        "/messages",
+        data={
+            "csrf_token": token,
+            "action": "start",
+            "target_user_id": target_id,
+            "context_type": "direct",
+        },
+        follow_redirects=False,
+    )
+    assert started.status_code == 302
+    location = started.headers["Location"]
+    conversation_id = int(location.rsplit("=", 1)[-1])
+
+    thread = client.get(f"/messages/{conversation_id}/live")
+    assert thread.status_code == 200
+    assert b"Conversation started" in thread.data
+    assert thread.headers["Cache-Control"] == "no-store"
+
+    page = client.get(f"/messages?conversation_id={conversation_id}")
+    assert b"messages_live.js" in page.data
+    assert f"/messages/{conversation_id}/live".encode() in page.data
