@@ -17,6 +17,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='ui-polish.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='product-expansion.css') }}">
 </head>
 <body class="{% block body_class %}{% endblock %}{% if current_user and current_user.role == 'patient' %} has-patient-dock{% endif %}">
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -44,6 +45,7 @@
 
           {% if current_user.role == 'patient' %}
             <a href="{{ url_for('main.ai_center') }}" {% if endpoint == 'main.ai_center' %}aria-current="page"{% endif %}>AI Assistant</a>
+            <a href="{{ url_for('mental_wellness.mental_wellness_page') }}" {% if endpoint == 'mental_wellness.mental_wellness_page' %}aria-current="page"{% endif %}>Mental Wellness</a>
             <a href="{{ url_for('main.finder') }}" {% if endpoint in ['main.finder','main.provider_detail'] %}aria-current="page"{% endif %}>Find Care</a>
             <a href="{{ url_for('main.appointments') }}" {% if endpoint == 'main.appointments' %}aria-current="page"{% endif %}>Appointments</a>
             <details class="nav-menu" {% if endpoint in ['health_memory.health_summary_page','health_memory.timeline_page','main.records','main.health','health_memory.health_profile_page','health_memory.health_access_page','health_memory.report_detail_page','care_continuity.care_continuity_page'] %}data-active="true"{% endif %}>
@@ -58,6 +60,7 @@
               </div>
             </details>
             <a href="{{ url_for('milestone7.messages_page') }}" {% if endpoint == 'milestone7.messages_page' %}aria-current="page"{% endif %}>Messages</a>
+            <a href="{{ url_for('health_social.community_page') }}" {% if endpoint == 'health_social.community_page' %}aria-current="page"{% endif %}>Community</a>
             <a href="{{ url_for('family.family_page') }}" {% if endpoint in ['family.family_page','family.parent_care_page'] %}aria-current="page"{% endif %}>Family</a>
             <a href="{{ url_for('fitness.overview') }}" {% if endpoint.startswith('fitness.') or endpoint == 'milestone7.pose_coach_page' %}aria-current="page"{% endif %}>Fitness</a>
           {% elif current_user.role in ['doctor','hospital'] %}
@@ -65,6 +68,7 @@
               <a href="{{ url_for('main.appointments') }}" {% if endpoint == 'main.appointments' %}aria-current="page"{% endif %}>Appointments</a>
               <a href="{{ url_for('milestone7.doctor_availability_page') }}" {% if endpoint == 'milestone7.doctor_availability_page' %}aria-current="page"{% endif %}>Availability</a>
               <a href="{{ url_for('milestone7.messages_page') }}" {% if endpoint == 'milestone7.messages_page' %}aria-current="page"{% endif %}>Messages</a>
+              <a href="{{ url_for('payments.payments_page') }}" {% if endpoint == 'payments.payments_page' %}aria-current="page"{% endif %}>Payments</a>
               <a href="{{ url_for('main.records') }}" {% if endpoint == 'main.records' %}aria-current="page"{% endif %}>Shared Records</a>
             {% endif %}
             <a href="{{ url_for('main.provider_profile') }}" {% if endpoint == 'main.provider_profile' %}aria-current="page"{% endif %}>{{ 'Provider Profile' if provider_operational_access else 'Complete Verification' }}</a>
@@ -97,6 +101,10 @@
                 <a href="{{ url_for('care_os.care_os_home') }}">Care OS</a>
                 <a href="{{ url_for('specialist_agents.agent_os_page') }}">Agent OS</a>
                 <a href="{{ url_for('health_hub.health_hub_page') }}">Health Hub</a>
+                <a href="{{ url_for('health_social.community_page') }}">Health Community</a>
+                <a href="{{ url_for('health_shop.health_shop_page') }}">Health Shop</a>
+                <a href="{{ url_for('payments.payments_page') }}">Payments</a>
+                <a href="{{ url_for('business.business_page') }}">ZENDOC for Business</a>
                 <a href="{{ url_for('main.ai_center') }}#mental-awareness">Mental Wellness &amp; Awareness</a>
                 <a href="{{ url_for('health_memory.health_access_page') }}#identity-trust">Identity &amp; eKYC Readiness</a>
                 <a href="{{ url_for('connected_care.connected_care_home') }}">Connected Care</a>
@@ -112,6 +120,7 @@
               {% if current_user.role == 'admin' or (current_user.role in ['doctor','hospital','pharmacy'] and provider_operational_access) %}<a href="{{ url_for('milestone7.operations_page') }}">Staff operations</a>{% endif %}
               {% if current_user.role == 'admin' %}
                 <a href="{{ url_for('main.founder_readiness_page') }}">Founder readiness</a>
+                <a href="{{ url_for('health_social.community_moderation_page') }}">Community moderation</a>
                 <a href="{{ url_for('edgecare.edgecare_admin_page') }}">AI runtime &amp; care-chain readiness</a>
                 <a href="{{ url_for('showcase.showcase_page') }}">Public showcase</a>
               {% endif %}
@@ -176,6 +185,7 @@
     <nav class="patient-mobile-dock" aria-label="Patient quick navigation">
       <a class="mobile-dock-link" href="{{ url_for('main.dashboard') }}" {% if endpoint == 'main.dashboard' %}aria-current="page"{% endif %}><span aria-hidden="true">⌂</span><span>Home</span></a>
       <a class="mobile-dock-link mobile-dock-link--ai" href="{{ url_for('main.ai_center') }}" {% if endpoint == 'main.ai_center' %}aria-current="page"{% endif %}><span aria-hidden="true">✦</span><span>AI</span></a>
+      <a class="mobile-dock-link" href="{{ url_for('health_social.community_page') }}" {% if endpoint == 'health_social.community_page' %}aria-current="page"{% endif %}><span aria-hidden="true">◉</span><span>Community</span></a>
       <a class="mobile-dock-link" href="{{ url_for('main.finder') }}" {% if endpoint in ['main.finder','main.provider_detail'] %}aria-current="page"{% endif %}><span aria-hidden="true">⌖</span><span>Find</span></a>
       <a class="mobile-dock-link" href="{{ url_for('main.records') }}" {% if endpoint in ['main.records','health_memory.timeline_page','health_memory.health_summary_page'] %}aria-current="page"{% endif %}><span aria-hidden="true">HM</span><span>Records</span></a>
       <a class="mobile-dock-link" href="{{ url_for('main.appointments') }}" {% if endpoint == 'main.appointments' %}aria-current="page"{% endif %}><span aria-hidden="true">Cal</span><span>Visits</span></a>
@@ -226,6 +236,7 @@
       <div class="footer-bottom-links">
         <a href="{{ url_for('public_launch.privacy_policy') }}">Privacy Policy</a>
         <a href="{{ url_for('public_launch.terms_of_service') }}">Terms of Service</a>
+        <a href="{{ url_for('public_launch.community_guidelines') }}">Community Guidelines</a>
         <a href="{{ url_for('public_launch.medical_disclaimer') }}">Medical Disclaimer</a>
         <a href="{{ url_for('public_launch.account_deletion') }}">Delete Account</a>
         <button type="button" class="footer-install-button" data-install-zendoc hidden>Install ZENDOC</button>

@@ -143,8 +143,13 @@ def get_health_trend(actor, metric_type, patient_id=None, period="30d", start_da
         if start >= end or end - start > timedelta(days=3660):
             raise ValueError("Custom trend date range is invalid.")
     else:
+        # Rolling day periods are calendar-day inclusive at the UTC boundary.
+        # Using the current clock time made a measurement on the first allowed
+        # day disappear later in that same day (for example, exactly 30 days
+        # ago at 08:00 when queried at 08:30), which produced unstable trends.
         end = now + timedelta(seconds=1)
-        start = now - timedelta(days=PERIOD_DAYS[period])
+        boundary = (now - timedelta(days=PERIOD_DAYS[period])).date()
+        start = datetime.combine(boundary, datetime.min.time(), tzinfo=timezone.utc)
     rows = get_db().execute(
         """
         SELECT * FROM health_metrics

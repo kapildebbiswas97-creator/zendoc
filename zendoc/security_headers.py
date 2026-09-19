@@ -11,7 +11,7 @@ def apply_security_headers(response):
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     response.headers.setdefault(
         "Permissions-Policy",
-        "geolocation=(self), microphone=(self), camera=(self), payment=(), usb=(), browsing-topics=()",
+        "geolocation=(self), microphone=(self), camera=(self), payment=(self \"https://checkout.razorpay.com\"), usb=(), browsing-topics=()",
     )
     response.headers.setdefault(
         "Content-Security-Policy",
@@ -22,13 +22,13 @@ def apply_security_headers(response):
                 "form-action 'self'",
                 "frame-ancestors 'none'",
                 "object-src 'none'",
-                "script-src 'self' 'unsafe-inline'",
+                "script-src 'self' 'unsafe-inline' https://checkout.razorpay.com",
                 "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
                 "font-src 'self' https://fonts.gstatic.com data:",
                 "img-src 'self' data: blob: https:",
                 "media-src 'self' blob: https:",
                 "connect-src 'self' https: wss:",
-                "frame-src https://www.youtube.com https://www.youtube-nocookie.com",
+                "frame-src https://www.youtube.com https://www.youtube-nocookie.com https://checkout.razorpay.com https://api.razorpay.com",
                 "worker-src 'self' blob:",
                 "manifest-src 'self'",
             )

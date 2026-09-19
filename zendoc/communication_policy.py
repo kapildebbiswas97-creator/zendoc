@@ -236,6 +236,22 @@ def _doctor_patient_allowed(actor, target, channel="chat"):
     return False, "No doctor-patient context"
 
 
+def _accounts_block_each_other(first_user_id, second_user_id):
+    from .health_social import ensure_health_social_schema
+
+    ensure_health_social_schema()
+    row = get_db().execute(
+        """
+        SELECT 1 FROM health_social_blocks
+        WHERE (blocker_id=? AND blocked_id=?)
+           OR (blocker_id=? AND blocked_id=?)
+        LIMIT 1
+        """,
+        (int(first_user_id), int(second_user_id), int(second_user_id), int(first_user_id)),
+    ).fetchone()
+    return bool(row)
+
+
 def permission_decision(actor, target_user_id, context=None, channel="chat"):
     if not actor:
         return {"allowed": False, "reason": "Authentication required.", "context": normalize_context(context)}
@@ -248,6 +264,13 @@ def permission_decision(actor, target_user_id, context=None, channel="chat"):
         return {"allowed": False, "reason": "Contact not found.", "context": ctx}
     if actor_row["id"] == target["id"]:
         return {"allowed": False, "reason": "Choose another ZENDOC account.", "context": ctx}
+
+    if _accounts_block_each_other(actor_row["id"], target["id"]):
+        return {
+            "allowed": False,
+            "reason": "Communication is unavailable because one account has blocked the other.",
+            "context": ctx,
+        }
 
     if not _public_provider_communication_allowed(actor_row):
         return {

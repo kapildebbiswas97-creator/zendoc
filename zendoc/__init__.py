@@ -7,6 +7,7 @@ from .config import load_config, validate_startup_config
 from .ai_chat_routes import bp as ai_chat_bp
 from .care_action_ledger import ensure_care_action_ledger_schema
 from .care_continuity_routes import bp as care_continuity_bp
+from .business_routes import bp as business_bp
 from .care_os_routes import bp as care_os_bp
 from .carefin_routes import bp as carefin_bp
 from .care_journey_routes import bp as care_journey_bp
@@ -29,6 +30,10 @@ from .global_medical_authorities import install_global_medical_authorities
 from .global_registry_install import install_global_public_sources
 from .health_access import ensure_consent_schema
 from .health_hub_routes import bp as health_hub_bp
+from .health_shop import ensure_health_shop_schema
+from .health_shop_routes import bp as health_shop_bp
+from .health_social import ensure_health_social_schema
+from .health_social_routes import bp as health_social_bp
 from .health_routes import bp as health_memory_bp
 from .india_care_rail import bp as india_care_rail_bp
 from .knowledge_routes import bp as medical_knowledge_bp
@@ -37,6 +42,7 @@ from .medical_knowledge_documents import ensure_medical_knowledge_document_schem
 from .medical_knowledge_registry import MEDICAL_KNOWLEDGE_SOURCES
 from .medical_rag_ingestion import ensure_medical_rag_schema
 from .milestone7_routes import bp as milestone7_bp
+from .mental_wellness_routes import bp as mental_wellness_bp
 from .milestone8_routes import bp as milestone8_bp
 from .milestone82_routes import bp as milestone82_bp
 from .nutrition_routes import bp as nutrition_intelligence_bp
@@ -50,6 +56,8 @@ from .operational_fulfilment_ui import bp as operational_fulfilment_ui_bp
 from .organization_routes import bp as provider_organizations_bp
 from .personal_baseline_routes import bp as personal_health_baseline_bp
 from .policy_acceptance import ensure_policy_acceptance_schema
+from .payments import ensure_payment_schema
+from .payment_routes import bp as payments_bp
 from .pharmacy_order_routes import bp as pharmacy_order_ops_bp
 from .preventive_care import ensure_preventive_care_schema
 from .preventive_care_routes import bp as preventive_care_bp
@@ -118,6 +126,7 @@ def create_app(test_config=None):
     app.register_blueprint(release_health_bp)
     app.register_blueprint(health_memory_bp)
     app.register_blueprint(care_continuity_bp)
+    app.register_blueprint(business_bp)
     app.register_blueprint(medical_knowledge_bp)
     app.register_blueprint(personal_health_baseline_bp)
     app.register_blueprint(preventive_care_bp)
@@ -126,6 +135,10 @@ def create_app(test_config=None):
     app.register_blueprint(family_bp)
     app.register_blueprint(ecosystem_bp)
     app.register_blueprint(health_hub_bp)
+    app.register_blueprint(health_shop_bp)
+    app.register_blueprint(health_social_bp)
+    app.register_blueprint(mental_wellness_bp)
+    app.register_blueprint(payments_bp)
     app.register_blueprint(pharmacy_order_ops_bp)
     app.register_blueprint(operational_fulfilment_bp)
     app.register_blueprint(operational_fulfilment_release_bp)
@@ -169,6 +182,9 @@ def create_app(test_config=None):
             ensure_provider_invitation_schema()
             ensure_preventive_care_schema()
             ensure_policy_acceptance_schema()
+            ensure_health_shop_schema()
+            ensure_health_social_schema()
+            ensure_payment_schema()
             ensure_care_action_ledger_schema()
             ensure_operational_fulfilment_schema()
             get_db().commit()

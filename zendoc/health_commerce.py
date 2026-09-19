@@ -16,6 +16,14 @@ from urllib.parse import quote_plus
 
 COMMERCE_CATEGORIES = (
     {
+        "id": "food_fresh",
+        "label": "Fresh food & healthy groceries",
+        "safety_note": (
+            "Food discovery is general wellness support, not medical nutrition therapy. Allergies, kidney disease, "
+            "diabetes, pregnancy and other clinical dietary needs may require qualified professional guidance."
+        ),
+    },
+    {
         "id": "eyewear",
         "label": "Eyewear & vision accessories",
         "safety_note": (
@@ -59,9 +67,44 @@ COMMERCE_CATEGORIES = (
 
 MERCHANTS = (
     {
+        "id": "blinkit",
+        "label": "Blinkit",
+        "categories": {"food_fresh", "nutrition", "general_wellness"},
+        "search_template": "https://blinkit.com/s/?q={query}",
+        "relationship_status": "external_search_only",
+    },
+    {
+        "id": "bigbasket",
+        "label": "BigBasket",
+        "categories": {"food_fresh", "nutrition", "general_wellness"},
+        "search_template": "https://www.bigbasket.com/ps/?q={query}",
+        "relationship_status": "external_search_only",
+    },
+    {
+        "id": "zepto",
+        "label": "Zepto",
+        "categories": {"food_fresh", "nutrition", "general_wellness"},
+        "search_template": "https://www.zeptonow.com/search?query={query}",
+        "relationship_status": "external_search_only",
+    },
+    {
+        "id": "swiggy_instamart",
+        "label": "Swiggy Instamart",
+        "categories": {"food_fresh", "nutrition", "general_wellness"},
+        "search_template": "https://www.swiggy.com/instamart/search?custom_back=true&query={query}",
+        "relationship_status": "external_search_only",
+    },
+    {
+        "id": "zomato",
+        "label": "Zomato",
+        "categories": {"food_fresh", "nutrition", "general_wellness"},
+        "search_template": "https://www.zomato.com/search?q={query}",
+        "relationship_status": "external_search_only",
+    },
+    {
         "id": "amazon_india",
         "label": "Amazon India",
-        "categories": {"eyewear", "fitness", "nutrition", "home_health", "baby_child", "general_wellness"},
+        "categories": {"food_fresh", "eyewear", "fitness", "nutrition", "home_health", "baby_child", "general_wellness"},
         "search_template": "https://www.amazon.in/s?k={query}",
         "relationship_status": "external_search_only",
     },

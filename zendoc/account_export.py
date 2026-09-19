@@ -92,7 +92,7 @@ def build_account_export(user: Any) -> dict:
 
     role = str(account["role"])
     payload = {
-        "export_version": "zendoc-account-export-v1",
+        "export_version": "zendoc-account-export-v2",
         "generated_at": now_iso(),
         "account": account,
         "email_verification": email_verification_status(account),
@@ -103,6 +103,82 @@ def build_account_export(user: Any) -> dict:
             "It excludes passwords, API/reset tokens, secret keys, internal storage object keys, "
             "and administrative security configuration."
         ),
+        "community_data": {
+            "posts": _rows(
+                "SELECT id,lane,body,media_type,media_url,media_mime_type,media_original_name,media_size_bytes,sponsorship_label,visibility,moderation_status,created_at,updated_at FROM health_social_posts WHERE author_id=? ORDER BY created_at,id",
+                (user_id,),
+            ),
+            "stories": _rows(
+                "SELECT id,lane,body,media_url,media_mime_type,media_original_name,media_size_bytes,moderation_status,created_at,expires_at FROM health_social_stories WHERE author_id=? ORDER BY created_at,id",
+                (user_id,),
+            ),
+            "comments": _rows(
+                "SELECT id,post_id,body,moderation_status,created_at FROM health_social_comments WHERE author_id=? ORDER BY created_at,id",
+                (user_id,),
+            ),
+            "likes": _rows(
+                "SELECT post_id,created_at FROM health_social_likes WHERE user_id=? ORDER BY created_at,post_id",
+                (user_id,),
+            ),
+            "following": _rows(
+                "SELECT followed_id,created_at FROM health_social_follows WHERE follower_id=? ORDER BY created_at,followed_id",
+                (user_id,),
+            ),
+            "followers": _rows(
+                "SELECT follower_id,created_at FROM health_social_follows WHERE followed_id=? ORDER BY created_at,follower_id",
+                (user_id,),
+            ),
+            "blocked_accounts": _rows(
+                "SELECT blocked_id,created_at FROM health_social_blocks WHERE blocker_id=? ORDER BY created_at,blocked_id",
+                (user_id,),
+            ),
+            "reports_submitted": _rows(
+                "SELECT id,entity_type,entity_id,reason,status,created_at FROM health_social_reports WHERE reporter_id=? ORDER BY created_at,id",
+                (user_id,),
+            ),
+            "notice": "Community content is user-generated and is not exported as clinical evidence.",
+        },
+        "health_commerce_data": {
+            "outbound_clicks": _rows(
+                """
+                SELECT click_uid,merchant_id,query_text,category,destination_url,affiliate_configured,created_at
+                FROM health_commerce_clicks WHERE user_id=? ORDER BY created_at,id
+                """,
+                (user_id,),
+            ),
+            "notice": (
+                "Outbound merchant records show searches/handoffs initiated from ZENDOC. "
+                "They do not prove purchase, delivery or commission."
+            ),
+        },
+        "payment_data": {
+            "invoices": _rows(
+                """
+                SELECT id,invoice_uid,patient_id,payee_user_id,resource_type,resource_id,
+                       amount_paise,currency,description,status,gateway,gateway_order_id,
+                       gateway_payment_id,created_at,updated_at,paid_at
+                FROM care_invoices
+                WHERE patient_id=? OR payee_user_id=?
+                ORDER BY created_at,id
+                """,
+                (user_id, user_id),
+            ),
+            "events": _rows(
+                """
+                SELECT pe.id,pe.invoice_id,pe.event_type,pe.provider_event_ref,
+                       pe.signature_verified,pe.created_at
+                FROM payment_events pe
+                JOIN care_invoices i ON i.id=pe.invoice_id
+                WHERE i.patient_id=? OR i.payee_user_id=?
+                ORDER BY pe.created_at,pe.id
+                """,
+                (user_id, user_id),
+            ),
+            "notice": (
+                "Payment export includes ZENDOC invoice and gateway reference metadata, "
+                "not payment-provider secret credentials or raw signed webhook payloads."
+            ),
+        },
     }
 
     if role == "patient":

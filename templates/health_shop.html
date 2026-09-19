@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}ZENDOC Health Shop{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">B2C health commerce</p>
+    <h1>Health Shop</h1>
+    <p class="section-copy">Search health-related food, fitness equipment, eyewear, home-health devices and general wellness products across external merchants without mixing commission with clinical guidance.</p>
+  </div>
+  <a class="secondary-action" href="{{ url_for('business.business_page') }}">B2B with ZENDOC</a>
+</section>
+
+<aside class="trust-note">
+  <strong>Clinical independence comes first.</strong><br>
+  {{ affiliate.truth_notice }} ZENDOC does not automatically buy products, prescribe supplements, or send prescription-medicine searches to general marketplaces.
+</aside>
+
+<form class="panel spaced-panel" method="get">
+  <label>What are you looking for?
+    <input name="q" value="{{ q }}" placeholder="fruit, yoga mat, BP monitor, protein shaker…">
+  </label>
+  <label>Category
+    <select name="category">{% for category in categories %}<option value="{{ category.id }}" {% if selected_category == category.id %}selected{% endif %}>{{ category.label }}</option>{% endfor %}</select>
+  </label>
+  <button type="submit">Search health products</button>
+</form>
+
+{% if products.query %}
+  <section class="spaced-panel">
+    <div class="panel-head"><div><p class="eyebrow">External merchant handoffs</p><h2>Choose where you want to continue</h2></div></div>
+    <p class="section-copy">{{ products.truth_notice }}</p>
+    {% if products.medicine_query %}
+      <article class="panel">
+        <h3>Medicine search kept inside ZENDOC Pharmacy</h3>
+        <p>Medicine and prescription queries are intentionally not routed to general ecommerce merchants.</p>
+        <a class="primary-action" href="{{ products.pharmacy_handoff }}">Continue to Pharmacy</a>
+      </article>
+    {% else %}
+      <div class="grid three">
+        {% for item in products.results %}
+          <article class="panel">
+            <h3>{{ item.label }}</h3>
+            <p>{{ item.relationship_status.replace('_',' ').title() }}</p>
+            <div class="form-actions">
+              <span class="status-badge">Stock unverified</span><span class="status-badge">Price unverified</span>
+            </div>
+            <a class="primary-action spaced-panel" href="{{ url_for('health_shop.outbound', merchant_id=item.id, q=products.query, category=products.category) }}" target="_blank" rel="noopener noreferrer">Continue to {{ item.label }}</a>
+          </article>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </section>
+{% endif %}
+
+<section class="grid two spaced-panel">
+  <article class="panel"><h2>How referral revenue will work</h2><p>ZENDOC records an outbound click ID. A merchant becomes commission-enabled only after you join its real affiliate/partner program and configure the issued deep-link template. Until then the handoff remains a normal external search with no commission claim.</p></article>
+  <article class="panel"><h2>Health recommendation boundary</h2><p>Merchant commission cannot change provider ranking, emergency guidance, diagnosis boundaries, prescriptions, medicine changes, or medical-product suitability. Users always choose whether to leave ZENDOC.</p></article>
+</section>
+{% endblock %}

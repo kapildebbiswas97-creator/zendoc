@@ -116,6 +116,14 @@
   {% if intelligence_result.follow_up_questions %}
     <div style="margin-top:16px;"><strong>Helpful follow-up</strong><div class="chips">{% for question in intelligence_result.follow_up_questions %}<button type="button" data-prompt="{{ question }}">{{ question }}</button>{% endfor %}</div></div>
   {% endif %}
+  {% if not intelligence_result.emergency and intelligence_result.intent in ['fitness_coach','fitness','workout_plan','workout_session','exercise_instruction','exercise','fitness_analytics','nutrition_general','nutrition','hydration'] %}
+    {% set shop_category = 'food_fresh' if intelligence_result.intent in ['nutrition_general','nutrition','hydration'] else 'fitness' %}
+    <div class="subtle-panel" style="margin-top:16px;">
+      <strong>Optional product discovery</strong>
+      <p>ZENDOC keeps health guidance separate from shopping. If you want to buy related food, fitness equipment or wellness items, open Health Shop and choose your own search. Your health question is not sent to merchants automatically.</p>
+      <a class="secondary-action" href="{{ url_for('health_shop.health_shop_page', category=shop_category) }}">Explore Health Shop</a>
+    </div>
+  {% endif %}
 </section>
 {% endif %}
 

@@ -141,8 +141,10 @@ CREATOR_PLATFORM_READINESS = {
         "appeals, audit logs and repeat-offender handling",
     ],
     "truth_notice": (
-        "ZENDOC does not currently publish creator videos or cross-post to external social networks. "
-        "A one-click cross-post feature requires each platform's official authorization/API and user OAuth."
+        "ZENDOC Community now supports health-only text posts, HTTPS media links, 24-hour stories, follows, "
+        "likes, comments, reporting and blocking. Native media upload, creator payouts and cross-posting to "
+        "external social networks are not live; those require durable media infrastructure, moderation and "
+        "each destination platform's official authorization/API and user OAuth."
     ),
 }
 

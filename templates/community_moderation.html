@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Community Moderation — ZENDOC{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Owner safety operations</p>
+    <h1>Health Community moderation</h1>
+    <p class="section-copy">Review reports without allowing community popularity or commercial activity to influence clinical guidance. Removing content hides it from community feeds; user-account reports require separate owner investigation.</p>
+  </div>
+  <div class="form-actions">
+    <a class="secondary-action" href="{{ url_for('health_social.community_moderation_page', status='open') }}">Open</a>
+    <a class="secondary-action" href="{{ url_for('health_social.community_moderation_page', status='all') }}">All</a>
+  </div>
+</section>
+
+<aside class="trust-note">
+  <strong>Moderation boundary.</strong><br>
+  This queue can remove reported posts, stories and comments. It deliberately does not auto-disable user accounts from a single report.
+</aside>
+
+<section class="community-feed spaced-panel">
+{% for report in reports %}
+  <article class="panel community-post">
+    <div class="panel-head">
+      <div>
+        <p class="eyebrow">{{ report.entity_type.replace('_',' ').title() }} report #{{ report.id }}</p>
+        <h2>{{ report.target_author_name or 'Target unavailable' }}</h2>
+      </div>
+      <span class="status-badge {{ 'active' if report.status == 'open' else '' }}">{{ report.status.replace('_',' ').title() }}</span>
+    </div>
+    <p><strong>Reported by:</strong> {{ report.reporter_name }} · {{ report.created_at[:16] }}</p>
+    <p><strong>Reason:</strong> {{ report.reason }}</p>
+    {% if report.target_preview %}<div class="subtle-panel"><strong>Reported content</strong><p>{{ report.target_preview }}</p></div>{% endif %}
+    <p class="form-note">Current target status: {{ report.target_status }}</p>
+    {% if report.status == 'open' %}
+      <div class="form-actions">
+        {% if report.entity_type in ['post','story','comment'] %}
+        <form method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="report_id" value="{{ report.id }}">
+          <input type="hidden" name="moderation_action" value="remove">
+          <button class="danger-button" type="submit">Remove reported content</button>
+        </form>
+        {% endif %}
+        <form method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="report_id" value="{{ report.id }}">
+          <input type="hidden" name="moderation_action" value="dismiss">
+          <button class="secondary-action" type="submit">Dismiss report</button>
+        </form>
+      </div>
+    {% endif %}
+  </article>
+{% else %}
+  <div class="empty-state"><h2>No matching community reports</h2><p>New user reports will appear here for owner review.</p></div>
+{% endfor %}
+</section>
+{% endblock %}

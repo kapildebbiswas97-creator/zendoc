@@ -1,7 +1,7 @@
 # ZENDOC Public Web + Android/Google Play Release Runbook
 
 Status: engineering runbook for the current ZENDOC competition branch.
-Last reviewed: 18 September 2026.
+Last reviewed: 19 September 2026.
 
 This document separates repository work from steps that require a real domain, hosting account, credentials, Android signing key, developer account, testers, or Google review.
 
@@ -10,7 +10,7 @@ This document separates repository work from steps that require a real domain, h
 Use one ZENDOC backend/web product:
 
 - Flask/ZENDOC backend with PostgreSQL.
-- Durable S3-compatible medical-record object storage.
+- Durable S3-compatible medical-record and Health Community media object storage.
 - HTTPS custom domain.
 - Transactional SMTP for account email verification, password recovery, and off-app account deletion.
 - Installable PWA for direct mobile installation.
@@ -59,28 +59,39 @@ Required environment values include:
     ZENDOC_S3_ACCESS_KEY_ID=...
     ZENDOC_S3_SECRET_ACCESS_KEY=...
 
+Optional direct connected-care payments (only when a real Razorpay account is ready):
+
+    ZENDOC_RAZORPAY_KEY_ID=...
+    ZENDOC_RAZORPAY_KEY_SECRET=...
+    ZENDOC_RAZORPAY_WEBHOOK_SECRET=...
+
+Do not expose "Pay securely" as live until all three are configured and the signed webhook endpoint has been tested. Client checkout success alone must never mark an invoice paid.
+
 After the real object-storage smoke test succeeds, set ZENDOC_STORAGE_VERIFIED=true only for that unchanged configuration.
 
 ## Web release sequence
 
 1. Require blocking repository CI to pass.
 2. Deploy the exact validated release commit with PostgreSQL and production secrets.
-3. Configure S3-compatible record storage.
-4. In the target deployment environment run: python scripts/verify_record_storage.py
-5. Configure SMTP and run: python scripts/verify_transactional_email.py you@example.com
-6. Configure a protected scratch PostgreSQL database and run the guarded restore test:
+3. Configure S3-compatible record and Community-media storage.
+4. In the target deployment environment run both:
+   python scripts/verify_record_storage.py
+   python scripts/verify_community_media_storage.py
+5. Set ZENDOC_STORAGE_VERIFIED=true only if both storage smoke tests pass for the same unchanged configuration.
+6. Configure SMTP and run: python scripts/verify_transactional_email.py you@example.com
+7. Configure a protected scratch PostgreSQL database and run the guarded restore test:
    DATABASE_URL=<production-db> ZENDOC_BACKUP_VERIFY_DATABASE_URL=<scratch-verify-db> ZENDOC_BACKUP_VERIFY_ALLOW_RESET=true python scripts/verify_postgres_backup_restore.py
-7. Verify the hosting provider's scheduled backup/PITR retention, then set ZENDOC_BACKUP_VERIFIED=true.
-8. Buy/connect the domain and enable HTTPS.
-9. Set ZENDOC_PUBLIC_BASE_URL to that exact HTTPS origin.
-10. Configure a real support email.
-11. Set ZENDOC_EMAIL_VERIFIED=true and ZENDOC_STORAGE_VERIFIED=true only after their real smoke tests pass.
-12. Set ZENDOC_PUBLIC_RELEASE_REQUIRED=true only when the complete public configuration is ready.
-13. Run: python scripts/verify_public_launch.py https://your-domain.example
-14. Create a separate test account, accept the live Privacy Policy and Terms, verify the email link, confirm login is blocked before verification and allowed after verification.
-15. Test account data export, password reset, signed-in deletion and public deletion-request flows using that test account.
-16. Open Founder Readiness and require zero Public Launch blockers.
-17. Test using a physical phone/PWA before inviting real users.
+8. Verify the hosting provider's scheduled backup/PITR retention, then set ZENDOC_BACKUP_VERIFIED=true.
+9. Buy/connect the domain and enable HTTPS.
+10. Set ZENDOC_PUBLIC_BASE_URL to that exact HTTPS origin.
+11. Configure a real support email.
+12. Set ZENDOC_EMAIL_VERIFIED=true only after its real delivery smoke test passes.
+13. Set ZENDOC_PUBLIC_RELEASE_REQUIRED=true only when the complete public configuration is ready.
+14. Run: python scripts/verify_public_launch.py https://your-domain.example
+15. Create a separate test account, accept the live Privacy Policy and Terms, verify the email link, confirm login is blocked before verification and allowed after verification.
+16. Test account data export, password reset, signed-in deletion and public deletion-request flows using that test account.
+17. Open Founder Readiness and require zero Public Launch blockers.
+18. Test using a physical phone/PWA before inviting real users.
 
 ## Public resources
 
@@ -89,6 +100,7 @@ The following must remain reachable:
 - /privacy
 - /terms
 - /medical-disclaimer
+- /community-guidelines
 - /account-deletion
 - /register/patient
 - /resend-verification
@@ -226,3 +238,51 @@ Before Android upload preserve:
 ## Truth boundary
 
 A green public software gate does not prove regulatory approval, medical-device status, clinical effectiveness, provider network breadth, Snapdragon/NPU execution, Google Play approval, or fundraising success.
+
+
+## Health Community / UGC release checks
+
+The repository now includes a bounded health-only community with posts, 24-hour stories, follows, likes, comments, reporting and blocking.
+
+Before broad public promotion:
+
+- verify reporting and blocking on physical Android devices;
+- publish clear community rules and enforce health-only scope;
+- keep user-generated posts separate from medical evidence, diagnosis and prescription;
+- require sponsorship disclosure for commercial creator content;
+- native JPEG/PNG/WebP/MP4/WebM upload software is implemented with a 25 MiB limit and content-signature validation; require the durable Community-media storage smoke test before public uploads;
+- keep copyright/consent review, user reporting/blocking and owner moderation active for public media;
+- do not claim cross-posting until each external platform has an official API/OAuth integration;
+- re-review the Google Play Data safety and Health apps declarations against the exact shipping community features.
+
+## Commerce / affiliate release checks
+
+Health Shop can record outbound click attribution. That does not prove affiliate approval or commission.
+
+For each merchant separately:
+
+1. Join the merchant's real affiliate/partner program.
+2. Complete required business/KYC/tax setup.
+3. Obtain an approved deep-link or referral URL format.
+4. Configure only that merchant's ZENDOC_AFFILIATE_*_URL_TEMPLATE value.
+5. Test that the destination remains the intended merchant and that the click ID is preserved.
+6. Show the required affiliate/sponsorship disclosure.
+7. Keep clinical ranking, care navigation and medicine safety independent of commission.
+
+Never estimate or report commission until a real merchant report confirms it.
+
+## Connected-care payment release checks
+
+The repository payment layer is invoice-based and tied to connected ZENDOC care items.
+
+Before enabling live payment:
+
+1. Complete the payment provider's merchant/KYC onboarding.
+2. Configure live key ID, key secret and webhook secret through deployment secrets.
+3. Register the HTTPS webhook endpoint /api/v1/payments/webhook/razorpay.
+4. Verify signed payment.captured/order.paid events in the deployed environment.
+5. Test failed, cancelled and duplicated checkout flows.
+6. Confirm refunds/disputes/reconciliation processes before public financial operations.
+7. Keep payment execution deterministic and server-verified; AI must never autonomously authorize or confirm payment.
+
+Google Play Billing is not the payment path for ZENDOC's physical goods or connected clinical/service transactions; review the exact shipping model against current Google Play payments policy before every release.

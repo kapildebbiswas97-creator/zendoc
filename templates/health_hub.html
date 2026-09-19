@@ -10,6 +10,8 @@
   </div>
   <div class="form-actions">
     <a href="{{ url_for('family.family_page') }}" class="secondary-action">Family Care</a>
+    <a href="{{ url_for('health_social.community_page') }}" class="secondary-action">Health Community</a>
+    <a href="{{ url_for('health_shop.health_shop_page') }}" class="secondary-action">Health Shop</a>
     <a href="{{ url_for('ecosystem.marketplace_page') }}" class="secondary-action">Marketplace</a>
   </div>
 </section>
@@ -75,7 +77,8 @@
     <div><p class="eyebrow">Health commerce discovery</p><h2>Find health-related products</h2></div>
     <span class="status-badge">External discovery only</span>
   </div>
-  <p class="section-copy">Search external merchants without pretending ZENDOC knows live stock, price, seller quality or medical suitability. No affiliate/referral relationship is configured by this feature.</p>
+  <p class="section-copy">Search external merchants without pretending ZENDOC knows live stock, price, seller quality or medical suitability. The dedicated Health Shop records truthful outbound attribution and shows whether a real affiliate relationship is configured.</p>
+  <div class="form-actions"><a class="primary-action" href="{{ url_for('health_shop.health_shop_page', q=product_query, category=product_category) }}">Open Health Shop</a></div>
 
   <form method="get" action="{{ url_for('health_hub.health_hub_page') }}">
     <label>Product
@@ -169,13 +172,14 @@
 <section class="spaced-panel">
   <div class="panel-head">
     <div><p class="eyebrow">Creator ecosystem</p><h2>Health creator &amp; cross-post studio</h2></div>
-    <span class="status-badge">Readiness only</span>
+    <span class="status-badge">Community + native media software-ready</span><span class="status-badge">Readiness only · external cross-post/payout</span>
   </div>
   <aside class="trust-note">
-    <strong>Not live yet.</strong><br>
+    <strong>Community is live in software; external creator integrations are not.</strong><br>
     {{ creator.truth_notice }}
   </aside>
-  <p class="section-copy">Before public uploads or creator payouts, ZENDOC needs moderation, copyright/consent controls, minor safety, sponsorship disclosure, reporting/appeals and official OAuth/API integrations.</p>
+  <p class="section-copy">ZENDOC Community now supports health-only posts, native JPEG/PNG/WebP images, MP4/WebM videos, 24-hour stories, follows, comments, reporting, blocking and owner moderation. Public media uploads still require verified durable object storage. Creator payouts and external cross-posting remain integration-required and need the relevant partner/API/OAuth approvals.</p>
+  <div class="form-actions"><a class="primary-action" href="{{ url_for('health_social.community_page') }}">Open Health Community</a></div>
   <div class="grid three">
     {% for requirement in creator.required_before_launch %}
       <article class="panel"><p>{{ requirement }}</p></article>

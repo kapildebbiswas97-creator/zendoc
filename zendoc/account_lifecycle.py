@@ -15,6 +15,7 @@ from typing import Any
 from flask import current_app
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from .community_media import get_community_media_storage
 from .db import get_db, now_iso
 from .record_storage import get_record_storage
 from .security import hash_token, is_owner, new_token
@@ -104,21 +105,47 @@ def _owned_record_storage_keys(user_id: int) -> list[str]:
     return [str(row["stored_filename"]) for row in rows if row["stored_filename"]]
 
 
-def _delete_owned_files(user_id: int) -> int:
+def _owned_community_media_keys(user_id: int) -> list[str]:
+    rows = get_db().execute(
+        """
+        SELECT media_storage_key FROM health_social_posts
+        WHERE author_id=? AND media_storage_key IS NOT NULL
+        UNION
+        SELECT media_storage_key FROM health_social_stories
+        WHERE author_id=? AND media_storage_key IS NOT NULL
+        """,
+        (int(user_id), int(user_id)),
+    ).fetchall()
+    return [str(row["media_storage_key"]) for row in rows if row["media_storage_key"]]
+
+
+def _delete_owned_files(user_id: int) -> tuple[int, int]:
     keys = _owned_record_storage_keys(user_id)
-    if not keys:
-        return 0
-    storage = get_record_storage()
-    status = storage.status()
-    if status.get("status") == "integration_required":
-        raise RuntimeError(
-            "Account deletion cannot complete while the configured medical-record storage provider is unavailable."
-        )
     deleted = 0
-    for key in keys:
-        storage.delete(key)
-        deleted += 1
-    return deleted
+    if keys:
+        storage = get_record_storage()
+        status = storage.status()
+        if status.get("status") == "integration_required":
+            raise RuntimeError(
+                "Account deletion cannot complete while the configured medical-record storage provider is unavailable."
+            )
+        for key in keys:
+            storage.delete(key)
+            deleted += 1
+
+    community_keys = _owned_community_media_keys(user_id)
+    community_deleted = 0
+    if community_keys:
+        community_storage = get_community_media_storage()
+        community_status = community_storage.status()
+        if community_status.get("status") == "integration_required":
+            raise RuntimeError(
+                "Account deletion cannot complete while the configured community-media storage provider is unavailable."
+            )
+        for key in community_keys:
+            community_storage.delete(key)
+            community_deleted += 1
+    return deleted, community_deleted
 
 
 def _delete_directly_attributed_rows(user_id: int):
@@ -147,11 +174,10 @@ def _delete_directly_attributed_rows(user_id: int):
         ("DELETE FROM staff_tasks WHERE patient_id=? OR assigned_staff_id=?", (user_id, user_id)),
         ("DELETE FROM product_analytics_events WHERE user_id=?", (user_id,)),
         ("DELETE FROM product_feedback WHERE user_id=?", (user_id,)),
+        ("DELETE FROM health_commerce_clicks WHERE user_id=?", (user_id,)),
         ("DELETE FROM request_observations WHERE actor_id=?", (user_id,)),
         ("DELETE FROM user_policy_acceptances WHERE user_id=?", (user_id,)),
         ("DELETE FROM user_email_verifications WHERE user_id=?", (user_id,)),
-        ("DELETE FROM user_email_verifications WHERE user_id=?", (user_id,)),
-        ("DELETE FROM user_policy_acceptances WHERE user_id=?", (user_id,)),
     )
     for sql, params in statements:
         db.execute(sql, params)
@@ -171,7 +197,7 @@ def delete_account(user: Any, *, password: str | None = None, token_authorized: 
 
     # Remove account-owned files before the database rows that reference them.
     # If storage is unavailable, fail closed instead of claiming deletion.
-    deleted_files = _delete_owned_files(user_id)
+    deleted_files, deleted_community_media = _delete_owned_files(user_id)
 
     db = get_db()
     role = str(persisted["role"] or "")
@@ -255,6 +281,7 @@ def delete_account(user: Any, *, password: str | None = None, token_authorized: 
         "account_id": user_id,
         "role": role,
         "owned_record_files_deleted": deleted_files,
+        "owned_community_media_files_deleted": deleted_community_media,
         "deidentified_operational_anchor_retained": retained_tombstone,
         "notice": (
             "The ZENDOC account credentials and directly associated application data were deleted. "

@@ -62,6 +62,25 @@ def test_patient_can_export_own_structured_data_without_auth_or_storage_fields(t
                 stamp,
             ),
         )
+        db.execute(
+            """
+            INSERT INTO health_social_posts
+            (author_id,lane,body,media_type,media_storage_key,media_mime_type,media_original_name,
+             media_size_bytes,visibility,moderation_status,created_at,updated_at)
+            VALUES (?,'fitness','Export community post','image',?,'image/png','shared.png',123,
+                    'community','published',?,?)
+            """,
+            (uid, "community-storage-secret-marker.png", stamp, stamp),
+        )
+        db.execute(
+            """
+            INSERT INTO health_commerce_clicks
+            (click_uid,user_id,merchant_id,query_text,category,destination_url,affiliate_configured,created_at)
+            VALUES ('hc_export_test',?,'amazon_india','yoga mat','fitness',
+                    'https://www.amazon.in/s?k=yoga+mat',0,?)
+            """,
+            (uid, stamp),
+        )
         db.commit()
 
     response = client.get("/account/export")
@@ -70,6 +89,7 @@ def test_patient_can_export_own_structured_data_without_auth_or_storage_fields(t
     assert "attachment" in response.headers.get("Content-Disposition", "")
     payload = json.loads(response.get_data(as_text=True))
 
+    assert payload["export_version"] == "zendoc-account-export-v2"
     assert payload["account"]["email_normalized"] == email
     assert "password_hash" not in payload["account"]
     assert "api_tokens" not in payload
@@ -78,7 +98,14 @@ def test_patient_can_export_own_structured_data_without_auth_or_storage_fields(t
     record = payload["patient_data"]["medical_records"][0]
     assert record["original_filename"] == "report.txt"
     assert "stored_filename" not in record
-    assert "storage-object-marker-123" not in response.get_data(as_text=True)
+    assert payload["community_data"]["posts"][0]["body"] == "Export community post"
+    assert payload["community_data"]["posts"][0]["media_original_name"] == "shared.png"
+    assert payload["health_commerce_data"]["outbound_clicks"][0]["merchant_id"] == "amazon_india"
+    assert "payment_data" in payload
+    raw_export = response.get_data(as_text=True)
+    assert "storage-object-marker-123" not in raw_export
+    assert "community-storage-secret-marker" not in raw_export
+    assert "media_storage_key" not in raw_export
 
 
 def test_mobile_api_account_export_is_user_scoped(tmp_path):

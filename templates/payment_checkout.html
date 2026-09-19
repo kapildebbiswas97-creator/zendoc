@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Secure Checkout — ZENDOC{% endblock %}
+{% block content %}
+<section class="section-head"><div><p class="eyebrow">Secure payment</p><h1>Pay ₹{{ checkout.invoice.amount_inr }}</h1><p class="section-copy">{{ checkout.invoice.description }} · {{ checkout.invoice.payee_name }}</p></div></section>
+<aside class="trust-note"><strong>Final confirmation is server-verified.</strong><br>ZENDOC verifies the checkout signature and then waits for a signed Razorpay capture webhook before marking this invoice paid.</aside>
+<section class="panel spaced-panel">
+  <button
+    id="razorpay-checkout"
+    type="button"
+    data-key="{{ checkout.key_id }}"
+    data-order-id="{{ checkout.order_id }}"
+    data-amount="{{ checkout.invoice.amount_paise }}"
+    data-currency="{{ checkout.invoice.currency }}"
+    data-name="ZENDOC"
+    data-description="{{ checkout.invoice.description }}"
+  >Open secure checkout</button>
+  <form id="razorpay-verify-form" method="post" action="{{ url_for('payments.verify_checkout', invoice_id=checkout.invoice.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="razorpay_payment_id" id="razorpay-payment-id">
+    <input type="hidden" name="razorpay_order_id" id="razorpay-order-id">
+    <input type="hidden" name="razorpay_signature" id="razorpay-signature">
+  </form>
+</section>
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<script src="{{ url_for('static', filename='payment_checkout.js') }}" defer></script>
+{% endblock %}

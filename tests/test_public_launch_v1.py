@@ -7,6 +7,7 @@ from werkzeug.datastructures import FileStorage
 from tests.test_milestone1 import csrf, login_web, make_client, register_web
 from zendoc.db import get_db, now_iso
 from zendoc.record_storage import S3CompatibleRecordStorage
+from zendoc.community_media import S3CommunityMediaStorage
 from zendoc.launch_readiness import public_launch_readiness
 from zendoc.account_lifecycle import delete_account
 from zendoc.config import ConfigError, validate_startup_config
@@ -19,6 +20,7 @@ def test_public_launch_legal_pwa_and_deletion_routes_exist(tmp_path):
         ("/privacy", "ZENDOC Privacy Policy"),
         ("/terms", "ZENDOC Terms of Service"),
         ("/medical-disclaimer", "Medical Disclaimer"),
+        ("/community-guidelines", "ZENDOC Health Community Guidelines"),
         ("/account-deletion", "Delete your ZENDOC account"),
         ("/offline", "ZENDOC needs a connection"),
     ):
@@ -256,6 +258,42 @@ def test_s3_compatible_storage_save_read_and_delete(tmp_path, monkeypatch):
         assert ("zendoc-test", saved.storage_key) in fake.deleted
 
 
+def test_s3_compatible_community_media_save_read_and_delete(tmp_path, monkeypatch):
+    app, _client = make_client(tmp_path)
+    fake = _FakeS3()
+    storage = S3CommunityMediaStorage()
+    payload = b"\x89PNG\r\n\x1a\n" + b"zendoc-community-s3"
+
+    with app.app_context():
+        monkeypatch.setattr(
+            storage,
+            "_client",
+            lambda: (
+                fake,
+                {
+                    "bucket": "zendoc-test",
+                    "endpoint_url": "https://storage.example.test",
+                    "region": "auto",
+                    "access_key": "x",
+                    "secret_key": "y",
+                    "sse": "AES256",
+                },
+            ),
+        )
+        upload = FileStorage(
+            stream=BytesIO(payload),
+            filename="community.png",
+            content_type="image/png",
+        )
+        saved = storage.save(upload)
+        assert saved.provider == "s3"
+        assert saved.mime_type == "image/png"
+        assert saved.storage_key.startswith("community-media/")
+        assert storage.read_bytes(saved.storage_key, max_bytes=4096) == payload
+        storage.delete(saved.storage_key)
+        assert ("zendoc-test", saved.storage_key) in fake.deleted
+
+
 def test_public_launch_gate_reports_missing_real_world_configuration(tmp_path):
     app, _client = make_client(tmp_path)
     with app.app_context():
@@ -273,6 +311,7 @@ def test_public_launch_gate_reports_missing_real_world_configuration(tmp_path):
         assert "public_base_url" in keys
         assert "transactional_email" in keys
         assert "durable_record_storage" in keys
+        assert "durable_community_media" in keys
         assert "/privacy" not in (report.get("missing_routes") or [])
 
 

@@ -10,9 +10,9 @@ def test_repository_owned_software_completion_gate_is_green(tmp_path):
 
     assert report["status"] == "SOFTWARE_IMPLEMENTATION_COMPLETE", report["blockers"]
     assert report["blockers"] == []
-    assert report["route_count"] >= 20
-    assert report["artifact_count"] >= 20
-    assert report["regression_file_count"] >= 10
+    assert report["route_count"] >= 50
+    assert report["artifact_count"] >= 45
+    assert report["regression_file_count"] >= 20
     assert report["validation_status"] == "EXACT_HEAD_CI_STILL_REQUIRED"
 
 

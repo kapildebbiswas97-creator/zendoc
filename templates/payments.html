@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Payments — ZENDOC{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div><p class="eyebrow">Connected care payments</p><h1>Payments &amp; invoices</h1><p class="section-copy">Hospitals, doctors and pharmacies can issue invoices only for connected ZENDOC care items. Patients can pay in-app only when the real Razorpay configuration and signed webhook are ready.</p></div>
+  <span class="status-badge {{ 'active' if gateway.ready_for_live_payment else 'warning' }}">{{ 'Gateway ready' if gateway.ready_for_live_payment else 'Integration required' }}</span>
+</section>
+<aside class="trust-note"><strong>Payment truth boundary.</strong><br>{{ gateway.truth_notice }} Google Play Billing is not used here for physical goods or regulated clinical-service transactions.</aside>
+
+{% if current_user.role in ['doctor','hospital','pharmacy'] %}
+<section class="panel spaced-panel">
+  <p class="eyebrow">Provider billing</p><h2>Issue invoice for connected care</h2>
+  {% if billable_resources %}
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="issue_invoice">
+    <label>Connected care item<select name="resource_ref" required>{% for item in billable_resources %}<option value="{{ item.ref }}">{{ item.patient_name }} · {{ item.title }}</option>{% endfor %}</select></label>
+    <label>Amount (INR)<input type="number" name="amount_inr" min="1" max="1000000" step="0.01" required></label>
+    <label>Description<input name="description" maxlength="300" required placeholder="Consultation fee / confirmed pharmacy order…"></label>
+    <button type="submit">Issue invoice</button>
+  </form>
+  {% else %}<div class="empty-state"><p>No billable connected care items are available. A provider cannot create an arbitrary patient charge.</p></div>{% endif %}
+</section>
+{% endif %}
+
+<section class="spaced-panel">
+  <div class="panel-head"><div><p class="eyebrow">Ledger</p><h2>Your invoices</h2></div></div>
+  <div class="grid two">
+  {% for invoice in invoices %}
+    <article class="panel">
+      <div class="panel-head"><div><strong>₹{{ invoice.amount_inr }}</strong><p>{{ invoice.description }}</p></div><span class="status-badge {{ 'active' if invoice.status == 'paid' else '' }}">{{ invoice.status.replace('_',' ').title() }}</span></div>
+      <p>{{ invoice.payee_name }} → {{ invoice.patient_name }}</p>
+      <small>{{ invoice.resource_type.replace('_',' ').title() }} #{{ invoice.resource_id }} · {{ invoice.created_at[:16] }}</small>
+      {% if current_user.id == invoice.patient_id and invoice.status != 'paid' %}
+        {% if gateway.ready_for_live_payment %}
+        <form method="post" action="{{ url_for('payments.checkout', invoice_id=invoice.id) }}" class="spaced-panel"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">Pay securely</button></form>
+        {% else %}<p class="form-note">Checkout will activate after Razorpay key, secret and webhook secret are configured.</p>{% endif %}
+      {% endif %}
+    </article>
+  {% else %}
+    <div class="empty-state"><h3>No invoices yet</h3><p>Connected care invoices will appear here.</p></div>
+  {% endfor %}
+  </div>
+</section>
+{% endblock %}
