@@ -119,6 +119,19 @@
             <strong>{{ participant.name }}</strong>
             <span class="role-badge role-{{ participant.role }}">{{ participant.role.title() }}{% if participant.city %} · {{ participant.city }}{% endif %}</span>
             <small>{{ participant.reason }}</small>
+            {% if participant.id != current_user.id %}
+              <form method="post" class="form-actions">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="conversation_id" value="{{ selected.id }}">
+                {% if participant.id in blocked_ids %}
+                  <input type="hidden" name="action" value="unblock_contact">
+                  <button type="submit" class="secondary-action">Unblock</button>
+                {% else %}
+                  <input type="hidden" name="action" value="block_contact">
+                  <button type="submit" class="secondary-action">Block</button>
+                {% endif %}
+              </form>
+            {% endif %}
           </div>
         {% endfor %}
       </div>
