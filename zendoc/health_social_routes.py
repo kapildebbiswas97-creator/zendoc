@@ -12,12 +12,14 @@ from .health_social import (
     list_comments,
     list_feed,
     list_stories,
+    list_moderation_reports,
+    moderate_report,
     report_entity,
     toggle_like,
     unfollow_user,
 )
 from .routes import audit, require_api_user
-from .security import login_required
+from .security import login_required, owner_required
 
 bp = Blueprint("health_social", __name__)
 
@@ -129,3 +131,35 @@ def api_action():
         return jsonify({"error": {"code": 404, "message": str(exc)}}), 404
     except ValueError as exc:
         return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+
+
+@bp.route("/admin/community-moderation", methods=("GET", "POST"))
+@owner_required
+def community_moderation_page():
+    if request.method == "POST":
+        try:
+            result = moderate_report(
+                int(request.form.get("report_id")),
+                request.form.get("moderation_action"),
+            )
+            audit(
+                "moderate",
+                "health_social_report",
+                str(result["report_id"]),
+                actor=g.user,
+            )
+            flash(
+                "Community report resolved. Removed content is no longer visible in community feeds."
+                if result["status"] == "resolved_removed"
+                else "Community report dismissed after owner review.",
+                "success",
+            )
+        except (TypeError, ValueError, LookupError) as exc:
+            flash(str(exc), "error")
+        return redirect(url_for("health_social.community_moderation_page"))
+
+    return render_template(
+        "community_moderation.html",
+        reports=list_moderation_reports(status=request.args.get("status", "open")),
+        selected_status=request.args.get("status", "open"),
+    )
