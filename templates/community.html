@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}ZENDOC Health Community{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Health-only social community</p>
+    <h1>Learn, share and follow healthy journeys</h1>
+    <p class="section-copy">A community for healthy food, fitness, wellbeing, caregiving, preventive health and health technology. Posts are user-generated and are not verified medical advice.</p>
+  </div>
+  <div class="form-actions">
+    <a class="secondary-action" href="{{ url_for('milestone7.messages_page') }}">Private messages</a>
+    <a class="secondary-action" href="{{ url_for('health_hub.health_hub_page') }}">Health Hub</a>
+  </div>
+</section>
+
+<aside class="trust-note">
+  <strong>Health-only, safety-first.</strong><br>
+  Do not use community posts to diagnose, prescribe, change medicines, sell prescription drugs, or replace emergency/professional care. Sponsored content must be labelled. You can report or block content/accounts.
+</aside>
+
+<section class="stories-strip spaced-panel" aria-label="24 hour health stories">
+  {% for story in stories %}
+    <article class="story-card">
+      <strong>{{ story.author_name }}</strong>
+      <span class="role-badge role-{{ story.author_role }}">{{ story.author_role }}</span>
+      <p>{{ story.body }}</p>
+      {% if story.media_url %}<a href="{{ story.media_url }}" target="_blank" rel="noopener noreferrer">Open story media</a>{% endif %}
+      <small>Expires {{ story.expires_at[:16] }}</small>
+    </article>
+  {% else %}
+    <div class="empty-state"><strong>No active stories yet.</strong><p>Create a short health story below. It expires automatically after 24 hours.</p></div>
+  {% endfor %}
+</section>
+
+<section class="grid two spaced-panel">
+  <form class="panel" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="action" value="post">
+    <p class="eyebrow">Create health post</p><h2>Share something useful</h2>
+    <label>Health lane<select name="lane" required>{% for lane in lanes %}<option value="{{ lane.id }}">{{ lane.label }}</option>{% endfor %}</select></label>
+    <label>Post<textarea name="body" maxlength="2000" rows="4" required placeholder="Healthy recipe, workout learning, caregiving tip, recovery routine…"></textarea></label>
+    <label>Optional HTTPS video/media link<input name="media_url" type="url" placeholder="https://..."></label>
+    <label>Optional sponsorship disclosure<input name="sponsorship_label" maxlength="160" placeholder="e.g. Sponsored by …"></label>
+    <button type="submit">Publish health post</button>
+  </form>
+
+  <form class="panel" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="action" value="story">
+    <p class="eyebrow">24-hour story</p><h2>Share a short update</h2>
+    <label>Health lane<select name="lane" required>{% for lane in lanes %}<option value="{{ lane.id }}">{{ lane.label }}</option>{% endfor %}</select></label>
+    <label>Story<textarea name="body" maxlength="700" rows="3" required></textarea></label>
+    <label>Optional HTTPS media link<input name="media_url" type="url" placeholder="https://..."></label>
+    <button type="submit">Publish 24-hour story</button>
+  </form>
+</section>
+
+<section class="grid three spaced-panel">
+  <article class="panel">
+    <div class="panel-head"><div><p class="eyebrow">Your feed</p><h2>{{ 'Following' if mode == 'following' else 'Community' }}</h2></div></div>
+    <div class="form-actions">
+      <a class="secondary-action" href="{{ url_for('health_social.community_page', mode='all') }}">All</a>
+      <a class="secondary-action" href="{{ url_for('health_social.community_page', mode='following') }}">Following</a>
+    </div>
+  </article>
+  <article class="panel">
+    <form method="get">
+      <label>Find people<input name="q" value="{{ q }}" placeholder="Search name or role"></label>
+      <button type="submit">Search</button>
+    </form>
+  </article>
+  <article class="panel">
+    <h3>Private conversation</h3>
+    <p>Following never grants medical-record access. Use Messages for a private conversation under ZENDOC communication rules.</p>
+    <a class="secondary-action" href="{{ url_for('milestone7.messages_page') }}">Open Messages</a>
+  </article>
+</section>
+
+{% if people %}
+<section class="people-strip spaced-panel">
+  {% for person in people %}
+    <article class="panel compact-person">
+      <strong>{{ person.name }}</strong><span class="role-badge role-{{ person.role }}">{{ person.role }}</span>
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="target_user_id" value="{{ person.id }}">
+        <input type="hidden" name="action" value="{{ 'unfollow' if person.followed_by_me else 'follow' }}">
+        <button class="secondary-action" type="submit">{{ 'Following' if person.followed_by_me else 'Follow' }}</button>
+      </form>
+    </article>
+  {% endfor %}
+</section>
+{% endif %}
+
+<section class="community-feed spaced-panel">
+  {% for post in feed %}
+    <article class="panel community-post">
+      <div class="panel-head">
+        <div><strong>{{ post.author_name }}</strong> <span class="role-badge role-{{ post.author_role }}">{{ post.author_role }}</span><p class="eyebrow">{{ post.lane.replace('_',' ').title() }}</p></div>
+        <small>{{ post.created_at[:16] }}</small>
+      </div>
+      <p>{{ post.body }}</p>
+      {% if post.sponsorship_label %}<p class="privacy-banner"><strong>Commercial disclosure:</strong> {{ post.sponsorship_label }}</p>{% endif %}
+      {% if post.media_url %}<a class="secondary-action" href="{{ post.media_url }}" target="_blank" rel="noopener noreferrer">Open video/media</a>{% endif %}
+      <p class="form-note">Community content — not verified medical advice.</p>
+
+      <div class="form-actions">
+        <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="like"><input type="hidden" name="post_id" value="{{ post.id }}"><button class="secondary-action" type="submit">{{ 'Liked' if post.liked_by_me else 'Like' }} · {{ post.like_count }}</button></form>
+        {% if post.author_id != current_user.id %}
+        <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="{{ 'unfollow' if post.followed_by_me else 'follow' }}"><input type="hidden" name="target_user_id" value="{{ post.author_id }}"><button class="secondary-action" type="submit">{{ 'Following' if post.followed_by_me else 'Follow' }}</button></form>
+        <details><summary>Safety</summary>
+          <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="report"><input type="hidden" name="entity_type" value="post"><input type="hidden" name="entity_id" value="{{ post.id }}"><input name="reason" maxlength="500" required placeholder="Why should this be reviewed?"><button type="submit">Report</button></form>
+          <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="block"><input type="hidden" name="target_user_id" value="{{ post.author_id }}"><button class="secondary-action" type="submit">Block account</button></form>
+        </details>
+        {% endif %}
+      </div>
+
+      {% if post.comments %}
+      <div class="comment-stack">
+        {% for comment in post.comments %}<p><strong>{{ comment.author_name }}</strong> {{ comment.body }}</p>{% endfor %}
+      </div>
+      {% endif %}
+      <form method="post" class="comment-composer">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="comment"><input type="hidden" name="post_id" value="{{ post.id }}">
+        <input name="body" maxlength="700" required placeholder="Add a health-focused comment">
+        <button type="submit">Comment</button>
+      </form>
+    </article>
+  {% else %}
+    <div class="empty-state"><h2>Your health community feed is ready</h2><p>Publish the first health-focused post or follow another ZENDOC member.</p></div>
+  {% endfor %}
+</section>
+{% endblock %}
