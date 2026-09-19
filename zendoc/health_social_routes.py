@@ -134,6 +134,7 @@ def api_action():
 
 
 @bp.route("/admin/community-moderation", methods=("GET", "POST"))
+@login_required
 @owner_required
 def community_moderation_page():
     if request.method == "POST":
