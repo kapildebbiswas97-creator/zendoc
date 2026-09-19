@@ -143,6 +143,7 @@
       <form method="post" class="comment-composer">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="comment"><input type="hidden" name="post_id" value="{{ post.id }}">
         <input name="body" maxlength="700" required placeholder="Add a health-focused comment">
+        <label class="check-option"><input type="checkbox" name="accept_guidelines" value="1" required> <span>Follow Community Guidelines</span></label>
         <button type="submit">Comment</button>
       </form>
     </article>
