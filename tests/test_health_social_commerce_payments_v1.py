@@ -234,3 +234,33 @@ def test_signed_payment_webhook_requires_matching_invoice_amount_and_currency(tm
             verify_webhook(raw_bad, bad_signature)
         row = db.execute("SELECT status FROM care_invoices WHERE gateway_order_id='order_mismatch'").fetchone()
         assert row["status"] == "checkout_ready"
+
+
+def test_owner_moderation_removes_reported_content(tmp_path):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    register_web(client, "patient", "post-author@example.com", "Post Author")
+    register_web(client, "patient", "post-reporter@example.com", "Post Reporter")
+
+    with app.app_context():
+        db = get_db()
+        author = db.execute("SELECT * FROM users WHERE email=?", ("post-author@example.com",)).fetchone()
+        reporter = db.execute("SELECT * FROM users WHERE email=?", ("post-reporter@example.com",)).fetchone()
+        post = create_post(author, {"lane": "fitness", "body": "Community post for moderation test"})
+        report_id = report_entity(reporter, "post", post["id"], "Needs owner review")
+        queue = list_moderation_reports()
+        assert any(item["id"] == report_id for item in queue)
+
+        result = moderate_report(report_id, "remove")
+        assert result["status"] == "resolved_removed"
+        hidden = db.execute(
+            "SELECT moderation_status FROM health_social_posts WHERE id=?",
+            (post["id"],),
+        ).fetchone()
+        assert hidden["moderation_status"] == "removed"
+        assert all(item["id"] != post["id"] for item in list_feed(reporter))
+
+    login_web(client, "admin", "admin@example.com", "AdminStrong123")
+    response = client.get("/admin/community-moderation")
+    assert response.status_code == 200
+    assert b"Health Community moderation" in response.data
