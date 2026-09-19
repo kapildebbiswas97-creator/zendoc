@@ -104,3 +104,17 @@
     min-width: 78vw;
   }
 }
+
+
+.community-media {
+  display: block;
+  width: 100%;
+  max-height: 520px;
+  object-fit: contain;
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.community-media--story {
+  max-height: 360px;
+}
