@@ -142,6 +142,7 @@ def software_completion_readiness() -> dict:
         "static/icons/zendoc-maskable-512.png",
         "scripts/verify_public_launch.py",
         "scripts/verify_record_storage.py",
+        "scripts/verify_community_media_storage.py",
         "scripts/verify_transactional_email.py",
         "scripts/verify_postgres_backup_restore.py",
         "scripts/verify_android_release.py",
