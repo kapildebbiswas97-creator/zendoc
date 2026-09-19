@@ -59,6 +59,14 @@ Required environment values include:
     ZENDOC_S3_ACCESS_KEY_ID=...
     ZENDOC_S3_SECRET_ACCESS_KEY=...
 
+Optional direct connected-care payments (only when a real Razorpay account is ready):
+
+    ZENDOC_RAZORPAY_KEY_ID=...
+    ZENDOC_RAZORPAY_KEY_SECRET=...
+    ZENDOC_RAZORPAY_WEBHOOK_SECRET=...
+
+Do not expose "Pay securely" as live until all three are configured and the signed webhook endpoint has been tested. Client checkout success alone must never mark an invoice paid.
+
 After the real object-storage smoke test succeeds, set ZENDOC_STORAGE_VERIFIED=true only for that unchanged configuration.
 
 ## Web release sequence
@@ -226,3 +234,50 @@ Before Android upload preserve:
 ## Truth boundary
 
 A green public software gate does not prove regulatory approval, medical-device status, clinical effectiveness, provider network breadth, Snapdragon/NPU execution, Google Play approval, or fundraising success.
+
+
+## Health Community / UGC release checks
+
+The repository now includes a bounded health-only community with posts, 24-hour stories, follows, likes, comments, reporting and blocking.
+
+Before broad public promotion:
+
+- verify reporting and blocking on physical Android devices;
+- publish clear community rules and enforce health-only scope;
+- keep user-generated posts separate from medical evidence, diagnosis and prescription;
+- require sponsorship disclosure for commercial creator content;
+- add durable media storage, copyright/consent review and media moderation before enabling native photo/video upload;
+- do not claim cross-posting until each external platform has an official API/OAuth integration;
+- re-review the Google Play Data safety and Health apps declarations against the exact shipping community features.
+
+## Commerce / affiliate release checks
+
+Health Shop can record outbound click attribution. That does not prove affiliate approval or commission.
+
+For each merchant separately:
+
+1. Join the merchant's real affiliate/partner program.
+2. Complete required business/KYC/tax setup.
+3. Obtain an approved deep-link or referral URL format.
+4. Configure only that merchant's ZENDOC_AFFILIATE_*_URL_TEMPLATE value.
+5. Test that the destination remains the intended merchant and that the click ID is preserved.
+6. Show the required affiliate/sponsorship disclosure.
+7. Keep clinical ranking, care navigation and medicine safety independent of commission.
+
+Never estimate or report commission until a real merchant report confirms it.
+
+## Connected-care payment release checks
+
+The repository payment layer is invoice-based and tied to connected ZENDOC care items.
+
+Before enabling live payment:
+
+1. Complete the payment provider's merchant/KYC onboarding.
+2. Configure live key ID, key secret and webhook secret through deployment secrets.
+3. Register the HTTPS webhook endpoint /api/v1/payments/webhook/razorpay.
+4. Verify signed payment.captured/order.paid events in the deployed environment.
+5. Test failed, cancelled and duplicated checkout flows.
+6. Confirm refunds/disputes/reconciliation processes before public financial operations.
+7. Keep payment execution deterministic and server-verified; AI must never autonomously authorize or confirm payment.
+
+Google Play Billing is not the payment path for ZENDOC's physical goods or connected clinical/service transactions; review the exact shipping model against current Google Play payments policy before every release.
