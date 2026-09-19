@@ -78,6 +78,7 @@ def _handle_action(user, data):
         liked = toggle_like(user, int(data.get("post_id")))
         return "Post liked." if liked else "Like removed."
     if action == "comment":
+        _require_guidelines_acceptance(user, data)
         add_comment(user, int(data.get("post_id")), data.get("body"))
         return "Comment added."
     if action == "report":
