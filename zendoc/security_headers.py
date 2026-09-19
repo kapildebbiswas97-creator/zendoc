@@ -11,7 +11,7 @@ def apply_security_headers(response):
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     response.headers.setdefault(
         "Permissions-Policy",
-        "geolocation=(self), microphone=(self), camera=(self), payment=(), usb=(), browsing-topics=()",
+        "geolocation=(self), microphone=(self), camera=(self), payment=(self \"https://checkout.razorpay.com\"), usb=(), browsing-topics=()",
     )
     response.headers.setdefault(
         "Content-Security-Policy",
