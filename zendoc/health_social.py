@@ -600,3 +600,21 @@ def get_community_media_access(user, storage_key: str) -> dict:
     if story:
         return dict(story)
     raise LookupError("Community media is unavailable.")
+
+
+def unblock_user(user, target_user_id: int) -> None:
+    ensure_health_social_schema()
+    get_db().execute(
+        "DELETE FROM health_social_blocks WHERE blocker_id=? AND blocked_id=?",
+        (_user_id(user), int(target_user_id)),
+    )
+    get_db().commit()
+
+
+def blocked_user_ids(user) -> set[int]:
+    ensure_health_social_schema()
+    rows = get_db().execute(
+        "SELECT blocked_id FROM health_social_blocks WHERE blocker_id=? ORDER BY created_at DESC",
+        (_user_id(user),),
+    ).fetchall()
+    return {int(row["blocked_id"]) for row in rows}
