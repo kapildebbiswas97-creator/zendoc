@@ -106,6 +106,27 @@
 </section>
 {% endif %}
 
+{% if blocked_users %}
+<details class="panel spaced-panel">
+  <summary><strong>Blocked accounts</strong> · {{ blocked_users|length }}</summary>
+  <p class="form-note">Blocked accounts cannot appear in your Community feed or exchange private messages/calls/records with you. Unblocking restores only the normal ZENDOC permission rules; it does not automatically follow or grant record access.</p>
+  <div class="grid two">
+    {% for person in blocked_users %}
+      <div class="summary-row">
+        <strong>{{ person.name }}</strong>
+        <span class="role-badge role-{{ person.role }}">{{ person.role.title() }}</span>
+        <form method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="action" value="unblock">
+          <input type="hidden" name="target_user_id" value="{{ person.id }}">
+          <button type="submit" class="secondary-action">Unblock</button>
+        </form>
+      </div>
+    {% endfor %}
+  </div>
+</details>
+{% endif %}
+
 <section class="community-feed spaced-panel">
   {% for post in feed %}
     <article class="panel community-post">
