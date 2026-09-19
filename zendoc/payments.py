@@ -384,11 +384,32 @@ def verify_webhook(raw_body: bytes, signature: str) -> dict:
         return {"accepted": True, "handled": False, "event": event_type}
 
     row = get_db().execute(
-        "SELECT id FROM care_invoices WHERE gateway='razorpay' AND gateway_order_id=?",
+        """
+        SELECT id,amount_paise,currency,status FROM care_invoices
+        WHERE gateway='razorpay' AND gateway_order_id=?
+        """,
         (order_id,),
     ).fetchone()
     if not row:
         return {"accepted": True, "handled": False, "event": event_type}
+
+    expected_amount = int(row["amount_paise"])
+    expected_currency = str(row["currency"] or "INR").upper()
+    observed_amount = payment_entity.get("amount")
+    if observed_amount in (None, ""):
+        observed_amount = order_entity.get("amount_paid")
+    observed_currency = str(
+        payment_entity.get("currency") or order_entity.get("currency") or expected_currency
+    ).upper()
+
+    if observed_amount not in (None, "") and int(observed_amount) != expected_amount:
+        raise PermissionError("Signed payment event amount does not match the ZENDOC invoice.")
+    if observed_currency != expected_currency:
+        raise PermissionError("Signed payment event currency does not match the ZENDOC invoice.")
+    if event_type == "payment.captured" and str(payment_entity.get("status") or "").lower() not in {"captured", ""}:
+        raise PermissionError("Payment event is not in captured state.")
+    if event_type == "order.paid" and str(order_entity.get("status") or "").lower() not in {"paid", ""}:
+        raise PermissionError("Order event is not in paid state.")
 
     invoice_id = int(row["id"])
     now = now_iso()
