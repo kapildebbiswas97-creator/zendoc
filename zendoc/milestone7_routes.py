@@ -141,6 +141,25 @@ def messages_page():
     )
 
 
+@bp.get("/messages/<int:conversation_id>/live")
+@login_required
+def messages_live_fragment(conversation_id):
+    try:
+        selected = get_conversation(g.user, conversation_id)
+        messages = list_messages(g.user, conversation_id)
+    except (LookupError, PermissionError):
+        abort(404)
+    response = render_template(
+        "components/_message_bubbles.html",
+        selected=selected,
+        messages=messages,
+    )
+    return response, 200, {
+        "Cache-Control": "no-store",
+        "X-ZENDOC-Unread-Count": str(unread_count(g.user)),
+    }
+
+
 @bp.get("/videos")
 @login_required
 def videos_page():
