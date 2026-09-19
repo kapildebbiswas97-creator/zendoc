@@ -11,6 +11,7 @@ from .health_social import (
     follow_user,
     get_community_media_access,
     lane_catalog,
+    list_blocked_users,
     list_comments,
     list_feed,
     list_stories,
@@ -18,6 +19,7 @@ from .health_social import (
     moderate_report,
     report_entity,
     toggle_like,
+    unblock_user,
     unfollow_user,
 )
 from .policy_acceptance import COMMUNITY_GUIDELINES_VERSION, record_policy_acceptance
@@ -86,7 +88,10 @@ def _handle_action(user, data):
         return "Report sent for review."
     if action == "block":
         block_user(user, int(data.get("target_user_id")))
-        return "Account blocked. Their community content is now hidden."
+        return "Account blocked. Their community content is now hidden and private communication is unavailable."
+    if action == "unblock":
+        unblock_user(user, int(data.get("target_user_id")))
+        return "Account unblocked. Normal community and communication rules apply again."
     raise ValueError("Unsupported community action.")
 
 
@@ -127,6 +132,7 @@ def community_page():
         q=request.args.get("q", ""),
         mode=mode,
         media_storage=get_community_media_storage().status(),
+        blocked_users=list_blocked_users(g.user),
     )
 
 
