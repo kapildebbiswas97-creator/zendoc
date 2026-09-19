@@ -19,6 +19,7 @@ def test_public_launch_legal_pwa_and_deletion_routes_exist(tmp_path):
         ("/privacy", "ZENDOC Privacy Policy"),
         ("/terms", "ZENDOC Terms of Service"),
         ("/medical-disclaimer", "Medical Disclaimer"),
+        ("/community-guidelines", "ZENDOC Health Community Guidelines"),
         ("/account-deletion", "Delete your ZENDOC account"),
         ("/offline", "ZENDOC needs a connection"),
     ):
@@ -273,6 +274,7 @@ def test_public_launch_gate_reports_missing_real_world_configuration(tmp_path):
         assert "public_base_url" in keys
         assert "transactional_email" in keys
         assert "durable_record_storage" in keys
+        assert "durable_community_media" in keys
         assert "/privacy" not in (report.get("missing_routes") or [])
 
 
