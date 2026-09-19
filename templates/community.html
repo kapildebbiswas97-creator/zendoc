@@ -15,7 +15,7 @@
 
 <aside class="trust-note">
   <strong>Health-only, safety-first.</strong><br>
-  Do not use community posts to diagnose, prescribe, change medicines, sell prescription drugs, or replace emergency/professional care. Sponsored content must be labelled. You can report or block content/accounts.
+  Do not use community posts to diagnose, prescribe, change medicines, sell prescription drugs, or replace emergency/professional care. Sponsored content must be labelled. You can report or block content/accounts. <a href="{{ url_for('public_launch.community_guidelines') }}">Read the Health Community Guidelines</a>.
 </aside>
 
 <section class="stories-strip spaced-panel" aria-label="24 hour health stories">
@@ -41,6 +41,7 @@
     <label>Post<textarea name="body" maxlength="2000" rows="4" required placeholder="Healthy recipe, workout learning, caregiving tip, recovery routine…"></textarea></label>
     <label>Optional HTTPS video/media link<input name="media_url" type="url" placeholder="https://..."></label>
     <label>Optional sponsorship disclosure<input name="sponsorship_label" maxlength="160" placeholder="e.g. Sponsored by …"></label>
+    <label class="check-option"><input type="checkbox" name="accept_guidelines" value="1" required> <span>I will follow the <a href="{{ url_for('public_launch.community_guidelines') }}" target="_blank" rel="noopener">Health Community Guidelines</a>.</span></label>
     <button type="submit">Publish health post</button>
   </form>
 
@@ -51,6 +52,7 @@
     <label>Health lane<select name="lane" required>{% for lane in lanes %}<option value="{{ lane.id }}">{{ lane.label }}</option>{% endfor %}</select></label>
     <label>Story<textarea name="body" maxlength="700" rows="3" required></textarea></label>
     <label>Optional HTTPS media link<input name="media_url" type="url" placeholder="https://..."></label>
+    <label class="check-option"><input type="checkbox" name="accept_guidelines" value="1" required> <span>I will follow the <a href="{{ url_for('public_launch.community_guidelines') }}" target="_blank" rel="noopener">Health Community Guidelines</a>.</span></label>
     <button type="submit">Publish 24-hour story</button>
   </form>
 </section>
