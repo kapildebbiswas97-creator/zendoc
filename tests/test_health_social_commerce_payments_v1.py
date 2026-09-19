@@ -8,6 +8,7 @@ from zendoc.db import get_db
 from zendoc.payments import verify_webhook
 from zendoc.health_commerce import search_health_products
 from zendoc.health_shop import affiliate_readiness
+from zendoc.health_social import create_post, list_feed, list_moderation_reports, moderate_report, report_entity
 from zendoc.payments import payment_gateway_status
 from tests.test_milestone1 import csrf, login_web, make_app, register_web
 
