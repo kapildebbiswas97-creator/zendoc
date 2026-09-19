@@ -10,6 +10,7 @@ from pathlib import Path
 
 from flask import current_app
 
+from .community_media import get_community_media_storage
 from .database_reliability import backup_readiness, readiness_report
 from .db import get_db
 from .demo_truth import synthetic_demo_provider_profile_ids, synthetic_demo_user_ids
@@ -54,9 +55,20 @@ def software_completion_readiness() -> dict:
         "telehealth": "/telehealth",
         "agent_os": "/agent-os",
         "care_continuity": "/care-continuity",
+        "mental_wellness": "/mental-wellness",
+        "health_community": "/community",
+        "community_media": "/community/media/<path:storage_key>",
+        "community_moderation": "/admin/community-moderation",
+        "health_shop": "/health-shop",
+        "health_shop_outbound": "/health-shop/out/<merchant_id>",
+        "payments": "/payments",
+        "payment_webhook": "/api/v1/payments/webhook/razorpay",
+        "business": "/business",
+        "community_guidelines": "/community-guidelines",
         "privacy": "/privacy",
         "terms": "/terms",
         "medical_disclaimer": "/medical-disclaimer",
+        "community_guidelines": "/community-guidelines",
         "account_deletion": "/account-deletion",
         "account_export": "/account/export",
         "email_verification": "/verify-email",
@@ -99,6 +111,25 @@ def software_completion_readiness() -> dict:
         "zendoc/provider_invitation.py",
         "zendoc/record_storage.py",
         "zendoc/health_memory_rag.py",
+        "zendoc/mental_wellness_routes.py",
+        "zendoc/health_social.py",
+        "zendoc/health_social_routes.py",
+        "zendoc/community_media.py",
+        "zendoc/health_shop.py",
+        "zendoc/health_shop_routes.py",
+        "zendoc/payments.py",
+        "zendoc/payment_routes.py",
+        "zendoc/business_routes.py",
+        "templates/mental_wellness.html",
+        "templates/community.html",
+        "templates/community_moderation.html",
+        "templates/community_guidelines.html",
+        "templates/health_shop.html",
+        "templates/payments.html",
+        "templates/payment_checkout.html",
+        "templates/business.html",
+        "static/product-expansion.css",
+        "static/payment_checkout.js",
         "templates/privacy.html",
         "templates/terms.html",
         "templates/medical_disclaimer.html",
@@ -158,6 +189,10 @@ def software_completion_readiness() -> dict:
         "tests/test_health_memory_rag_v1.py",
         "tests/test_careloop_consent_scope_boundary.py",
         "tests/test_care_action_provider_state_truth.py",
+        "tests/test_health_social_commerce_payments_v1.py",
+        "tests/test_health_hub_v1.py",
+        "tests/test_competition_identity_wellness_visibility_v1.py",
+        "tests/test_patient_messaging_and_feature_visibility_v1.py",
     ]
     missing_tests = [
         relative for relative in required_tests
@@ -562,6 +597,43 @@ def public_launch_readiness() -> dict:
             "message": "Durable record storage is configured, encrypted in transit and marked verified.",
         })
 
+    community_storage = get_community_media_storage().status()
+    if community_storage.get("provider") == "local":
+        blockers.append({
+            "key": "durable_community_media",
+            "message": (
+                "Local Community media storage is development-only. Configure and verify the "
+                "S3-compatible durable storage boundary before public user uploads."
+            ),
+            "detail": community_storage,
+        })
+    elif community_storage.get("status") == "integration_required":
+        blockers.append({
+            "key": "durable_community_media",
+            "message": "Durable Health Community media storage is not fully configured.",
+            "detail": community_storage,
+        })
+    elif community_storage.get("transport_secure") is False:
+        blockers.append({
+            "key": "durable_community_media_transport",
+            "message": "Public Community media storage must use HTTPS transport.",
+            "detail": community_storage,
+        })
+    elif not community_storage.get("durable_public_ready"):
+        blockers.append({
+            "key": "durable_community_media",
+            "message": (
+                "Community media storage is configured but has not been verified by the "
+                "production durable-storage evidence gate."
+            ),
+            "detail": community_storage,
+        })
+    else:
+        passed.append({
+            "key": "durable_community_media",
+            "message": "Durable Community media storage is configured and verified.",
+        })
+
     required_routes = {
         "privacy": "/privacy",
         "terms": "/terms",
@@ -675,6 +747,7 @@ def public_launch_readiness() -> dict:
         "pilot_status": pilot.get("status"),
         "email": email,
         "record_storage": storage,
+        "community_media_storage": community_storage,
         "public_base_url": public_base_url or None,
         "truth_notice": (
             "PUBLIC_LAUNCH_READY means only that the checked software/deployment controls are present and configured. "
