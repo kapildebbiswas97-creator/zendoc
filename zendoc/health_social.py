@@ -44,6 +44,10 @@ def ensure_health_social_schema():
             body TEXT NOT NULL,
             media_type TEXT NOT NULL DEFAULT 'text',
             media_url TEXT,
+            media_storage_key TEXT,
+            media_mime_type TEXT,
+            media_original_name TEXT,
+            media_size_bytes INTEGER,
             sponsorship_label TEXT,
             visibility TEXT NOT NULL DEFAULT 'community',
             moderation_status TEXT NOT NULL DEFAULT 'published',
@@ -61,6 +65,10 @@ def ensure_health_social_schema():
             lane TEXT NOT NULL,
             body TEXT NOT NULL,
             media_url TEXT,
+            media_storage_key TEXT,
+            media_mime_type TEXT,
+            media_original_name TEXT,
+            media_size_bytes INTEGER,
             moderation_status TEXT NOT NULL DEFAULT 'published',
             created_at TEXT NOT NULL,
             expires_at TEXT NOT NULL
@@ -157,16 +165,32 @@ def create_post(user, data) -> dict:
     body = _clean_body(data.get("body"))
     lane = _clean_lane(data.get("lane"))
     media_url = _clean_media_url(data.get("media_url"))
-    media_type = "video_link" if media_url else "text"
+    media_storage_key = str(data.get("media_storage_key") or "").strip() or None
+    media_mime_type = str(data.get("media_mime_type") or "").strip() or None
+    media_original_name = str(data.get("media_original_name") or "").strip()[:255] or None
+    media_size_bytes = int(data.get("media_size_bytes") or 0) or None
+    media_kind = str(data.get("media_kind") or "").strip().lower()
+    if media_storage_key and media_url:
+        raise ValueError("Choose either an uploaded media file or an external media link, not both.")
+    if media_storage_key:
+        if media_kind not in {"image", "video"} or not media_mime_type:
+            raise ValueError("Uploaded community media metadata is invalid.")
+        media_type = media_kind
+    else:
+        media_type = "external_link" if media_url else "text"
     sponsorship = str(data.get("sponsorship_label") or "").strip()[:160] or None
     now = now_iso()
     cursor = get_db().execute(
         """
         INSERT INTO health_social_posts
-        (author_id,lane,body,media_type,media_url,sponsorship_label,visibility,moderation_status,created_at,updated_at)
-        VALUES (?,?,?,?,?,?,'community','published',?,?)
+        (author_id,lane,body,media_type,media_url,media_storage_key,media_mime_type,
+         media_original_name,media_size_bytes,sponsorship_label,visibility,moderation_status,created_at,updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,'community','published',?,?)
         """,
-        (_user_id(user), lane, body, media_type, media_url, sponsorship, now, now),
+        (
+            _user_id(user), lane, body, media_type, media_url, media_storage_key,
+            media_mime_type, media_original_name, media_size_bytes, sponsorship, now, now,
+        ),
     )
     get_db().commit()
     return get_post(user, int(cursor.lastrowid))
@@ -228,15 +252,28 @@ def create_story(user, data) -> dict:
     lane = _clean_lane(data.get("lane"))
     body = _clean_body(data.get("body"), 700)
     media_url = _clean_media_url(data.get("media_url"))
+    media_storage_key = str(data.get("media_storage_key") or "").strip() or None
+    media_mime_type = str(data.get("media_mime_type") or "").strip() or None
+    media_original_name = str(data.get("media_original_name") or "").strip()[:255] or None
+    media_size_bytes = int(data.get("media_size_bytes") or 0) or None
+    media_kind = str(data.get("media_kind") or "").strip().lower()
+    if media_storage_key and media_url:
+        raise ValueError("Choose either an uploaded media file or an external media link, not both.")
+    if media_storage_key and (media_kind not in {"image", "video"} or not media_mime_type):
+        raise ValueError("Uploaded community media metadata is invalid.")
     now = now_iso()
     expires = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat(timespec="seconds")
     cursor = get_db().execute(
         """
         INSERT INTO health_social_stories
-        (author_id,lane,body,media_url,moderation_status,created_at,expires_at)
-        VALUES (?,?,?,?, 'published', ?,?)
+        (author_id,lane,body,media_url,media_storage_key,media_mime_type,media_original_name,
+         media_size_bytes,moderation_status,created_at,expires_at)
+        VALUES (?,?,?,?,?,?,?,?,'published',?,?)
         """,
-        (_user_id(user), lane, body, media_url, now, expires),
+        (
+            _user_id(user), lane, body, media_url, media_storage_key, media_mime_type,
+            media_original_name, media_size_bytes, now, expires,
+        ),
     )
     get_db().commit()
     return {"id": int(cursor.lastrowid), "expires_at": expires}
@@ -523,3 +560,43 @@ def moderate_report(report_id: int, action: str) -> dict:
         "entity_type": entity_type,
         "entity_id": entity_id,
     }
+
+
+def get_community_media_access(user, storage_key: str) -> dict:
+    """Resolve media only when the signed-in viewer can see its live content."""
+    ensure_health_social_schema()
+    uid = _user_id(user)
+    key = str(storage_key or "").strip()
+    if not key:
+        raise LookupError("Community media not found.")
+
+    post = get_db().execute(
+        f"""
+        SELECT p.media_storage_key,p.media_mime_type,p.media_original_name,p.media_size_bytes,
+               p.author_id,u.name author_name,'post' entity_type
+        FROM health_social_posts p
+        JOIN users u ON u.id=p.author_id
+        WHERE p.media_storage_key=? AND p.moderation_status='published'
+          AND {_blocked_pair_clause()}
+        LIMIT 1
+        """,
+        (key, uid, uid),
+    ).fetchone()
+    if post:
+        return dict(post)
+
+    story = get_db().execute(
+        f"""
+        SELECT s.media_storage_key,s.media_mime_type,s.media_original_name,s.media_size_bytes,
+               s.author_id,u.name author_name,'story' entity_type
+        FROM health_social_stories s
+        JOIN users u ON u.id=s.author_id
+        WHERE s.media_storage_key=? AND s.moderation_status='published' AND s.expires_at>?
+          AND {_blocked_pair_clause()}
+        LIMIT 1
+        """,
+        (key, now_iso(), uid, uid),
+    ).fetchone()
+    if story:
+        return dict(story)
+    raise LookupError("Community media is unavailable.")
