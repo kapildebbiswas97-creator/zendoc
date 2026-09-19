@@ -50,6 +50,10 @@ Depending on the features a user uses, ZENDOC can handle the following data.
 - uploaded records
 - AI prompts/responses
 - patient-entered clinician-handoff questions and reason for visit
+- Health Community posts, 24-hour stories, comments, follows, likes, reports and blocks
+- optional external media links shared in Health Community
+- health-commerce search queries and outbound merchant click identifiers
+- connected-care invoice/payment status and gateway transaction references when payments are enabled
 
 ### App activity, diagnostics, and security
 
@@ -86,6 +90,8 @@ Complete this table from the actual production deployment.
 | Maps/Places provider | Care discovery if enabled | Search/location query as configured | TBD | TBD | TBD |
 | Cloud AI provider | Only if enabled | Exact configured scope | TBD | TBD | TBD |
 | Video provider | Only if enabled | Search query as configured | TBD | TBD | TBD |
+| Payment provider | Only if connected-care payment is enabled | Invoice amount/currency, order reference and payment identifiers required for checkout | HTTPS required | TBD | TBD |
+| External merchants / affiliate partners | Only when the user chooses an external health-commerce handoff | Search/destination/referral identifiers according to the configured partner link | HTTPS required | TBD | TBD |
 
 If a provider is not enabled in production, do not describe it as an active transfer merely because adapter code exists.
 
@@ -99,7 +105,10 @@ Important ZENDOC distinctions:
 - sending data to a service provider may need disclosure according to Google's definitions and exceptions;
 - public healthcare search input may be sent to an enabled map/directory provider;
 - model/cloud AI data flow depends on the actual configured routing;
-- do not assume "not shared" without reviewing every enabled production processor.
+- do not assume "not shared" without reviewing every enabled production processor;
+- Health Community content is intentionally public/community content within ZENDOC according to the shipping visibility controls, so Play disclosures and the privacy policy must reflect that user-content behavior;
+- a merchant handoff sends the user to an external destination only after the user chooses it; review any affiliate query/click identifiers against Google's sharing definitions;
+- if Razorpay is enabled, review the exact checkout/payment identifiers sent to the provider and returned by its SDK/webhooks.
 
 ## Security behavior to verify
 
@@ -173,6 +182,10 @@ The store listing should state clearly:
 - [ ] Password-reset email tested.
 - [ ] Record-storage deletion tested.
 - [ ] Every enabled third-party production processor listed above.
+- [ ] Community reporting/blocking and content rules tested on the exact Android build.
+- [ ] Community/user-content disclosures reviewed in Privacy Policy and Data Safety.
+- [ ] Health Shop affiliate disclosures match only the merchants actually configured.
+- [ ] Payment provider, webhook and transaction-reference disclosures match the exact live configuration.
 - [ ] Data Safety answers reviewed against actual network/config behavior.
 - [ ] Health apps declaration matches exact public features.
 - [ ] Store description matches medical disclaimer/truth boundaries.
