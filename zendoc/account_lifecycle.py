@@ -121,16 +121,17 @@ def _owned_community_media_keys(user_id: int) -> list[str]:
 
 def _delete_owned_files(user_id: int) -> tuple[int, int]:
     keys = _owned_record_storage_keys(user_id)
-    storage = get_record_storage()
-    status = storage.status()
-    if status.get("status") == "integration_required":
-        raise RuntimeError(
-            "Account deletion cannot complete while the configured medical-record storage provider is unavailable."
-        )
     deleted = 0
-    for key in keys:
-        storage.delete(key)
-        deleted += 1
+    if keys:
+        storage = get_record_storage()
+        status = storage.status()
+        if status.get("status") == "integration_required":
+            raise RuntimeError(
+                "Account deletion cannot complete while the configured medical-record storage provider is unavailable."
+            )
+        for key in keys:
+            storage.delete(key)
+            deleted += 1
 
     community_keys = _owned_community_media_keys(user_id)
     community_deleted = 0
