@@ -183,6 +183,7 @@
     <nav class="patient-mobile-dock" aria-label="Patient quick navigation">
       <a class="mobile-dock-link" href="{{ url_for('main.dashboard') }}" {% if endpoint == 'main.dashboard' %}aria-current="page"{% endif %}><span aria-hidden="true">⌂</span><span>Home</span></a>
       <a class="mobile-dock-link mobile-dock-link--ai" href="{{ url_for('main.ai_center') }}" {% if endpoint == 'main.ai_center' %}aria-current="page"{% endif %}><span aria-hidden="true">✦</span><span>AI</span></a>
+      <a class="mobile-dock-link" href="{{ url_for('health_social.community_page') }}" {% if endpoint == 'health_social.community_page' %}aria-current="page"{% endif %}><span aria-hidden="true">◉</span><span>Community</span></a>
       <a class="mobile-dock-link" href="{{ url_for('main.finder') }}" {% if endpoint in ['main.finder','main.provider_detail'] %}aria-current="page"{% endif %}><span aria-hidden="true">⌖</span><span>Find</span></a>
       <a class="mobile-dock-link" href="{{ url_for('main.records') }}" {% if endpoint in ['main.records','health_memory.timeline_page','health_memory.health_summary_page'] %}aria-current="page"{% endif %}><span aria-hidden="true">HM</span><span>Records</span></a>
       <a class="mobile-dock-link" href="{{ url_for('main.appointments') }}" {% if endpoint == 'main.appointments' %}aria-current="page"{% endif %}><span aria-hidden="true">Cal</span><span>Visits</span></a>
