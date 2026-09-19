@@ -1,6 +1,7 @@
 """Web and mobile API routes for the ZENDOC health-only community."""
 from flask import Blueprint, flash, g, jsonify, redirect, render_template, request, url_for
 
+from .community_media import get_community_media_storage
 from .health_social import (
     add_comment,
     block_user,
@@ -8,6 +9,7 @@ from .health_social import (
     create_story,
     discover_people,
     follow_user,
+    get_community_media_access,
     lane_catalog,
     list_comments,
     list_feed,
@@ -35,6 +37,23 @@ def _require_guidelines_acceptance(user, data):
         COMMUNITY_GUIDELINES_VERSION,
         source="community_publish",
     )
+
+
+def _publish_payload_with_media(data, upload):
+    payload = dict(data)
+    stored = None
+    if upload and getattr(upload, "filename", ""):
+        if str(payload.get("media_url") or "").strip():
+            raise ValueError("Choose either a native upload or an external media link, not both.")
+        stored = get_community_media_storage().save(upload)
+        payload.update({
+            "media_storage_key": stored.storage_key,
+            "media_mime_type": stored.mime_type,
+            "media_original_name": stored.original_filename,
+            "media_size_bytes": stored.size_bytes,
+            "media_kind": stored.media_kind,
+        })
+    return payload, stored
 
 
 def _handle_action(user, data):
@@ -74,9 +93,23 @@ def _handle_action(user, data):
 @login_required
 def community_page():
     if request.method == "POST":
+        stored = None
         try:
-            flash(_handle_action(g.user, request.form), "success")
-        except (ValueError, LookupError, PermissionError) as error:
+            action = str(request.form.get("action") or "").strip()
+            payload = request.form
+            if action in {"post", "story"}:
+                payload, stored = _publish_payload_with_media(
+                    request.form.to_dict(),
+                    request.files.get("media_file"),
+                )
+            flash(_handle_action(g.user, payload), "success")
+            stored = None
+        except (ValueError, LookupError, PermissionError, RuntimeError) as error:
+            if stored is not None:
+                try:
+                    get_community_media_storage().delete(stored.storage_key)
+                except Exception:
+                    pass
             flash(str(error), "error")
         return redirect(url_for("health_social.community_page", mode=request.args.get("mode", "all")))
 
@@ -92,6 +125,7 @@ def community_page():
         people=discover_people(g.user, request.args.get("q", "")),
         q=request.args.get("q", ""),
         mode=mode,
+        media_storage=get_community_media_storage().status(),
     )
 
 
@@ -181,3 +215,17 @@ def community_moderation_page():
         reports=list_moderation_reports(status=request.args.get("status", "open")),
         selected_status=request.args.get("status", "open"),
     )
+
+
+@bp.get("/community/media/<path:storage_key>")
+@login_required
+def community_media_file(storage_key):
+    try:
+        media = get_community_media_access(g.user, storage_key)
+        return get_community_media_storage().response(
+            media["media_storage_key"],
+            mime_type=media["media_mime_type"],
+            download_name=media["media_original_name"] or "zendoc-community-media",
+        )
+    except (LookupError, ValueError, RuntimeError):
+        return ("Community media unavailable.", 404)
