@@ -17,6 +17,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='ui-polish.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='product-expansion.css') }}">
 </head>
 <body class="{% block body_class %}{% endblock %}{% if current_user and current_user.role == 'patient' %} has-patient-dock{% endif %}">
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -44,6 +45,7 @@
 
           {% if current_user.role == 'patient' %}
             <a href="{{ url_for('main.ai_center') }}" {% if endpoint == 'main.ai_center' %}aria-current="page"{% endif %}>AI Assistant</a>
+            <a href="{{ url_for('mental_wellness.mental_wellness_page') }}" {% if endpoint == 'mental_wellness.mental_wellness_page' %}aria-current="page"{% endif %}>Mental Wellness</a>
             <a href="{{ url_for('main.finder') }}" {% if endpoint in ['main.finder','main.provider_detail'] %}aria-current="page"{% endif %}>Find Care</a>
             <a href="{{ url_for('main.appointments') }}" {% if endpoint == 'main.appointments' %}aria-current="page"{% endif %}>Appointments</a>
             <details class="nav-menu" {% if endpoint in ['health_memory.health_summary_page','health_memory.timeline_page','main.records','main.health','health_memory.health_profile_page','health_memory.health_access_page','health_memory.report_detail_page','care_continuity.care_continuity_page'] %}data-active="true"{% endif %}>
@@ -58,6 +60,7 @@
               </div>
             </details>
             <a href="{{ url_for('milestone7.messages_page') }}" {% if endpoint == 'milestone7.messages_page' %}aria-current="page"{% endif %}>Messages</a>
+            <a href="{{ url_for('health_social.community_page') }}" {% if endpoint == 'health_social.community_page' %}aria-current="page"{% endif %}>Community</a>
             <a href="{{ url_for('family.family_page') }}" {% if endpoint in ['family.family_page','family.parent_care_page'] %}aria-current="page"{% endif %}>Family</a>
             <a href="{{ url_for('fitness.overview') }}" {% if endpoint.startswith('fitness.') or endpoint == 'milestone7.pose_coach_page' %}aria-current="page"{% endif %}>Fitness</a>
           {% elif current_user.role in ['doctor','hospital'] %}
@@ -97,6 +100,10 @@
                 <a href="{{ url_for('care_os.care_os_home') }}">Care OS</a>
                 <a href="{{ url_for('specialist_agents.agent_os_page') }}">Agent OS</a>
                 <a href="{{ url_for('health_hub.health_hub_page') }}">Health Hub</a>
+                <a href="{{ url_for('health_social.community_page') }}">Health Community</a>
+                <a href="{{ url_for('health_shop.health_shop_page') }}">Health Shop</a>
+                <a href="{{ url_for('payments.payments_page') }}">Payments</a>
+                <a href="{{ url_for('business.business_page') }}">ZENDOC for Business</a>
                 <a href="{{ url_for('main.ai_center') }}#mental-awareness">Mental Wellness &amp; Awareness</a>
                 <a href="{{ url_for('health_memory.health_access_page') }}#identity-trust">Identity &amp; eKYC Readiness</a>
                 <a href="{{ url_for('connected_care.connected_care_home') }}">Connected Care</a>
