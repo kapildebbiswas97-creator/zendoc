@@ -147,11 +147,10 @@ def _delete_directly_attributed_rows(user_id: int):
         ("DELETE FROM staff_tasks WHERE patient_id=? OR assigned_staff_id=?", (user_id, user_id)),
         ("DELETE FROM product_analytics_events WHERE user_id=?", (user_id,)),
         ("DELETE FROM product_feedback WHERE user_id=?", (user_id,)),
+        ("DELETE FROM health_commerce_clicks WHERE user_id=?", (user_id,)),
         ("DELETE FROM request_observations WHERE actor_id=?", (user_id,)),
         ("DELETE FROM user_policy_acceptances WHERE user_id=?", (user_id,)),
         ("DELETE FROM user_email_verifications WHERE user_id=?", (user_id,)),
-        ("DELETE FROM user_email_verifications WHERE user_id=?", (user_id,)),
-        ("DELETE FROM user_policy_acceptances WHERE user_id=?", (user_id,)),
     )
     for sql, params in statements:
         db.execute(sql, params)
