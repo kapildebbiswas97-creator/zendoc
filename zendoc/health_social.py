@@ -199,7 +199,7 @@ def list_feed(user, *, followed_only=False, limit=50) -> list[dict]:
     uid = _user_id(user)
     limit = max(1, min(int(limit or 50), 100))
     followed_sql = "AND (p.author_id=? OR EXISTS(SELECT 1 FROM health_social_follows f WHERE f.follower_id=? AND f.followed_id=p.author_id))" if followed_only else ""
-    params = [uid, uid, uid]
+    params = [uid, uid, uid, uid]
     if followed_only:
         params.extend([uid, uid])
     params.append(limit)
