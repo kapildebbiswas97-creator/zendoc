@@ -105,11 +105,11 @@ def build_account_export(user: Any) -> dict:
         ),
         "community_data": {
             "posts": _rows(
-                "SELECT id,lane,body,media_type,media_url,sponsorship_label,visibility,moderation_status,created_at,updated_at FROM health_social_posts WHERE author_id=? ORDER BY created_at,id",
+                "SELECT id,lane,body,media_type,media_url,media_mime_type,media_original_name,media_size_bytes,sponsorship_label,visibility,moderation_status,created_at,updated_at FROM health_social_posts WHERE author_id=? ORDER BY created_at,id",
                 (user_id,),
             ),
             "stories": _rows(
-                "SELECT id,lane,body,media_url,moderation_status,created_at,expires_at FROM health_social_stories WHERE author_id=? ORDER BY created_at,id",
+                "SELECT id,lane,body,media_url,media_mime_type,media_original_name,media_size_bytes,moderation_status,created_at,expires_at FROM health_social_stories WHERE author_id=? ORDER BY created_at,id",
                 (user_id,),
             ),
             "comments": _rows(
