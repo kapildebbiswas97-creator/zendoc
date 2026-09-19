@@ -5,9 +5,13 @@
   <div>
     <p class="eyebrow">ZENDOC Connect</p>
     <h1>Messages</h1>
-    <p class="section-copy">Private care conversations with the people your account is allowed to contact.</p>
+    <p class="section-copy">Private care conversations with searchable contacts, structured health context, voice/video availability gates and clear privacy boundaries.</p>
   </div>
-  <span class="status-badge active">{{ unread_total }} Unread</span>
+  <div class="form-actions">
+    <a class="secondary-action" href="{{ url_for('health_social.community_page') }}">Health Community</a>
+    {% if current_user.role == 'patient' %}<a class="secondary-action" href="{{ url_for('mental_wellness.mental_wellness_page') }}">Mental Wellness</a>{% endif %}
+    <span class="status-badge active">{{ unread_total }} Unread</span>
+  </div>
 </section>
 
 <section class="connect-shell">
