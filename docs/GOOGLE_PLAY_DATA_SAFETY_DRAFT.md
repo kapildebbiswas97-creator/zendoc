@@ -51,7 +51,7 @@ Depending on the features a user uses, ZENDOC can handle the following data.
 - AI prompts/responses
 - patient-entered clinician-handoff questions and reason for visit
 - Health Community posts, 24-hour stories, comments, follows, likes, reports and blocks
-- optional external media links shared in Health Community
+- native Health Community images/videos (JPEG, PNG, WebP, MP4, WebM) and optional external media links
 - health-commerce search queries and outbound merchant click identifiers
 - connected-care invoice/payment status and gateway transaction references when payments are enabled
 
@@ -85,7 +85,7 @@ Complete this table from the actual production deployment.
 |---|---|---|---|---|---|
 | Hosting provider | Web/API hosting | TBD | HTTPS required | TBD | TBD |
 | PostgreSQL host | Durable database | TBD | TBD | TBD | TBD |
-| S3-compatible storage | Medical-record objects | Uploaded files/object metadata | TLS required | TBD | TBD |
+| S3-compatible storage | Medical-record and Health Community media objects | Uploaded files/object metadata | TLS required | TBD | TBD |
 | SMTP/email provider | Email verification, password reset, deletion email | Recipient email + transactional content | TLS configured | TBD | TBD |
 | Maps/Places provider | Care discovery if enabled | Search/location query as configured | TBD | TBD | TBD |
 | Cloud AI provider | Only if enabled | Exact configured scope | TBD | TBD | TBD |
@@ -136,7 +136,7 @@ Current deletion implementation:
 - deletes directly attributed AI/history/analytics/observability rows covered by the deletion service;
 - deletes account email-verification and policy-acceptance records;
 - cascades account-owned database records according to the schema;
-- deletes owned medical-record objects through the configured storage adapter;
+- deletes owned medical-record objects and native Health Community media through the configured storage adapters;
 - may preserve another user's necessary operational history only after removing or de-identifying the deleted provider's user identity.
 
 Before launch:
@@ -181,6 +181,7 @@ The store listing should state clearly:
 - [ ] Account structured export tested.
 - [ ] Password-reset email tested.
 - [ ] Record-storage deletion tested.
+- [ ] Community-media storage save/read/delete tested.
 - [ ] Every enabled third-party production processor listed above.
 - [ ] Community reporting/blocking and content rules tested on the exact Android build.
 - [ ] Community/user-content disclosures reviewed in Privacy Policy and Data Safety.
