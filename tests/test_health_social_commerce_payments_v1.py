@@ -524,3 +524,48 @@ def test_connect_live_script_is_outside_title_block(tmp_path):
     script_pos = html.find("messages_live.js")
     assert title_end >= 0
     assert script_pos > title_end
+
+
+def test_community_blocked_account_manager_can_unblock(tmp_path):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    register_web(client, "patient", "community-blocker@example.com", "Community Blocker")
+    register_web(client, "patient", "community-blocked@example.com", "Community Blocked")
+    login_web(client, "patient", "community-blocker@example.com")
+
+    with app.app_context():
+        target_id = int(
+            get_db().execute(
+                "SELECT id FROM users WHERE email_normalized=?",
+                ("community-blocked@example.com",),
+            ).fetchone()["id"]
+        )
+
+    page = client.get("/community")
+    token = csrf(page.data.decode())
+    blocked = client.post(
+        "/community",
+        data={
+            "csrf_token": token,
+            "action": "block",
+            "target_user_id": target_id,
+        },
+        follow_redirects=True,
+    )
+    assert blocked.status_code == 200
+    assert b"Blocked accounts" in blocked.data
+    assert b"Community Blocked" in blocked.data
+    assert b"Unblock" in blocked.data
+
+    token = csrf(blocked.data.decode())
+    unblocked = client.post(
+        "/community",
+        data={
+            "csrf_token": token,
+            "action": "unblock",
+            "target_user_id": target_id,
+        },
+        follow_redirects=True,
+    )
+    assert unblocked.status_code == 200
+    assert b"Account unblocked" in unblocked.data
