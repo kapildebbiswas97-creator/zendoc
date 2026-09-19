@@ -16,6 +16,7 @@ REQUIRED_PATHS = {
     "/privacy": "html",
     "/terms": "html",
     "/medical-disclaimer": "html",
+    "/community-guidelines": "html",
     "/account-deletion": "html",
     "/register/patient": "html",
     "/resend-verification": "html",
@@ -95,6 +96,17 @@ def main() -> int:
                 if 'name="accept_privacy" value="1" required' not in text or 'name="accept_terms" value="1" required' not in text:
                     ok = False
                     detail["error"] = "public registration does not require both Privacy and Terms acceptance"
+            if path == "/community-guidelines" and ok:
+                text = body.decode("utf-8", "replace")
+                required_markers = (
+                    "ZENDOC Health Community Guidelines",
+                    "Reporting, blocking and moderation",
+                    "Commercial content",
+                )
+                missing = [marker for marker in required_markers if marker not in text]
+                if missing:
+                    ok = False
+                    detail["error"] = f"community guidelines are missing safety markers: {missing}"
             if path == "/resend-verification" and ok:
                 text = body.decode("utf-8", "replace")
                 if "never confirms whether an account exists" not in text:
