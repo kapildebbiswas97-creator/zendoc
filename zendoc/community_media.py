@@ -129,6 +129,15 @@ class LocalCommunityMediaStorage:
     def delete(self, storage_key: str):
         self._path(storage_key).unlink(missing_ok=True)
 
+    def read_bytes(self, storage_key: str, *, max_bytes: int = MAX_COMMUNITY_MEDIA_BYTES) -> bytes:
+        limit = max(1, min(int(max_bytes), MAX_COMMUNITY_MEDIA_BYTES))
+        target = self._path(storage_key)
+        if not target.exists() or not target.is_file():
+            raise LookupError("Stored community media was not found.")
+        if target.stat().st_size > limit:
+            raise ValueError("Stored community media exceeds the bounded read limit.")
+        return target.read_bytes()
+
     def response(self, storage_key: str, *, mime_type: str, download_name: str):
         return send_from_directory(
             self._root(),
@@ -225,6 +234,19 @@ class S3CommunityMediaStorage:
         client, settings = self._client()
         client.delete_object(Bucket=settings["bucket"], Key=self._key(storage_key))
 
+    def read_bytes(self, storage_key: str, *, max_bytes: int = MAX_COMMUNITY_MEDIA_BYTES) -> bytes:
+        limit = max(1, min(int(max_bytes), MAX_COMMUNITY_MEDIA_BYTES))
+        client, settings = self._client()
+        key = self._key(storage_key)
+        head = client.head_object(Bucket=settings["bucket"], Key=key)
+        size = int(head.get("ContentLength") or 0)
+        if size > limit:
+            raise ValueError("Stored community media exceeds the bounded read limit.")
+        body = client.get_object(Bucket=settings["bucket"], Key=key)["Body"].read(limit + 1)
+        if len(body) > limit:
+            raise ValueError("Stored community media exceeds the bounded read limit.")
+        return body
+
     def response(self, storage_key: str, *, mime_type: str, download_name: str):
         client, settings = self._client()
         key = self._key(storage_key)
@@ -281,6 +303,9 @@ class UnavailableCommunityMediaStorage:
         self._raise()
 
     def delete(self, storage_key: str):
+        self._raise()
+
+    def read_bytes(self, storage_key: str, *, max_bytes: int = MAX_COMMUNITY_MEDIA_BYTES):
         self._raise()
 
     def response(self, storage_key: str, *, mime_type: str, download_name: str):
