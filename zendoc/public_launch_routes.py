@@ -37,6 +37,11 @@ def medical_disclaimer():
     return render_template("medical_disclaimer.html")
 
 
+@bp.get("/community-guidelines")
+def community_guidelines():
+    return render_template("community_guidelines.html")
+
+
 def _public_base_url() -> str:
     configured = str(current_app.config.get("PUBLIC_BASE_URL") or "").strip().rstrip("/")
     return configured or request.url_root.rstrip("/")
