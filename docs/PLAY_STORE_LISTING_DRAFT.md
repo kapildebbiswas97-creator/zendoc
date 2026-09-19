@@ -24,7 +24,7 @@ Key capabilities in the current product include:
 - Care Continuity with clinician handoff preparation and evidence provenance.
 - Messages and family-care workflows with permission controls.
 - A dedicated Mental Wellness & Awareness center for non-diagnostic wellbeing check-ins and safe support navigation.
-- Health Community for health-only posts, 24-hour stories, follows, likes, comments, reports and blocking. Community content is user-generated and is not verified medical advice.
+- Health Community for health-only posts, native images/videos, 24-hour stories, follows, likes, comments, reports, blocking and owner moderation. Community content is user-generated and is not verified medical advice.
 - Health Shop for external food, fitness, eyewear, wellness and health-device discovery with referral status kept separate from clinical guidance.
 - Connected care invoices and payment checkout when a real payment gateway and signed webhook verification are configured.
 - Fitness, nutrition and wellness features.
@@ -65,8 +65,11 @@ Do not use synthetic statistics as traction.
 4. Health Memory timeline.
 5. Agent OS with bounded AI/human gates.
 6. Care Continuity / clinician handoff.
-7. Appointments with connected-provider truth state.
-8. Privacy & access / account controls.
+7. Mental Wellness & Awareness.
+8. Health Community with native media and reporting/blocking.
+9. Health Shop with external-merchant truth labels.
+10. Connected-care invoices/payments readiness.
+11. Privacy & access / account controls.
 
 ## Do not put these claims in the listing unless independently proven
 
