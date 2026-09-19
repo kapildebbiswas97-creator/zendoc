@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Mental Wellness & Awareness — ZENDOC{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Mental wellness &amp; awareness</p>
+    <h1>A visible, private place to check in with yourself</h1>
+    <p class="section-copy">Everyday wellbeing awareness, reflection and safe next-step guidance. ZENDOC does not diagnose a mental-health condition, perform personality scoring, prescribe medicine, or replace a qualified professional.</p>
+  </div>
+  <span class="status-badge active">Non-diagnostic</span>
+</section>
+
+<aside class="trust-note">
+  <strong>Urgent safety comes first.</strong><br>
+  If you may hurt yourself or someone else, or you feel in immediate danger, contact local emergency services or a trusted person nearby now. Do not wait for an online response.
+</aside>
+
+<section class="grid two spaced-panel">
+  <article class="panel">
+    <p class="eyebrow">Awareness</p>
+    <h2>Four simple steps</h2>
+    <div class="grid two">
+      <div class="subtle-panel"><strong>Notice</strong><p>Name what you are feeling, what changed recently and what is making the day harder.</p></div>
+      <div class="subtle-panel"><strong>Stabilize</strong><p>Use appropriate basics such as grounding, sleep, hydration, movement and social support.</p></div>
+      <div class="subtle-panel"><strong>Reach out</strong><p>If stress is persistent, worsening or affecting daily life, consider qualified professional support.</p></div>
+      <div class="subtle-panel"><strong>Escalate safely</strong><p>For immediate danger or risk of harm, use local emergency services and trusted people nearby.</p></div>
+    </div>
+  </article>
+
+  <form class="panel" method="post" action="{{ url_for('main.ai_center') }}" aria-label="Mental wellness check-in">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="feature" value="mental_health">
+    <p class="eyebrow">Private check-in</p>
+    <h2>How are you doing right now?</h2>
+    <p class="form-note">This uses ZENDOC's existing deterministic wellbeing guidance with an emergency-first safety check. It is not a clinical assessment.</p>
+    <label>Age group
+      <select name="age_group">
+        <option>student</option>
+        <option>working professional</option>
+        <option>adult</option>
+        <option>elderly</option>
+      </select>
+    </label>
+    <label>Stress level from 0 to 10
+      <input name="stress_level" type="number" min="0" max="10" value="5">
+    </label>
+    <label>What is happening?
+      <textarea name="context" rows="5" maxlength="1000" placeholder="Share only what you are comfortable sharing."></textarea>
+    </label>
+    <button type="submit">Review safe next steps</button>
+  </form>
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head"><div><p class="eyebrow">Support that matches real life</p><h2>Mental Wellness by life stage</h2></div></div>
+  <div class="quick-action-grid">
+    <article class="quick-action"><strong>Students</strong><span>Exam pressure, focus, loneliness, peer pressure, sleep and career uncertainty.</span></article>
+    <article class="quick-action"><strong>Professionals</strong><span>Workload, deadlines, burnout, job uncertainty, recovery and healthy boundaries.</span></article>
+    <article class="quick-action"><strong>Adults &amp; Parents</strong><span>Family pressure, finances, relationships, parenting load and caregiving.</span></article>
+    <article class="quick-action"><strong>Older Adults</strong><span>Loneliness, retirement changes, worry, sleep, loss and staying socially connected.</span></article>
+  </div>
+</section>
+
+<section class="grid three spaced-panel">
+  <a class="panel" href="{{ url_for('milestone7.messages_page') }}"><h3>Talk to someone you trust</h3><p>Use ZENDOC Messages for permitted private conversations.</p></a>
+  <a class="panel" href="{{ url_for('main.finder') }}"><h3>Find professional care</h3><p>Search care options with source and verification status kept visible.</p></a>
+  <a class="panel" href="{{ url_for('health_hub.health_hub_page') }}"><h3>Build healthy routines</h3><p>Explore sleep, fitness, nutrition and wellbeing education in Health Hub.</p></a>
+</section>
+{% endblock %}
