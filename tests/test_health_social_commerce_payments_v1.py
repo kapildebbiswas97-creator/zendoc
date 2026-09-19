@@ -1,3 +1,4 @@
+from io import BytesIO
 import hashlib
 import hmac
 import json
@@ -63,6 +64,7 @@ def test_health_community_post_story_follow_and_comment_are_persisted(tmp_path):
             "action": "post",
             "lane": "healthy_food",
             "body": "Simple balanced lunch idea with vegetables and whole grains.",
+            "accept_guidelines": "1",
         },
         follow_redirects=True,
     )
@@ -78,6 +80,7 @@ def test_health_community_post_story_follow_and_comment_are_persisted(tmp_path):
             "action": "story",
             "lane": "fitness",
             "body": "Completed a gentle mobility routine today.",
+            "accept_guidelines": "1",
         },
         follow_redirects=True,
     )
@@ -264,3 +267,94 @@ def test_owner_moderation_removes_reported_content(tmp_path):
     response = client.get("/admin/community-moderation")
     assert response.status_code == 200
     assert b"Health Community moderation" in response.data
+
+
+def test_community_guidelines_are_public_and_required_to_publish(tmp_path):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    public = client.get("/community-guidelines")
+    assert public.status_code == 200
+    assert b"ZENDOC Health Community Guidelines" in public.data
+
+    register_web(client, "patient", "guideline-user@example.com", "Guideline User")
+    login_web(client, "patient", "guideline-user@example.com")
+    page = client.get("/community")
+    token = csrf(page.data.decode())
+    denied = client.post(
+        "/community",
+        data={
+            "csrf_token": token,
+            "action": "post",
+            "lane": "fitness",
+            "body": "A health-focused post without policy acknowledgement.",
+        },
+        follow_redirects=True,
+    )
+    assert denied.status_code == 200
+    assert b"Accept the current Health Community Guidelines" in denied.data
+    assert b"A health-focused post without policy acknowledgement." not in denied.data
+
+
+def test_native_community_media_upload_is_validated_and_access_controlled(tmp_path):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    register_web(client, "patient", "media-user@example.com", "Media User")
+    login_web(client, "patient", "media-user@example.com")
+
+    page = client.get("/community")
+    token = csrf(page.data.decode())
+    # Minimal PNG signature plus bounded payload is enough for the storage
+    # contract; browsers remain responsible for rendering valid image content.
+    png = b"\x89PNG\r\n\x1a\n" + (b"zendoc-media" * 8)
+    created = client.post(
+        "/community",
+        data={
+            "csrf_token": token,
+            "action": "post",
+            "lane": "healthy_food",
+            "body": "Native media upload test.",
+            "accept_guidelines": "1",
+            "media_file": (BytesIO(png), "healthy.png", "image/png"),
+        },
+        content_type="multipart/form-data",
+        follow_redirects=True,
+    )
+    assert created.status_code == 200
+    assert b"Native media upload test." in created.data
+
+    with app.app_context():
+        row = get_db().execute(
+            """
+            SELECT media_storage_key,media_mime_type,media_original_name,media_size_bytes
+            FROM health_social_posts
+            WHERE body='Native media upload test.'
+            """
+        ).fetchone()
+        assert row is not None
+        assert row["media_storage_key"]
+        assert row["media_mime_type"] == "image/png"
+        assert row["media_original_name"] == "healthy.png"
+        assert int(row["media_size_bytes"]) == len(png)
+        media_path = row["media_storage_key"]
+
+    media = client.get(f"/community/media/{media_path}")
+    assert media.status_code == 200
+    assert media.mimetype == "image/png"
+
+    page = client.get("/community")
+    token = csrf(page.data.decode())
+    bad = client.post(
+        "/community",
+        data={
+            "csrf_token": token,
+            "action": "story",
+            "lane": "fitness",
+            "body": "Bad content-type test.",
+            "accept_guidelines": "1",
+            "media_file": (BytesIO(b"not-a-png"), "fake.png", "image/png"),
+        },
+        content_type="multipart/form-data",
+        follow_redirects=True,
+    )
+    assert bad.status_code == 200
+    assert b"does not match its declared media type" in bad.data
