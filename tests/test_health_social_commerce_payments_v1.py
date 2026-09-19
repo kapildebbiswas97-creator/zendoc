@@ -399,3 +399,128 @@ def test_connect_live_fragment_refreshes_authorized_thread(tmp_path):
     page = client.get(f"/messages?conversation_id={conversation_id}")
     assert b"messages_live.js" in page.data
     assert f"/messages/{conversation_id}/live".encode() in page.data
+
+
+def test_private_message_block_prevents_both_sides_until_unblocked(tmp_path):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    register_web(client, "patient", "block-one@example.com", "Block One")
+    register_web(client, "patient", "block-two@example.com", "Block Two")
+    login_web(client, "patient", "block-one@example.com")
+
+    with app.app_context():
+        target = get_db().execute(
+            "SELECT id FROM users WHERE email_normalized=?",
+            ("block-two@example.com",),
+        ).fetchone()
+        target_id = int(target["id"])
+
+    page = client.get("/messages?q=Block+Two")
+    token = csrf(page.data.decode())
+    started = client.post(
+        "/messages",
+        data={
+            "csrf_token": token,
+            "action": "start",
+            "target_user_id": target_id,
+            "context_type": "direct",
+        },
+        follow_redirects=False,
+    )
+    conversation_id = int(started.headers["Location"].rsplit("=", 1)[-1])
+
+    page = client.get(f"/messages?conversation_id={conversation_id}")
+    token = csrf(page.data.decode())
+    blocked = client.post(
+        "/messages",
+        data={
+            "csrf_token": token,
+            "action": "block_contact",
+            "conversation_id": conversation_id,
+        },
+        follow_redirects=True,
+    )
+    assert blocked.status_code == 200
+    assert b"Account blocked" in blocked.data
+    assert b"Unblock" in blocked.data
+
+    token = csrf(blocked.data.decode())
+    denied = client.post(
+        "/messages",
+        data={
+            "csrf_token": token,
+            "action": "send",
+            "conversation_id": conversation_id,
+            "body": "This message must not be delivered.",
+            "message_type": "text",
+        },
+        follow_redirects=True,
+    )
+    assert b"one account has blocked the other" in denied.data
+    with app.app_context():
+        assert get_db().execute(
+            "SELECT id FROM messages WHERE conversation_id=? AND body=?",
+            (conversation_id, "This message must not be delivered."),
+        ).fetchone() is None
+
+    token = csrf(denied.data.decode())
+    unblocked = client.post(
+        "/messages",
+        data={
+            "csrf_token": token,
+            "action": "unblock_contact",
+            "conversation_id": conversation_id,
+        },
+        follow_redirects=True,
+    )
+    assert b"Account unblocked" in unblocked.data
+
+    token = csrf(unblocked.data.decode())
+    sent = client.post(
+        "/messages",
+        data={
+            "csrf_token": token,
+            "action": "send",
+            "conversation_id": conversation_id,
+            "body": "Messaging works after explicit unblock.",
+            "message_type": "text",
+        },
+        follow_redirects=True,
+    )
+    assert b"Messaging works after explicit unblock." in sent.data
+
+
+def test_connect_live_script_is_outside_title_block(tmp_path):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    register_web(client, "patient", "script-one@example.com", "Script One")
+    register_web(client, "patient", "script-two@example.com", "Script Two")
+    login_web(client, "patient", "script-one@example.com")
+
+    with app.app_context():
+        target_id = int(
+            get_db().execute(
+                "SELECT id FROM users WHERE email_normalized=?",
+                ("script-two@example.com",),
+            ).fetchone()["id"]
+        )
+
+    page = client.get("/messages?q=Script+Two")
+    token = csrf(page.data.decode())
+    started = client.post(
+        "/messages",
+        data={
+            "csrf_token": token,
+            "action": "start",
+            "target_user_id": target_id,
+            "context_type": "direct",
+        },
+        follow_redirects=False,
+    )
+    conversation_id = int(started.headers["Location"].rsplit("=", 1)[-1])
+    page = client.get(f"/messages?conversation_id={conversation_id}")
+    html = page.data.decode()
+    title_end = html.lower().find("</title>")
+    script_pos = html.find("messages_live.js")
+    assert title_end >= 0
+    assert script_pos > title_end
