@@ -1,3 +1,11 @@
+import hashlib
+import hmac
+import json
+
+import pytest
+
+from zendoc.db import get_db
+from zendoc.payments import verify_webhook
 from zendoc.health_commerce import search_health_products
 from zendoc.health_shop import affiliate_readiness
 from zendoc.payments import payment_gateway_status
@@ -118,3 +126,110 @@ def test_business_page_is_public_and_truthful(tmp_path):
     assert b"B2B + B2C" in response.data
     assert b"real merchant affiliate approval" in response.data
     assert b"real contracts" in response.data
+
+
+def test_signed_payment_webhook_requires_matching_invoice_amount_and_currency(tmp_path, monkeypatch):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    register_web(client, "patient", "pay-patient@example.com", "Pay Patient")
+    register_web(client, "hospital", "pay-hospital@example.com", "Pay Hospital")
+
+    webhook_secret = "unit-test-webhook-secret"
+    monkeypatch.setenv("ZENDOC_RAZORPAY_WEBHOOK_SECRET", webhook_secret)
+
+    with app.app_context():
+        db = get_db()
+        patient = db.execute("SELECT id FROM users WHERE email='pay-patient@example.com'").fetchone()
+        hospital = db.execute("SELECT id FROM users WHERE email='pay-hospital@example.com'").fetchone()
+        now = "2026-09-19T08:00:00+00:00"
+        db.execute(
+            """
+            INSERT INTO care_invoices
+            (invoice_uid,patient_id,payee_user_id,resource_type,resource_id,amount_paise,currency,
+             description,status,gateway,gateway_order_id,created_by,created_at,updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                "inv_test_match",
+                patient["id"],
+                hospital["id"],
+                "appointment",
+                101,
+                12500,
+                "INR",
+                "Connected care test invoice",
+                "checkout_ready",
+                "razorpay",
+                "order_match",
+                hospital["id"],
+                now,
+                now,
+            ),
+        )
+        db.execute(
+            """
+            INSERT INTO care_invoices
+            (invoice_uid,patient_id,payee_user_id,resource_type,resource_id,amount_paise,currency,
+             description,status,gateway,gateway_order_id,created_by,created_at,updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                "inv_test_mismatch",
+                patient["id"],
+                hospital["id"],
+                "appointment",
+                102,
+                12500,
+                "INR",
+                "Connected care mismatch invoice",
+                "checkout_ready",
+                "razorpay",
+                "order_mismatch",
+                hospital["id"],
+                now,
+                now,
+            ),
+        )
+        db.commit()
+
+        good_event = {
+            "event": "payment.captured",
+            "payload": {
+                "payment": {
+                    "entity": {
+                        "id": "pay_match",
+                        "order_id": "order_match",
+                        "amount": 12500,
+                        "currency": "INR",
+                        "status": "captured",
+                    }
+                }
+            },
+        }
+        raw = json.dumps(good_event, separators=(",", ":")).encode()
+        signature = hmac.new(webhook_secret.encode(), raw, hashlib.sha256).hexdigest()
+        result = verify_webhook(raw, signature)
+        assert result["handled"] is True
+        row = db.execute("SELECT status FROM care_invoices WHERE gateway_order_id='order_match'").fetchone()
+        assert row["status"] == "paid"
+
+        bad_event = {
+            "event": "payment.captured",
+            "payload": {
+                "payment": {
+                    "entity": {
+                        "id": "pay_mismatch",
+                        "order_id": "order_mismatch",
+                        "amount": 12499,
+                        "currency": "INR",
+                        "status": "captured",
+                    }
+                }
+            },
+        }
+        raw_bad = json.dumps(bad_event, separators=(",", ":")).encode()
+        bad_signature = hmac.new(webhook_secret.encode(), raw_bad, hashlib.sha256).hexdigest()
+        with pytest.raises(PermissionError, match="amount"):
+            verify_webhook(raw_bad, bad_signature)
+        row = db.execute("SELECT status FROM care_invoices WHERE gateway_order_id='order_mismatch'").fetchone()
+        assert row["status"] == "checkout_ready"
