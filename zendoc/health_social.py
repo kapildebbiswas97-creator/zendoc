@@ -403,3 +403,123 @@ def discover_people(user, query="", *, limit=20) -> list[dict]:
         (uid, uid, uid, uid, q, like, like, max(1, min(int(limit or 20), 50))),
     ).fetchall()
     return [dict(row) for row in rows]
+
+
+def list_moderation_reports(*, status="open", limit=100) -> list[dict]:
+    """Owner-facing moderation queue. Authorization belongs at the route layer."""
+    ensure_health_social_schema()
+    wanted = str(status or "open").strip().lower()
+    rows = get_db().execute(
+        """
+        SELECT r.*,u.name reporter_name,u.email reporter_email
+        FROM health_social_reports r
+        JOIN users u ON u.id=r.reporter_id
+        WHERE (?='all' OR r.status=?)
+        ORDER BY r.created_at ASC,r.id ASC
+        LIMIT ?
+        """,
+        (wanted, wanted, max(1, min(int(limit or 100), 250))),
+    ).fetchall()
+    results = []
+    for row in rows:
+        item = dict(row)
+        entity_type = item["entity_type"]
+        entity_id = int(item["entity_id"])
+        preview = None
+        author_name = None
+        if entity_type == "post":
+            target = get_db().execute(
+                """
+                SELECT p.body,p.moderation_status,u.name author_name
+                FROM health_social_posts p JOIN users u ON u.id=p.author_id
+                WHERE p.id=?
+                """,
+                (entity_id,),
+            ).fetchone()
+        elif entity_type == "story":
+            target = get_db().execute(
+                """
+                SELECT s.body,s.moderation_status,u.name author_name
+                FROM health_social_stories s JOIN users u ON u.id=s.author_id
+                WHERE s.id=?
+                """,
+                (entity_id,),
+            ).fetchone()
+        elif entity_type == "comment":
+            target = get_db().execute(
+                """
+                SELECT c.body,c.moderation_status,u.name author_name
+                FROM health_social_comments c JOIN users u ON u.id=c.author_id
+                WHERE c.id=?
+                """,
+                (entity_id,),
+            ).fetchone()
+        elif entity_type == "user":
+            target = get_db().execute(
+                "SELECT name author_name,'Account report' body,'active' moderation_status FROM users WHERE id=?",
+                (entity_id,),
+            ).fetchone()
+        else:
+            target = None
+        if target:
+            preview = str(target["body"] or "")[:500]
+            author_name = target["author_name"]
+            item["target_status"] = target["moderation_status"]
+        else:
+            item["target_status"] = "missing"
+        item["target_preview"] = preview
+        item["target_author_name"] = author_name
+        results.append(item)
+    return results
+
+
+def moderate_report(report_id: int, action: str) -> dict:
+    """Resolve one report without silently disabling user accounts."""
+    ensure_health_social_schema()
+    row = get_db().execute(
+        "SELECT * FROM health_social_reports WHERE id=?",
+        (int(report_id),),
+    ).fetchone()
+    if not row:
+        raise LookupError("Community report not found.")
+    if str(row["status"]) != "open":
+        raise ValueError("This community report has already been resolved.")
+
+    action = str(action or "").strip().lower()
+    if action not in {"remove", "dismiss"}:
+        raise ValueError("Moderation action must be remove or dismiss.")
+
+    entity_type = str(row["entity_type"])
+    entity_id = int(row["entity_id"])
+    if action == "remove":
+        table_by_type = {
+            "post": "health_social_posts",
+            "story": "health_social_stories",
+            "comment": "health_social_comments",
+        }
+        table = table_by_type.get(entity_type)
+        if not table:
+            raise ValueError(
+                "Account reports require manual owner investigation; they are not auto-disabled from the community queue."
+            )
+        target = get_db().execute(f"SELECT id FROM {table} WHERE id=?", (entity_id,)).fetchone()
+        if target:
+            get_db().execute(
+                f"UPDATE {table} SET moderation_status='removed' WHERE id=?",
+                (entity_id,),
+            )
+        resolution = "resolved_removed"
+    else:
+        resolution = "dismissed"
+
+    get_db().execute(
+        "UPDATE health_social_reports SET status=? WHERE id=?",
+        (resolution, int(report_id)),
+    )
+    get_db().commit()
+    return {
+        "report_id": int(report_id),
+        "status": resolution,
+        "entity_type": entity_type,
+        "entity_id": entity_id,
+    }
