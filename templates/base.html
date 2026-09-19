@@ -68,6 +68,7 @@
               <a href="{{ url_for('main.appointments') }}" {% if endpoint == 'main.appointments' %}aria-current="page"{% endif %}>Appointments</a>
               <a href="{{ url_for('milestone7.doctor_availability_page') }}" {% if endpoint == 'milestone7.doctor_availability_page' %}aria-current="page"{% endif %}>Availability</a>
               <a href="{{ url_for('milestone7.messages_page') }}" {% if endpoint == 'milestone7.messages_page' %}aria-current="page"{% endif %}>Messages</a>
+              <a href="{{ url_for('payments.payments_page') }}" {% if endpoint == 'payments.payments_page' %}aria-current="page"{% endif %}>Payments</a>
               <a href="{{ url_for('main.records') }}" {% if endpoint == 'main.records' %}aria-current="page"{% endif %}>Shared Records</a>
             {% endif %}
             <a href="{{ url_for('main.provider_profile') }}" {% if endpoint == 'main.provider_profile' %}aria-current="page"{% endif %}>{{ 'Provider Profile' if provider_operational_access else 'Complete Verification' }}</a>
@@ -119,6 +120,7 @@
               {% if current_user.role == 'admin' or (current_user.role in ['doctor','hospital','pharmacy'] and provider_operational_access) %}<a href="{{ url_for('milestone7.operations_page') }}">Staff operations</a>{% endif %}
               {% if current_user.role == 'admin' %}
                 <a href="{{ url_for('main.founder_readiness_page') }}">Founder readiness</a>
+                <a href="{{ url_for('health_social.community_moderation_page') }}">Community moderation</a>
                 <a href="{{ url_for('edgecare.edgecare_admin_page') }}">AI runtime &amp; care-chain readiness</a>
                 <a href="{{ url_for('showcase.showcase_page') }}">Public showcase</a>
               {% endif %}
