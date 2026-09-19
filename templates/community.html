@@ -15,7 +15,7 @@
 
 <aside class="trust-note">
   <strong>Health-only, safety-first.</strong><br>
-  Do not use community posts to diagnose, prescribe, change medicines, sell prescription drugs, or replace emergency/professional care. Sponsored content must be labelled. You can report or block content/accounts. <a href="{{ url_for('public_launch.community_guidelines') }}">Read the Health Community Guidelines</a>.
+  Do not use community posts to diagnose, prescribe, change medicines, sell prescription drugs, or replace emergency/professional care. Sponsored content must be labelled. Reporting and blocking controls are available for content and accounts. <a href="{{ url_for('public_launch.community_guidelines') }}">Read the Health Community Guidelines</a>.
 </aside>
 
 <p class="form-note">Native media storage: <strong>{{ media_storage.status.replace('_',' ').title() }}</strong>{% if not media_storage.durable_public_ready %} · Local/development uploads work now; durable public media still requires the production object-storage configuration.{% endif %}</p>
