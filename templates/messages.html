@@ -1,6 +1,5 @@
 {% extends "base.html" %}
-{% block title %}ZENDOC Connect Messages{% if selected %}<script src="{{ url_for('static', filename='messages_live.js') }}" defer></script>{% endif %}
-{% endblock %}
+{% block title %}ZENDOC Connect Messages{% endblock %}
 {% block content %}
 <section class="section-head">
   <div>
@@ -145,4 +144,5 @@
     {% endif %}
   </aside>
 </section>
+{% if selected %}<script src="{{ url_for('static', filename='messages_live.js') }}" defer></script>{% endif %}
 {% endblock %}
