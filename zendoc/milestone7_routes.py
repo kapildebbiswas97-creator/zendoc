@@ -15,6 +15,7 @@ from .connect import (
     unread_count,
 )
 from .db import get_db
+from .health_social import block_user, blocked_user_ids, unblock_user
 from .human_operations import create_staff_task, list_staff_tasks, update_staff_task, upsert_staff_profile
 from .pose_coach import POSE_EXERCISES, list_pose_sessions, save_pose_session
 from .routes import audit, require_api_user
@@ -112,6 +113,27 @@ def messages_page():
                 audit("share", "report_message", str(message["id"]))
                 flash("Medical report shared with consent.", "success")
                 return redirect(url_for("milestone7.messages_page", conversation_id=message["conversation_id"]))
+            if action in {"block_contact", "unblock_contact"}:
+                conversation_id = int(request.form.get("conversation_id"))
+                conversation = get_conversation(g.user, conversation_id)
+                other = next(
+                    (
+                        participant for participant in conversation.get("participants", [])
+                        if int(participant.get("id") or 0) != int(g.user["id"])
+                    ),
+                    None,
+                )
+                if not other:
+                    raise LookupError("Conversation contact not found.")
+                if action == "block_contact":
+                    block_user(g.user, int(other["id"]))
+                    audit("block", "user", str(other["id"]))
+                    flash("Account blocked. New private messages, calls and record sharing are now unavailable between these accounts.", "success")
+                else:
+                    unblock_user(g.user, int(other["id"]))
+                    audit("unblock", "user", str(other["id"]))
+                    flash("Account unblocked. Normal communication rules apply again.", "success")
+                return redirect(url_for("milestone7.messages_page", conversation_id=conversation_id))
         except (ValueError, LookupError, PermissionError) as error:
             flash(str(error), "error")
         return redirect(url_for("milestone7.messages_page"))
@@ -138,6 +160,7 @@ def messages_page():
         contacts=contacts,
         unread_total=unread_count(g.user),
         q=request.args.get("q", ""),
+        blocked_ids=blocked_user_ids(g.user),
     )
 
 
