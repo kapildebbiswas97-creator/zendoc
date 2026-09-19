@@ -18,19 +18,34 @@ from .health_social import (
     toggle_like,
     unfollow_user,
 )
+from .policy_acceptance import COMMUNITY_GUIDELINES_VERSION, record_policy_acceptance
 from .routes import audit, require_api_user
 from .security import login_required, owner_required
 
 bp = Blueprint("health_social", __name__)
 
 
+def _require_guidelines_acceptance(user, data):
+    accepted = data.get("accept_guidelines")
+    if accepted not in (True, 1, "1", "true", "on", "yes"):
+        raise PermissionError("Accept the current Health Community Guidelines before publishing.")
+    record_policy_acceptance(
+        int(user["id"]),
+        "community_guidelines",
+        COMMUNITY_GUIDELINES_VERSION,
+        source="community_publish",
+    )
+
+
 def _handle_action(user, data):
     action = str(data.get("action") or "").strip()
     if action == "post":
+        _require_guidelines_acceptance(user, data)
         item = create_post(user, data)
         audit("create", "health_social_post", str(item["id"]), actor=user)
         return "Health community post published."
     if action == "story":
+        _require_guidelines_acceptance(user, data)
         item = create_story(user, data)
         audit("create", "health_social_story", str(item["id"]), actor=user)
         return "Health story published for 24 hours."
@@ -95,6 +110,7 @@ def api_create_post():
         return error
     data = request.get_json(silent=True) or {}
     try:
+        _require_guidelines_acceptance(user, data)
         post = create_post(user, data)
         audit("create", "health_social_post", str(post["id"]), actor=user)
         return jsonify({"post": post}), 201
@@ -109,6 +125,7 @@ def api_create_story():
         return error
     data = request.get_json(silent=True) or {}
     try:
+        _require_guidelines_acceptance(user, data)
         story = create_story(user, data)
         audit("create", "health_social_story", str(story["id"]), actor=user)
         return jsonify({"story": story}), 201
