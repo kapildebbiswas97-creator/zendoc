@@ -618,3 +618,19 @@ def blocked_user_ids(user) -> set[int]:
         (_user_id(user),),
     ).fetchall()
     return {int(row["blocked_id"]) for row in rows}
+
+
+def list_blocked_users(user, *, limit=100) -> list[dict]:
+    ensure_health_social_schema()
+    rows = get_db().execute(
+        """
+        SELECT u.id,u.name,u.role,b.created_at
+        FROM health_social_blocks b
+        JOIN users u ON u.id=b.blocked_id
+        WHERE b.blocker_id=?
+        ORDER BY b.created_at DESC,u.name
+        LIMIT ?
+        """,
+        (_user_id(user), max(1, min(int(limit or 100), 250))),
+    ).fetchall()
+    return [dict(row) for row in rows]
