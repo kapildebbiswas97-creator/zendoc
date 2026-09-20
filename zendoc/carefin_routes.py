@@ -5,6 +5,7 @@ from flask import Blueprint, flash, g, jsonify, redirect, render_template, reque
 
 from .carefin_cases import (
     apply_carefin_partner_response,
+    build_claim_packet,
     carefin_case_options,
     create_carefin_case,
     get_carefin_case,
@@ -94,6 +95,21 @@ def carefin_page():
         cases=list_carefin_cases(g.user),
         case_options=carefin_case_options(),
     )
+
+
+@bp.get("/carefin/cases/<int:case_id>/claim-packet.json")
+@login_required
+def carefin_claim_packet(case_id):
+    try:
+        packet = build_claim_packet(g.user, case_id)
+        response = jsonify(packet)
+        response.headers["Content-Disposition"] = f'attachment; filename="zendoc-carefin-case-{case_id}.json"'
+        response.headers["Cache-Control"] = "no-store"
+        return response
+    except PermissionError as exc:
+        return jsonify({"error":{"code":403,"message":str(exc)}}),403
+    except (TypeError,ValueError,LookupError) as exc:
+        return jsonify({"error":{"code":404,"message":str(exc)}}),404
 
 
 @bp.route("/admin/carefin-cases", methods=("GET", "POST"))

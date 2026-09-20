@@ -1,4 +1,5 @@
 from zendoc.carefin_cases import (
+    build_claim_packet,
     create_carefin_case,
     get_carefin_case,
     owner_transition_case,
@@ -92,3 +93,32 @@ def test_carefin_web_case_flow_is_visible(tmp_path):
     assert created.status_code == 200
     assert b"CareFin case created" in created.data
     assert b"PM-JAY" in created.data or b"Pradhan" in created.data
+
+
+
+def test_carefin_claim_packet_is_private_and_never_claims_submission(tmp_path):
+    app = make_app(tmp_path)
+    a = app.test_client()
+    b = app.test_client()
+    register_web(a, "patient", "packet-a@example.com", "Packet A")
+    register_web(b, "patient", "packet-b@example.com", "Packet B")
+    user_a = _user(app, "packet-a@example.com")
+    user_b = _user(app, "packet-b@example.com")
+
+    with app.app_context():
+        case = create_carefin_case(user_a, "lic")
+        case = submit_case_evidence(
+            user_a,
+            case["id"],
+            evidence_type="POLICY_REFERENCE",
+            evidence_reference="POLICY-REF-77",
+        )
+        packet = build_claim_packet(user_a, case["id"])
+        assert packet["submission_status"] == "NOT_SUBMITTED_BY_ZENDOC"
+        assert packet["latest_evidence"]["reference"] == "POLICY-REF-77"
+        assert "not an insurance claim submission" in packet["truth_notice"].lower()
+        try:
+            build_claim_packet(user_b, case["id"])
+            assert False
+        except PermissionError:
+            pass

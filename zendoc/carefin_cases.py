@@ -418,3 +418,56 @@ def apply_carefin_partner_response(payload: dict, raw_body: bytes, signature: st
     )
     get_db().commit()
     return _case_row(case_id)
+
+
+
+def build_claim_packet(actor, case_id: int) -> dict:
+    """Build a privacy-minimized claim-preparation packet for the case owner.
+
+    This packet is evidence organization only. It does not submit a claim,
+    certify eligibility, or imply insurer/government acceptance.
+    """
+    item = get_carefin_case(actor, case_id)
+    source = get_source(item["source_id"]) or {}
+    return {
+        "packet_type": "zendoc_carefin_claim_preparation",
+        "packet_version": 1,
+        "case_id": int(item["id"]),
+        "source": {
+            "source_id": item["source_id"],
+            "name": item["source_name"],
+            "owner": source.get("owner"),
+            "official_url": source.get("official_url"),
+            "source_type": source.get("source_type"),
+        },
+        "state": item["state"],
+        "authoritative_confirmation": bool(item["authoritative_confirmation"]),
+        "latest_evidence": {
+            "type": item.get("latest_evidence_type"),
+            "reference": item.get("latest_evidence_reference"),
+        },
+        "user_note": item.get("user_note"),
+        "timeline": [
+            {
+                "event_type": event.get("event_type"),
+                "previous_state": event.get("previous_state"),
+                "state": event.get("state"),
+                "evidence_type": event.get("evidence_type"),
+                "evidence_reference": event.get("evidence_reference"),
+                "note": event.get("note"),
+                "authoritative_confirmation": bool(event.get("authoritative_confirmation")),
+                "created_at": event.get("created_at"),
+            }
+            for event in item.get("events", [])
+        ],
+        "generated_at": now_iso(),
+        "submission_status": "NOT_SUBMITTED_BY_ZENDOC",
+        "truth_notice": (
+            "This packet organizes ZENDOC case references for the user. It is not an insurance claim submission, "
+            "eligibility decision, approval, payment confirmation or insurer/government response. Submit only through "
+            "the relevant official source or an authorized connected partner."
+        ),
+        "privacy_notice": (
+            "The packet intentionally excludes passwords, OTPs, PINs, full Aadhaar/PAN numbers and card credentials."
+        ),
+    }
