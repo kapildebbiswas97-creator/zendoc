@@ -52,7 +52,7 @@ PLATFORM_TOOL_CATALOG = (
         "keywords": ("health memory", "timeline", "my records", "records"),
         "title": "Health Memory",
         "subtitle": "Your longitudinal records, timeline, reports and consent-controlled access",
-        "url": "/health/summary",
+        "url": "/health-summary",
         "type": "health_memory",
     },
     {
