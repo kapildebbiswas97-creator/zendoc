@@ -62,8 +62,16 @@ def get_capability_registry() -> dict:
     database_url = _env("DATABASE_URL")
     postgresql_configured = database_url.startswith(("postgresql://", "postgres://", "postgresql+psycopg://"))
     persistence_verified = _env_bool("ZENDOC_PERSISTENCE_VERIFIED")
-    storage_provider = _env("ZENDOC_STORAGE_PROVIDER", "local")
-    s3_configured = storage_provider != "local" and bool(_env("ZENDOC_STORAGE_BUCKET"))
+    storage_provider = _env("ZENDOC_STORAGE_PROVIDER", "local").lower()
+    s3_provider = storage_provider in {"s3", "s3_compatible", "r2"}
+    s3_configured = s3_provider and all(
+        bool(_env(key))
+        for key in (
+            "ZENDOC_S3_BUCKET",
+            "ZENDOC_S3_ACCESS_KEY_ID",
+            "ZENDOC_S3_SECRET_ACCESS_KEY",
+        )
+    )
     real_evaluation_enabled = _env_bool("ZENDOC_MODEL_EVALUATION_REAL_ENABLED")
     storage_verified = _env_bool("ZENDOC_STORAGE_VERIFIED")
     affiliate_templates_configured = any(
@@ -419,11 +427,25 @@ def get_capability_registry() -> dict:
             ),
         },
         "object_storage": {
-            "status": STATUS_INTEGRATION_REQUIRED if s3_configured else STATUS_WORKING,
+            "status": (
+                STATUS_WORKING
+                if s3_configured and storage_verified
+                else STATUS_BETA
+                if s3_configured
+                else STATUS_INTEGRATION_REQUIRED
+                if s3_provider
+                else STATUS_WORKING
+            ),
             "label": "Object Storage (S3-compatible)",
-            "description": "Local file storage (development)."
-                           if not s3_configured else
-                           f"Provider '{storage_provider}' is configured but its external adapter must be installed and tested.",
+            "description": (
+                f"Provider '{storage_provider}' is configured and operator-verified for durable object storage."
+                if s3_configured and storage_verified
+                else f"Provider '{storage_provider}' is configured; run real save/read/delete verification before calling it durable."
+                if s3_configured
+                else f"Provider '{storage_provider}' is selected but required S3-compatible credentials are incomplete."
+                if s3_provider
+                else "Local file storage works for development; hosted persistence requires verified durable object storage."
+            ),
         },
         "realtime": {
             "status": STATUS_WORKING,
