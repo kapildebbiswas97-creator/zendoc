@@ -7,18 +7,22 @@ from .health_social import (
     block_user,
     create_post,
     create_story,
+    delete_post,
     discover_people,
+    get_post,
     follow_user,
     get_community_media_access,
     lane_catalog,
     list_blocked_users,
     list_comments,
     list_feed,
+    list_saved_posts,
     list_stories,
     list_moderation_reports,
     moderate_report,
     report_entity,
     toggle_like,
+    toggle_save,
     unblock_user,
     unfollow_user,
 )
@@ -79,6 +83,19 @@ def _handle_action(user, data):
     if action == "like":
         liked = toggle_like(user, int(data.get("post_id")))
         return "Post liked." if liked else "Like removed."
+    if action == "save":
+        saved = toggle_save(user, int(data.get("post_id")))
+        return "Post saved." if saved else "Post removed from saved items."
+    if action == "delete_post":
+        deleted = delete_post(user, int(data.get("post_id")))
+        storage_key = deleted.get("media_storage_key")
+        if storage_key:
+            try:
+                get_community_media_storage().delete(storage_key)
+            except Exception:
+                pass
+        audit("delete", "health_social_post", str(deleted["id"]), actor=user)
+        return "Your community post was deleted."
     if action == "comment":
         _require_guidelines_acceptance(user, data)
         add_comment(user, int(data.get("post_id")), data.get("body"))
@@ -120,7 +137,7 @@ def community_page():
         return redirect(url_for("health_social.community_page", mode=request.args.get("mode", "all")))
 
     mode = request.args.get("mode", "all")
-    feed = list_feed(g.user, followed_only=(mode == "following"))
+    feed = list_saved_posts(g.user) if mode == "saved" else list_feed(g.user, followed_only=(mode == "following"))
     for post in feed:
         post["comments"] = list_comments(g.user, int(post["id"]), limit=3)
     return render_template(
@@ -136,12 +153,25 @@ def community_page():
     )
 
 
+@bp.get("/community/posts/<int:post_id>")
+@login_required
+def community_post_page(post_id):
+    try:
+        post = get_post(g.user, post_id)
+        comments = list_comments(g.user, post_id, limit=30)
+    except (LookupError, PermissionError):
+        return ("Community post unavailable.", 404)
+    return render_template("community_post.html", post=post, comments=comments)
+
+
 @bp.get("/api/v1/community/feed")
 def api_feed():
     user, error = require_api_user()
     if error:
         return error
-    return jsonify({"posts": list_feed(user, followed_only=request.args.get("mode") == "following")})
+    mode = request.args.get("mode", "all")
+    posts = list_saved_posts(user) if mode == "saved" else list_feed(user, followed_only=mode == "following")
+    return jsonify({"posts": posts})
 
 
 @bp.post("/api/v1/community/posts")

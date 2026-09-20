@@ -4,10 +4,10 @@
 <section class="section-head">
   <div>
     <p class="eyebrow">Mental wellness &amp; awareness</p>
-    <h1>A visible, private place to check in with yourself</h1>
-    <p class="section-copy">Everyday wellbeing awareness, reflection and safe next-step guidance. ZENDOC does not diagnose a mental-health condition, perform personality scoring, prescribe medicine, or replace a qualified professional.</p>
+    <h1>A private place to notice patterns and care for yourself</h1>
+    <p class="section-copy">Track your own wellbeing, keep a private journal, and use safety-first educational guidance. ZENDOC does not diagnose a mental-health condition, perform personality scoring, prescribe medicine, or replace a qualified professional.</p>
   </div>
-  <span class="status-badge active">Non-diagnostic</span>
+  <span class="status-badge active">Private · Non-diagnostic</span>
 </section>
 
 <aside class="trust-note">
@@ -16,9 +16,78 @@
 </aside>
 
 <section class="grid two spaced-panel">
+  <form class="panel" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="action" value="checkin">
+    <p class="eyebrow">Private check-in</p>
+    <h2>How are you doing right now?</h2>
+    <p class="form-note">These are your own 0–10 ratings. ZENDOC stores them as personal history; it does not convert them into a diagnosis or clinical risk score.</p>
+    <label>Mood · 0 low, 10 very good<input name="mood_level" type="number" min="0" max="10" value="5" required></label>
+    <label>Stress · 0 low, 10 very high<input name="stress_level" type="number" min="0" max="10" value="5" required></label>
+    <label>Energy · 0 low, 10 high<input name="energy_level" type="number" min="0" max="10" value="5" required></label>
+    <label>Sleep quality · 0 poor, 10 very good<input name="sleep_quality" type="number" min="0" max="10" value="5" required></label>
+    <label>Optional private note<textarea name="note" rows="3" maxlength="1000" placeholder="What influenced today?"></textarea></label>
+    <button type="submit">Save private check-in</button>
+  </form>
+
+  <form class="panel" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="action" value="journal">
+    <p class="eyebrow">Private journal</p>
+    <h2>Write for yourself</h2>
+    <p class="form-note">Journal entries belong to your account and are not shared with providers merely because they exist.</p>
+    <label>Optional title<input name="title" maxlength="140" placeholder="Today, exam pressure, sleep…"></label>
+    <label>Journal entry<textarea name="body" rows="8" maxlength="6000" required placeholder="Write only what you are comfortable saving."></textarea></label>
+    <button type="submit">Save private journal entry</button>
+  </form>
+</section>
+
+{% if wellness_summary.averages %}
+<section class="panel spaced-panel">
+  <div class="panel-head"><div><p class="eyebrow">Your recent self-ratings</p><h2>Last {{ wellness_summary.count }} check-ins</h2></div><span class="status-badge">Descriptive only</span></div>
+  <div class="stats">
+    <article><span>Mood</span><strong>{{ wellness_summary.averages.mood_level }}</strong><small>out of 10</small></article>
+    <article><span>Stress</span><strong>{{ wellness_summary.averages.stress_level }}</strong><small>out of 10</small></article>
+    <article><span>Energy</span><strong>{{ wellness_summary.averages.energy_level }}</strong><small>out of 10</small></article>
+    <article><span>Sleep</span><strong>{{ wellness_summary.averages.sleep_quality }}</strong><small>out of 10</small></article>
+  </div>
+  <p class="form-note">These averages summarize numbers you entered yourself. They are not a screening result, diagnosis, or medical recommendation.</p>
+</section>
+{% endif %}
+
+<section class="grid two spaced-panel">
   <article class="panel">
-    <p class="eyebrow">Awareness</p>
-    <h2>Four simple steps</h2>
+    <div class="panel-head"><div><p class="eyebrow">Check-in history</p><h2>Your recent entries</h2></div></div>
+    {% for item in checkins %}
+      <div class="summary-row">
+        <div><strong>{{ item.created_at[:16] }}</strong><p>Mood {{ item.mood_level }}/10 · Stress {{ item.stress_level }}/10 · Energy {{ item.energy_level }}/10 · Sleep {{ item.sleep_quality }}/10</p>{% if item.note %}<p>{{ item.note }}</p>{% endif %}</div>
+      </div>
+    {% else %}
+      <div class="empty-state"><h3>No check-ins yet</h3><p>Your private history will appear after you save your first check-in.</p></div>
+    {% endfor %}
+  </article>
+
+  <article class="panel">
+    <div class="panel-head"><div><p class="eyebrow">Journal history</p><h2>Your private journal</h2></div></div>
+    {% for item in journal_entries %}
+      <div class="summary-row">
+        <div><strong>{{ item.title or 'Journal entry' }}</strong><small>{{ item.created_at[:16] }}</small><p>{{ item.body }}</p></div>
+        <form method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="action" value="delete_journal">
+          <input type="hidden" name="entry_id" value="{{ item.id }}">
+          <button type="submit" class="secondary-action">Delete</button>
+        </form>
+      </div>
+    {% else %}
+      <div class="empty-state"><h3>No journal entries yet</h3><p>Entries you choose to save will remain private to your account.</p></div>
+    {% endfor %}
+  </article>
+</section>
+
+<section class="grid two spaced-panel">
+  <article class="panel">
+    <p class="eyebrow">Awareness</p><h2>Four simple steps</h2>
     <div class="grid two">
       <div class="subtle-panel"><strong>Notice</strong><p>Name what you are feeling, what changed recently and what is making the day harder.</p></div>
       <div class="subtle-panel"><strong>Stabilize</strong><p>Use appropriate basics such as grounding, sleep, hydration, movement and social support.</p></div>
@@ -27,26 +96,15 @@
     </div>
   </article>
 
-  <form class="panel" method="post" action="{{ url_for('main.ai_center') }}" aria-label="Mental wellness check-in">
+  <form class="panel" method="post" action="{{ url_for('main.ai_center') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="feature" value="mental_health">
-    <p class="eyebrow">Private check-in</p>
-    <h2>How are you doing right now?</h2>
+    <p class="eyebrow">Safety-first guidance</p>
+    <h2>Review a situation with ZENDOC</h2>
     <p class="form-note">This uses ZENDOC's existing deterministic wellbeing guidance with an emergency-first safety check. It is not a clinical assessment.</p>
-    <label>Age group
-      <select name="age_group">
-        <option>student</option>
-        <option>working professional</option>
-        <option>adult</option>
-        <option>elderly</option>
-      </select>
-    </label>
-    <label>Stress level from 0 to 10
-      <input name="stress_level" type="number" min="0" max="10" value="5">
-    </label>
-    <label>What is happening?
-      <textarea name="context" rows="5" maxlength="1000" placeholder="Share only what you are comfortable sharing."></textarea>
-    </label>
+    <label>Age group<select name="age_group"><option>student</option><option>working professional</option><option>adult</option><option>elderly</option></select></label>
+    <label>Stress level from 0 to 10<input name="stress_level" type="number" min="0" max="10" value="5"></label>
+    <label>What is happening?<textarea name="context" rows="5" maxlength="1000" placeholder="Share only what you are comfortable sharing."></textarea></label>
     <button type="submit">Review safe next steps</button>
   </form>
 </section>

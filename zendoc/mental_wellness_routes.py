@@ -1,18 +1,49 @@
-"""Dedicated, visible Mental Wellness & Awareness surface.
+"""Dedicated, private Mental Wellness & Awareness surface."""
+from flask import Blueprint, flash, g, redirect, render_template, request, url_for
 
-The existing AI page retains its deterministic mental-health check-in. This
-blueprint gives the feature a stable first-class route so navigation changes
-cannot accidentally hide it again.
-"""
-from flask import Blueprint, render_template
-
+from .mental_wellness import (
+    create_journal_entry,
+    delete_journal_entry,
+    list_checkins,
+    list_journal_entries,
+    record_checkin,
+    wellness_summary,
+)
+from .routes import audit
 from .security import login_required, role_required
 
 bp = Blueprint("mental_wellness", __name__)
 
 
-@bp.get("/mental-wellness")
+@bp.route("/mental-wellness", methods=("GET", "POST"))
 @login_required
 @role_required("patient")
 def mental_wellness_page():
-    return render_template("mental_wellness.html")
+    if request.method == "POST":
+        action = str(request.form.get("action") or "").strip()
+        try:
+            if action == "checkin":
+                item = record_checkin(g.user, request.form)
+                audit("create", "mental_wellness_checkin", str(item["id"]), actor=g.user)
+                flash("Private wellbeing check-in saved.", "success")
+            elif action == "journal":
+                item = create_journal_entry(g.user, request.form)
+                audit("create", "mental_wellness_journal", str(item["id"]), actor=g.user)
+                flash("Private journal entry saved.", "success")
+            elif action == "delete_journal":
+                entry_id = int(request.form.get("entry_id") or 0)
+                delete_journal_entry(g.user, entry_id)
+                audit("delete", "mental_wellness_journal", str(entry_id), actor=g.user)
+                flash("Private journal entry deleted.", "success")
+            else:
+                raise ValueError("Unsupported Mental Wellness action.")
+        except (TypeError, ValueError, LookupError, PermissionError) as exc:
+            flash(str(exc), "error")
+        return redirect(url_for("mental_wellness.mental_wellness_page"))
+
+    return render_template(
+        "mental_wellness.html",
+        checkins=list_checkins(g.user),
+        journal_entries=list_journal_entries(g.user),
+        wellness_summary=wellness_summary(g.user),
+    )

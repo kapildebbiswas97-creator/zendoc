@@ -42,6 +42,7 @@ from .medical_knowledge_documents import ensure_medical_knowledge_document_schem
 from .medical_knowledge_registry import MEDICAL_KNOWLEDGE_SOURCES
 from .medical_rag_ingestion import ensure_medical_rag_schema
 from .milestone7_routes import bp as milestone7_bp
+from .mental_wellness import ensure_mental_wellness_schema
 from .mental_wellness_routes import bp as mental_wellness_bp
 from .milestone8_routes import bp as milestone8_bp
 from .milestone82_routes import bp as milestone82_bp
@@ -182,6 +183,7 @@ def create_app(test_config=None):
             ensure_provider_invitation_schema()
             ensure_preventive_care_schema()
             ensure_policy_acceptance_schema()
+            ensure_mental_wellness_schema()
             ensure_health_shop_schema()
             ensure_health_social_schema()
             ensure_payment_schema()

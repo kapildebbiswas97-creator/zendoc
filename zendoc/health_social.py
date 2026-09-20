@@ -83,6 +83,15 @@ def ensure_health_social_schema():
             PRIMARY KEY (post_id, user_id)
         );
 
+        CREATE TABLE IF NOT EXISTS health_social_saves (
+            post_id INTEGER NOT NULL REFERENCES health_social_posts(id) ON DELETE CASCADE,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            created_at TEXT NOT NULL,
+            PRIMARY KEY (post_id, user_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_health_social_saves_user
+            ON health_social_saves(user_id, created_at, post_id);
+
         CREATE TABLE IF NOT EXISTS health_social_comments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             post_id INTEGER NOT NULL REFERENCES health_social_posts(id) ON DELETE CASCADE,
@@ -204,12 +213,13 @@ def get_post(user, post_id: int) -> dict:
         SELECT p.*,u.name author_name,u.role author_role,
                (SELECT COUNT(*) FROM health_social_likes l WHERE l.post_id=p.id) like_count,
                (SELECT COUNT(*) FROM health_social_comments c WHERE c.post_id=p.id AND c.moderation_status='published') comment_count,
-               EXISTS(SELECT 1 FROM health_social_likes l WHERE l.post_id=p.id AND l.user_id=?) liked_by_me
+               EXISTS(SELECT 1 FROM health_social_likes l WHERE l.post_id=p.id AND l.user_id=?) liked_by_me,
+               EXISTS(SELECT 1 FROM health_social_saves s WHERE s.post_id=p.id AND s.user_id=?) saved_by_me
         FROM health_social_posts p
         JOIN users u ON u.id=p.author_id
         WHERE p.id=? AND p.moderation_status='published' AND {_blocked_pair_clause()}
         """,
-        (uid, int(post_id), uid, uid),
+        (uid, uid, int(post_id), uid, uid),
     ).fetchone()
     if not row:
         raise LookupError("Community post not found.")
@@ -223,7 +233,7 @@ def list_feed(user, *, followed_only=False, limit=50) -> list[dict]:
     uid = _user_id(user)
     limit = max(1, min(int(limit or 50), 100))
     followed_sql = "AND (p.author_id=? OR EXISTS(SELECT 1 FROM health_social_follows f WHERE f.follower_id=? AND f.followed_id=p.author_id))" if followed_only else ""
-    params = [uid, uid, uid, uid]
+    params = [uid, uid, uid, uid, uid]
     if followed_only:
         params.extend([uid, uid])
     params.append(limit)
@@ -233,6 +243,7 @@ def list_feed(user, *, followed_only=False, limit=50) -> list[dict]:
                (SELECT COUNT(*) FROM health_social_likes l WHERE l.post_id=p.id) like_count,
                (SELECT COUNT(*) FROM health_social_comments c WHERE c.post_id=p.id AND c.moderation_status='published') comment_count,
                EXISTS(SELECT 1 FROM health_social_likes l WHERE l.post_id=p.id AND l.user_id=?) liked_by_me,
+               EXISTS(SELECT 1 FROM health_social_saves s WHERE s.post_id=p.id AND s.user_id=?) saved_by_me,
                EXISTS(SELECT 1 FROM health_social_follows f WHERE f.follower_id=? AND f.followed_id=p.author_id) followed_by_me
         FROM health_social_posts p
         JOIN users u ON u.id=p.author_id
@@ -351,6 +362,74 @@ def toggle_like(user, post_id: int) -> bool:
         liked = True
     get_db().commit()
     return liked
+
+
+def toggle_save(user, post_id: int) -> bool:
+    ensure_health_social_schema()
+    get_post(user, post_id)
+    uid = _user_id(user)
+    existing = get_db().execute(
+        "SELECT 1 FROM health_social_saves WHERE post_id=? AND user_id=?",
+        (int(post_id), uid),
+    ).fetchone()
+    if existing:
+        get_db().execute("DELETE FROM health_social_saves WHERE post_id=? AND user_id=?", (int(post_id), uid))
+        saved = False
+    else:
+        get_db().execute(
+            "INSERT INTO health_social_saves (post_id,user_id,created_at) VALUES (?,?,?)",
+            (int(post_id), uid, now_iso()),
+        )
+        saved = True
+    get_db().commit()
+    return saved
+
+
+def list_saved_posts(user, *, limit=50) -> list[dict]:
+    ensure_health_social_schema()
+    uid = _user_id(user)
+    rows = get_db().execute(
+        f"""
+        SELECT p.*,u.name author_name,u.role author_role,
+               (SELECT COUNT(*) FROM health_social_likes l WHERE l.post_id=p.id) like_count,
+               (SELECT COUNT(*) FROM health_social_comments c WHERE c.post_id=p.id AND c.moderation_status='published') comment_count,
+               EXISTS(SELECT 1 FROM health_social_likes l WHERE l.post_id=p.id AND l.user_id=?) liked_by_me,
+               1 AS saved_by_me,
+               EXISTS(SELECT 1 FROM health_social_follows f WHERE f.follower_id=? AND f.followed_id=p.author_id) followed_by_me
+        FROM health_social_saves saved
+        JOIN health_social_posts p ON p.id=saved.post_id
+        JOIN users u ON u.id=p.author_id
+        WHERE saved.user_id=? AND p.moderation_status='published'
+          AND _blocked_pair_clause()
+        ORDER BY saved.created_at DESC,p.id DESC
+        LIMIT ?
+        """,
+        (uid, uid, uid, uid, uid, max(1, min(int(limit or 50), 100))),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def delete_post(user, post_id: int) -> dict:
+    ensure_health_social_schema()
+    uid = _user_id(user)
+    row = get_db().execute(
+        """
+        SELECT id,author_id,media_storage_key
+        FROM health_social_posts
+        WHERE id=? AND moderation_status='published'
+        """,
+        (int(post_id),),
+    ).fetchone()
+    if not row:
+        raise LookupError("Community post not found.")
+    if int(row["author_id"]) != uid:
+        raise PermissionError("You can only delete your own community posts.")
+    get_db().execute(
+        "UPDATE health_social_posts SET moderation_status='deleted_by_author',updated_at=? WHERE id=?",
+        (now_iso(), int(post_id)),
+    )
+    get_db().commit()
+    return {"id": int(post_id), "media_storage_key": row["media_storage_key"]}
 
 
 def add_comment(user, post_id: int, body) -> dict:

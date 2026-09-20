@@ -71,10 +71,11 @@
 
 <section class="grid three spaced-panel">
   <article class="panel">
-    <div class="panel-head"><div><p class="eyebrow">Your feed</p><h2>{{ 'Following' if mode == 'following' else 'Community' }}</h2></div></div>
+    <div class="panel-head"><div><p class="eyebrow">Your feed</p><h2>{{ 'Saved' if mode == 'saved' else ('Following' if mode == 'following' else 'Community') }}</h2></div></div>
     <div class="form-actions">
       <a class="secondary-action" href="{{ url_for('health_social.community_page', mode='all') }}">All</a>
       <a class="secondary-action" href="{{ url_for('health_social.community_page', mode='following') }}">Following</a>
+      <a class="secondary-action" href="{{ url_for('health_social.community_page', mode='saved') }}">Saved</a>
     </div>
   </article>
   <article class="panel">
@@ -147,7 +148,11 @@
 
       <div class="form-actions">
         <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="like"><input type="hidden" name="post_id" value="{{ post.id }}"><button class="secondary-action" type="submit">{{ 'Liked' if post.liked_by_me else 'Like' }} · {{ post.like_count }}</button></form>
-        {% if post.author_id != current_user.id %}
+        <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="save"><input type="hidden" name="post_id" value="{{ post.id }}"><button class="secondary-action" type="submit">{{ 'Saved' if post.saved_by_me else 'Save' }}</button></form>
+        <a class="secondary-action" href="{{ url_for('health_social.community_post_page', post_id=post.id) }}">Open / share</a>
+        {% if post.author_id == current_user.id %}
+          <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="delete_post"><input type="hidden" name="post_id" value="{{ post.id }}"><button class="secondary-action" type="submit">Delete</button></form>
+        {% else %}
         <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="{{ 'unfollow' if post.followed_by_me else 'follow' }}"><input type="hidden" name="target_user_id" value="{{ post.author_id }}"><button class="secondary-action" type="submit">{{ 'Following' if post.followed_by_me else 'Follow' }}</button></form>
         <details><summary>Safety</summary>
           <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="report"><input type="hidden" name="entity_type" value="post"><input type="hidden" name="entity_id" value="{{ post.id }}"><input name="reason" maxlength="500" required placeholder="Why should this be reviewed?"><button type="submit">Report</button></form>
