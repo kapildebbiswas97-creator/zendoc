@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}CareFin Cases — ZENDOC{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div><p class="eyebrow">Owner-only evidence review</p><h1>CareFin cases</h1><p class="section-copy">Record real insurer/government/employer/trust/CSR/hospital responses. Never promote discovery or AI output into approval.</p></div>
+  <a class="secondary-action" href="{{ url_for('main.admin') }}">Back to Admin</a>
+</section>
+<aside class="trust-note"><strong>Authoritative state rule.</strong><br>CONFIRMED, APPROVED and PAID require an accepted authoritative evidence type and a real response/reference identifier.</aside>
+<section class="grid two spaced-panel">
+  <article class="panel">
+    <h2>Tracked cases</h2>
+    {% for case in cases %}
+      <div class="summary-row">
+        <div><strong>#{{ case.id }} · {{ case.source_name }}</strong><p>{{ case.user_name }} · {{ case.user_email }}</p></div>
+        <div><span class="status-badge">{{ case.state|replace('_',' ') }}</span><br><a href="{{ url_for('carefin.carefin_admin_page', case_id=case.id) }}">Review</a></div>
+      </div>
+    {% else %}<div class="empty-state"><p>No CareFin cases yet.</p></div>{% endfor %}
+  </article>
+  <article class="panel">
+    {% if selected %}
+      <p class="eyebrow">Case #{{ selected.id }}</p><h2>{{ selected.source_name }}</h2>
+      <p>{{ selected.truth_notice }}</p>
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="case_id" value="{{ selected.id }}">
+        <label>Next state<select name="target_state" required>
+          {% for value in ['EVIDENCE_RECEIVED','VERIFICATION_REQUIRED','CONFIRMED','APPROVED','PAID','REJECTED','EXPIRED'] %}<option value="{{ value }}">{{ value|replace('_',' ')|title }}</option>{% endfor %}
+        </select></label>
+        <label>Authoritative evidence type<select name="evidence_type">
+          <option value="">Not required for non-authoritative transition</option>
+          {% for value in case_options.authoritative_evidence_types %}<option value="{{ value }}">{{ value|replace('_',' ')|title }}</option>{% endfor %}
+        </select></label>
+        <label>Authoritative response/reference<input name="evidence_reference" maxlength="300" placeholder="Required for Confirmed / Approved / Paid"></label>
+        <label>Review note<textarea name="note" rows="3" maxlength="1200"></textarea></label>
+        <button type="submit">Record reviewed state</button>
+      </form>
+      <h3>Audit history</h3>
+      {% for event in selected.events %}<div class="summary-row"><div><strong>{{ event.event_type|replace('_',' ')|title }}</strong><p>{{ event.previous_state or '—' }} → {{ event.state }}{% if event.evidence_reference %} · {{ event.evidence_reference }}{% endif %}</p></div><small>{{ event.created_at[:16] }}</small></div>{% endfor %}
+    {% else %}
+      <div class="empty-state"><h3>Select a case</h3><p>Choose a case to inspect its evidence history and record an authoritative response.</p></div>
+    {% endif %}
+  </article>
+</section>
+{% endblock %}

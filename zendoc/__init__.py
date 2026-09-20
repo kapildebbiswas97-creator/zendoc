@@ -11,6 +11,7 @@ from .care_action_ledger import ensure_care_action_ledger_schema
 from .care_continuity_routes import bp as care_continuity_bp
 from .business_routes import bp as business_bp
 from .care_os_routes import bp as care_os_bp
+from .carefin_cases import ensure_carefin_case_schema
 from .carefin_routes import bp as carefin_bp
 from .care_journey_routes import bp as care_journey_bp
 from .careloop_integration import finish_careloop_request
@@ -180,6 +181,7 @@ def create_app(test_config=None):
             init_db()
             ensure_global_data_schema()
             ensure_call_schema()
+            ensure_carefin_case_schema()
             ensure_consent_schema()
             ensure_email_verification_schema()
             ensure_medical_knowledge_document_schema()
