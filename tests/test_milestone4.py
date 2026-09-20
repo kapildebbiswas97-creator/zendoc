@@ -172,10 +172,14 @@ def test_structured_report_results_explanation_and_unit_safe_lab_trends(tmp_path
 def test_measurement_source_validation_blood_pressure_and_trends(tmp_path):
     _app, client = make_client(tmp_path)
     token = api_token(client, "measurements@example.com")
-    for day, value in ((20, 72), (26, 70)):
+    trend_dates = [
+        (datetime.now(timezone.utc) - timedelta(days=20)).replace(hour=8, minute=0, second=0, microsecond=0),
+        (datetime.now(timezone.utc) - timedelta(days=10)).replace(hour=8, minute=0, second=0, microsecond=0),
+    ]
+    for recorded_at, value in zip(trend_dates, (72, 70)):
         response = client.post(
             "/api/v1/health-measurements",
-            json={"metric_type": "weight", "value": value, "unit": "kg", "source": "manual", "recorded_at": f"2026-08-{day}T08:00:00+00:00"},
+            json={"metric_type": "weight", "value": value, "unit": "kg", "source": "manual", "recorded_at": recorded_at.isoformat()},
             headers=headers(token),
         )
         assert response.status_code == 201
