@@ -96,6 +96,12 @@ def get_capability_registry() -> dict:
         and bool(_env("ZENDOC_EKYC_WEBHOOK_SECRET"))
     )
     external_ekyc_verified = external_ekyc_configured and _env_bool("ZENDOC_EKYC_VERIFIED")
+    carefin_partner_name = _env("ZENDOC_CAREFIN_PARTNER_NAME", "none")
+    carefin_partner_configured = (
+        carefin_partner_name.lower() not in {"", "none"}
+        and bool(_env("ZENDOC_CAREFIN_WEBHOOK_SECRET"))
+    )
+    carefin_partner_verified = carefin_partner_configured and _env_bool("ZENDOC_CAREFIN_PARTNER_VERIFIED")
     razorpay_configured = all(
         bool(_env(key))
         for key in (
@@ -252,9 +258,15 @@ def get_capability_registry() -> dict:
             "description": "Deterministic public-source discovery, missing-information analysis, provenance, and coverage truth-state enforcement.",
         },
         "carefin_live_verification": {
-            "status": STATUS_INTEGRATION_REQUIRED,
+            "status": STATUS_WORKING if carefin_partner_verified else (STATUS_BETA if carefin_partner_configured else STATUS_INTEGRATION_REQUIRED),
             "label": "CareFin Live Coverage Verification",
-            "description": "Personal eligibility, insurer approval, government approval, CSR/trust approval, and payment confirmation require authoritative partner responses.",
+            "description": (
+                f"Signed authoritative CareFin callbacks are configured and operator-verified for '{carefin_partner_name}'."
+                if carefin_partner_verified else
+                f"Signed CareFin callback credentials exist for '{carefin_partner_name}', but operator verification is pending."
+                if carefin_partner_configured else
+                "Personal eligibility, insurer/government/CSR approval and payment confirmation require an authoritative partner response; owner evidence review remains available."
+            ),
         },
         "automatic_care_journey": {
             "status": STATUS_WORKING,

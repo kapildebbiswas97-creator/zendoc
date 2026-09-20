@@ -4,6 +4,7 @@ from __future__ import annotations
 from flask import Blueprint, flash, g, jsonify, redirect, render_template, request, url_for
 
 from .carefin_cases import (
+    apply_carefin_partner_response,
     carefin_case_options,
     create_carefin_case,
     get_carefin_case,
@@ -205,3 +206,24 @@ def _value(user, key, default=None):
     if isinstance(user, dict):
         return user.get(key, default)
     return default
+
+
+
+@bp.post("/api/v1/carefin/webhook")
+def carefin_partner_webhook():
+    raw=request.get_data(cache=True)
+    payload=request.get_json(silent=True) or {}
+    try:
+        item=apply_carefin_partner_response(
+            payload,raw,request.headers.get("X-ZENDOC-CareFin-Signature","")
+        )
+        return jsonify({
+            "accepted":True,
+            "case_id":item["id"],
+            "state":item["state"],
+            "authoritative_confirmation":bool(item["authoritative_confirmation"]),
+        })
+    except PermissionError as exc:
+        return jsonify({"error":{"code":403,"message":str(exc)}}),403
+    except (TypeError,ValueError,LookupError) as exc:
+        return jsonify({"error":{"code":400,"message":str(exc)}}),400

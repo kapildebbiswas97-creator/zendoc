@@ -1,6 +1,11 @@
 """Durable, truth-preserving CareFin benefit/insurance case tracking."""
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
+import os
+
 from .benefit_sources import get_source
 from .carefin_engine import (
     APPROVED,
@@ -63,6 +68,17 @@ def ensure_carefin_case_schema():
         );
         CREATE INDEX IF NOT EXISTS idx_carefin_case_events_case
             ON carefin_case_events(case_id,created_at,id);
+
+        CREATE TABLE IF NOT EXISTS carefin_partner_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            provider_event_id TEXT NOT NULL UNIQUE,
+            case_id INTEGER NOT NULL REFERENCES carefin_cases(id) ON DELETE CASCADE,
+            partner_name TEXT NOT NULL,
+            payload_digest TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_carefin_partner_events_case
+            ON carefin_partner_events(case_id,created_at,id);
         """
     )
 
@@ -307,3 +323,98 @@ def carefin_case_options() -> dict:
         "authoritative_evidence_types": sorted(AUTHORITATIVE_EVIDENCE_TYPES),
         "authoritative_states": [CONFIRMED, APPROVED, PAID],
     }
+
+
+
+def carefin_partner_status() -> dict:
+    partner=str(os.environ.get("ZENDOC_CAREFIN_PARTNER_NAME") or "none").strip()
+    secret=str(os.environ.get("ZENDOC_CAREFIN_WEBHOOK_SECRET") or "")
+    verified=str(os.environ.get("ZENDOC_CAREFIN_PARTNER_VERIFIED") or "").strip().lower() in {"1","true","yes","on"}
+    configured=partner.lower() not in {"","none"} and bool(secret)
+    return {
+        "partner":partner,
+        "configured":configured,
+        "operator_verified":bool(configured and verified),
+        "status":"working" if configured and verified else "configured_unverified" if configured else "integration_required",
+        "truth_notice":(
+            "Signed CareFin partner callbacks are configured and operator-verified; each state change still requires a valid signed event."
+            if configured and verified else
+            "CareFin partner callback credentials exist but are not operator-verified."
+            if configured else
+            "No insurer/government/CSR CareFin webhook partner is configured. Owner evidence review remains available."
+        ),
+    }
+
+
+def apply_carefin_partner_response(payload: dict, raw_body: bytes, signature: str) -> dict:
+    ensure_carefin_case_schema()
+    status=carefin_partner_status()
+    secret=str(os.environ.get("ZENDOC_CAREFIN_WEBHOOK_SECRET") or "")
+    if not status["configured"] or not secret:
+        raise PermissionError("CareFin partner webhook is not configured.")
+    supplied=str(signature or "").strip()
+    if supplied.lower().startswith("sha256="):
+        supplied=supplied.split("=",1)[1]
+    expected=hmac.new(secret.encode("utf-8"),raw_body,hashlib.sha256).hexdigest()
+    if not supplied or not hmac.compare_digest(supplied,expected):
+        raise PermissionError("Invalid CareFin partner webhook signature.")
+
+    event_id=str(payload.get("event_id") or "").strip()[:200]
+    if not event_id:
+        raise ValueError("Partner event_id is required for idempotency.")
+    existing=get_db().execute(
+        "SELECT case_id FROM carefin_partner_events WHERE provider_event_id=?",
+        (event_id,),
+    ).fetchone()
+    if existing:
+        return _case_row(int(existing["case_id"]))
+
+    case_id=int(payload.get("case_id") or 0)
+    item=_case_row(case_id)
+    target=str(payload.get("target_state") or "").strip().upper()
+    if target not in {"CONFIRMED","APPROVED","PAID","REJECTED","EXPIRED"}:
+        raise ValueError("Partner callback target state is not allowed.")
+    evidence_type=str(payload.get("evidence_type") or "").strip().upper() or None
+    evidence_reference=str(payload.get("evidence_reference") or "").strip()[:300] or None
+    authoritative=target in {"CONFIRMED","APPROVED","PAID"}
+
+    transition=transition_coverage_state(
+        source_id=item["source_id"],
+        current_state=item["state"],
+        target_state=target,
+        evidence_type=evidence_type,
+        evidence_reference=evidence_reference,
+        authoritative_confirmation=authoritative,
+    )
+    now=now_iso()
+    get_db().execute(
+        """
+        UPDATE carefin_cases
+        SET state=?,latest_evidence_type=COALESCE(?,latest_evidence_type),
+            latest_evidence_reference=COALESCE(?,latest_evidence_reference),
+            authoritative_confirmation=?,updated_at=?
+        WHERE id=?
+        """,
+        (
+            transition["state"],transition.get("evidence_type"),transition.get("evidence_reference"),
+            1 if authoritative else 0,now,case_id,
+        ),
+    )
+    digest=hashlib.sha256(raw_body).hexdigest()
+    get_db().execute(
+        """
+        INSERT INTO carefin_partner_events
+        (provider_event_id,case_id,partner_name,payload_digest,created_at)
+        VALUES (?,?,?,?,?)
+        """,
+        (event_id,case_id,status["partner"][:160],digest,now),
+    )
+    _event(
+        case_id,None,"partner_state_transition",previous_state=item["state"],
+        state=transition["state"],evidence_type=transition.get("evidence_type"),
+        evidence_reference=transition.get("evidence_reference"),
+        note=str(payload.get("note") or "")[:1200],
+        authoritative_confirmation=authoritative,
+    )
+    get_db().commit()
+    return _case_row(case_id)
