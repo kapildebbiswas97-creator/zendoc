@@ -65,6 +65,30 @@ def get_capability_registry() -> dict:
     storage_provider = _env("ZENDOC_STORAGE_PROVIDER", "local")
     s3_configured = storage_provider != "local" and bool(_env("ZENDOC_STORAGE_BUCKET"))
     real_evaluation_enabled = _env_bool("ZENDOC_MODEL_EVALUATION_REAL_ENABLED")
+    storage_verified = _env_bool("ZENDOC_STORAGE_VERIFIED")
+    affiliate_templates_configured = any(
+        bool(_env(key))
+        for key in (
+            "ZENDOC_AFFILIATE_AMAZON_INDIA_URL_TEMPLATE",
+            "ZENDOC_AFFILIATE_FLIPKART_URL_TEMPLATE",
+            "ZENDOC_AFFILIATE_MEESHO_URL_TEMPLATE",
+            "ZENDOC_AFFILIATE_BLINKIT_URL_TEMPLATE",
+            "ZENDOC_AFFILIATE_BIGBASKET_URL_TEMPLATE",
+            "ZENDOC_AFFILIATE_ZEPTO_URL_TEMPLATE",
+            "ZENDOC_AFFILIATE_SWIGGY_INSTAMART_URL_TEMPLATE",
+            "ZENDOC_AFFILIATE_ZOMATO_URL_TEMPLATE",
+            "ZENDOC_AFFILIATE_LENSKART_URL_TEMPLATE",
+            "ZENDOC_AFFILIATE_HEALTHKART_URL_TEMPLATE",
+        )
+    )
+    razorpay_configured = all(
+        bool(_env(key))
+        for key in (
+            "ZENDOC_RAZORPAY_KEY_ID",
+            "ZENDOC_RAZORPAY_KEY_SECRET",
+            "ZENDOC_RAZORPAY_WEBHOOK_SECRET",
+        )
+    )
 
     return {
         # Core platform
@@ -76,7 +100,54 @@ def get_capability_registry() -> dict:
         "connect_messaging": {
             "status": STATUS_WORKING,
             "label": "ZENDOC Connect Messaging",
-            "description": "Policy-aware messaging, conversations, read receipts, report/video sharing.",
+            "description": "Policy-aware messaging, conversations, read receipts, report/video sharing and participant-protected native image/video attachments.",
+        },
+        "mental_wellness_private": {
+            "status": STATUS_WORKING,
+            "label": "Mental Wellness & Awareness",
+            "description": "Private self-entered check-ins and journal history with non-diagnostic, emergency-first safety boundaries.",
+        },
+        "health_community": {
+            "status": STATUS_WORKING,
+            "label": "ZENDOC Health Community",
+            "description": "Health-only posts, stories, comments, reactions, follows, saved posts, reporting, blocking, author deletion and authenticated media access.",
+        },
+        "community_media_public_durability": {
+            "status": STATUS_BETA if s3_configured and storage_verified else STATUS_INTEGRATION_REQUIRED,
+            "label": "Durable Public Community Media",
+            "description": (
+                "S3-compatible storage is configured and operator-verified."
+                if s3_configured and storage_verified
+                else "Local media works for development; public durable video/image storage requires configured and verified object storage."
+            ),
+        },
+        "health_shop_discovery": {
+            "status": STATUS_WORKING,
+            "label": "Health Shop Discovery",
+            "description": "Health-focused external merchant discovery plus real outbound-click attribution; no stock, price, order or commission is fabricated.",
+        },
+        "affiliate_referral_revenue": {
+            "status": STATUS_BETA if affiliate_templates_configured else STATUS_INTEGRATION_REQUIRED,
+            "label": "Affiliate / Referral Revenue",
+            "description": (
+                "Approved affiliate URL templates are configured; actual conversion and commission still require authoritative merchant evidence."
+                if affiliate_templates_configured
+                else "No approved affiliate templates are configured; merchant handoffs remain discovery-only."
+            ),
+        },
+        "connected_payments_gateway": {
+            "status": STATUS_BETA if razorpay_configured else STATUS_INTEGRATION_REQUIRED,
+            "label": "Connected Payments Gateway",
+            "description": (
+                "Razorpay credentials/webhook secret are configured; only verified gateway/webhook state may confirm payments."
+                if razorpay_configured
+                else "Real payment execution requires configured Razorpay credentials and signed webhook verification."
+            ),
+        },
+        "voice_video_calling": {
+            "status": STATUS_INTEGRATION_REQUIRED,
+            "label": "Voice / Video Calling",
+            "description": "Chat and consultation state work; production WebRTC/TURN calling is not claimed until real end-to-end infrastructure is configured and verified.",
         },
         "deterministic_safety_engine": {
             "status": STATUS_WORKING,
@@ -251,7 +322,7 @@ def get_capability_registry() -> dict:
         "telehealth": {
             "status": STATUS_BETA,
             "label": "Telehealth Beta",
-            "description": "Consultation requests, doctor acceptance, chat. Local demo only — production WebRTC provider required.",
+            "description": "Consultation requests, doctor acceptance and chat are implemented. Production voice/video WebRTC remains Integration Required.",
         },
         "report_intelligence": {
             "status": STATUS_BETA,
