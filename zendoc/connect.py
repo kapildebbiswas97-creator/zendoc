@@ -22,6 +22,7 @@ MESSAGE_TYPES = (
     "consultation",
     "record",
     "report",
+    "image",
     "video",
     "service_update",
     "task_update",
@@ -449,3 +450,77 @@ def share_report_message(actor, conversation_id, data):
     )
     get_db().commit()
     return message
+
+
+
+def share_native_media_message(actor, conversation_id, data):
+    """Attach already-validated/stored native image or video media to a conversation."""
+    media_kind = str(data.get("media_kind") or "").strip().lower()
+    if media_kind not in {"image", "video"}:
+        raise ValueError("Message media must be an image or video.")
+    storage_key = str(data.get("storage_key") or "").strip()
+    mime_type = str(data.get("mime_type") or "").strip().lower()
+    original_name = str(data.get("original_name") or "message-media").strip()[:255]
+    size_bytes = int(data.get("size_bytes") or 0)
+    if not storage_key or not mime_type or size_bytes <= 0:
+        raise ValueError("Stored message media metadata is incomplete.")
+    caption = str(data.get("body") or data.get("caption") or "").strip()
+    body = caption[:1500] if caption else ("Shared an image." if media_kind == "image" else "Shared a video.")
+    message = send_message(
+        actor,
+        conversation_id,
+        {"message_type": media_kind, "body": body, "metadata": {"native_media": True}},
+    )
+    get_db().execute(
+        """
+        INSERT INTO message_attachments
+        (message_id,attachment_type,url,title,metadata_json,created_at)
+        VALUES (?,?,?,?,?,?)
+        """,
+        (
+            int(message["id"]), media_kind, None, original_name,
+            _json({
+                "storage_key": storage_key,
+                "mime_type": mime_type,
+                "size_bytes": size_bytes,
+                "native_media": True,
+            }),
+            now_iso(),
+        ),
+    )
+    get_db().commit()
+    return _message_to_dict(
+        get_db().execute(
+            "SELECT m.*,u.name sender_name,u.role sender_role FROM messages m JOIN users u ON u.id=m.sender_id WHERE m.id=?",
+            (int(message["id"]),),
+        ).fetchone()
+    )
+
+
+def get_message_media_access(actor, attachment_id: int) -> dict:
+    """Return stored media metadata only after proving conversation membership."""
+    row = get_db().execute(
+        """
+        SELECT ma.*,m.conversation_id
+        FROM message_attachments ma
+        JOIN messages m ON m.id=ma.message_id
+        WHERE ma.id=? AND m.deleted_at IS NULL
+        """,
+        (int(attachment_id),),
+    ).fetchone()
+    if not row:
+        raise LookupError("Message media was not found.")
+    _assert_participant(actor, int(row["conversation_id"]))
+    metadata = _decode_json(row["metadata_json"])
+    storage_key = str(metadata.get("storage_key") or "").strip()
+    mime_type = str(metadata.get("mime_type") or "").strip()
+    if not metadata.get("native_media") or not storage_key or not mime_type:
+        raise LookupError("This attachment is not native ZENDOC message media.")
+    return {
+        "attachment_id": int(row["id"]),
+        "conversation_id": int(row["conversation_id"]),
+        "storage_key": storage_key,
+        "mime_type": mime_type,
+        "title": str(row["title"] or "message-media"),
+        "size_bytes": int(metadata.get("size_bytes") or 0),
+    }

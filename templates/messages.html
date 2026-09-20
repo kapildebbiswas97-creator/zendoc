@@ -88,13 +88,15 @@
         {% include "components/_message_bubbles.html" %}
       </div>
 
-      <form method="post" class="message-composer">
+      <form method="post" class="message-composer" enctype="multipart/form-data">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="action" value="send">
         <input type="hidden" name="conversation_id" value="{{ selected.id }}">
         <div class="composer-input-row">
           <div style="flex:1;display:grid;gap:8px;">
-            <textarea name="body" rows="2" maxlength="1500" placeholder="Write a message…" aria-label="Message" required></textarea>
+            <textarea name="body" rows="2" maxlength="1500" placeholder="Write a message or add a caption…" aria-label="Message"></textarea>
+            <label>Optional image/video<input name="media_file" type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm"></label>
+            <small>Native media is private to conversation participants. JPEG, PNG, WebP, MP4 or WebM; maximum 25 MiB.</small>
             <details class="progressive-fields"><summary>Add message context</summary><div><label>Context type<select name="message_type">{% for type in ['text','appointment','consultation','record','report','video','service_update','task_update'] %}<option value="{{ type }}">{{ type.replace('_', ' ').title() }}</option>{% endfor %}</select></label><p class="helper-text">Choose a context only when the message is about a specific care item.</p></div></details>
           </div>
           <button type="submit" class="send-btn" data-submitting-label="Sending…">Send</button>

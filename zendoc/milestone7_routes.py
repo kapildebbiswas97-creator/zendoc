@@ -1,14 +1,17 @@
 from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, url_for
 
 from .agent_core import admin_command_center_data, respond_with_core_agent
+from .community_media import get_community_media_storage
 from .connect import (
     create_communication_permission,
     discover_contacts,
     get_conversation,
+    get_message_media_access,
     list_conversations,
     list_messages,
     mark_read,
     send_message,
+    share_native_media_message,
     share_report_message,
     share_video_message,
     start_conversation,
@@ -99,7 +102,33 @@ def messages_page():
                 flash("Conversation started.", "success")
                 return redirect(url_for("milestone7.messages_page", conversation_id=conversation["id"]))
             if action == "send":
-                message = send_message(g.user, int(request.form.get("conversation_id")), request.form)
+                conversation_id = int(request.form.get("conversation_id"))
+                upload = request.files.get("media_file")
+                stored = None
+                if upload and getattr(upload, "filename", ""):
+                    try:
+                        stored = get_community_media_storage().save(upload)
+                        message = share_native_media_message(
+                            g.user,
+                            conversation_id,
+                            {
+                                "body": request.form.get("body"),
+                                "media_kind": stored.media_kind,
+                                "storage_key": stored.storage_key,
+                                "mime_type": stored.mime_type,
+                                "original_name": stored.original_filename,
+                                "size_bytes": stored.size_bytes,
+                            },
+                        )
+                    except Exception:
+                        if stored is not None:
+                            try:
+                                get_community_media_storage().delete(stored.storage_key)
+                            except Exception:
+                                pass
+                        raise
+                else:
+                    message = send_message(g.user, conversation_id, request.form)
                 audit("message", "conversation", str(message["conversation_id"]))
                 flash("Message sent.", "success")
                 return redirect(url_for("milestone7.messages_page", conversation_id=message["conversation_id"]))
@@ -162,6 +191,20 @@ def messages_page():
         q=request.args.get("q", ""),
         blocked_ids=blocked_user_ids(g.user),
     )
+
+
+@bp.get("/messages/media/<int:attachment_id>")
+@login_required
+def message_media_file(attachment_id):
+    try:
+        media = get_message_media_access(g.user, attachment_id)
+        return get_community_media_storage().response(
+            media["storage_key"],
+            mime_type=media["mime_type"],
+            download_name=media["title"],
+        )
+    except (LookupError, PermissionError, ValueError, RuntimeError):
+        abort(404)
 
 
 @bp.get("/messages/<int:conversation_id>/live")
