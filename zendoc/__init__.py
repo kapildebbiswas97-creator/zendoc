@@ -33,6 +33,8 @@ from .global_medical_authorities import install_global_medical_authorities
 from .global_registry_install import install_global_public_sources
 from .health_access import ensure_consent_schema
 from .health_hub_routes import bp as health_hub_bp
+from .identity_verification import ensure_identity_verification_schema
+from .identity_verification_routes import bp as identity_verification_bp
 from .health_shop import ensure_health_shop_schema
 from .health_shop_routes import bp as health_shop_bp
 from .health_social import ensure_health_social_schema
@@ -140,6 +142,7 @@ def create_app(test_config=None):
     app.register_blueprint(family_bp)
     app.register_blueprint(ecosystem_bp)
     app.register_blueprint(health_hub_bp)
+    app.register_blueprint(identity_verification_bp)
     app.register_blueprint(health_shop_bp)
     app.register_blueprint(health_social_bp)
     app.register_blueprint(mental_wellness_bp)
@@ -191,6 +194,7 @@ def create_app(test_config=None):
             ensure_policy_acceptance_schema()
             ensure_mental_wellness_schema()
             ensure_health_shop_schema()
+            ensure_identity_verification_schema()
             ensure_health_social_schema()
             ensure_payment_schema()
             ensure_care_action_ledger_schema()
