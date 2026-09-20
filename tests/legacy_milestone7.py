@@ -176,13 +176,13 @@ def test_doctor_availability_consultation_and_messaging_isolation(tmp_path):
     outsider_token = api_token(client, "tele-outsider@example.com")
     doctor_id = user_id(app, "tele-doctor@example.com")
 
-    unavailable_video = client.put(
+    video_capable = client.put(
         "/api/v1/doctor/availability",
         json={"status": "available", "accepts_chat": True, "accepts_video": True},
         headers=headers(doctor_token),
     )
-    assert unavailable_video.status_code == 400
-    assert "Video telehealth is not available" in unavailable_video.json["error"]["message"]
+    assert video_capable.status_code == 200
+    assert video_capable.json["doctor_availability"]["accepts_video"] == 1
 
     availability = client.put(
         "/api/v1/doctor/availability",
@@ -198,7 +198,7 @@ def test_doctor_availability_consultation_and_messaging_isolation(tmp_path):
         headers=headers(patient_token),
     )
     assert rejected_video.status_code == 400
-    assert "Video telehealth is not available" in rejected_video.json["error"]["message"]
+    assert "not accepting video consultation requests" in rejected_video.json["error"]["message"]
 
     requested = client.post(
         "/api/v1/consultations",
