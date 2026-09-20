@@ -290,11 +290,11 @@ def test_webrtc_call_signaling_is_authorized_and_private(tmp_path):
 
     call_page = caller.get(f"/calls/start/{conversation_id}/voice")
     assert call_page.status_code == 200
-    token = csrf(call_page.data.decode())
+    caller_token = token
     created = caller.post(
         "/calls/create",
         data={
-            "csrf_token": token,
+            "csrf_token": caller_token,
             "conversation_id": conversation_id,
             "call_type": "voice",
             "offer_json": '{"type":"offer","sdp":"v=0\\r\\no=zendoc-offer"}',
@@ -307,13 +307,13 @@ def test_webrtc_call_signaling_is_authorized_and_private(tmp_path):
     assert incoming.status_code == 200
     assert b"Incoming calls" in incoming.data
     assert b"Call Caller" in incoming.data
+    callee_token = csrf(incoming.data.decode())
 
     assert stranger.get(f"/calls/{call_id}/state").status_code == 403
     assert stranger.get(f"/calls/{call_id}").status_code == 404
 
     callee_page = callee.get(f"/calls/{call_id}")
     assert callee_page.status_code == 200
-    callee_token = csrf(callee_page.data.decode())
     answered = callee.post(
         f"/calls/{call_id}/answer",
         data={
@@ -326,7 +326,7 @@ def test_webrtc_call_signaling_is_authorized_and_private(tmp_path):
     assert answered.get_json()["call"]["status"] == "accepted"
 
     caller_page = caller.get(f"/calls/{call_id}")
-    caller_token = csrf(caller_page.data.decode())
+    assert caller_page.status_code == 200
     candidate = caller.post(
         f"/calls/{call_id}/ice",
         data={
