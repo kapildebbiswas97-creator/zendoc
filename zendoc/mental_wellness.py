@@ -105,6 +105,18 @@ def list_checkins(user, limit: int = 14) -> list[dict]:
     return [dict(row) for row in rows]
 
 
+def delete_checkin(user, checkin_id: int) -> None:
+    ensure_mental_wellness_schema()
+    cursor = get_db().execute(
+        "DELETE FROM mental_wellness_checkins WHERE id=? AND user_id=?",
+        (int(checkin_id), _user_id(user)),
+    )
+    if int(cursor.rowcount or 0) != 1:
+        get_db().rollback()
+        raise LookupError("Private wellbeing check-in not found.")
+    get_db().commit()
+
+
 def create_journal_entry(user, data) -> dict:
     ensure_mental_wellness_schema()
     uid = _user_id(user)

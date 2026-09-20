@@ -3,6 +3,7 @@ from flask import Blueprint, flash, g, redirect, render_template, request, url_f
 
 from .mental_wellness import (
     create_journal_entry,
+    delete_checkin,
     delete_journal_entry,
     list_checkins,
     list_journal_entries,
@@ -30,6 +31,11 @@ def mental_wellness_page():
                 item = create_journal_entry(g.user, request.form)
                 audit("create", "mental_wellness_journal", str(item["id"]), actor=g.user)
                 flash("Private journal entry saved.", "success")
+            elif action == "delete_checkin":
+                checkin_id = int(request.form.get("checkin_id") or 0)
+                delete_checkin(g.user, checkin_id)
+                audit("delete", "mental_wellness_checkin", str(checkin_id), actor=g.user)
+                flash("Private wellbeing check-in deleted.", "success")
             elif action == "delete_journal":
                 entry_id = int(request.form.get("entry_id") or 0)
                 delete_journal_entry(g.user, entry_id)

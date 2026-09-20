@@ -50,6 +50,10 @@ def test_mental_wellness_private_history_and_journal(tmp_path):
         ).fetchone()
         assert row is not None
         entry_id = int(row["id"])
+        checkin_id = int(get_db().execute(
+            "SELECT id FROM mental_wellness_checkins WHERE user_id=? ORDER BY id DESC LIMIT 1",
+            (int(row["user_id"]),),
+        ).fetchone()["id"])
 
     other = app.test_client()
     register_web(other, "patient", "wellness-other@example.com", "Wellness Other")
@@ -58,6 +62,13 @@ def test_mental_wellness_private_history_and_journal(tmp_path):
     assert b"This belongs only to my account." not in other_page.data
 
     other_token = csrf(other_page.data.decode())
+    denied_checkin = other.post(
+        "/mental-wellness",
+        data={"csrf_token": other_token, "action": "delete_checkin", "checkin_id": checkin_id},
+        follow_redirects=True,
+    )
+    assert b"Private wellbeing check-in not found." in denied_checkin.data
+    other_token = csrf(denied_checkin.data.decode())
     denied = other.post(
         "/mental-wellness",
         data={"csrf_token": other_token, "action": "delete_journal", "entry_id": entry_id},
@@ -67,6 +78,13 @@ def test_mental_wellness_private_history_and_journal(tmp_path):
 
     owner_page = client.get("/mental-wellness")
     owner_token = csrf(owner_page.data.decode())
+    deleted_checkin = client.post(
+        "/mental-wellness",
+        data={"csrf_token": owner_token, "action": "delete_checkin", "checkin_id": checkin_id},
+        follow_redirects=True,
+    )
+    assert b"Private wellbeing check-in deleted." in deleted_checkin.data
+    owner_token = csrf(deleted_checkin.data.decode())
     deleted = client.post(
         "/mental-wellness",
         data={"csrf_token": owner_token, "action": "delete_journal", "entry_id": entry_id},

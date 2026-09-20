@@ -61,6 +61,12 @@
     {% for item in checkins %}
       <div class="summary-row">
         <div><strong>{{ item.created_at[:16] }}</strong><p>Mood {{ item.mood_level }}/10 · Stress {{ item.stress_level }}/10 · Energy {{ item.energy_level }}/10 · Sleep {{ item.sleep_quality }}/10</p>{% if item.note %}<p>{{ item.note }}</p>{% endif %}</div>
+        <form method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="action" value="delete_checkin">
+          <input type="hidden" name="checkin_id" value="{{ item.id }}">
+          <button type="submit" class="secondary-action">Delete</button>
+        </form>
       </div>
     {% else %}
       <div class="empty-state"><h3>No check-ins yet</h3><p>Your private history will appear after you save your first check-in.</p></div>
