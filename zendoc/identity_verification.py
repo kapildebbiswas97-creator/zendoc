@@ -193,6 +193,29 @@ def list_identity_cases(actor,*,limit=100):
     return [dict(row) for row in rows]
 
 
+def cancel_identity_case(actor, case_id, *, note=None):
+    """Allow a user to cancel their own non-final identity verification case."""
+    ensure_identity_verification_schema()
+    item = _row(case_id=case_id)
+    uid = _uid(actor)
+    if int(item["user_id"]) != uid and not is_owner(actor):
+        raise PermissionError("You cannot cancel this identity verification case.")
+    if item["status"] in {"verified_external", "verified_manual", "rejected", "cancelled"}:
+        raise ValueError("This identity verification case is already final.")
+    now = now_iso()
+    get_db().execute(
+        """
+        UPDATE identity_verification_cases
+        SET status='cancelled',review_note=COALESCE(?,review_note),updated_at=?
+        WHERE id=?
+        """,
+        (str(note or "").strip()[:1000] or None, now, int(case_id)),
+    )
+    _event(case_id,"cancelled","cancelled",actor=actor,note=note)
+    get_db().commit()
+    return get_identity_case(actor,case_id)
+
+
 def owner_review_identity_case(actor,case_id,*,decision,evidence_reference=None,note=None):
     ensure_identity_verification_schema()
     if not is_owner(actor):

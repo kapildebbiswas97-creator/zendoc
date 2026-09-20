@@ -2,7 +2,7 @@
 from flask import Blueprint,flash,g,jsonify,redirect,render_template,request,url_for
 
 from .identity_verification import (
-    apply_external_result,create_identity_case,identity_case_options,
+    apply_external_result,cancel_identity_case,create_identity_case,identity_case_options,
     list_identity_cases,owner_review_identity_case,
 )
 from .routes import audit
@@ -16,9 +16,18 @@ bp=Blueprint("identity_verification",__name__)
 def identity_page():
     if request.method=="POST":
         try:
-            item=create_identity_case(g.user,request.form)
-            audit("create","identity_verification_case",str(item["id"]),actor=g.user)
-            flash("Identity verification case created. Full identity numbers were not stored.","success")
+            action=str(request.form.get("action") or "create").strip().lower()
+            if action=="cancel":
+                item=cancel_identity_case(
+                    g.user,int(request.form.get("case_id") or 0),
+                    note=request.form.get("note"),
+                )
+                audit("cancel","identity_verification_case",str(item["id"]),actor=g.user)
+                flash("Identity verification case cancelled.","success")
+            else:
+                item=create_identity_case(g.user,request.form)
+                audit("create","identity_verification_case",str(item["id"]),actor=g.user)
+                flash("Identity verification case created. Full identity numbers were not stored.","success")
         except (ValueError,LookupError,PermissionError) as exc:
             flash(str(exc),"error")
         return redirect(url_for("identity_verification.identity_page"))

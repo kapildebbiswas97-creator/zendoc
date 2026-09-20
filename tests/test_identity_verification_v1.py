@@ -7,6 +7,7 @@ from zendoc.identity_verification import (
     apply_external_result,
     create_identity_case,
     get_identity_case,
+    cancel_identity_case,
     owner_review_identity_case,
 )
 from tests.test_milestone1 import make_app, register_web
@@ -85,4 +86,24 @@ def test_identity_case_is_private(tmp_path):
             get_identity_case(ub,case["id"])
             assert False
         except PermissionError:
+            pass
+
+
+
+def test_identity_case_owner_can_cancel_pending_case(tmp_path):
+    app=make_app(tmp_path)
+    client=app.test_client()
+    register_web(client,"patient","idv-cancel@example.com","IDV Cancel")
+    user=_user(app,"idv-cancel@example.com")
+    with app.app_context():
+        case=create_identity_case(user,{
+            "purpose":"account_identity","identifier_type":"other_last4",
+            "identifier_last4":"C123","consent":"yes"
+        })
+        cancelled=cancel_identity_case(user,case["id"])
+        assert cancelled["status"]=="cancelled"
+        try:
+            cancel_identity_case(user,case["id"])
+            assert False
+        except ValueError:
             pass
