@@ -229,3 +229,122 @@ def test_owner_commerce_metrics_are_click_only(tmp_path):
     assert page.status_code == 200
     assert b"Outbound clicks" in page.data
     assert b"do not prove an order, conversion or commission" in page.data
+
+
+
+def test_webrtc_call_signaling_is_authorized_and_private(tmp_path):
+    from zendoc.db import now_iso
+
+    app = make_app(tmp_path)
+    caller = app.test_client()
+    callee = app.test_client()
+    stranger = app.test_client()
+    register_web(caller, "patient", "call-caller@example.com", "Call Caller")
+    register_web(callee, "patient", "call-callee@example.com", "Call Callee")
+    register_web(stranger, "patient", "call-stranger@example.com", "Call Stranger")
+    login_web(caller, "patient", "call-caller@example.com")
+    login_web(callee, "patient", "call-callee@example.com")
+    login_web(stranger, "patient", "call-stranger@example.com")
+
+    with app.app_context():
+        db = get_db()
+        caller_id = int(db.execute(
+            "SELECT id FROM users WHERE email_normalized=?",
+            ("call-caller@example.com",),
+        ).fetchone()["id"])
+        callee_id = int(db.execute(
+            "SELECT id FROM users WHERE email_normalized=?",
+            ("call-callee@example.com",),
+        ).fetchone()["id"])
+
+    page = caller.get("/messages?q=Call+Callee")
+    token = csrf(page.data.decode())
+    started = caller.post(
+        "/messages",
+        data={
+            "csrf_token": token,
+            "action": "start",
+            "target_user_id": callee_id,
+            "context_type": "direct",
+        },
+        follow_redirects=False,
+    )
+    conversation_id = int(started.headers["Location"].rsplit("=", 1)[-1])
+
+    # Voice/video is intentionally stricter than text chat.
+    denied_page = caller.get(f"/calls/start/{conversation_id}/voice")
+    assert denied_page.status_code == 403
+
+    with app.app_context():
+        now = now_iso()
+        get_db().execute(
+            """
+            INSERT INTO communication_permissions
+            (requester_id,target_user_id,context_type,context_id,allow_chat,allow_voice,allow_video,
+             allow_record_sharing,status,created_by,expires_at,revoked_at,created_at,updated_at)
+            VALUES (?,?, 'direct', NULL,1,1,1,0,'active',?,NULL,NULL,?,?)
+            """,
+            (caller_id, callee_id, caller_id, now, now),
+        )
+        get_db().commit()
+
+    call_page = caller.get(f"/calls/start/{conversation_id}/voice")
+    assert call_page.status_code == 200
+    token = csrf(call_page.data.decode())
+    created = caller.post(
+        "/calls/create",
+        data={
+            "csrf_token": token,
+            "conversation_id": conversation_id,
+            "call_type": "voice",
+            "offer_json": '{"type":"offer","sdp":"v=0\\r\\no=zendoc-offer"}',
+        },
+    )
+    assert created.status_code == 201
+    call_id = int(created.get_json()["call"]["id"])
+
+    incoming = callee.get("/messages")
+    assert incoming.status_code == 200
+    assert b"Incoming calls" in incoming.data
+    assert b"Call Caller" in incoming.data
+
+    assert stranger.get(f"/calls/{call_id}/state").status_code == 403
+    assert stranger.get(f"/calls/{call_id}").status_code == 404
+
+    callee_page = callee.get(f"/calls/{call_id}")
+    assert callee_page.status_code == 200
+    callee_token = csrf(callee_page.data.decode())
+    answered = callee.post(
+        f"/calls/{call_id}/answer",
+        data={
+            "csrf_token": callee_token,
+            "accept": "1",
+            "answer_json": '{"type":"answer","sdp":"v=0\\r\\no=zendoc-answer"}',
+        },
+    )
+    assert answered.status_code == 200
+    assert answered.get_json()["call"]["status"] == "accepted"
+
+    caller_page = caller.get(f"/calls/{call_id}")
+    caller_token = csrf(caller_page.data.decode())
+    candidate = caller.post(
+        f"/calls/{call_id}/ice",
+        data={
+            "csrf_token": caller_token,
+            "candidate_json": '{"candidate":"candidate:1 1 UDP 1 192.0.2.1 12345 typ host","sdpMid":"0","sdpMLineIndex":0}',
+        },
+    )
+    assert candidate.status_code == 201
+
+    state = callee.get(f"/calls/{call_id}/state")
+    assert state.status_code == 200
+    assert state.get_json()["call"]["status"] == "accepted"
+    assert state.get_json()["call"]["answer"]["type"] == "answer"
+    assert state.get_json()["call"]["candidates"]
+
+    ended = caller.post(
+        f"/calls/{call_id}/end",
+        data={"csrf_token": caller_token},
+    )
+    assert ended.status_code == 200
+    assert ended.get_json()["call"]["status"] == "ended"
