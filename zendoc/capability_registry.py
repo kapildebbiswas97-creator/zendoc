@@ -374,7 +374,10 @@ def get_capability_registry() -> dict:
         "telehealth": {
             "status": STATUS_BETA,
             "label": "Telehealth Beta",
-            "description": "Consultation requests, doctor acceptance and chat are implemented. Production voice/video WebRTC remains Integration Required.",
+            "description": (
+                "Consultation requests, provider acceptance, scoped Connect chat and authenticated browser WebRTC voice/video are implemented. "
+                "Reliable public-network calling still depends on verified STUN/TURN infrastructure and two-device testing."
+            ),
         },
         "report_intelligence": {
             "status": STATUS_BETA,
