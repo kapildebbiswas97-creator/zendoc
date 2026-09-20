@@ -1,6 +1,6 @@
 # ZENDOC — Feature Truth Matrix
 
-**Truth model updated:** 13 September 2026  
+**Truth model updated:** 20 September 2026  
 **Authoritative runtime source:** `zendoc/capability_registry.py`  
 **Owner inspection:** `/owner/intelligence-manifest` and `/owner/ai-runtime`
 
@@ -35,6 +35,7 @@ ZENDOC uses exactly these runtime statuses:
 | Reports | Report intelligence | `BETA` | Deterministic educational interpretation and report workflow; not diagnosis. |
 | Appointments | Provider profiles, schedules and booking state | `WORKING` | ZENDOC-owned scheduling/booking records work; external provider truth is shown only when confirmed. |
 | Finder | Local/ingested healthcare finder | `BETA` or `WORKING` | Local/verified records work. Live Places status depends on configured provider and server-side key. |
+| Global search | Restored product-module discovery | `WORKING` | Global search can surface Mental Wellness, Community, Health Shop, Messages/calling, Payments, Health Memory and AI in addition to healthcare discovery. |
 | Provider network | Onboarding and evidence review | `WORKING` | Providers submit evidence; owner review controls verification. ZENDOC does not auto-verify from self-asserted data. |
 | Public data | Official/public dataset ingestion | `WORKING` | Owner-only dry-run/apply, checksums, schema mapping, provenance, rejection reasons and idempotent upsert are implemented. |
 | Public data | Live official connectors | `INTEGRATION_REQUIRED` | LGD/OGD/ABDM or other sources require source-specific download/API/authorized access. |
@@ -50,9 +51,16 @@ ZENDOC uses exactly these runtime statuses:
 | CareFin | Benefit discovery | `WORKING` | Provenance-aware discovery and missing-information analysis. |
 | CareFin | Personal eligibility/approval/payment confirmation | `INTEGRATION_REQUIRED` | Requires authoritative government/insurer/CSR/trust/payment responses. |
 | Family care | Family/dependent coordination | `WORKING` | Permissioned app workflow; real-world care remains subject to connected providers. |
-| Messaging | ZENDOC Connect | `WORKING` | Policy-aware messaging and sharing within ZENDOC authorization boundaries. |
-| Telehealth | Consultation workflow | `BETA` | App workflow is available; production-grade real-time media requires appropriate infrastructure/provider. |
+| Messaging | ZENDOC Connect | `WORKING` | Policy-aware conversations, read state, native participant-protected image/video attachments, report/video-link sharing, blocking and in-app notifications. |
+| Calling | Browser WebRTC voice/video | `BETA` | Authenticated signaling, offer/answer/ICE exchange, call lifecycle, browser media controls and stale-call cleanup are implemented. Network reachability still depends on real STUN/TURN configuration and end-to-end browser verification. |
+| Telehealth | Consultation workflow | `BETA` | Consultation request/acceptance/chat works. The newer WebRTC calling surface is separate and still infrastructure-dependent for public-network reliability. |
 | IoT | Device registration/manual measurements | `BETA` | Device records and measurement provenance work; live hardware sync requires device SDK/integration. |
+| Mental wellness | Private check-ins and journal | `WORKING` | User-owned mood/stress/energy/sleep self-ratings, private journal history and user deletion controls are implemented. ZENDOC does not turn these into a diagnosis or personality score. |
+| Community | Health Community | `WORKING` | Health-focused posts, stories, comments, likes, follows, saved posts, blocking, reporting, author deletion and authenticated media access are implemented. User-generated content is not verified medical advice. |
+| Community | Durable public image/video storage | `INTEGRATION_REQUIRED` unless configured and verified | Local development media works; hosted persistence requires verified S3-compatible storage or equivalent durable object storage. |
+| Commerce | Health Shop discovery | `WORKING` | External merchant discovery and ZENDOC outbound-click evidence are implemented without claiming stock, price, conversion or commission. |
+| Commerce | Affiliate/referral revenue | `INTEGRATION_REQUIRED` unless approved/configured | Requires a real merchant program/approved affiliate deep link and authoritative conversion/settlement evidence. A click is not revenue. |
+| Payments | Connected payment gateway | `INTEGRATION_REQUIRED` unless configured and verified | Payment workflow exists; successful payment requires genuine gateway credentials and signed webhook/verification evidence. |
 | Fitness | Plans, sessions, nutrition and hydration | `WORKING` | General wellness tooling; not medical diagnosis/treatment. |
 | Fitness camera | Camera preview | `BETA` | Browser-local preview only; no fabricated pose/rep/form analysis. |
 | Notifications | In-app notifications | `WORKING` | Delivered inside ZENDOC. |
