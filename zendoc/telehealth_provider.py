@@ -18,17 +18,27 @@ class LocalDemoTelehealthProvider:
             "provider": self.name,
             "room_token_hash": hash_token(room_token),
             "status": "waiting",
-            "integration_status": "chat_only_no_webrtc" if self.name == "internal_chat" else "beta_local_only",
+            "integration_status": (
+                "zendoc_browser_webrtc_beta"
+                if self.name in {"internal_webrtc", "internal_chat"}
+                else "beta_local_only"
+            ),
         }
 
     def status(self):
+        webrtc_enabled = self.name in {"internal_webrtc", "internal_chat"}
         return {
             "provider": self.name,
-            "status": "working_chat_only" if self.name == "internal_chat" else "beta",
+            "status": "beta_webrtc" if webrtc_enabled else "beta",
             "supports_chat": True,
-            "supports_voice": False,
-            "supports_video": False,
-            "message": "Local consultation state and chat work; production voice/video WebRTC is Integration Required.",
+            "supports_voice": webrtc_enabled,
+            "supports_video": webrtc_enabled,
+            "message": (
+                "ZENDOC consultation chat plus authenticated browser WebRTC voice/video are available. "
+                "Public-network reliability still depends on configured STUN/TURN infrastructure and end-to-end browser testing."
+                if webrtc_enabled else
+                "Local consultation state and chat work; voice/video WebRTC is not enabled for this provider."
+            ),
         }
 
 
@@ -53,6 +63,6 @@ def get_telehealth_provider():
     provider = str(current_app.config.get("TELEHEALTH_PROVIDER") or "local_demo").strip().lower()
     if provider == "local_demo":
         return LocalDemoTelehealthProvider("local_demo")
-    if provider == "internal_chat":
-        return LocalDemoTelehealthProvider("internal_chat")
+    if provider in {"internal_chat", "internal_webrtc"}:
+        return LocalDemoTelehealthProvider(provider)
     return UnavailableTelehealthProvider(provider)

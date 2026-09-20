@@ -26,7 +26,9 @@ from .routes import audit, require_api_user
 from .security import assert_owner, login_required, owner_required, role_required
 from .telehealth_provider import get_telehealth_provider
 from .telehealth import (
+    ensure_consultation_conversation,
     get_consultation,
+    get_consultation_conversation,
     get_doctor_availability,
     list_consultation_messages,
     list_consultations,
@@ -306,7 +308,19 @@ def telehealth_detail_page(consultation_id):
     except (LookupError, PermissionError) as error:
         flash(str(error), "error")
         return redirect(url_for("milestone7.telehealth_page"))
-    return render_template("telehealth_detail.html", consultation=consultation, messages=messages)
+    conversation = None
+    if consultation["status"] in {"accepted", "scheduled"} and g.user["role"] != "admin":
+        try:
+            conversation = ensure_consultation_conversation(g.user, consultation_id)
+        except (ValueError, LookupError, PermissionError):
+            conversation = get_consultation_conversation(g.user, consultation_id)
+    return render_template(
+        "telehealth_detail.html",
+        consultation=consultation,
+        messages=messages,
+        conversation=conversation,
+        telehealth_status=get_telehealth_provider().status(),
+    )
 
 
 @bp.route("/fitness/pose-coach", methods=("GET", "POST"))

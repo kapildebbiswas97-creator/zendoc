@@ -167,7 +167,7 @@ def load_config(base_dir, overrides=None):
         "BACKUP_VERIFIED": env_bool("ZENDOC_BACKUP_VERIFIED", False),
         "STORAGE_PROVIDER": os.environ.get("ZENDOC_STORAGE_PROVIDER", "local").strip().lower(),
         "STORAGE_VERIFIED": env_bool("ZENDOC_STORAGE_VERIFIED", False),
-        "TELEHEALTH_PROVIDER": os.environ.get("ZENDOC_TELEHEALTH_PROVIDER", "local_demo").strip().lower(),
+        "TELEHEALTH_PROVIDER": os.environ.get("ZENDOC_TELEHEALTH_PROVIDER", "internal_webrtc").strip().lower(),
         "REALTIME_PROVIDER": os.environ.get("ZENDOC_REALTIME_PROVIDER", "polling").strip().lower(),
         "NOTIFICATION_PROVIDER": os.environ.get("ZENDOC_NOTIFICATION_PROVIDER", "in_app").strip().lower(),
         "EKYC_PROVIDER": os.environ.get("ZENDOC_EKYC_PROVIDER", "none").strip().lower(),

@@ -21,18 +21,22 @@
 
 {% if consultation.status in ['accepted','scheduled'] %}
 <section class="panel">
-  <h2>Local Demo Room</h2>
-  <p class="section-copy">Camera and microphone controls are browser-local beta controls. Click Join only when you are ready to grant permission.</p>
-  <div class="form-actions">
-    <button id="telehealth-join" type="button">Join Room</button>
-    <button id="telehealth-mute" type="button" class="secondary-action">Mute</button>
-    <button id="telehealth-camera" type="button" class="secondary-action">Camera Off</button>
-    <button id="telehealth-leave" type="button" class="danger-button">Leave</button>
-  </div>
-  <video id="telehealth-preview" autoplay playsinline muted style="width:100%;max-height:360px;background:#111;border-radius:8px;margin-top:14px;"></video>
-  <p id="telehealth-status" class="section-copy">Not connected.</p>
+  <div class="panel-head"><div><p class="eyebrow">Accepted consultation</p><h2>ZENDOC Connect consultation room</h2></div><span class="status-badge beta">WebRTC beta</span></div>
+  <p class="section-copy">{{ telehealth_status.message }}</p>
+  {% if conversation %}
+    <div class="form-actions">
+      <a class="primary-action" href="{{ url_for('milestone7.messages_page', conversation_id=conversation.id) }}">Open secure consultation chat</a>
+      {% if consultation.consultation_type == 'voice' %}
+        <a class="secondary-action" href="{{ url_for('calls.call_start_page', conversation_id=conversation.id, call_type='voice') }}">Start voice call</a>
+      {% elif consultation.consultation_type == 'video' %}
+        <a class="secondary-action" href="{{ url_for('calls.call_start_page', conversation_id=conversation.id, call_type='video') }}">Start video call</a>
+      {% endif %}
+    </div>
+    <p class="form-note">Calls use authenticated browser WebRTC signaling. Without verified TURN infrastructure, some mobile/carrier/firewall networks may not connect reliably.</p>
+  {% else %}
+    <div class="empty-state"><h3>Consultation communication is not ready</h3><p>The consultation is accepted, but ZENDOC could not create its scoped Connect conversation. Refresh after checking provider communication permissions.</p></div>
+  {% endif %}
 </section>
-<script src="{{ url_for('static', filename='camera.js') }}"></script>
 {% endif %}
 
 <section class="grid two">

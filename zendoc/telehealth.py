@@ -145,6 +145,17 @@ def request_consultation(actor, data):
         raise ValueError(
             f"{consultation_type.title()} telehealth is not available on this deployment."
         )
+    availability = get_doctor_availability(doctor_id)
+    if not availability.get("allow_new_consultation_requests", 1):
+        raise ValueError("This provider is not accepting new consultation requests.")
+    if consultation_type == "voice" and not (
+        availability.get("accepts_voice") and availability.get("allow_voice_requests")
+    ):
+        raise ValueError("This provider is not accepting voice consultation requests.")
+    if consultation_type == "video" and not (
+        availability.get("accepts_video") and availability.get("allow_video_requests")
+    ):
+        raise ValueError("This provider is not accepting video consultation requests.")
     reason = str(data.get("reason") or "").strip()
     if not reason:
         raise ValueError("Consultation reason is required.")
@@ -318,6 +329,13 @@ def update_consultation_status(actor, consultation_id, status, scheduled_for=Non
                 consultation.get("organization_id"), consultation.get("organization_location_id"), now
             ),
         )
+    if status in {"accepted", "scheduled"}:
+        try:
+            ensure_consultation_conversation(actor, consultation_id)
+        except (ValueError, LookupError, PermissionError):
+            # The consultation state remains authoritative even if the messaging
+            # surface cannot be opened yet; the detail page reports the limitation.
+            pass
     if status == "ended":
         get_db().execute("UPDATE consultation_rooms SET status='ended', ended_at=? WHERE consultation_id=?", (now, consultation_id))
     db.commit()
@@ -359,3 +377,53 @@ def list_consultation_messages(actor, consultation_id):
         (consultation["id"],),
     ).fetchall()
     return [dict(row) for row in rows]
+
+
+
+def get_consultation_conversation(actor, consultation_id: int):
+    """Return the active ZENDOC Connect conversation scoped to a consultation."""
+    consultation = get_consultation(actor, consultation_id)
+    uid = _user_id(actor)
+    row = get_db().execute(
+        """
+        SELECT c.*
+        FROM conversations c
+        JOIN conversation_participants cp ON cp.conversation_id=c.id
+        WHERE c.status='active'
+          AND cp.user_id=?
+          AND c.context_type='consultation'
+          AND c.context_id=?
+        ORDER BY c.updated_at DESC,c.id DESC
+        LIMIT 1
+        """,
+        (uid, str(int(consultation_id))),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def ensure_consultation_conversation(actor, consultation_id: int):
+    """Create/reuse a conversation after a consultation is accepted/scheduled."""
+    consultation = get_consultation(actor, consultation_id)
+    if str(consultation["status"]) not in {"accepted", "scheduled"}:
+        raise ValueError("Consultation chat/call access begins after provider acceptance.")
+    existing = get_consultation_conversation(actor, consultation_id)
+    if existing:
+        return existing
+    if _value(actor, "role") == "admin":
+        return None
+    target_id = (
+        int(consultation["doctor_id"])
+        if int(consultation["patient_id"]) == _user_id(actor)
+        else int(consultation["patient_id"])
+    )
+    from .connect import start_conversation
+    conversation = start_conversation(
+        actor,
+        {
+            "target_user_id": target_id,
+            "context_type": "consultation",
+            "context_id": str(int(consultation_id)),
+            "title": f"Telehealth: {consultation['patient_name']} · {consultation['doctor_name']}",
+        },
+    )
+    return conversation
