@@ -44,13 +44,38 @@
             <div class="form-actions">
               <span class="status-badge">Stock unverified</span><span class="status-badge">Price unverified</span>
             </div>
-            <a class="primary-action spaced-panel" href="{{ url_for('health_shop.outbound', merchant_id=item.id, q=products.query, category=products.category) }}" target="_blank" rel="noopener noreferrer">Continue to {{ item.label }}</a>
+            <div class="form-actions spaced-panel">
+              <a class="primary-action" href="{{ url_for('health_shop.outbound', merchant_id=item.id, q=products.query, category=products.category) }}" target="_blank" rel="noopener noreferrer">Continue to {{ item.label }}</a>
+              <form method="post" action="{{ url_for('health_shop.save_health_shop_item_route') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="merchant_id" value="{{ item.id }}">
+                <input type="hidden" name="q" value="{{ products.query }}">
+                <input type="hidden" name="category" value="{{ products.category }}">
+                <button type="submit" class="secondary-action">Save to Health List</button>
+              </form>
+            </div>
           </article>
         {% endfor %}
       </div>
     {% endif %}
   </section>
 {% endif %}
+
+<section class="panel spaced-panel">
+  <div class="panel-head"><div><p class="eyebrow">Saved shopping</p><h2>Your Saved Health List</h2></div><span class="status-badge">{{ saved_items|length }} saved</span></div>
+  <p class="form-note">Saved items remember a merchant + search intent only. ZENDOC does not cache or claim the merchant's live stock, price, seller or delivery promise.</p>
+  {% for saved in saved_items %}
+    <div class="summary-row">
+      <div><strong>{{ saved.query_text }}</strong><p>{{ saved.merchant_label }} · {{ saved.category|replace('_',' ')|title }}</p></div>
+      <div class="form-actions">
+        <a class="secondary-action" href="{{ url_for('health_shop.outbound', merchant_id=saved.merchant_id, q=saved.query_text, category=saved.category) }}" target="_blank" rel="noopener noreferrer">Open merchant</a>
+        <form method="post" action="{{ url_for('health_shop.delete_saved_health_shop_item_route', item_id=saved.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit" class="secondary-action">Remove</button></form>
+      </div>
+    </div>
+  {% else %}
+    <div class="empty-state"><p>Nothing saved yet. Search for a health product and save a merchant handoff here.</p></div>
+  {% endfor %}
+</section>
 
 <section class="grid two spaced-panel">
   <article class="panel"><h2>How referral revenue will work</h2><p>ZENDOC records an outbound click ID. A merchant becomes commission-enabled only after you join its real affiliate/partner program and configure the issued deep-link template. Until then the handoff remains a normal external search with no commission claim.</p></article>

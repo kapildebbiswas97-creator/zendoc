@@ -569,3 +569,55 @@ def test_community_blocked_account_manager_can_unblock(tmp_path):
     )
     assert unblocked.status_code == 200
     assert b"Account unblocked" in unblocked.data
+
+
+
+def test_health_shop_saved_list_is_private_and_truthful(tmp_path):
+    app = make_app(tmp_path)
+    a = app.test_client()
+    b = app.test_client()
+    register_web(a, "patient", "shop-save-a@example.com", "Shop Save A")
+    register_web(b, "patient", "shop-save-b@example.com", "Shop Save B")
+    login_web(a, "patient", "shop-save-a@example.com")
+    login_web(b, "patient", "shop-save-b@example.com")
+
+    page = a.get("/health-shop?q=yoga+mat&category=fitness")
+    assert page.status_code == 200
+    token = csrf(page.data.decode())
+    saved = a.post(
+        "/health-shop/save",
+        data={
+            "csrf_token": token,
+            "merchant_id": "amazon_india",
+            "q": "yoga mat",
+            "category": "fitness",
+        },
+        follow_redirects=True,
+    )
+    assert saved.status_code == 200
+    assert b"Saved Health List" in saved.data
+    assert b"yoga mat" in saved.data
+    assert b"Stock unverified" in saved.data
+
+    other = b.get("/health-shop")
+    assert other.status_code == 200
+    assert b"yoga mat" not in other.data
+
+    with app.app_context():
+        row = get_db().execute(
+            "SELECT * FROM health_shop_saved_items WHERE query_text='yoga mat'"
+        ).fetchone()
+        assert row is not None
+        saved_id = int(row["id"])
+
+    denied = b.post(
+        f"/health-shop/saved/{saved_id}/delete",
+        data={"csrf_token": csrf(other.data.decode())},
+        follow_redirects=True,
+    )
+    assert b"Saved health-shop item not found." in denied.data
+    with app.app_context():
+        assert get_db().execute(
+            "SELECT id FROM health_shop_saved_items WHERE id=?",
+            (saved_id,),
+        ).fetchone() is not None

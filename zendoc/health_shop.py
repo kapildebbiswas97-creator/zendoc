@@ -32,6 +32,20 @@ def ensure_health_shop_schema():
             ON health_commerce_clicks(user_id,created_at);
         CREATE INDEX IF NOT EXISTS idx_health_commerce_clicks_merchant
             ON health_commerce_clicks(merchant_id,created_at);
+
+        CREATE TABLE IF NOT EXISTS health_shop_saved_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            merchant_id TEXT NOT NULL,
+            merchant_label TEXT NOT NULL,
+            query_text TEXT NOT NULL,
+            category TEXT NOT NULL,
+            destination_url TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE(user_id,merchant_id,query_text,category)
+        );
+        CREATE INDEX IF NOT EXISTS idx_health_shop_saved_items_user
+            ON health_shop_saved_items(user_id,created_at,id);
         """
     )
 
@@ -161,3 +175,72 @@ def commerce_click_metrics(limit: int = 100) -> dict:
             "commission, merchant settlement, stock availability or price."
         ),
     }
+
+
+
+def save_health_shop_item(user, merchant_id: str, query: str, category: str) -> dict:
+    """Save a health-product search intent without claiming merchant inventory."""
+    ensure_health_shop_schema()
+    result = search_health_products(query, category)
+    item = next((row for row in result.get("results", []) if row.get("id") == merchant_id), None)
+    if not item:
+        raise LookupError("That merchant is not available for this health-product search.")
+    uid = int(user["id"])
+    existing = get_db().execute(
+        """
+        SELECT * FROM health_shop_saved_items
+        WHERE user_id=? AND merchant_id=? AND query_text=? AND category=?
+        """,
+        (uid, merchant_id, result["query"], result["category"]),
+    ).fetchone()
+    if existing:
+        return dict(existing)
+    now = now_iso()
+    cursor = get_db().execute(
+        """
+        INSERT INTO health_shop_saved_items
+        (user_id,merchant_id,merchant_label,query_text,category,destination_url,created_at)
+        VALUES (?,?,?,?,?,?,?)
+        """,
+        (
+            uid,
+            str(item["id"]),
+            str(item["label"])[:120],
+            result["query"],
+            result["category"],
+            str(item["url"])[:3000],
+            now,
+        ),
+    )
+    get_db().commit()
+    row = get_db().execute(
+        "SELECT * FROM health_shop_saved_items WHERE id=?",
+        (int(cursor.lastrowid),),
+    ).fetchone()
+    return dict(row)
+
+
+def list_saved_health_shop_items(user, limit: int = 50) -> list[dict]:
+    ensure_health_shop_schema()
+    rows = get_db().execute(
+        """
+        SELECT * FROM health_shop_saved_items
+        WHERE user_id=?
+        ORDER BY created_at DESC,id DESC
+        LIMIT ?
+        """,
+        (int(user["id"]), max(1, min(int(limit or 50), 200))),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def delete_saved_health_shop_item(user, item_id: int) -> None:
+    ensure_health_shop_schema()
+    cursor = get_db().execute(
+        "DELETE FROM health_shop_saved_items WHERE id=? AND user_id=?",
+        (int(item_id), int(user["id"])),
+    )
+    if int(cursor.rowcount or 0) != 1:
+        get_db().rollback()
+        raise LookupError("Saved health-shop item not found.")
+    get_db().commit()
