@@ -400,7 +400,7 @@ def list_saved_posts(user, *, limit=50) -> list[dict]:
         JOIN health_social_posts p ON p.id=saved.post_id
         JOIN users u ON u.id=p.author_id
         WHERE saved.user_id=? AND p.moderation_status='published'
-          AND _blocked_pair_clause()
+          AND {_blocked_pair_clause()}
         ORDER BY saved.created_at DESC,p.id DESC
         LIMIT ?
         """,
