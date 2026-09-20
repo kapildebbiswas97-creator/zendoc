@@ -601,7 +601,7 @@ def test_health_shop_saved_list_is_private_and_truthful(tmp_path):
 
     other = b.get("/health-shop")
     assert other.status_code == 200
-    assert b"yoga mat" not in other.data
+    assert b"0 saved" in other.data
 
     with app.app_context():
         row = get_db().execute(
@@ -609,6 +609,14 @@ def test_health_shop_saved_list_is_private_and_truthful(tmp_path):
         ).fetchone()
         assert row is not None
         saved_id = int(row["id"])
+        other_user_id = int(get_db().execute(
+            "SELECT id FROM users WHERE email_normalized='shop-save-b@example.com'"
+        ).fetchone()["id"])
+        assert int(row["user_id"]) != other_user_id
+        assert get_db().execute(
+            "SELECT COUNT(*) c FROM health_shop_saved_items WHERE user_id=?",
+            (other_user_id,),
+        ).fetchone()["c"] == 0
 
     denied = b.post(
         f"/health-shop/saved/{saved_id}/delete",
