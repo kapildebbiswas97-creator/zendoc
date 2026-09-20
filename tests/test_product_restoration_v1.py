@@ -246,7 +246,7 @@ def test_owner_commerce_metrics_are_click_only(tmp_path):
     page = owner.get("/admin/commerce-referrals")
     assert page.status_code == 200
     assert b"Outbound clicks" in page.data
-    assert b"do not prove an order, conversion or commission" in page.data
+    assert b"do not prove an order, conversion or commission" in page.data.lower()
 
 
 
