@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .db import get_db, now_iso
+from .email_delivery import email_delivery_status, send_transactional_email
 
 
 SUPPORTED_CHANNELS = {"in_app", "email", "sms", "whatsapp", "push"}
@@ -42,7 +43,7 @@ def deliver_notification(
     channel = str(channel or "in_app").strip().lower()
     if channel not in SUPPORTED_CHANNELS:
         raise ValueError("Unsupported notification channel.")
-    user = get_db().execute("SELECT id FROM users WHERE id=? AND active=1", (int(user_id),)).fetchone()
+    user = get_db().execute("SELECT id,email FROM users WHERE id=? AND active=1", (int(user_id),)).fetchone()
     if not user:
         raise LookupError("Notification recipient not found.")
     title = str(title or "ZENDOC notification").strip()[:180]
@@ -66,6 +67,24 @@ def deliver_notification(
         sent_at = now
         delivered_at = now
         integration_required = False
+    elif channel == "email":
+        email_status = email_delivery_status()
+        if not email_status.get("transactional_email"):
+            status = "queued"
+            provider_response = "email_provider_not_configured"
+            integration_required = True
+        else:
+            try:
+                result = send_transactional_email(user["email"], title, message)
+                status = "sent"
+                provider_response = str(result.get("provider") or "smtp")[:1000]
+                sent_at = now
+                integration_required = False
+            except Exception as exc:
+                status = "failed"
+                provider_response = f"email_send_failed:{type(exc).__name__}"
+                failed_at = now
+                integration_required = False
     else:
         # Persist a truthful queue intent. Without a configured external
         # provider, this is neither sent nor delivered.
@@ -185,9 +204,14 @@ def transition_notification_delivery(
 
 
 def notification_provider_status() -> dict:
+    email = email_delivery_status()
     return {
         "in_app": {"status": "working", "provider": "local_in_app"},
-        "email": {"status": "integration_required"},
+        "email": {
+            "status": "configured" if email.get("transactional_email") else "integration_required",
+            "provider": email.get("provider", "none"),
+            "truth_notice": "SMTP acceptance is recorded as sent; ZENDOC does not call it delivered without delivery confirmation.",
+        },
         "sms": {"status": "integration_required"},
         "whatsapp": {"status": "integration_required"},
         "push": {"status": "integration_required"},

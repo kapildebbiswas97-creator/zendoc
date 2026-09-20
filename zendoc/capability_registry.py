@@ -59,6 +59,11 @@ def get_capability_registry() -> dict:
     places_provider = _env("ZENDOC_PLACES_PROVIDER", "none").lower()
     places = places_provider == "google" and bool(_env("ZENDOC_GOOGLE_PLACES_API_KEY"))
     video_provider = _env("ZENDOC_VIDEO_PROVIDER", "none") not in {"", "none"}
+    external_email_configured = (
+        _env("ZENDOC_EMAIL_PROVIDER", "none").lower() == "smtp"
+        and bool(_env("ZENDOC_SMTP_HOST"))
+        and bool(_env("ZENDOC_SMTP_FROM_EMAIL"))
+    )
     database_url = _env("DATABASE_URL")
     postgresql_configured = database_url.startswith(("postgresql://", "postgres://", "postgresql+psycopg://"))
     persistence_verified = _env_bool("ZENDOC_PERSISTENCE_VERIFIED")
@@ -438,9 +443,13 @@ def get_capability_registry() -> dict:
             "description": "Educational video search." if video_provider else "General ZENDOC guidance cards — video provider not configured.",
         },
         "external_notifications": {
-            "status": STATUS_INTEGRATION_REQUIRED,
+            "status": STATUS_BETA if external_email_configured else STATUS_INTEGRATION_REQUIRED,
             "label": "External Notifications (Email/SMS/WhatsApp/Push)",
-            "description": "Configure ZENDOC_EMAIL_PROVIDER, ZENDOC_SMS_PROVIDER for real delivery.",
+            "description": (
+                "SMTP email sending is configured and records provider acceptance as SENT; SMS, WhatsApp and push still require authorized providers."
+                if external_email_configured else
+                "In-app delivery works. SMTP email, SMS, WhatsApp and push require their real provider configuration."
+            ),
         },
         "in_app_notifications": {
             "status": STATUS_WORKING,
