@@ -121,6 +121,7 @@
               {% if current_user.role == 'admin' %}
                 <a href="{{ url_for('main.founder_readiness_page') }}">Founder readiness</a>
                 <a href="{{ url_for('health_social.community_moderation_page') }}">Community moderation</a>
+                <a href="{{ url_for('health_shop.health_shop_admin_page') }}">Commerce &amp; referral activity</a>
                 <a href="{{ url_for('edgecare.edgecare_admin_page') }}">AI runtime &amp; care-chain readiness</a>
                 <a href="{{ url_for('showcase.showcase_page') }}">Public showcase</a>
               {% endif %}

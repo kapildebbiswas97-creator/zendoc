@@ -2,9 +2,9 @@
 from flask import Blueprint, g, jsonify, redirect, render_template, request
 
 from .health_commerce import commerce_category_catalog, commerce_ethics_policy, search_health_products
-from .health_shop import affiliate_readiness, build_outbound_handoff
+from .health_shop import affiliate_readiness, build_outbound_handoff, commerce_click_metrics
 from .routes import require_api_user
-from .security import login_required
+from .security import login_required, owner_required
 
 bp = Blueprint("health_shop", __name__)
 
@@ -52,3 +52,15 @@ def api_health_shop_search():
         "affiliate": affiliate_readiness(),
         "user_id": int(user["id"]),
     })
+
+
+
+@bp.get("/admin/commerce-referrals")
+@login_required
+@owner_required
+def health_shop_admin_page():
+    return render_template(
+        "health_shop_admin.html",
+        metrics=commerce_click_metrics(),
+        affiliate=affiliate_readiness(),
+    )

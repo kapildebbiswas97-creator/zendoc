@@ -116,3 +116,48 @@ def build_outbound_handoff(user, merchant_id: str, query: str, category: str) ->
             "This opens an external merchant. ZENDOC does not verify stock, price, seller, delivery or medical suitability."
         ),
     }
+
+
+
+def commerce_click_metrics(limit: int = 100) -> dict:
+    """Owner-facing outbound attribution metrics; never implies purchase/conversion."""
+    ensure_health_shop_schema()
+    total = get_db().execute("SELECT COUNT(*) c FROM health_commerce_clicks").fetchone()
+    configured = get_db().execute(
+        "SELECT COUNT(*) c FROM health_commerce_clicks WHERE affiliate_configured=1"
+    ).fetchone()
+    unique_users = get_db().execute(
+        "SELECT COUNT(DISTINCT user_id) c FROM health_commerce_clicks WHERE user_id IS NOT NULL"
+    ).fetchone()
+    merchants = get_db().execute(
+        """
+        SELECT merchant_id,COUNT(*) clicks,
+               SUM(CASE WHEN affiliate_configured=1 THEN 1 ELSE 0 END) affiliate_configured_clicks
+        FROM health_commerce_clicks
+        GROUP BY merchant_id
+        ORDER BY clicks DESC,merchant_id ASC
+        """
+    ).fetchall()
+    recent = get_db().execute(
+        """
+        SELECT id,click_uid,user_id,merchant_id,query_text,category,destination_url,
+               affiliate_configured,created_at
+        FROM health_commerce_clicks
+        ORDER BY created_at DESC,id DESC
+        LIMIT ?
+        """,
+        (max(1, min(int(limit or 100), 500)),),
+    ).fetchall()
+    return {
+        "total_outbound_clicks": int(total["c"] or 0),
+        "affiliate_configured_clicks": int(configured["c"] or 0),
+        "unique_users": int(unique_users["c"] or 0),
+        "merchants": [dict(row) for row in merchants],
+        "recent": [dict(row) for row in recent],
+        "conversion_tracking": False,
+        "revenue_verified": False,
+        "truth_notice": (
+            "These are ZENDOC outbound-click records only. They do not prove an order, conversion, "
+            "commission, merchant settlement, stock availability or price."
+        ),
+    }
