@@ -14,6 +14,21 @@
   </div>
 </section>
 
+{% if incoming_calls %}
+<section class="panel spaced-panel" aria-label="Incoming calls">
+  <div class="panel-head"><div><p class="eyebrow">Incoming calls</p><h2>Someone is calling you</h2></div><span class="status-badge active">{{ incoming_calls|length }}</span></div>
+  <div class="grid two">
+    {% for call in incoming_calls %}
+      <article class="subtle-panel">
+        <strong>{{ call.initiator_name }}</strong>
+        <p>{{ call.call_type.title() }} call · {{ call.created_at[:16] }}</p>
+        <a class="primary-action" href="{{ url_for('calls.call_page', call_id=call.id) }}">Open call</a>
+      </article>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
 <section class="connect-shell">
   <aside class="connect-list {% if selected %}has-selected{% endif %}">
     <form method="get" action="{{ url_for('milestone7.messages_page') }}" class="search-form">
@@ -72,12 +87,12 @@
         </div>
         <div class="form-actions comm-controls">
           {% if selected.can_call %}
-            <a href="{{ url_for('milestone7.telehealth_page') }}" class="secondary-action call-btn" title="Doctor accepts voice calls">Voice Call</a>
+            <a href="{{ url_for('calls.call_start_page', conversation_id=selected.id, call_type='voice') }}" class="secondary-action call-btn" title="Start an authorized ZENDOC voice call">Voice Call</a>
           {% else %}
             <button type="button" class="secondary-action call-btn" disabled title="Doctor approval or appointment required for voice">Voice Call (Locked)</button>
           {% endif %}
           {% if selected.can_video %}
-            <a href="{{ url_for('milestone7.telehealth_page') }}" class="secondary-action video-btn" title="Doctor accepts video requests">Video Call</a>
+            <a href="{{ url_for('calls.call_start_page', conversation_id=selected.id, call_type='video') }}" class="secondary-action video-btn" title="Start an authorized ZENDOC video call">Video Call</a>
           {% else %}
             <button type="button" class="secondary-action video-btn" disabled title="Doctor approval or appointment required for video">Video Call (Locked)</button>
           {% endif %}

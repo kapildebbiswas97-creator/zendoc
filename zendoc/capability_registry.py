@@ -81,6 +81,7 @@ def get_capability_registry() -> dict:
             "ZENDOC_AFFILIATE_HEALTHKART_URL_TEMPLATE",
         )
     )
+    webrtc_ice_configured = bool(_env("ZENDOC_WEBRTC_ICE_SERVERS_JSON"))
     razorpay_configured = all(
         bool(_env(key))
         for key in (
@@ -145,9 +146,13 @@ def get_capability_registry() -> dict:
             ),
         },
         "voice_video_calling": {
-            "status": STATUS_INTEGRATION_REQUIRED,
+            "status": STATUS_BETA,
             "label": "Voice / Video Calling",
-            "description": "Chat and consultation state work; production WebRTC/TURN calling is not claimed until real end-to-end infrastructure is configured and verified.",
+            "description": (
+                "Authenticated browser WebRTC signaling, call lifecycle and media controls are implemented; configured ICE servers improve network reachability, but TURN reliability still requires real end-to-end verification."
+                if webrtc_ice_configured else
+                "Authenticated browser WebRTC signaling, call lifecycle and media controls are implemented. No ICE server configuration is present, so many public/NAT networks may require TURN before calls are reliable."
+            ),
         },
         "deterministic_safety_engine": {
             "status": STATUS_WORKING,

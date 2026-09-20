@@ -2,6 +2,7 @@ from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template
 
 from .agent_core import admin_command_center_data, respond_with_core_agent
 from .community_media import get_community_media_storage
+from .call_signaling import list_incoming_calls
 from .connect import (
     create_communication_permission,
     discover_contacts,
@@ -188,6 +189,7 @@ def messages_page():
         messages=messages,
         contacts=contacts,
         unread_total=unread_count(g.user),
+        incoming_calls=list_incoming_calls(g.user),
         q=request.args.get("q", ""),
         blocked_ids=blocked_user_ids(g.user),
     )
