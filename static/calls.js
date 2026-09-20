@@ -166,7 +166,7 @@
         await peer.addIceCandidate(item.candidate);
       } catch (_) {}
     }
-    if (call.status === "ended" || call.status === "rejected") {
+    if (call.status === "ended" || call.status === "rejected" || call.status === "missed") {
       stopPolling();
       closePeer();
     }

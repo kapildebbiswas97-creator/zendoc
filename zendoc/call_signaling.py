@@ -7,6 +7,7 @@ claimed reliable across public networks until that infrastructure is verified.
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 
 from .communication_policy import can_call, can_video_call
 from .db import get_db, now_iso
@@ -136,6 +137,61 @@ def _validated_description(value, expected_type: str) -> str:
     return json.dumps({"type": expected_type, "sdp": str(data["sdp"])[:55_000]}, separators=(",", ":"))
 
 
+def _parse_time(value):
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+
+
+def _expire_stale_calls():
+    """Close abandoned signaling sessions so they cannot block future calls."""
+    ensure_call_schema()
+    now = datetime.now(timezone.utc)
+    ringing_before = (now - timedelta(minutes=3)).isoformat(timespec="seconds")
+    accepted_before = (now - timedelta(hours=4)).isoformat(timespec="seconds")
+    ended_at = now.isoformat(timespec="seconds")
+    ringing = get_db().execute(
+        """
+        SELECT id FROM connect_calls
+        WHERE status='ringing' AND created_at<?
+        """,
+        (ringing_before,),
+    ).fetchall()
+    accepted = get_db().execute(
+        """
+        SELECT id FROM connect_calls
+        WHERE status='accepted' AND updated_at<?
+        """,
+        (accepted_before,),
+    ).fetchall()
+    expired_ids = [int(row["id"]) for row in ringing]
+    stale_ids = [int(row["id"]) for row in accepted]
+    for call_id in expired_ids:
+        get_db().execute(
+            """
+            UPDATE connect_calls
+            SET status='missed',offer_json='{}',answer_json=NULL,updated_at=?,ended_at=?
+            WHERE id=? AND status='ringing'
+            """,
+            (ended_at, ended_at, call_id),
+        )
+        get_db().execute("DELETE FROM connect_call_ice WHERE call_id=?", (call_id,))
+    for call_id in stale_ids:
+        get_db().execute(
+            """
+            UPDATE connect_calls
+            SET status='ended',offer_json='{}',answer_json=NULL,updated_at=?,ended_at=?
+            WHERE id=? AND status='accepted'
+            """,
+            (ended_at, ended_at, call_id),
+        )
+        get_db().execute("DELETE FROM connect_call_ice WHERE call_id=?", (call_id,))
+    if expired_ids or stale_ids:
+        get_db().commit()
+    return {"missed": expired_ids, "ended": stale_ids}
+
+
 def _call_row(call_id: int):
     row = get_db().execute(
         """
@@ -162,6 +218,7 @@ def _assert_call_participant(actor, call_id: int) -> tuple[dict, int]:
 
 def create_call(actor, conversation_id: int, call_type: str, offer_json: str) -> dict:
     ensure_call_schema()
+    _expire_stale_calls()
     permission = call_permission(actor, conversation_id, call_type)
     if not permission["allowed"]:
         raise PermissionError(permission["reason"])
@@ -250,6 +307,7 @@ def add_ice_candidate(actor, call_id: int, candidate_json: str) -> dict:
 
 def get_call_state(actor, call_id: int, *, after_candidate_id: int = 0) -> dict:
     ensure_call_schema()
+    _expire_stale_calls()
     row, uid = _assert_call_participant(actor, call_id)
     candidates = get_db().execute(
         """
@@ -307,6 +365,7 @@ def end_call(actor, call_id: int) -> dict:
 
 def list_incoming_calls(actor, limit: int = 10) -> list[dict]:
     ensure_call_schema()
+    _expire_stale_calls()
     uid = _uid(actor)
     rows = get_db().execute(
         """

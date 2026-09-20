@@ -348,3 +348,91 @@ def test_webrtc_call_signaling_is_authorized_and_private(tmp_path):
     )
     assert ended.status_code == 200
     assert ended.get_json()["call"]["status"] == "ended"
+
+
+
+def test_stale_ringing_call_expires_and_does_not_block_new_call(tmp_path):
+    from datetime import datetime, timedelta, timezone
+    from zendoc.db import now_iso
+
+    app = make_app(tmp_path)
+    caller = app.test_client()
+    callee = app.test_client()
+    register_web(caller, "patient", "stale-caller@example.com", "Stale Caller")
+    register_web(callee, "patient", "stale-callee@example.com", "Stale Callee")
+    login_web(caller, "patient", "stale-caller@example.com")
+    login_web(callee, "patient", "stale-callee@example.com")
+
+    with app.app_context():
+        db = get_db()
+        caller_id = int(db.execute(
+            "SELECT id FROM users WHERE email_normalized=?",
+            ("stale-caller@example.com",),
+        ).fetchone()["id"])
+        callee_id = int(db.execute(
+            "SELECT id FROM users WHERE email_normalized=?",
+            ("stale-callee@example.com",),
+        ).fetchone()["id"])
+
+    page = caller.get("/messages?q=Stale+Callee")
+    token = csrf(page.data.decode())
+    started = caller.post(
+        "/messages",
+        data={"csrf_token": token, "action": "start", "target_user_id": callee_id, "context_type": "direct"},
+        follow_redirects=False,
+    )
+    conversation_id = int(started.headers["Location"].rsplit("=", 1)[-1])
+
+    with app.app_context():
+        now = now_iso()
+        get_db().execute(
+            """
+            INSERT INTO communication_permissions
+            (requester_id,target_user_id,context_type,context_id,allow_chat,allow_voice,allow_video,
+             allow_record_sharing,status,created_by,expires_at,revoked_at,created_at,updated_at)
+            VALUES (?,?, 'direct', NULL,1,1,1,0,'active',?,NULL,NULL,?,?)
+            """,
+            (caller_id, callee_id, caller_id, now, now),
+        )
+        get_db().commit()
+
+    created = caller.post(
+        "/calls/create",
+        data={
+            "csrf_token": token,
+            "conversation_id": conversation_id,
+            "call_type": "voice",
+            "offer_json": '{"type":"offer","sdp":"v=0\\r\\nostale-offer"}',
+        },
+    )
+    assert created.status_code == 201
+    old_call_id = int(created.get_json()["call"]["id"])
+
+    with app.app_context():
+        old = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat(timespec="seconds")
+        get_db().execute(
+            "UPDATE connect_calls SET created_at=?,updated_at=? WHERE id=?",
+            (old, old, old_call_id),
+        )
+        get_db().commit()
+
+    # Incoming-list access performs bounded cleanup and hides the stale ring.
+    incoming = callee.get("/calls/incoming")
+    assert incoming.status_code == 200
+    assert incoming.get_json()["calls"] == []
+
+    with app.app_context():
+        row = get_db().execute("SELECT status FROM connect_calls WHERE id=?", (old_call_id,)).fetchone()
+        assert row["status"] == "missed"
+
+    new_call = caller.post(
+        "/calls/create",
+        data={
+            "csrf_token": token,
+            "conversation_id": conversation_id,
+            "call_type": "voice",
+            "offer_json": '{"type":"offer","sdp":"v=0\\r\\nnew-offer"}',
+        },
+    )
+    assert new_call.status_code == 201
+    assert int(new_call.get_json()["call"]["id"]) != old_call_id
