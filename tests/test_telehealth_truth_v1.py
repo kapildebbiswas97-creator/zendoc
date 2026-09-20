@@ -183,3 +183,92 @@ def test_accepted_video_consultation_opens_real_connect_call_flow(tmp_path, monk
     assert "ZENDOC Connect consultation room" in html
     assert "Start video call" in html
     assert "/calls/start/" in html
+
+
+
+def test_call_permission_requires_accepted_matching_consultation(tmp_path, monkeypatch):
+    from zendoc.communication_policy import can_video_call
+    monkeypatch.setenv("ZENDOC_TELEHEALTH_PROVIDER","internal_webrtc")
+    app, client = make_client(tmp_path)
+    patient_email = "call-policy-patient@example.com"
+    doctor_email = "call-policy-doctor@example.com"
+
+    register_web(client, "doctor", doctor_email, "Call Policy Doctor")
+    client.get("/logout")
+    doctor_id = _verify_doctor(app, doctor_email)
+    login_web(client, "doctor", doctor_email)
+    doctor_page = client.get("/doctor/availability")
+    token = csrf(doctor_page.data.decode())
+    client.post(
+        "/doctor/availability",
+        data={
+            "csrf_token": token,
+            "status": "available",
+            "accepts_chat": "1",
+            "accepts_video": "1",
+            "allow_video_requests": "1",
+            "allow_new_consultation_requests": "1",
+            "patient_message_policy": "accepted_consultation",
+        },
+        follow_redirects=True,
+    )
+    client.get("/logout")
+
+    register_web(client, "patient", patient_email, "Call Policy Patient")
+    with app.app_context():
+        patient = dict(get_db().execute(
+            "SELECT * FROM users WHERE email_normalized=?",
+            (patient_email,),
+        ).fetchone())
+        doctor = dict(get_db().execute(
+            "SELECT * FROM users WHERE email_normalized=?",
+            (doctor_email,),
+        ).fetchone())
+        assert can_video_call(patient, doctor_id)["allowed"] is False
+
+    login_web(client, "patient", patient_email)
+    page = client.get("/telehealth")
+    token = csrf(page.data.decode())
+    client.post(
+        "/telehealth",
+        data={
+            "csrf_token": token,
+            "action": "request_consultation",
+            "doctor_id": doctor_id,
+            "consultation_type": "video",
+            "reason": "Video follow-up",
+        },
+        follow_redirects=True,
+    )
+    with app.app_context():
+        consultation_id = int(get_db().execute(
+            "SELECT id FROM consultation_requests WHERE patient_id=? AND doctor_id=? ORDER BY id DESC LIMIT 1",
+            (patient["id"], doctor_id),
+        ).fetchone()["id"])
+
+    client.get("/logout")
+    login_web(client, "doctor", doctor_email)
+    detail = client.get(f"/telehealth/{consultation_id}")
+    token = csrf(detail.data.decode())
+    client.post(
+        "/telehealth",
+        data={
+            "csrf_token": token,
+            "action": "update_status",
+            "consultation_id": consultation_id,
+            "status": "accepted",
+        },
+        follow_redirects=True,
+    )
+
+    with app.app_context():
+        patient = dict(get_db().execute(
+            "SELECT * FROM users WHERE email_normalized=?",
+            (patient_email,),
+        ).fetchone())
+        doctor = dict(get_db().execute(
+            "SELECT * FROM users WHERE email_normalized=?",
+            (doctor_email,),
+        ).fetchone())
+        assert can_video_call(patient, doctor_id)["allowed"] is True
+        assert can_video_call(doctor, patient["id"])["allowed"] is True

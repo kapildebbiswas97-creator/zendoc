@@ -128,14 +128,20 @@ def _has_appointment(patient_id, doctor_id):
     return bool(row)
 
 
-def _has_accepted_consultation(patient_id, doctor_id):
+def _has_accepted_consultation(patient_id, doctor_id, consultation_type=None):
+    params = [int(patient_id), int(doctor_id)]
+    type_clause = ""
+    if consultation_type:
+        type_clause = " AND consultation_type=?"
+        params.append(str(consultation_type))
     row = get_db().execute(
-        """
+        f"""
         SELECT id FROM consultation_requests
         WHERE patient_id=? AND doctor_id=? AND status IN ('accepted','scheduled')
+        {type_clause}
         ORDER BY updated_at DESC LIMIT 1
         """,
-        (int(patient_id), int(doctor_id)),
+        tuple(params),
     ).fetchone()
     return bool(row)
 
@@ -201,9 +207,23 @@ def _doctor_patient_allowed(actor, target, channel="chat"):
         patient_id, doctor_id = actor["id"], target["id"]
         availability = _doctor_availability(doctor_id)
         if channel == "voice":
-            return bool(availability["allow_voice_requests"] and availability["accepts_voice"]), "Doctor allows voice requests"
+            enabled = bool(availability["allow_voice_requests"] and availability["accepts_voice"])
+            accepted = _has_accepted_consultation(patient_id, doctor_id, "voice")
+            return (
+                bool(enabled and accepted),
+                "Accepted voice consultation"
+                if enabled and accepted
+                else "Voice calling requires an accepted voice consultation or explicit permission",
+            )
         if channel == "video":
-            return bool(availability["allow_video_requests"] and availability["accepts_video"]), "Doctor allows video requests"
+            enabled = bool(availability["allow_video_requests"] and availability["accepts_video"])
+            accepted = _has_accepted_consultation(patient_id, doctor_id, "video")
+            return (
+                bool(enabled and accepted),
+                "Accepted video consultation"
+                if enabled and accepted
+                else "Video calling requires an accepted video consultation or explicit permission",
+            )
         if channel != "chat":
             return False, "Unsupported doctor-patient communication channel"
 
@@ -232,6 +252,20 @@ def _doctor_patient_allowed(actor, target, channel="chat"):
             _has_appointment(patient_id, provider_id) or _has_accepted_consultation(patient_id, provider_id)
         ):
             return True, "Existing ZENDOC care relationship"
+        if channel in {"voice", "video"}:
+            availability = _doctor_availability(provider_id)
+            enabled = bool(
+                availability["allow_voice_requests"] and availability["accepts_voice"]
+            ) if channel == "voice" else bool(
+                availability["allow_video_requests"] and availability["accepts_video"]
+            )
+            accepted = _has_accepted_consultation(patient_id, provider_id, channel)
+            return (
+                bool(enabled and accepted),
+                f"Accepted {channel} consultation"
+                if enabled and accepted
+                else f"{channel.title()} calling requires an accepted matching consultation or explicit permission",
+            )
         return False, "Doctor or hospital messaging requires an existing ZENDOC care relationship"
     return False, "No doctor-patient context"
 
