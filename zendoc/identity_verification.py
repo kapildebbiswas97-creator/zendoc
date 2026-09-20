@@ -123,8 +123,8 @@ def create_identity_case(actor,data):
     if str(data.get("consent") or "").strip().lower() not in {"1","true","yes","on"}:
         raise PermissionError("Explicit consent is required before starting identity verification.")
     provider_status=identity_provider_status()
-    provider=provider_status["provider"] if provider_status["configured"] else "manual_evidence_review"
-    status="pending_external" if provider_status["configured"] else "manual_review_required"
+    provider=provider_status["provider"] if provider_status["operator_verified"] else "manual_evidence_review"
+    status="pending_external" if provider_status["operator_verified"] else "manual_review_required"
     now=now_iso()
     cursor=get_db().execute(
         """
@@ -224,8 +224,8 @@ def apply_external_result(payload,raw_body,signature):
     ensure_identity_verification_schema()
     provider_status=identity_provider_status()
     secret=str(os.environ.get("ZENDOC_EKYC_WEBHOOK_SECRET") or "")
-    if not provider_status["configured"] or not secret:
-        raise PermissionError("External eKYC provider is not configured.")
+    if not provider_status["operator_verified"] or not secret:
+        raise PermissionError("External eKYC provider is not configured and operator-verified.")
     supplied=str(signature or "").strip()
     if supplied.lower().startswith("sha256="):
         supplied=supplied.split("=",1)[1]

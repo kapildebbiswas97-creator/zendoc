@@ -350,8 +350,8 @@ def apply_carefin_partner_response(payload: dict, raw_body: bytes, signature: st
     ensure_carefin_case_schema()
     status=carefin_partner_status()
     secret=str(os.environ.get("ZENDOC_CAREFIN_WEBHOOK_SECRET") or "")
-    if not status["configured"] or not secret:
-        raise PermissionError("CareFin partner webhook is not configured.")
+    if not status["operator_verified"] or not secret:
+        raise PermissionError("CareFin partner webhook is not configured and operator-verified.")
     supplied=str(signature or "").strip()
     if supplied.lower().startswith("sha256="):
         supplied=supplied.split("=",1)[1]
