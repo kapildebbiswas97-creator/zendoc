@@ -136,3 +136,96 @@ def test_community_save_share_and_author_delete(tmp_path):
     )
     assert b"Your community post was deleted." in removed.data
     assert viewer.get(f"/community/posts/{post_id}").status_code == 404
+
+
+
+def test_native_message_media_is_participant_protected(tmp_path):
+    from io import BytesIO
+
+    app = make_app(tmp_path)
+    sender = app.test_client()
+    receiver = app.test_client()
+    stranger = app.test_client()
+    register_web(sender, "patient", "media-sender@example.com", "Media Sender")
+    register_web(receiver, "patient", "media-receiver@example.com", "Media Receiver")
+    register_web(stranger, "patient", "media-stranger@example.com", "Media Stranger")
+    login_web(sender, "patient", "media-sender@example.com")
+    login_web(receiver, "patient", "media-receiver@example.com")
+    login_web(stranger, "patient", "media-stranger@example.com")
+
+    with app.app_context():
+        receiver_id = int(get_db().execute(
+            "SELECT id FROM users WHERE email_normalized=?",
+            ("media-receiver@example.com",),
+        ).fetchone()["id"])
+
+    page = sender.get("/messages?q=Media+Receiver")
+    token = csrf(page.data.decode())
+    started = sender.post(
+        "/messages",
+        data={
+            "csrf_token": token,
+            "action": "start",
+            "target_user_id": receiver_id,
+            "context_type": "direct",
+        },
+        follow_redirects=False,
+    )
+    assert started.status_code == 302
+    conversation_id = int(started.headers["Location"].rsplit("=", 1)[-1])
+
+    page = sender.get(f"/messages?conversation_id={conversation_id}")
+    token = csrf(page.data.decode())
+    png = b"\x89PNG\r\n\x1a\n" + (b"zendoc-private-message-media" * 8)
+    sent = sender.post(
+        "/messages",
+        data={
+            "csrf_token": token,
+            "action": "send",
+            "conversation_id": conversation_id,
+            "body": "Private image",
+            "media_file": (BytesIO(png), "private.png", "image/png"),
+        },
+        content_type="multipart/form-data",
+        follow_redirects=True,
+    )
+    assert sent.status_code == 200
+    assert b"Private image" in sent.data
+
+    with app.app_context():
+        attachment = get_db().execute(
+            """
+            SELECT ma.id
+            FROM message_attachments ma
+            JOIN messages m ON m.id=ma.message_id
+            WHERE m.conversation_id=? AND ma.attachment_type='image'
+            ORDER BY ma.id DESC LIMIT 1
+            """,
+            (conversation_id,),
+        ).fetchone()
+        assert attachment is not None
+        attachment_id = int(attachment["id"])
+
+    assert sender.get(f"/messages/media/{attachment_id}").status_code == 200
+    assert receiver.get(f"/messages/media/{attachment_id}").status_code == 200
+    assert stranger.get(f"/messages/media/{attachment_id}").status_code == 404
+
+
+def test_owner_commerce_metrics_are_click_only(tmp_path):
+    app = make_app(tmp_path)
+    patient = app.test_client()
+    register_web(patient, "patient", "shop-click@example.com", "Shop Click")
+    login_web(patient, "patient", "shop-click@example.com")
+
+    response = patient.get(
+        "/health-shop/out/amazon_india?q=yoga+mat&category=fitness",
+        follow_redirects=False,
+    )
+    assert response.status_code == 302
+
+    owner = app.test_client()
+    login_web(owner, "admin", "admin@example.com", "AdminStrong123")
+    page = owner.get("/admin/commerce-referrals")
+    assert page.status_code == 200
+    assert b"Outbound clicks" in page.data
+    assert b"do not prove an order, conversion or commission" in page.data
