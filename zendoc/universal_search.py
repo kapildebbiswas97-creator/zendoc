@@ -12,6 +12,69 @@ from .family_care import list_family_members
 from .universal_health_search import universal_search as search_healthcare
 
 
+PLATFORM_TOOL_CATALOG = (
+    {
+        "keywords": ("mental wellness", "mental health", "stress", "mood", "journal", "wellbeing", "self care", "self-care"),
+        "title": "Mental Wellness & Awareness",
+        "subtitle": "Private check-ins, private journal and safety-first non-diagnostic support",
+        "url": "/mental-wellness",
+        "type": "mental_wellness",
+    },
+    {
+        "keywords": ("community", "post", "posts", "social", "story", "stories", "feed", "follow"),
+        "title": "ZENDOC Health Community",
+        "subtitle": "Health-focused posts, stories, saved posts, comments, media and moderation controls",
+        "url": "/community",
+        "type": "community",
+    },
+    {
+        "keywords": ("shop", "shopping", "amazon", "flipkart", "meesho", "blinkit", "zomato", "swiggy", "fitness product", "health product", "device"),
+        "title": "ZENDOC Health Shop",
+        "subtitle": "Health-focused external product discovery with truthful referral status",
+        "url": "/health-shop",
+        "type": "health_shop",
+    },
+    {
+        "keywords": ("message", "messages", "chat", "conversation", "whatsapp", "telegram"),
+        "title": "ZENDOC Connect Messages",
+        "subtitle": "Private policy-aware conversations, media sharing and authorized voice/video calls",
+        "url": "/messages",
+        "type": "messages",
+    },
+    {
+        "keywords": ("payment", "payments", "invoice", "razorpay"),
+        "title": "ZENDOC Payments",
+        "subtitle": "Connected payment workflow with real gateway verification when configured",
+        "url": "/payments",
+        "type": "payments",
+    },
+    {
+        "keywords": ("health memory", "timeline", "my records", "records"),
+        "title": "Health Memory",
+        "subtitle": "Your longitudinal records, timeline, reports and consent-controlled access",
+        "url": "/health/summary",
+        "type": "health_memory",
+    },
+    {
+        "keywords": ("ai", "assistant", "ask zendoc", "chatgpt"),
+        "title": "ZENDOC AI",
+        "subtitle": "Educational health guidance, retrieval and safe next-step support",
+        "url": "/ai",
+        "type": "ai_assistant",
+    },
+)
+
+COMMERCE_QUERY_TERMS = (
+    "shop", "shopping", "buy", "amazon", "flipkart", "meesho", "blinkit", "zomato",
+    "swiggy", "instamart", "yoga mat", "fitness equipment", "health product",
+    "wellness product", "bp monitor", "blood pressure monitor", "wearable",
+)
+
+COMMUNITY_QUERY_TERMS = (
+    "community", "post", "posts", "story", "stories", "feed", "social",
+)
+
+
 HEALTHCARE_QUERY_TERMS = (
     "doctor", "doctors", "cardiologist", "dermatologist", "physician", "specialist",
     "hospital", "hospitals", "clinic", "clinics", "pharmacy", "pharmacies", "chemist",
@@ -53,6 +116,57 @@ def _healthcare_search_items(clean_q):
             "bookable_in_zendoc": bool(item.get("bookable_in_zendoc")),
         })
     return items
+
+
+def _platform_tool_matches(lower):
+    matches = []
+    for item in PLATFORM_TOOL_CATALOG:
+        if any(keyword in lower for keyword in item["keywords"]):
+            matches.append({
+                key: value for key, value in item.items() if key != "keywords"
+            })
+    return matches
+
+
+def _community_matches(user, clean_q, limit=5):
+    if not user or not has_app_context() or not any(term in clean_q.lower() for term in COMMUNITY_QUERY_TERMS):
+        return []
+    try:
+        from .db import get_db
+        from .health_social import blocked_user_ids, ensure_health_social_schema
+        ensure_health_social_schema()
+        blocked = blocked_user_ids(user)
+        params = [f"%{clean_q.lower()}%"]
+        blocked_sql = ""
+        if blocked:
+            placeholders = ",".join("?" for _ in blocked)
+            blocked_sql = f" AND p.author_id NOT IN ({placeholders})"
+            params.extend(sorted(int(uid) for uid in blocked))
+        params.append(max(1, min(int(limit), 10)))
+        rows = get_db().execute(
+            f"""
+            SELECT p.id,p.body,p.lane,p.created_at,u.name author_name
+            FROM health_social_posts p
+            JOIN users u ON u.id=p.author_id
+            WHERE p.moderation_status='published'
+              AND LOWER(p.body) LIKE ?
+              {blocked_sql}
+            ORDER BY p.created_at DESC,p.id DESC
+            LIMIT ?
+            """,
+            tuple(params),
+        ).fetchall()
+        return [
+            {
+                "title": f"{row['author_name']} · {str(row['lane']).replace('_', ' ').title()}",
+                "subtitle": str(row["body"])[:180],
+                "url": f"/community/posts/{row['id']}",
+                "type": "community_post",
+            }
+            for row in rows
+        ]
+    except Exception:
+        return []
 
 
 def search_all(user, query):
@@ -221,7 +335,47 @@ def search_all(user, query):
             ],
         })
 
-    # 9. AI Health Assistant
+    # 9. Restored product surfaces. These direct links keep major working
+    # capabilities discoverable even when their data stores have no matches.
+    platform_items = _platform_tool_matches(lower)
+    if platform_items:
+        results.append({
+            "category": "ZENDOC Tools",
+            "label": "Platform Features",
+            "items": platform_items,
+        })
+
+    community_items = _community_matches(user, clean_q)
+    if community_items:
+        results.append({
+            "category": "Health Community",
+            "label": "Community Posts",
+            "items": community_items,
+        })
+
+    if any(term in lower for term in COMMERCE_QUERY_TERMS):
+        try:
+            from .health_commerce import search_health_products
+            commerce = search_health_products(clean_q, "general_wellness")
+            merchant_items = [
+                {
+                    "title": item["label"],
+                    "subtitle": "External discovery only · stock and price not verified",
+                    "url": f"/health-shop?q={clean_q}&category=general_wellness",
+                    "type": "external_merchant_discovery",
+                }
+                for item in commerce.get("results", [])[:6]
+            ]
+            if merchant_items:
+                results.append({
+                    "category": "Health Shop",
+                    "label": "External Merchant Discovery",
+                    "items": merchant_items,
+                })
+        except Exception:
+            pass
+
+    # 10. AI Health Assistant
     results.append({
         "category": "ZENDOC AI",
         "label": "AI Health Guidance",

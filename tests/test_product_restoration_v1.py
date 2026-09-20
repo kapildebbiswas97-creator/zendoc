@@ -454,3 +454,43 @@ def test_stale_ringing_call_expires_and_does_not_block_new_call(tmp_path):
     )
     assert new_call.status_code == 201
     assert int(new_call.get_json()["call"]["id"]) != old_call_id
+
+
+
+def test_global_search_surfaces_restored_product_modules(tmp_path):
+    from zendoc.universal_search import search_all
+
+    app = make_app(tmp_path)
+    client = app.test_client()
+    register_web(client, "patient", "search-restored@example.com", "Search Restored")
+    login_web(client, "patient", "search-restored@example.com")
+
+    with app.app_context():
+        user = get_db().execute(
+            "SELECT * FROM users WHERE email_normalized=?",
+            ("search-restored@example.com",),
+        ).fetchone()
+
+        wellness = search_all(user, "mental wellness journal")
+        wellness_urls = [
+            item["url"]
+            for category in wellness["categories"]
+            for item in category["items"]
+        ]
+        assert "/mental-wellness" in wellness_urls
+
+        shop = search_all(user, "amazon health product")
+        shop_urls = [
+            item["url"]
+            for category in shop["categories"]
+            for item in category["items"]
+        ]
+        assert any(url.startswith("/health-shop") for url in shop_urls)
+
+        messages = search_all(user, "whatsapp style messages")
+        message_urls = [
+            item["url"]
+            for category in messages["categories"]
+            for item in category["items"]
+        ]
+        assert "/messages" in message_urls
