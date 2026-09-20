@@ -90,6 +90,12 @@ def get_capability_registry() -> dict:
         )
     )
     webrtc_ice_configured = bool(_env("ZENDOC_WEBRTC_ICE_SERVERS_JSON"))
+    external_ekyc_provider = _env("ZENDOC_EKYC_PROVIDER", "none").lower()
+    external_ekyc_configured = (
+        external_ekyc_provider not in {"", "none", "manual"}
+        and bool(_env("ZENDOC_EKYC_WEBHOOK_SECRET"))
+    )
+    external_ekyc_verified = external_ekyc_configured and _env_bool("ZENDOC_EKYC_VERIFIED")
     razorpay_configured = all(
         bool(_env(key))
         for key in (
@@ -294,6 +300,22 @@ def get_capability_registry() -> dict:
             "status": STATUS_INTEGRATION_REQUIRED,
             "label": "Live Official Dataset Connectors",
             "description": "LGD/OGD/ABDM live retrieval requires dataset-specific downloads/APIs or authorized onboarding; ZENDOC does not claim live access by default.",
+        },
+        "identity_evidence_review": {
+            "status": STATUS_WORKING,
+            "label": "Privacy-first Identity Evidence Review",
+            "description": "Consent-based masked identifier workflow stores only last 2–4 characters and keeps manual review explicitly separate from external eKYC.",
+        },
+        "external_ekyc": {
+            "status": STATUS_WORKING if external_ekyc_verified else (STATUS_BETA if external_ekyc_configured else STATUS_INTEGRATION_REQUIRED),
+            "label": "External eKYC Provider",
+            "description": (
+                f"Signed webhook integration for '{external_ekyc_provider}' is configured and operator-verified; each user remains unverified until a valid provider callback arrives."
+                if external_ekyc_verified else
+                f"Signed webhook integration for '{external_ekyc_provider}' is configured but not operator-verified."
+                if external_ekyc_configured else
+                "No authorized eKYC provider is connected. Manual identity evidence review is available but is not eKYC."
+            ),
         },
         "provider_onboarding_v1": {
             "status": STATUS_WORKING,

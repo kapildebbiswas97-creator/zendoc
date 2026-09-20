@@ -170,6 +170,8 @@ def load_config(base_dir, overrides=None):
         "TELEHEALTH_PROVIDER": os.environ.get("ZENDOC_TELEHEALTH_PROVIDER", "local_demo").strip().lower(),
         "REALTIME_PROVIDER": os.environ.get("ZENDOC_REALTIME_PROVIDER", "polling").strip().lower(),
         "NOTIFICATION_PROVIDER": os.environ.get("ZENDOC_NOTIFICATION_PROVIDER", "in_app").strip().lower(),
+        "EKYC_PROVIDER": os.environ.get("ZENDOC_EKYC_PROVIDER", "none").strip().lower(),
+        "EKYC_VERIFIED": env_bool("ZENDOC_EKYC_VERIFIED", False),
         "PUBLIC_BASE_URL": os.environ.get("ZENDOC_PUBLIC_BASE_URL", "").strip(),
         "PUBLIC_RELEASE_REQUIRED": env_bool("ZENDOC_PUBLIC_RELEASE_REQUIRED", False),
         "SUPPORT_EMAIL": os.environ.get("ZENDOC_SUPPORT_EMAIL", "").strip(),
