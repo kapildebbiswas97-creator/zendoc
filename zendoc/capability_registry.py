@@ -58,6 +58,15 @@ def get_capability_registry() -> dict:
     )
     places_provider = _env("ZENDOC_PLACES_PROVIDER", "none").lower()
     places = places_provider == "google" and bool(_env("ZENDOC_GOOGLE_PLACES_API_KEY"))
+    production_places_fallback = (
+        _env("ZENDOC_ENV", "development").lower() == "production"
+        and places_provider in {"", "none"}
+    )
+    places_external_available = bool(
+        places
+        or places_provider in {"nominatim", "openstreetmap", "osm"}
+        or production_places_fallback
+    )
     video_provider = _env("ZENDOC_VIDEO_PROVIDER", "none") not in {"", "none"}
     external_email_configured = (
         _env("ZENDOC_EMAIL_PROVIDER", "none").lower() == "smtp"
@@ -436,9 +445,15 @@ def get_capability_registry() -> dict:
 
         # External integrations
         "healthcare_finder": {
-            "status": STATUS_WORKING if places else STATUS_BETA,
+            "status": STATUS_WORKING if places_external_available else STATUS_BETA,
             "label": "Healthcare Finder",
-            "description": "Google Places credential and provider are configured; runtime calls remain subject to quota/health." if places else "Local provider directory works; live Google Places requires provider configuration plus a server-side API key.",
+            "description": (
+                "Google Places is configured with OpenStreetMap fallback; runtime calls remain subject to provider health/quota."
+                if places else
+                "OpenStreetMap/Nominatim external discovery is available as a truthful unverified discovery layer."
+                if places_external_available else
+                "Local/official provider discovery works; external map discovery activates with OpenStreetMap/Nominatim or Google Places configuration."
+            ),
         },
         "video_intelligence": {
             "status": STATUS_WORKING if video_provider else STATUS_BETA,
