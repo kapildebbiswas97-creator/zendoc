@@ -5,6 +5,8 @@ from flask import Flask
 
 from .config import load_config, validate_startup_config
 from .ai_chat_routes import bp as ai_chat_bp
+from .call_signaling import ensure_call_schema
+from .call_routes import bp as calls_bp
 from .care_action_ledger import ensure_care_action_ledger_schema
 from .care_continuity_routes import bp as care_continuity_bp
 from .business_routes import bp as business_bp
@@ -123,6 +125,7 @@ def create_app(test_config=None):
     app.before_request(start_request_observation)
 
     app.register_blueprint(ai_chat_bp)
+    app.register_blueprint(calls_bp)
     app.register_blueprint(bp)
     app.register_blueprint(release_health_bp)
     app.register_blueprint(health_memory_bp)
@@ -176,6 +179,7 @@ def create_app(test_config=None):
         try:
             init_db()
             ensure_global_data_schema()
+            ensure_call_schema()
             ensure_consent_schema()
             ensure_email_verification_schema()
             ensure_medical_knowledge_document_schema()
