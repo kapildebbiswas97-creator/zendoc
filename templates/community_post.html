@@ -1,5 +1,6 @@
 {% extends "base.html" %}
-{% block title %}Community Post — ZENDOC{% endblock %}
+{% block title %}Community Post — ZENDOC<script src="{{ url_for('static', filename='community_post.js') }}" defer></script>
+{% endblock %}
 {% block content %}
 <section class="section-head">
   <div><p class="eyebrow">Health Community</p><h1>Community post</h1><p class="section-copy">A stable page you can share with another signed-in ZENDOC member. Community content remains user-generated and is not verified medical advice.</p></div>
@@ -17,7 +18,9 @@
   <div class="form-actions">
     <form method="post" action="{{ url_for('health_social.community_page') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="like"><input type="hidden" name="post_id" value="{{ post.id }}"><button class="secondary-action" type="submit">{{ 'Liked' if post.liked_by_me else 'Like' }} · {{ post.like_count }}</button></form>
     <form method="post" action="{{ url_for('health_social.community_page') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="save"><input type="hidden" name="post_id" value="{{ post.id }}"><button class="secondary-action" type="submit">{{ 'Saved' if post.saved_by_me else 'Save' }}</button></form>
+    <button type="button" class="secondary-action" id="share-community-post" data-share-title="ZENDOC Health Community">Share / copy link</button>
   </div>
+  <p class="form-note" id="share-community-status" aria-live="polite"></p>
   <div class="comment-stack spaced-panel">{% for comment in comments %}<p><strong>{{ comment.author_name }}</strong> {{ comment.body }}</p>{% else %}<p class="form-note">No comments yet.</p>{% endfor %}</div>
 </article>
 {% endblock %}
