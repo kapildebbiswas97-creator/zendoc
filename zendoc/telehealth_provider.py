@@ -29,7 +29,7 @@ class LocalDemoTelehealthProvider:
         webrtc_enabled = self.name in {"internal_webrtc", "internal_chat"}
         return {
             "provider": self.name,
-            "status": "beta_webrtc" if webrtc_enabled else "beta",
+            "status": "beta",
             "supports_chat": True,
             "supports_voice": webrtc_enabled,
             "supports_video": webrtc_enabled,
