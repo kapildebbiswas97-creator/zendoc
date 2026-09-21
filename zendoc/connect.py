@@ -198,13 +198,24 @@ def create_communication_permission(actor, data):
         raise PermissionError("Authentication required.")
     requester_id = int(data.get("requester_id") or _user_id(actor))
     target_user_id = int(data.get("target_user_id") or 0)
+    requester = get_user(requester_id)
     target = get_user(target_user_id)
+    if not requester:
+        raise LookupError("Permission requester not found.")
     if not target:
         raise LookupError("Permission target not found.")
+    if requester_id == target_user_id:
+        raise ValueError("Communication permission must be granted to another account.")
+
     actor_id = _user_id(actor)
     actor_role = _value(actor, "role")
-    if actor_role != "admin" and actor_id not in {requester_id, target_user_id}:
-        raise PermissionError("Only a participant or admin can create communication permission.")
+    # An active permission is a grant *to* requester_id. The requester must
+    # never be able to mint that grant for themselves. Only the target account
+    # (the account being contacted) or an authorized admin can activate it.
+    if actor_role != "admin" and actor_id != target_user_id:
+        raise PermissionError(
+            "Only the target account can grant active communication permission."
+        )
     context = normalize_context(data)
     now = now_iso()
     cursor = get_db().execute(
