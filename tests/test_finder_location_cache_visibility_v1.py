@@ -45,7 +45,7 @@ def test_current_location_button_submits_own_finder_form():
 def test_service_worker_invalidates_old_static_cache_and_precaches_finder_assets():
     script = (ROOT / "static" / "sw.js").read_text(encoding="utf-8")
 
-    match = re.search(r'const STATIC_CACHE = "zendoc-static-v(\\d+)[^"]*";', script)
+    match = re.search(r'const STATIC_CACHE = "zendoc-static-v(\d+)[^"]*";', script)
     assert match is not None
     assert int(match.group(1)) >= 4
     assert 'zendoc-static-v1' not in script
