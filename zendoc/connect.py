@@ -363,7 +363,15 @@ def send_message(actor, conversation_id, data):
     # prevents an SMTP/notification/schema outage from surfacing as a 500 and
     # losing a message the user successfully submitted.
     get_db().commit()
-    _deliver_message_notifications_best_effort(conversation_id, sender_id, message_type)
+    try:
+        _deliver_message_notifications_best_effort(conversation_id, sender_id, message_type)
+    except Exception:
+        # Core messaging has already committed. Even an unexpected auxiliary
+        # notification failure must not turn the successful send into a 500.
+        try:
+            get_db().rollback()
+        except Exception:
+            pass
     try:
         from .event_bus import publish_event
         publish_event(
