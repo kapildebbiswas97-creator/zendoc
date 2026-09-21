@@ -4,6 +4,7 @@ from flask import Blueprint, flash, g, jsonify, redirect, render_template, reque
 from .payments import (
     create_checkout_order,
     create_invoice,
+    get_invoice,
     list_billable_resources,
     list_invoices,
     payment_gateway_status,
@@ -47,6 +48,21 @@ def payments_page():
         "payments.html",
         invoices=list_invoices(g.user),
         billable_resources=resources,
+        gateway=payment_gateway_status(),
+    )
+
+
+@bp.get("/payments/invoices/<int:invoice_id>")
+@login_required
+def invoice_detail(invoice_id):
+    try:
+        invoice = get_invoice(g.user, invoice_id)
+    except LookupError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("payments.payments_page"))
+    return render_template(
+        "payment_invoice.html",
+        invoice=invoice,
         gateway=payment_gateway_status(),
     )
 
