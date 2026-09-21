@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 from zendoc.places_provider import PlacesProvider, PlacesResult
 from zendoc.universal_health_search import universal_search
@@ -44,8 +45,12 @@ def test_current_location_button_submits_own_finder_form():
 def test_service_worker_invalidates_old_static_cache_and_precaches_finder_assets():
     script = (ROOT / "static" / "sw.js").read_text(encoding="utf-8")
 
-    assert 'zendoc-static-v3-20260921' in script
+    match = re.search(r'const STATIC_CACHE = "zendoc-static-v(\\d+)[^"]*";', script)
+    assert match is not None
+    assert int(match.group(1)) >= 4
     assert 'zendoc-static-v1' not in script
+    assert 'zendoc-static-v2' not in script
+    assert 'zendoc-static-v3' not in script
     assert '"/static/finder.js"' in script
     assert '"/static/product-expansion.css"' in script
     assert '"/static/edgecare_voice.js"' in script
