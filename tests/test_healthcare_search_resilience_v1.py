@@ -4,7 +4,9 @@ from zendoc.places_provider import (
     PlacesProvider,
     PlacesResult,
 )
+from zendoc.healthcare_finder import HealthcareFinder
 from zendoc.universal_health_search import universal_search
+import zendoc.routes as main_routes
 import zendoc.universal_search_routes as universal_search_routes
 from tests.test_milestone1 import login_web, make_app, register_web
 
@@ -230,3 +232,108 @@ def test_universal_search_route_returns_200_instead_of_500_on_catastrophic_failu
     assert b"Search temporarily limited" in response.data
     assert b"ZENDOC is still available" in response.data
     assert b"internal server error" not in response.data.lower()
+
+
+
+def test_advanced_finder_service_failure_returns_200_not_500(tmp_path, monkeypatch):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    register_web(client, "patient", "advanced-finder-fail@example.com", "Advanced Finder")
+    login_web(client, "patient", "advanced-finder-fail@example.com")
+
+    def explode(_self, _query):
+        raise RuntimeError("finder service unavailable")
+
+    monkeypatch.setattr(HealthcareFinder, "search", explode)
+
+    response = client.get("/finder?category=hospital&location=Kalyani")
+
+    assert response.status_code == 200
+    assert b"Search temporarily limited" in response.data
+    assert b"ZENDOC is still available" in response.data
+    assert b"Internal server error" not in response.data
+
+
+def test_advanced_finder_results_survive_analytics_failure(tmp_path, monkeypatch):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    register_web(client, "patient", "analytics-fail@example.com", "Analytics Fail")
+    login_web(client, "patient", "analytics-fail@example.com")
+
+    fake_result = {
+        "query": {
+            "category": "hospital",
+            "specialty": "",
+            "location": "Kalyani",
+            "latitude": None,
+            "longitude": None,
+            "radius_km": 10,
+        },
+        "registered_providers": [],
+        "official_public_directory": [],
+        "claimed_public_directory_links": [],
+        "external_places": {
+            "available": True,
+            "results": [],
+            "message": None,
+            "source": "test",
+        },
+        "results": [
+            {
+                "id": "analytics-safe:1",
+                "name": "Analytics Safe Hospital",
+                "category": "hospital",
+                "city": "Kalyani",
+                "state": "West Bengal",
+                "source": "external_test",
+                "verification_status": "external_unverified",
+                "bookable_in_zendoc": False,
+            }
+        ],
+        "source_tiers": {
+            "zendoc_verified": 0,
+            "official_public_directory_not_zendoc_verified": 0,
+            "approved_public_listings_merged_into_verified": 0,
+            "external_unverified": 1,
+        },
+        "search_status": "complete",
+        "warnings": [],
+        "message": None,
+    }
+
+    monkeypatch.setattr(
+        HealthcareFinder,
+        "search",
+        lambda _self, _query: fake_result,
+    )
+    monkeypatch.setattr(
+        main_routes,
+        "record_finder_search",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("analytics down")),
+    )
+
+    response = client.get("/finder?category=hospital&location=Kalyani")
+
+    assert response.status_code == 200
+    assert b"Analytics Safe Hospital" in response.data
+    assert b"Internal server error" not in response.data
+
+
+def test_advanced_finder_external_exception_becomes_degraded_result(tmp_path):
+    app = make_app(tmp_path)
+
+    with app.app_context():
+        result = HealthcareFinder(places_provider=ExplodingProvider()).search(
+            {
+                "category": "hospital",
+                "specialty": "",
+                "location": "Kalyani",
+                "latitude": None,
+                "longitude": None,
+                "radius_km": 10,
+            }
+        )
+
+    assert result["search_status"] in {"partial", "degraded"}
+    assert result["warnings"]
+    assert "temporarily unavailable" in " ".join(result["warnings"]).lower()
