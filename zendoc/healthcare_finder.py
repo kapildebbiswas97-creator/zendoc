@@ -1,12 +1,14 @@
+import logging
 import math
 
-from .places_provider import ShortLivedCache, configured_places_provider
+from .places_provider import PlacesResult, ShortLivedCache, configured_places_provider
 from .provider_service import search_registered_providers
 from .public_data_ingestion import search_public_healthcare_entities
 
 
 CATEGORIES = {"hospital", "clinic", "doctor", "pharmacy", "diagnostic_centre", "laboratory", "emergency"}
 _PLACES_CACHE = ShortLivedCache(ttl_seconds=300)
+LOGGER = logging.getLogger(__name__)
 
 
 def normalize_query(category=None, specialty=None, location=None, latitude=None, longitude=None, radius_km=10):
@@ -54,63 +56,125 @@ class HealthcareFinder:
             and normalized["latitude"] is None
             and any(query.get(key) not in (None, "") for key in ("latitude", "longitude"))
         )
+        warnings = []
 
-        registered = [] if invalid_gps_only else search_registered_providers(
-            category="doctor" if normalized["category"] in {"doctor", "clinic"} else normalized["category"],
-            specialty=normalized["specialty"],
-            location=normalized["location"],
-            latitude=normalized["latitude"],
-            longitude=normalized["longitude"],
-            radius_km=normalized["radius_km"],
-        )
-        public_directory = [] if invalid_gps_only else search_public_healthcare_entities(
-            category=normalized["category"],
-            specialty=normalized["specialty"],
-            location=normalized["location"],
-            limit=25,
-            latitude=normalized["latitude"],
-            longitude=normalized["longitude"],
-            radius_km=normalized["radius_km"],
-        )
+        registered = []
+        if not invalid_gps_only:
+            try:
+                registered = search_registered_providers(
+                    category="doctor" if normalized["category"] in {"doctor", "clinic"} else normalized["category"],
+                    specialty=normalized["specialty"],
+                    location=normalized["location"],
+                    latitude=normalized["latitude"],
+                    longitude=normalized["longitude"],
+                    radius_km=normalized["radius_km"],
+                )
+            except Exception:
+                LOGGER.exception("Registered-provider Finder source failed.")
+                warnings.append(
+                    "ZENDOC registered-provider search is temporarily unavailable. "
+                    "Other available healthcare sources are still shown."
+                )
+
+        public_directory = []
+        if not invalid_gps_only:
+            try:
+                public_directory = search_public_healthcare_entities(
+                    category=normalized["category"],
+                    specialty=normalized["specialty"],
+                    location=normalized["location"],
+                    limit=25,
+                    latitude=normalized["latitude"],
+                    longitude=normalized["longitude"],
+                    radius_km=normalized["radius_km"],
+                )
+            except Exception:
+                LOGGER.exception("Official public-directory Finder source failed.")
+                warnings.append(
+                    "The official/public healthcare directory is temporarily unavailable. "
+                    "Other available healthcare sources are still shown."
+                )
+
         registered, public_directory, claimed_links = merge_registered_with_approved_public_claims(
             registered,
             public_directory,
         )
+
         places_cache_key = (
             getattr(self.places_provider, "source", self.places_provider.__class__.__name__),
             tuple(sorted(normalized.items())),
         )
         places_result = _PLACES_CACHE.get(places_cache_key)
         if places_result is None:
-            places_result = self.places_provider.search(normalized)
-            # Keep successful/empty searches briefly for rate protection, but
-            # never cache an external outage. This allows a later request to
-            # recover when Google/Nominatim comes back.
+            try:
+                places_result = self.places_provider.search(normalized)
+            except Exception:
+                LOGGER.exception("External places Finder source failed.")
+                places_result = PlacesResult(
+                    available=False,
+                    results=[],
+                    message=(
+                        "External healthcare map search is temporarily unavailable. "
+                        "ZENDOC did not fabricate replacement listings."
+                    ),
+                    source=getattr(self.places_provider, "source", "external"),
+                )
             if places_result.available:
                 _PLACES_CACHE.set(places_cache_key, places_result)
+
+        external_results = [
+            dict(item)
+            for item in (places_result.results or [])
+            if isinstance(item, dict)
+        ]
+        if not places_result.available:
+            warnings.append(
+                str(places_result.message or "").strip()
+                or "An external healthcare map source is temporarily unavailable."
+            )
+
+        results = registered + public_directory + external_results
+        warnings = list(dict.fromkeys(
+            warning.strip()
+            for warning in warnings
+            if str(warning or "").strip()
+        ))
+        search_status = "partial" if warnings and results else "degraded" if warnings else "complete"
 
         response = {
             "query": normalized,
             "registered_providers": registered,
             "official_public_directory": public_directory,
             "claimed_public_directory_links": claimed_links,
-            "external_places": places_result.to_dict(),
-            "results": registered + public_directory + places_result.results,
+            "external_places": {
+                **places_result.to_dict(),
+                "results": external_results,
+            },
+            "results": results,
             "source_tiers": {
                 "zendoc_verified": len(registered),
                 "official_public_directory_not_zendoc_verified": len(public_directory),
                 "approved_public_listings_merged_into_verified": len(claimed_links),
-                "external_unverified": len(places_result.results),
+                "external_unverified": len(external_results),
             },
+            "search_status": search_status,
+            "warnings": warnings,
             "message": None,
         }
         if not response["results"]:
-            response["message"] = places_result.message or "No healthcare providers were found for this search."
+            response["message"] = (
+                warnings[0]
+                if warnings
+                else places_result.message
+                or "No healthcare providers were found for this search."
+            )
         if invalid_gps_only:
-            response["message"] = "Enter a city, area, or PIN code, or allow a valid current location to search nearby care."
+            response["search_status"] = "degraded"
+            response["message"] = (
+                "Enter a city, area, or PIN code, or allow a valid current location to search nearby care."
+            )
+            response["warnings"] = [response["message"]]
         return response
-
-
 
 
 def merge_registered_with_approved_public_claims(registered, public_directory):
