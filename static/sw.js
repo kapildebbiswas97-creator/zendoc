@@ -1,4 +1,4 @@
-const STATIC_CACHE = "zendoc-static-v4-premium-shell-20260921";
+const STATIC_CACHE = "zendoc-static-v5-commerce-payments-20260921";
 const STATIC_ASSETS = [
   "/static/style.css",
   "/static/ui-polish.css",
