@@ -47,7 +47,7 @@ def software_completion_readiness() -> dict:
         "health_summary": "/health-summary",
         "timeline": "/timeline",
         "records": "/records",
-        "health": "/health",
+        "health_home": "/health",
         "health_access": "/health-access",
         "family": "/family",
         "videos": "/videos",
@@ -69,7 +69,6 @@ def software_completion_readiness() -> dict:
         "privacy": "/privacy",
         "terms": "/terms",
         "medical_disclaimer": "/medical-disclaimer",
-        "community_guidelines": "/community-guidelines",
         "account_deletion": "/account-deletion",
         "account_export": "/account/export",
         "email_verification": "/verify-email",
@@ -86,7 +85,7 @@ def software_completion_readiness() -> dict:
         "founder_readiness": "/admin/founder-readiness",
         "startup_admin": "/admin/startup",
         "edgecare_admin": "/admin/edgecare",
-        "health": "/healthz",
+        "healthz": "/healthz",
         "readiness": "/api/v1/ready",
     }
     registered = {str(rule.rule) for rule in current_app.url_map.iter_rules()}
