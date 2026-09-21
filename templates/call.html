@@ -1,22 +1,8 @@
 {% extends "base.html" %}
-{% block title %}{{ call_type.title() }} Call — ZENDOC{% endblock %}
+{% block title %}{{ call_type.title() }} Call with {{ other_name }} — ZENDOC{% endblock %}
 {% block content %}
-<section class="section-head">
-  <div>
-    <p class="eyebrow">ZENDOC Connect</p>
-    <h1>{{ call_type.title() }} call with {{ other_name }}</h1>
-    <p class="section-copy">Browser-to-browser WebRTC call signaling is handled inside ZENDOC. Public-network reliability still depends on configured STUN/TURN infrastructure and browser permissions.</p>
-  </div>
-  <a class="secondary-action" href="{{ url_for('milestone7.messages_page', conversation_id=conversation_id) }}">Back to Messages</a>
-</section>
-
-<aside class="trust-note">
-  <strong>Privacy &amp; reliability.</strong><br>
-  ZENDOC coordinates authenticated signaling; browser media is intended to flow peer-to-peer. Without verified TURN infrastructure, some networks may not connect. A conversation never grants access to Health Memory or medical records.
-</aside>
-
 <section
-  class="panel spaced-panel call-shell"
+  class="call-experience"
   data-zendoc-call
   data-conversation-id="{{ conversation_id }}"
   data-call-type="{{ call_type }}"
@@ -25,37 +11,70 @@
   data-actor-id="{{ current_user.id }}"
   data-csrf-token="{{ csrf_token }}"
   data-ice-servers='{{ ice_servers|tojson }}'>
-  <div class="panel-head">
-    <div><p class="eyebrow">Connection</p><h2 id="call-status">{{ initial_call.status.replace('_',' ').title() if initial_call else 'Ready to start' }}</h2></div>
-    <span class="status-badge" id="call-type-badge">{{ call_type.title() }}</span>
-  </div>
 
-  <div class="grid two">
-    <article class="subtle-panel">
-      <h3>You</h3>
-      <video id="local-video" autoplay muted playsinline {% if call_type == 'voice' %}hidden{% endif %}></video>
-      <p id="local-audio-note" {% if call_type != 'voice' %}hidden{% endif %}>Microphone preview is active after you allow access.</p>
-    </article>
-    <article class="subtle-panel">
-      <h3>{{ other_name }}</h3>
+  <header class="call-experience__header">
+    <a class="secondary-action call-back" href="{{ url_for('milestone7.messages_page', conversation_id=conversation_id) }}">← Messages</a>
+    <div class="call-experience__identity">
+      <span class="call-avatar" aria-hidden="true">{{ other_name[:1]|upper }}</span>
+      <div>
+        <p class="eyebrow">ZENDOC Connect · {{ call_type.title() }}</p>
+        <h1>{{ other_name }}</h1>
+        <p id="call-status" class="call-status">{{ initial_call.status.replace('_',' ').title() if initial_call else 'Ready to start' }}</p>
+      </div>
+    </div>
+    <span class="status-badge" id="call-type-badge">{{ call_type.title() }}</span>
+  </header>
+
+  <aside class="call-truth-banner">
+    <strong>Private browser call.</strong>
+    <span>ZENDOC handles authenticated signaling. Media is intended to travel peer-to-peer; some public networks require configured TURN relay infrastructure. Calls do not unlock Health Memory or medical records.</span>
+  </aside>
+
+  <section class="call-stage call-stage--{{ call_type }}" aria-label="{{ call_type }} call stage">
+    <article class="call-remote-stage">
+      <div class="call-remote-placeholder" id="remote-waiting">
+        <span class="call-avatar call-avatar--large" aria-hidden="true">{{ other_name[:1]|upper }}</span>
+        <strong>{{ other_name }}</strong>
+        <span>Waiting for media connection…</span>
+      </div>
       <video id="remote-video" autoplay playsinline {% if call_type == 'voice' %}hidden{% endif %}></video>
       <audio id="remote-audio" autoplay {% if call_type != 'voice' %}hidden{% endif %}></audio>
-      <p id="remote-waiting">Waiting for connection…</p>
     </article>
+
+    <article class="call-local-stage {% if call_type == 'voice' %}call-local-stage--voice{% endif %}">
+      {% if call_type == 'video' %}
+        <video id="local-video" autoplay muted playsinline></video>
+        <span class="call-local-label">You</span>
+      {% else %}
+        <div class="call-voice-local">
+          <span class="call-avatar" aria-hidden="true">{{ current_user.name[:1]|upper }}</span>
+          <span id="local-audio-note">Microphone activates only after browser permission.</span>
+        </div>
+        <video id="local-video" autoplay muted playsinline hidden></video>
+      {% endif %}
+    </article>
+  </section>
+
+  <section class="call-diagnostics" aria-label="Connection diagnostics">
+    <div><span>Session</span><strong id="call-session-state">{{ initial_call.status.replace('_',' ').title() if initial_call else 'Not started' }}</strong></div>
+    <div><span>Media path</span><strong id="call-media-path">Not established</strong></div>
+    <div><span>Round trip</span><strong id="call-rtt">—</strong></div>
+    <div><span>Duration</span><strong id="call-duration">00:00</strong></div>
+  </section>
+
+  <div class="call-controls" aria-label="Call controls">
+    {% if initial_call and not initiator and initial_call.status == 'ringing' %}
+      <button type="button" id="accept-call" class="call-control call-control--accept">Accept {{ call_type }}</button>
+      <button type="button" id="reject-call" class="call-control call-control--end">Reject</button>
+    {% elif not initial_call %}
+      <button type="button" id="start-call" class="call-control call-control--accept">Start {{ call_type }}</button>
+    {% endif %}
+    <button type="button" id="mute-call" class="call-control" disabled>Mute</button>
+    {% if call_type == 'video' %}<button type="button" id="camera-call" class="call-control" disabled>Camera off</button>{% endif %}
+    <button type="button" id="end-call" class="call-control call-control--end" {% if not initial_call %}disabled{% endif %}>End</button>
   </div>
 
-  <div class="form-actions spaced-panel">
-    {% if initial_call and not initiator and initial_call.status == 'ringing' %}
-      <button type="button" id="accept-call">Accept {{ call_type }}</button>
-      <button type="button" id="reject-call" class="secondary-action">Reject</button>
-    {% elif not initial_call %}
-      <button type="button" id="start-call">Start {{ call_type }} call</button>
-    {% endif %}
-    <button type="button" id="mute-call" class="secondary-action" disabled>Mute</button>
-    {% if call_type == 'video' %}<button type="button" id="camera-call" class="secondary-action" disabled>Camera off</button>{% endif %}
-    <button type="button" id="end-call" class="secondary-action" {% if not initial_call %}disabled{% endif %}>End call</button>
-  </div>
-  <p class="form-note" id="call-detail">No call recording is implemented by this feature.</p>
+  <p class="call-detail" id="call-detail" role="status" aria-live="polite">No call recording is implemented. ZENDOC reports connection state from the actual browser peer connection.</p>
 </section>
 <script src="{{ url_for('static', filename='calls.js') }}" defer></script>
 {% endblock %}
