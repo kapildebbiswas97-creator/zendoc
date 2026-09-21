@@ -60,6 +60,8 @@
               </div>
             </details>
             <a href="{{ url_for('milestone7.messages_page') }}" {% if endpoint == 'milestone7.messages_page' %}aria-current="page"{% endif %}>Messages</a>
+            <a href="{{ url_for('payments.payments_page') }}" {% if endpoint == 'payments.payments_page' %}aria-current="page"{% endif %}>Payments</a>
+            <a href="{{ url_for('health_shop.health_shop_page') }}" {% if endpoint == 'health_shop.health_shop_page' %}aria-current="page"{% endif %}>Health Shop</a>
             <a href="{{ url_for('health_social.community_page') }}" {% if endpoint == 'health_social.community_page' %}aria-current="page"{% endif %}>Community</a>
             <a href="{{ url_for('family.family_page') }}" {% if endpoint in ['family.family_page','family.parent_care_page'] %}aria-current="page"{% endif %}>Family</a>
             <a href="{{ url_for('fitness.overview') }}" {% if endpoint.startswith('fitness.') or endpoint == 'milestone7.pose_coach_page' %}aria-current="page"{% endif %}>Fitness</a>
