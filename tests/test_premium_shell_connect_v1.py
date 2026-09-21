@@ -6,7 +6,9 @@ import pytest
 from zendoc.call_signaling import create_call
 from zendoc.connect import (
     create_communication_permission,
+    list_communication_permissions,
     list_messages,
+    revoke_communication_permission,
     send_message,
     start_conversation,
 )
@@ -338,3 +340,126 @@ def test_expired_explicit_call_permission_fails_closed(tmp_path):
         decision = can_call(caller, callee["id"])
         assert decision["allowed"] is False
         assert "family consent" in decision["reason"].lower()
+
+
+
+def test_explicit_permission_is_visible_and_revocable_by_either_participant(tmp_path):
+    app = make_app(tmp_path)
+    first = app.test_client()
+    second = app.test_client()
+    third = app.test_client()
+    register_web(first, "patient", "grant-a@example.com", "Grant A")
+    register_web(second, "patient", "grant-b@example.com", "Grant B")
+    register_web(third, "patient", "grant-c@example.com", "Grant C")
+    requester = _user(app, "grant-a@example.com")
+    target = _user(app, "grant-b@example.com")
+    outsider = _user(app, "grant-c@example.com")
+
+    with app.app_context():
+        conversation = start_conversation(
+            requester,
+            {"target_user_id": target["id"], "context_type": "direct"},
+        )
+        grant = create_communication_permission(
+            target,
+            {
+                "requester_id": requester["id"],
+                "target_user_id": target["id"],
+                "allow_chat": True,
+                "allow_voice": True,
+                "allow_video": False,
+                "allow_record_sharing": False,
+            },
+        )
+
+        requester_view = list_communication_permissions(
+            requester,
+            related_user_id=target["id"],
+        )
+        target_view = list_communication_permissions(
+            target,
+            related_user_id=requester["id"],
+        )
+        assert requester_view[0]["id"] == grant["id"]
+        assert requester_view[0]["effective"] is True
+        assert target_view[0]["effective"] is True
+
+        with pytest.raises(PermissionError, match="participant or admin"):
+            revoke_communication_permission(outsider, grant["id"])
+
+        revoked = revoke_communication_permission(requester, grant["id"])
+        assert revoked["status"] == "revoked"
+        assert revoked["revoked_at"]
+        assert can_call(requester, target["id"])["allowed"] is False
+
+    login_web(second, "patient", "grant-b@example.com")
+    page = second.get(f"/messages?conversation_id={conversation['id']}")
+    assert page.status_code == 200
+    assert b"Explicit communication access" in page.data
+    assert b"Grant A may contact Grant B" in page.data
+    assert b"Revoked" in page.data
+
+
+def test_communication_permission_api_rejects_self_grant_and_allows_target_revoke(tmp_path):
+    app = make_app(tmp_path)
+    requester_client = app.test_client()
+    target_client = app.test_client()
+    register_web(requester_client, "patient", "api-grant-a@example.com", "API Grant A")
+    register_web(target_client, "patient", "api-grant-b@example.com", "API Grant B")
+    requester = _user(app, "api-grant-a@example.com")
+    target = _user(app, "api-grant-b@example.com")
+
+    requester_token = requester_client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "api-grant-a@example.com",
+            "password": "StrongPass123",
+            "role": "patient",
+        },
+    ).get_json()["token"]
+    denied = requester_client.post(
+        "/api/v1/communication-permissions",
+        json={
+            "requester_id": requester["id"],
+            "target_user_id": target["id"],
+            "allow_voice": True,
+        },
+        headers={"Authorization": f"Bearer {requester_token}"},
+    )
+    assert denied.status_code == 403
+    assert "target account" in denied.get_json()["error"]["message"]
+
+    target_token = target_client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "api-grant-b@example.com",
+            "password": "StrongPass123",
+            "role": "patient",
+        },
+    ).get_json()["token"]
+    granted = target_client.post(
+        "/api/v1/communication-permissions",
+        json={
+            "requester_id": requester["id"],
+            "target_user_id": target["id"],
+            "allow_chat": True,
+            "allow_voice": True,
+        },
+        headers={"Authorization": f"Bearer {target_token}"},
+    )
+    assert granted.status_code == 201
+    permission_id = granted.get_json()["communication_permission"]["id"]
+
+    visible = target_client.get(
+        f"/api/v1/communication-permissions?related_user_id={requester['id']}",
+        headers={"Authorization": f"Bearer {target_token}"},
+    )
+    assert visible.status_code == 200
+    assert visible.get_json()["communication_permissions"][0]["effective"] is True
+
+    revoked = target_client.post(
+        f"/api/v1/communication-permissions/{permission_id}/revoke",
+        headers={"Authorization": f"Bearer {target_token}"},
+    )
+    assert revoked.status_code == 200
+    assert revoked.get_json()["communication_permission"]["status"] == "revoked"
