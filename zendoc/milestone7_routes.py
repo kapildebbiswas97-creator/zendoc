@@ -186,15 +186,23 @@ def messages_page():
     selected = None
     messages = []
     selected_id = request.args.get("conversation_id")
-    if selected_id:
-        try:
+    try:
+        if selected_id:
             selected = get_conversation(g.user, int(selected_id))
             messages = list_messages(g.user, selected["id"])
-        except (LookupError, PermissionError) as error:
-            flash(str(error), "error")
-    elif conversations:
-        selected = conversations[0]
-        messages = list_messages(g.user, selected["id"])
+        elif conversations:
+            selected = conversations[0]
+            messages = list_messages(g.user, selected["id"])
+    except (TypeError, ValueError, LookupError, PermissionError):
+        selected = None
+        messages = []
+        flash("That conversation is unavailable or you no longer have access to it.", "error")
+    except Exception:
+        current_app.logger.exception("ZENDOC Connect conversation load failed.")
+        selected = None
+        messages = []
+        flash("The selected conversation could not be loaded. Other ZENDOC features remain available.", "error")
+
     try:
         contacts = discover_contacts(g.user, request.args.get("q", ""))
     except Exception:
@@ -205,6 +213,16 @@ def messages_page():
     except Exception:
         current_app.logger.exception("ZENDOC Connect incoming-call lookup failed.")
         incoming_calls = []
+    try:
+        unread_total = unread_count(g.user)
+    except Exception:
+        current_app.logger.exception("ZENDOC Connect unread-count lookup failed.")
+        unread_total = 0
+    try:
+        blocked_ids = blocked_user_ids(g.user)
+    except Exception:
+        current_app.logger.exception("ZENDOC Connect block-list lookup failed.")
+        blocked_ids = set()
 
     return render_template(
         "messages.html",
@@ -212,10 +230,10 @@ def messages_page():
         selected=selected,
         messages=messages,
         contacts=contacts,
-        unread_total=unread_count(g.user),
+        unread_total=unread_total,
         incoming_calls=incoming_calls,
         q=request.args.get("q", ""),
-        blocked_ids=blocked_user_ids(g.user),
+        blocked_ids=blocked_ids,
     )
 
 
