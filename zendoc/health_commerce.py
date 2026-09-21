@@ -11,7 +11,8 @@ integration-specific tests before ZENDOC may claim referral revenue.
 from __future__ import annotations
 
 from copy import deepcopy
-from urllib.parse import quote_plus
+import re
+from urllib.parse import quote_plus, urlparse
 
 
 COMMERCE_CATEGORIES = (
@@ -142,7 +143,25 @@ MERCHANTS = (
 MEDICINE_TERMS = {
     "medicine", "medicines", "drug", "drugs", "tablet", "tablets", "capsule", "capsules",
     "antibiotic", "antibiotics", "injection", "insulin", "prescription medicine",
+    "paracetamol", "acetaminophen", "ibuprofen", "aspirin", "cetirizine", "azithromycin",
+    "amoxicillin", "metformin", "atorvastatin", "omeprazole", "pantoprazole",
 }
+
+
+COMMERCE_DISCOVERY_PRESETS = {
+    "food_fresh": ("fresh fruit", "vegetables", "oats", "nuts", "healthy snacks"),
+    "eyewear": ("eyeglass case", "sunglasses", "lens cleaning kit", "reading light"),
+    "fitness": ("yoga mat", "resistance bands", "foam roller", "protein shaker", "exercise mat"),
+    "nutrition": ("oats", "nuts and seeds", "protein shaker", "lunch box", "whole grain snacks"),
+    "home_health": ("digital thermometer", "blood pressure monitor", "pulse oximeter", "weighing scale"),
+    "baby_child": ("baby thermometer", "feeding bottle", "baby hygiene kit", "child water bottle"),
+    "general_wellness": ("water bottle", "sleep mask", "first aid organizer", "fitness tracker"),
+}
+
+
+def commerce_discovery_presets(category="general_wellness"):
+    selected = _category(category)
+    return list(COMMERCE_DISCOVERY_PRESETS.get(selected, COMMERCE_DISCOVERY_PRESETS["general_wellness"]))
 
 
 def commerce_category_catalog():
@@ -161,7 +180,11 @@ def _category(value):
 
 def _looks_like_medicine_query(query):
     lowered = query.lower()
-    return any(term in lowered for term in MEDICINE_TERMS)
+    if any(term in lowered for term in MEDICINE_TERMS):
+        return True
+    # Dosage-like queries are routed into the pharmacy safety flow instead of
+    # being treated as ordinary marketplace shopping intent.
+    return bool(re.search(r"\b\d+(?:\.\d+)?\s*(?:mg|mcg|microgram|milligram)\b", lowered))
 
 
 def search_health_products(query, category="general_wellness"):
@@ -190,6 +213,8 @@ def search_health_products(query, category="general_wellness"):
         "payment_execution_enabled": False,
         "medicine_query": False,
         "pharmacy_handoff": None,
+        "presets": commerce_discovery_presets(selected),
+        "merchant_count": 0,
         "truth_notice": (
             "These links open external merchant searches/catalogs. ZENDOC has not verified current stock, price, seller, "
             "medical suitability or delivery, and no affiliate/referral relationship is configured by this feature. "
@@ -215,12 +240,15 @@ def search_health_products(query, category="general_wellness"):
             continue
         item = deepcopy(merchant)
         item["url"] = merchant["search_template"].format(query=encoded)
+        parsed = urlparse(item["url"])
+        item["domain"] = parsed.netloc.replace("www.", "")
         item["affiliate_link"] = False
         item["stock_verified"] = False
         item["price_verified"] = False
         item.pop("search_template", None)
         item["categories"] = sorted(item["categories"])
         result["results"].append(item)
+    result["merchant_count"] = len(result["results"])
     return result
 
 
