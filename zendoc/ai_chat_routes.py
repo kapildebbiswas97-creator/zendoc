@@ -180,10 +180,14 @@ def chat_home():
     elif conversation is None and conversations:
         conversation = conversations[0]
     history = _history(g.user["id"], conversation["id"] if conversation else None)
+    draft = " ".join(str(request.args.get("draft") or "").strip().split())[:3000]
+    source_context = " ".join(str(request.args.get("context") or "").strip().split())[:80]
     return render_template(
         "ai_chat.html",
         mode=requested_mode,
         selected_conversation=conversation,
         conversations=conversations,
         history=history,
+        draft=draft,
+        source_context=source_context,
     )
