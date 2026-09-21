@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}Invoice {{ invoice.invoice_uid }} — ZENDOC{% endblock %}
+{% block content %}
+<section class="section-head payment-detail-head">
+  <div>
+    <p class="eyebrow">Connected care invoice</p>
+    <h1>₹{{ invoice.amount_inr }}</h1>
+    <p class="section-copy">{{ invoice.description }}</p>
+  </div>
+  <div class="form-actions">
+    <button type="button" class="secondary-action" onclick="window.print()">Print / save receipt</button>
+    <a class="secondary-action" href="{{ url_for('payments.payments_page') }}">Back to payments</a>
+  </div>
+</section>
+
+<section class="payment-detail-grid">
+  <article class="panel payment-invoice-card">
+    <div class="panel-head">
+      <div>
+        <p class="eyebrow">Invoice</p>
+        <h2>{{ invoice.invoice_uid }}</h2>
+      </div>
+      <span class="status-badge {{ 'active' if invoice.status == 'paid' else 'warning' }}">{{ invoice.status_meta.label }}</span>
+    </div>
+
+    <dl class="payment-detail-list">
+      <div><dt>From</dt><dd>{{ invoice.payee_name }} · {{ invoice.payee_role|title }}</dd></div>
+      <div><dt>To</dt><dd>{{ invoice.patient_name }}</dd></div>
+      <div><dt>Care item</dt><dd>{{ invoice.resource_type|replace('_',' ')|title }} #{{ invoice.resource_id }}</dd></div>
+      <div><dt>Currency</dt><dd>{{ invoice.currency }}</dd></div>
+      <div><dt>Issued</dt><dd>{{ invoice.created_at }}</dd></div>
+      {% if invoice.paid_at %}<div><dt>Paid at</dt><dd>{{ invoice.paid_at }}</dd></div>{% endif %}
+    </dl>
+
+    <aside class="trust-note spaced-panel">
+      <strong>{{ invoice.status_meta.label }}.</strong><br>
+      {{ invoice.status_meta.explanation }}
+    </aside>
+
+    {% if current_user.id == invoice.patient_id and invoice.status != 'paid' %}
+      {% if gateway.ready_for_live_payment %}
+        <form method="post" action="{{ url_for('payments.checkout', invoice_id=invoice.id) }}" class="spaced-panel">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="primary-action">Open secure Razorpay checkout</button>
+        </form>
+      {% else %}
+        <p class="form-note spaced-panel">Live checkout is not enabled until ZENDOC has a real Razorpay key, secret and webhook secret configured.</p>
+      {% endif %}
+    {% endif %}
+  </article>
+
+  <aside class="panel">
+    <p class="eyebrow">Payment state</p>
+    <h2>What has actually happened</h2>
+    <ol class="payment-status-timeline">
+      {% for step in invoice.status_meta.steps %}
+      <li class="{% if step.complete %}complete{% endif %} {% if step.current %}current{% endif %}">
+        <span class="payment-status-marker" aria-hidden="true">{{ '✓' if step.complete and not step.current else loop.index }}</span>
+        <div>
+          <strong>{{ step.label }}</strong>
+          <p>{{ step.explanation }}</p>
+        </div>
+      </li>
+      {% endfor %}
+    </ol>
+  </aside>
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head">
+    <div>
+      <p class="eyebrow">Verification evidence</p>
+      <h2>Gateway events ZENDOC has verified</h2>
+    </div>
+    <span class="status-badge">{{ invoice.events|length }} event{% if invoice.events|length != 1 %}s{% endif %}</span>
+  </div>
+  <p class="form-note">This log contains payment-verification evidence recorded by ZENDOC. A checkout window opening is not evidence of payment. Final paid state requires a valid signed capture event.</p>
+
+  {% if invoice.events %}
+    <div class="payment-event-list">
+      {% for event in invoice.events %}
+      <article class="payment-event">
+        <div>
+          <strong>{{ event.event_type|replace('_',' ')|title }}</strong>
+          <p>{{ event.created_at }}</p>
+        </div>
+        <div class="payment-event-meta">
+          <span class="status-badge {{ 'active' if event.signature_verified else 'warning' }}">{{ 'Signature verified' if event.signature_verified else 'Not verified' }}</span>
+          {% if event.provider_event_ref %}<span>Ref {{ event.provider_event_ref }}</span>{% endif %}
+          <span>Digest {{ event.payload_digest_prefix }}…</span>
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <h3>No verified gateway event yet</h3>
+      <p>This is normal for a newly issued invoice or when live checkout is not configured.</p>
+    </div>
+  {% endif %}
+</section>
+
+<section class="panel spaced-panel payment-truth-grid">
+  <div>
+    <p class="eyebrow">Payment boundary</p>
+    <h2>No client-side success claim</h2>
+    <p>Even after checkout returns a valid client signature, ZENDOC keeps the invoice in <strong>Checkout signature verified</strong> until the signed gateway capture webhook arrives.</p>
+  </div>
+  <div>
+    <p class="eyebrow">Health boundary</p>
+    <h2>Payment does not change clinical state</h2>
+    <p>Paying an invoice does not verify a diagnosis, prescription, appointment completion or provider outcome. Those remain separate care records.</p>
+  </div>
+</section>
+{% endblock %}
