@@ -731,7 +731,7 @@ def test_invoice_detail_is_participant_scoped_and_explains_nonfinal_signature_st
     assert b"This is not final payment confirmation" in detail.data
     assert b"Signature verified" in detail.data
     assert b"No client-side success claim" in detail.data
-    assert b"Print / save receipt" in detail.data
+    assert b"Print / save invoice" in detail.data
 
     login_web(outsider_client, "patient", "invoice-outsider@example.com")
     denied = outsider_client.get(f"/payments/invoices/{invoice_id}", follow_redirects=True)
@@ -758,3 +758,12 @@ def test_payment_ledger_and_pwa_cache_use_evidence_first_ui(tmp_path):
     root = Path(__file__).resolve().parents[1]
     sw = (root / "static" / "sw.js").read_text(encoding="utf-8")
     assert "zendoc-static-v5-commerce-payments-20260921" in sw
+
+
+
+def test_common_medicine_and_dosage_queries_never_open_general_marketplaces():
+    for query in ("paracetamol", "ibuprofen 400 mg", "azithromycin 500mg", "metformin"):
+        result = search_health_products(query, "general_wellness")
+        assert result["medicine_query"] is True
+        assert result["results"] == []
+        assert result["pharmacy_handoff"].startswith("/pharmacy")
