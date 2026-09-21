@@ -9,13 +9,12 @@
   </div>
   <div class="form-actions">
     <a class="secondary-action" href="#saved-health-list">Saved Health List</a>
-    <a class="secondary-action" href="{{ url_for('business.business_page') }}">ZENDOC for Business</a>
   </div>
 </section>
 
 <aside class="trust-note">
   <strong>Clinical independence comes first.</strong><br>
-  {{ affiliate.truth_notice }} ZENDOC does not automatically buy products, prescribe supplements, change medicines, or treat merchant placement as a clinical recommendation.
+  External marketplace results are discovery handoffs. ZENDOC does not automatically buy products, prescribe supplements, change medicines, or treat merchant placement as a clinical recommendation.
 </aside>
 
 <section class="health-shop-category-rail spaced-panel" aria-label="Health Shop categories">
@@ -85,7 +84,6 @@
           <div class="health-shop-merchant-truth">
             <span class="status-badge">Stock unverified</span>
             <span class="status-badge">Price unverified</span>
-            <span class="status-badge">{{ item.relationship_status.replace('_',' ').title() }}</span>
           </div>
 
           <p class="form-note">ZENDOC will open this merchant’s search/catalog for <strong>{{ products.query }}</strong>. Seller, delivery, returns, product claims and suitability are decided outside ZENDOC.</p>
@@ -168,14 +166,14 @@
 
 <section class="grid two spaced-panel">
   <article class="panel">
-    <p class="eyebrow">Referral model</p>
-    <h2>Attribution without fake revenue</h2>
-    <p>ZENDOC records outbound click IDs. A merchant becomes commission-enabled only after a real affiliate/partner agreement and configured deep-link template exist. Clicks alone never prove orders or commission.</p>
+    <p class="eyebrow">Shopping boundary</p>
+    <h2>External merchant, external purchase</h2>
+    <p>ZENDOC helps you discover and save searches. Stock, price, seller, delivery, returns, payment and purchase completion remain with the external merchant unless a real connected integration explicitly says otherwise.</p>
   </article>
   <article class="panel">
     <p class="eyebrow">Health boundary</p>
-    <h2>Commerce never controls care</h2>
-    <p>Merchant economics cannot alter provider ranking, emergency guidance, diagnosis boundaries, prescriptions, medicine changes or product suitability. Users always choose whether to leave ZENDOC.</p>
+    <h2>Shopping never controls care</h2>
+    <p>Marketplace placement cannot alter provider ranking, emergency guidance, diagnosis boundaries, prescriptions, medicine changes or product suitability. You always choose whether to leave ZENDOC.</p>
   </article>
 </section>
 {% endblock %}
