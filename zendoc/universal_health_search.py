@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import re
 from collections import OrderedDict
+from urllib.parse import quote_plus
 
 from .db import get_db
 from .geospatial import nearby_records
@@ -243,6 +244,41 @@ def _public_matches(text, category, latitude, longitude, radius_km):
     return records
 
 
+def _google_maps_url(item):
+    existing = str(item.get("google_maps_url") or "").strip()
+    if existing:
+        return existing
+
+    latitude = item.get("latitude")
+    longitude = item.get("longitude")
+    try:
+        if latitude not in (None, "") and longitude not in (None, ""):
+            query = f"{float(latitude):.6f},{float(longitude):.6f}"
+        else:
+            query = " ".join(
+                str(item.get(field) or "").strip()
+                for field in ("name", "address", "city", "district", "state", "postal_code")
+                if str(item.get(field) or "").strip()
+            )
+    except (TypeError, ValueError):
+        query = ""
+
+    if not query:
+        return None
+    return "https://www.google.com/maps/search/?api=1&query=" + quote_plus(query)
+
+
+def _with_map_handoffs(records):
+    enriched = []
+    for record in records:
+        item = dict(record)
+        google_maps_url = _google_maps_url(item)
+        if google_maps_url:
+            item["google_maps_url"] = google_maps_url
+        enriched.append(item)
+    return enriched
+
+
 def _dedupe(records):
     result = []
     seen = set()
@@ -349,7 +385,16 @@ def universal_search(text=None, category="all", latitude=None, longitude=None, r
             if osm_message:
                 external_messages.append(osm_message)
 
+    if query["latitude"] is not None and query["longitude"] is not None:
+        external_results = nearby_records(
+            external_results,
+            query["latitude"],
+            query["longitude"],
+            query["radius_km"],
+        )
+
     records.extend(external_results)
+    records = _with_map_handoffs(records)
     records = _dedupe(records)
     records.sort(key=lambda item: _rank(item, query["text"]))
 
