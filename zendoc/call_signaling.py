@@ -245,13 +245,22 @@ def create_call(actor, conversation_id: int, call_type: str, offer_json: str) ->
     )
     call_id = int(cursor.lastrowid)
     get_db().commit()
-    deliver_notification(
-        int(permission["other_id"]),
-        f"Incoming ZENDOC {permission['call_type']} call",
-        f"{_actor_name(actor)} is calling you.",
-        channel="in_app",
-        template_type="connect_call",
-    )
+    # The call session is the core action. Notification delivery is best-effort
+    # and must not turn a successfully created call into an HTTP 500.
+    try:
+        deliver_notification(
+            int(permission["other_id"]),
+            f"Incoming ZENDOC {permission['call_type']} call",
+            f"{_actor_name(actor)} is calling you.",
+            channel="in_app",
+            template_type="connect_call",
+        )
+        get_db().commit()
+    except Exception:
+        try:
+            get_db().rollback()
+        except Exception:
+            pass
     return get_call_state(actor, call_id)
 
 
