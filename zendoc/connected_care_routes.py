@@ -34,6 +34,7 @@ from flask import (
 
 from .care_graph import get_patient_care_graph, record_care_continuity_event
 from .carefin_engine import discover_benefits
+from .carefin_cases import carefin_case_options, list_carefin_cases
 from .care_journey_store import create_persisted_journey, list_patient_journeys, advance_persisted_journey
 from .context_engine import (
     build_minimum_context_bundle,
@@ -216,11 +217,32 @@ def connected_care_home():
 
 @bp.route("/connected-care/carefin", methods=("GET", "POST"))
 def carefin_page():
-    # CareFin has one canonical implementation with durable case tracking.
-    # Keep this legacy Connected Care URL as a compatibility handoff.
+    # Keep the legacy pilot URL directly usable while canonicalizing all
+    # mutations through /carefin. GET renders the same durable case model.
+    uid = _current_user_id()
+    if not uid:
+        return redirect(url_for("main.login", role="patient"))
     if request.method == "POST":
         return redirect(url_for("carefin.carefin_page"), code=307)
-    return redirect(url_for("carefin.carefin_page"))
+
+    db = get_db()
+    user = dict(db.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone() or abort(401))
+    form_data = {
+        "state": request.args.get("state", ""),
+        "district": request.args.get("district", user.get("city") or ""),
+        "age": request.args.get("age", user.get("age") or ""),
+        "occupation": request.args.get("occupation", ""),
+        "income_band": request.args.get("income_band", ""),
+        "existing_insurer": request.args.get("existing_insurer", ""),
+        "needs_charitable_support": request.args.get("needs_charitable_support") in {"1", "yes", "true", "on"},
+    }
+    return render_template(
+        "carefin.html",
+        result=None,
+        form_data=form_data,
+        cases=list_carefin_cases(user),
+        case_options=carefin_case_options(),
+    )
 
 
 @bp.get("/connected-care/journey")
