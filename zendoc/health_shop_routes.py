@@ -25,7 +25,7 @@ def health_shop_page():
     return render_template(
         "health_shop.html",
         q=query,
-        selected_category=category,
+        selected_category=products["category"],
         categories=commerce_category_catalog(),
         products=products,
         ethics=commerce_ethics_policy(),

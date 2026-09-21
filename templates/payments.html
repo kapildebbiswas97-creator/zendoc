@@ -1,44 +1,131 @@
 {% extends "base.html" %}
-{% block title %}Payments — ZENDOC{% endblock %}
+{% block title %}Payments & Invoices — ZENDOC{% endblock %}
 {% block content %}
-<section class="section-head">
-  <div><p class="eyebrow">Connected care payments</p><h1>Payments &amp; invoices</h1><p class="section-copy">Hospitals, doctors and pharmacies can issue invoices only for connected ZENDOC care items. Patients can pay in-app only when the real Razorpay configuration and signed webhook are ready.</p></div>
-  <span class="status-badge {{ 'active' if gateway.ready_for_live_payment else 'warning' }}">{{ 'Gateway ready' if gateway.ready_for_live_payment else 'Integration required' }}</span>
+<section class="section-head payments-hero">
+  <div>
+    <p class="eyebrow">Connected care payments</p>
+    <h1>Payments &amp; invoices</h1>
+    <p class="section-copy">A care payment should be as easy to understand as a UPI transaction without pretending checkout means success. Every ZENDOC invoice stays tied to a connected care item and advances only when real evidence exists.</p>
+  </div>
+  <span class="status-badge {{ 'active' if gateway.ready_for_live_payment else 'warning' }}">{{ 'Live gateway ready' if gateway.ready_for_live_payment else 'Live gateway integration required' }}</span>
 </section>
-<aside class="trust-note"><strong>Payment truth boundary.</strong><br>{{ gateway.truth_notice }} Google Play Billing is not used here for physical goods or regulated clinical-service transactions.</aside>
+
+<aside class="trust-note">
+  <strong>Payment truth boundary.</strong><br>
+  {{ gateway.truth_notice }} Payment state never changes diagnosis, prescription, appointment completion or care outcome.
+</aside>
+
+<section class="payment-state-guide spaced-panel" aria-label="ZENDOC payment state model">
+  <div><span>1</span><strong>Invoice issued</strong><small>Verified provider + connected care item</small></div>
+  <div><span>2</span><strong>Checkout ready</strong><small>Real Razorpay order exists</small></div>
+  <div><span>3</span><strong>Signature verified</strong><small>Browser checkout signature matched</small></div>
+  <div><span>4</span><strong>Paid</strong><small>Signed capture webhook confirmed</small></div>
+</section>
 
 {% if current_user.role in ['doctor','hospital','pharmacy'] %}
-<section class="panel spaced-panel">
-  <p class="eyebrow">Provider billing</p><h2>Issue invoice for connected care</h2>
+<section class="panel spaced-panel provider-billing-card">
+  <div class="panel-head">
+    <div><p class="eyebrow">Provider billing</p><h2>Issue invoice for connected care</h2></div>
+    <span class="status-badge">Verified providers only</span>
+  </div>
+  <p class="form-note">ZENDOC does not allow arbitrary charges to a patient account. The invoice must point to an eligible appointment or pharmacy request owned by the signed-in verified provider.</p>
   {% if billable_resources %}
-  <form method="post">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="issue_invoice">
-    <label>Connected care item<select name="resource_ref" required>{% for item in billable_resources %}<option value="{{ item.ref }}">{{ item.patient_name }} · {{ item.title }}</option>{% endfor %}</select></label>
-    <label>Amount (INR)<input type="number" name="amount_inr" min="1" max="1000000" step="0.01" required></label>
-    <label>Description<input name="description" maxlength="300" required placeholder="Consultation fee / confirmed pharmacy order…"></label>
-    <button type="submit">Issue invoice</button>
+  <form method="post" class="form-grid payment-issue-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="action" value="issue_invoice">
+    <label>Connected care item
+      <select name="resource_ref" required>
+        {% for item in billable_resources %}
+          <option value="{{ item.ref }}">{{ item.patient_name }} · {{ item.title }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Amount (INR)
+      <input type="number" name="amount_inr" min="1" max="1000000" step="0.01" inputmode="decimal" required>
+    </label>
+    <label class="payment-description-field">Description
+      <input name="description" maxlength="300" required placeholder="Consultation fee / confirmed pharmacy order…">
+    </label>
+    <div class="form-actions payment-issue-action"><button type="submit">Issue invoice</button></div>
   </form>
-  {% else %}<div class="empty-state"><p>No billable connected care items are available. A provider cannot create an arbitrary patient charge.</p></div>{% endif %}
+  {% else %}
+    <div class="empty-state">
+      <h3>No billable connected care item</h3>
+      <p>Complete an eligible ZENDOC care relationship first. Provider billing cannot target an arbitrary patient.</p>
+    </div>
+  {% endif %}
 </section>
 {% endif %}
 
 <section class="spaced-panel">
-  <div class="panel-head"><div><p class="eyebrow">Ledger</p><h2>Your invoices</h2></div></div>
-  <div class="grid two">
+  <div class="panel-head">
+    <div><p class="eyebrow">Your ledger</p><h2>Invoices</h2></div>
+    <span class="status-badge">{{ invoices|length }} total</span>
+  </div>
+
+  <div class="payment-ledger">
   {% for invoice in invoices %}
-    <article class="panel">
-      <div class="panel-head"><div><strong>₹{{ invoice.amount_inr }}</strong><p>{{ invoice.description }}</p></div><span class="status-badge {{ 'active' if invoice.status == 'paid' else '' }}">{{ invoice.status.replace('_',' ').title() }}</span></div>
-      <p>{{ invoice.payee_name }} → {{ invoice.patient_name }}</p>
-      <small>{{ invoice.resource_type.replace('_',' ').title() }} #{{ invoice.resource_id }} · {{ invoice.created_at[:16] }}</small>
-      {% if current_user.id == invoice.patient_id and invoice.status != 'paid' %}
-        {% if gateway.ready_for_live_payment %}
-        <form method="post" action="{{ url_for('payments.checkout', invoice_id=invoice.id) }}" class="spaced-panel"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">Pay securely</button></form>
-        {% else %}<p class="form-note">Checkout will activate after Razorpay key, secret and webhook secret are configured.</p>{% endif %}
-      {% endif %}
+    <article class="panel payment-ledger-card">
+      <div class="payment-ledger-card__top">
+        <div>
+          <span class="payment-ledger-card__amount">₹{{ invoice.amount_inr }}</span>
+          <p>{{ invoice.description }}</p>
+        </div>
+        <span class="status-badge {{ 'active' if invoice.status == 'paid' else 'warning' }}">{{ invoice.status_meta.label }}</span>
+      </div>
+
+      <div class="payment-ledger-card__parties">
+        <span><strong>From</strong>{{ invoice.payee_name }}</span>
+        <span aria-hidden="true">→</span>
+        <span><strong>To</strong>{{ invoice.patient_name }}</span>
+      </div>
+
+      <p class="payment-ledger-card__state">{{ invoice.status_meta.explanation }}</p>
+
+      <div class="payment-ledger-card__meta">
+        <span>{{ invoice.resource_type.replace('_',' ').title() }} #{{ invoice.resource_id }}</span>
+        <span>{{ invoice.created_at[:16] }}</span>
+        {% if invoice.events %}<span>{{ invoice.events|length }} verified-event record{% if invoice.events|length != 1 %}s{% endif %}</span>{% endif %}
+      </div>
+
+      <div class="form-actions spaced-panel">
+        <a class="secondary-action" href="{{ url_for('payments.invoice_detail', invoice_id=invoice.id) }}">Invoice details</a>
+        {% if current_user.id == invoice.patient_id and invoice.status != 'paid' %}
+          {% if gateway.ready_for_live_payment %}
+          <form method="post" action="{{ url_for('payments.checkout', invoice_id=invoice.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit">Pay securely</button>
+          </form>
+          {% else %}
+            <span class="status-badge warning">Checkout not configured</span>
+          {% endif %}
+        {% elif invoice.status == 'paid' %}
+          <a class="primary-action" href="{{ url_for('payments.invoice_detail', invoice_id=invoice.id) }}">View verified receipt</a>
+        {% endif %}
+      </div>
     </article>
   {% else %}
-    <div class="empty-state"><h3>No invoices yet</h3><p>Connected care invoices will appear here.</p></div>
+    <article class="panel">
+      <div class="empty-state">
+        <span class="empty-state__icon" aria-hidden="true">₹</span>
+        <h3>No invoices yet</h3>
+        <p>Connected care invoices will appear here only when an eligible verified provider issues one.</p>
+      </div>
+    </article>
   {% endfor %}
   </div>
+</section>
+
+<section class="grid two spaced-panel">
+  <article class="panel">
+    <p class="eyebrow">Patient protection</p>
+    <h2>No invisible payment state</h2>
+    <p>Open any invoice to see which evidence exists. “Checkout opened”, “signature verified” and “paid” are deliberately different states.</p>
+  </article>
+  <article class="panel">
+    <p class="eyebrow">Payment methods</p>
+    <h2>Real methods come from the configured gateway</h2>
+    <p>ZENDOC does not invent a BHIM, UPI, card or wallet success screen. When live Razorpay checkout is configured, the actual gateway presents the payment methods it supports for that transaction.</p>
+  </article>
 </section>
 {% endblock %}
