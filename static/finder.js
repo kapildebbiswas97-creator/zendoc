@@ -54,25 +54,3 @@ if (button) {
     );
   });
 }
-
-// Government hospital appointments are a real external workflow, not a
-// ZENDOC-confirmed booking. Keep the handoff visible but explicit about where
-// the booking is completed. ORS is the NIC common patient portal for
-// participating Government of India hospitals.
-const finderShell = document.querySelector(".finder-shell");
-if (finderShell && !document.getElementById("government-ors-handoff")) {
-  const panel = document.createElement("aside");
-  panel.id = "government-ors-handoff";
-  panel.className = "panel finder-source-summary";
-  panel.setAttribute("aria-label", "Government hospital appointment handoff");
-  panel.innerHTML = `
-    <div class="panel-head">
-      <div>
-        <p class="eyebrow">Government hospital appointments</p>
-        <h2>Need an OPD appointment at a participating government hospital?</h2>
-        <p class="form-note">Open the official NIC Online Registration System (ORS). Availability depends on whether that hospital and department are onboarded. The appointment is completed on the government portal, not inside ZENDOC.</p>
-      </div>
-      <a class="secondary-action" href="https://ors.gov.in/" target="_blank" rel="noopener noreferrer">Book via official ORS</a>
-    </div>`;
-  finderShell.insertBefore(panel, finderShell.firstChild);
-}
