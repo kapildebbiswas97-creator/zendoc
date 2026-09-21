@@ -7,6 +7,29 @@
 </section>
 {% if not provider_view %}{% include "components/_health_memory_nav.html" %}{% endif %}
 
+{% if not provider_view %}
+<section class="panel health-memory-command spaced-panel" aria-label="Health Memory command center">
+  <div class="panel-head">
+    <div><p class="eyebrow">Health Memory command center</p><h2>Keep the next care step connected to your history</h2></div>
+    <span class="status-badge active">Patient controlled</span>
+  </div>
+  <div class="quick-action-grid health-memory-actions">
+    <a class="quick-action" href="{{ url_for('health_memory.timeline_page') }}"><strong>Timeline</strong><span>See appointments, reports, measurements and recorded care events in chronological order.</span><span class="quick-action-arrow">→</span></a>
+    <a class="quick-action" href="{{ url_for('main.records') }}"><strong>Reports &amp; records</strong><span>Upload and organize records without changing their original provenance.</span><span class="quick-action-arrow">→</span></a>
+    <a class="quick-action" href="{{ url_for('main.health') }}"><strong>Vitals &amp; trends</strong><span>Add your measurements and review the history ZENDOC actually has.</span><span class="quick-action-arrow">→</span></a>
+    <a class="quick-action" href="{{ url_for('health_memory.health_access_page') }}"><strong>Privacy &amp; access</strong><span>Control sharing, consent scope and access rather than assuming anyone can see your records.</span><span class="quick-action-arrow">→</span></a>
+    <a class="quick-action" href="{{ url_for('family.family_page') }}"><strong>Family Care</strong><span>Coordinate supported family care while keeping each person's access boundaries separate.</span><span class="quick-action-arrow">→</span></a>
+    <a class="quick-action" href="{{ url_for('connected_care.care_journey_page') }}"><strong>Care Journey</strong><span>Connect discovery, diagnostics, benefits, services and follow-up back to Health Memory.</span><span class="quick-action-arrow">→</span></a>
+  </div>
+</section>
+
+<aside class="health-memory-provenance spaced-panel" aria-label="Health Memory provenance legend">
+  <div><strong>Provider confirmed</strong><span>Recorded or acknowledged by an authorized provider workflow.</span></div>
+  <div><strong>Patient reported</strong><span>Saved by you, including external events such as an ORS appointment you chose to record.</span></div>
+  <div><strong>Uploaded / measured</strong><span>Document or measurement provenance remains visible rather than being silently treated as clinician-verified.</span></div>
+</aside>
+{% endif %}
+
 {% if provider_view %}<aside class="trust-note"><strong>Consent-controlled access</strong><br>You can see: {{ summary.access_scopes|join(', ') }}. Information outside the patient’s active permission is not included.</aside>{% endif %}
 
 {% if summary.profile is defined %}
