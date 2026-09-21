@@ -108,7 +108,8 @@ if (heroVideo) {
 }
 
 document.querySelectorAll("form").forEach((form) => {
-  form.addEventListener("submit", () => {
+  form.addEventListener("submit", (event) => {
+    if (event.defaultPrevented) return;
     form.setAttribute("aria-busy", "true");
     form.querySelectorAll("button[type='submit'], input[type='submit']").forEach((control) => {
       control.disabled = true;
