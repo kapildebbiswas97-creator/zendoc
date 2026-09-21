@@ -8,7 +8,7 @@
     <p class="section-copy">{{ invoice.description }}</p>
   </div>
   <div class="form-actions">
-    <button type="button" class="secondary-action" onclick="window.print()">Print / save receipt</button>
+    <button type="button" class="secondary-action" onclick="window.print()">Print / save {{ 'verified receipt' if invoice.status == 'paid' else 'invoice' }}</button>
     <a class="secondary-action" href="{{ url_for('payments.payments_page') }}">Back to payments</a>
   </div>
 </section>
