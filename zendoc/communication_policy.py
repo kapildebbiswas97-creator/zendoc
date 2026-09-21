@@ -1,6 +1,6 @@
 from flask import current_app
 
-from .db import get_db
+from .db import get_db, now_iso
 from .family_care import has_family_access
 
 
@@ -89,10 +89,14 @@ def _has_explicit_permission(requester_id, target_id, channel="chat"):
     row = get_db().execute(
         f"""
         SELECT id FROM communication_permissions
-        WHERE requester_id=? AND target_user_id=? AND status='active' AND revoked_at IS NULL AND {column}=1
+        WHERE requester_id=? AND target_user_id=?
+          AND status='active'
+          AND revoked_at IS NULL
+          AND {column}=1
+          AND (expires_at IS NULL OR TRIM(expires_at)='' OR expires_at>?)
         ORDER BY created_at DESC LIMIT 1
         """,
-        (int(requester_id), int(target_id)),
+        (int(requester_id), int(target_id), now_iso()),
     ).fetchone()
     return bool(row)
 
