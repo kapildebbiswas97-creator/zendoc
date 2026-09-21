@@ -24,6 +24,7 @@ MESSAGE_TYPES = (
     "report",
     "image",
     "video",
+    "audio",
     "service_update",
     "task_update",
 )
@@ -105,6 +106,33 @@ def _message_to_dict(row):
         }
         for att in attachments
     ]
+
+    receipts = get_db().execute(
+        """
+        SELECT status,delivered_at,read_at
+        FROM message_receipts
+        WHERE message_id=?
+        """,
+        (item["id"],),
+    ).fetchall()
+    total_receipts = len(receipts)
+    read_count = sum(1 for receipt in receipts if str(receipt["status"] or "").lower() == "read")
+    delivered_count = sum(
+        1 for receipt in receipts
+        if str(receipt["status"] or "").lower() in {"delivered", "read"}
+    )
+    if total_receipts and read_count == total_receipts:
+        receipt_status = "read"
+    elif total_receipts and delivered_count == total_receipts:
+        receipt_status = "delivered"
+    else:
+        receipt_status = "sent"
+    item["receipt_summary"] = {
+        "status": receipt_status,
+        "recipient_count": total_receipts,
+        "delivered_count": delivered_count,
+        "read_count": read_count,
+    }
     return item
 
 
@@ -126,7 +154,17 @@ def _conversation_to_dict(row, actor):
         public_contact(dict(row), reason="Conversation participant", context={"type": item["context_type"], "id": item["context_id"]})
         for row in participants
     ]
-    other_id = next((int(row["user_id"]) for row in participants if int(row["user_id"]) != uid), None)
+    other_participant = next(
+        (participant for participant in item["participants"] if int(participant.get("id") or 0) != uid),
+        None,
+    )
+    item["other_participant"] = other_participant
+    item["display_name"] = (
+        other_participant.get("name")
+        if other_participant and str(item.get("conversation_type") or "direct") == "direct"
+        else item.get("title") or "ZENDOC Conversation"
+    )
+    other_id = int(other_participant["id"]) if other_participant else None
     item["unread_count"] = unread_count(actor, conversation_id=item["id"])
     item["can_call"] = False
     item["can_video"] = False
@@ -494,10 +532,10 @@ def share_report_message(actor, conversation_id, data):
 
 
 def share_native_media_message(actor, conversation_id, data):
-    """Attach already-validated/stored native image or video media to a conversation."""
+    """Attach already-validated/stored native image, video or audio media to a conversation."""
     media_kind = str(data.get("media_kind") or "").strip().lower()
-    if media_kind not in {"image", "video"}:
-        raise ValueError("Message media must be an image or video.")
+    if media_kind not in {"image", "video", "audio"}:
+        raise ValueError("Message media must be an image, video or audio clip.")
     storage_key = str(data.get("storage_key") or "").strip()
     mime_type = str(data.get("mime_type") or "").strip().lower()
     original_name = str(data.get("original_name") or "message-media").strip()[:255]
@@ -505,7 +543,12 @@ def share_native_media_message(actor, conversation_id, data):
     if not storage_key or not mime_type or size_bytes <= 0:
         raise ValueError("Stored message media metadata is incomplete.")
     caption = str(data.get("body") or data.get("caption") or "").strip()
-    body = caption[:1500] if caption else ("Shared an image." if media_kind == "image" else "Shared a video.")
+    default_body = {
+        "image": "Shared an image.",
+        "video": "Shared a video.",
+        "audio": "Shared a voice note.",
+    }[media_kind]
+    body = caption[:1500] if caption else default_body
     message = send_message(
         actor,
         conversation_id,
