@@ -9,9 +9,14 @@
   let lastHtml = stack.innerHTML;
   let timer = null;
 
+  const unreadBadge = document.getElementById("zendoc-unread-total");
+
   function nearBottom() {
-    const doc = document.documentElement;
-    return window.innerHeight + window.scrollY >= doc.scrollHeight - 180;
+    return stack.scrollHeight - stack.scrollTop - stack.clientHeight <= 140;
+  }
+
+  function followLatest(behavior) {
+    stack.scrollTo({ top: stack.scrollHeight, behavior: behavior || "auto" });
   }
 
   async function refreshThread() {
@@ -30,11 +35,15 @@
         return;
       }
       const html = await response.text();
+      const unread = response.headers.get("X-ZENDOC-Unread-Count");
+      if (unreadBadge && unread !== null) {
+        unreadBadge.textContent = String(unread) + " Unread";
+      }
       if (html !== lastHtml) {
         stack.innerHTML = html;
         lastHtml = html;
         if (shouldFollow) {
-          window.scrollTo({top: document.documentElement.scrollHeight, behavior: "smooth"});
+          followLatest("smooth");
         }
       }
     } catch (_error) {
@@ -57,5 +66,8 @@
     clearInterval(timer);
   });
 
+  // Open a selected conversation at the newest available message without
+  // forcing later jumps when the user intentionally scrolls upward.
+  followLatest("auto");
   schedule();
 })();
