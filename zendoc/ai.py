@@ -132,21 +132,57 @@ def mental_health_support(age_group, context, stress_level):
             "next_steps": safety["guidance"],
             "emergency": True,
         }
+
+    stage = str(age_group or "adult").strip().lower()
+    stage_guidance = {
+        "child": (
+            "For a child, involve a parent, caregiver, school counsellor, teacher or another trusted adult. "
+            "A child should not be expected to manage persistent distress or a safety concern alone."
+        ),
+        "teen": (
+            "For a teenager, protect sleep and routine, reduce avoidable pressure, and involve a trusted adult "
+            "or qualified professional if distress is persistent, worsening, linked to bullying, or affecting daily life."
+        ),
+        "student": (
+            "For a student or young adult, look at exam/workload pressure, sleep, isolation, relationships and routines, "
+            "and use campus, family or professional support when the problem is persistent."
+        ),
+        "working professional": (
+            "For a working adult, review workload, recovery time, sleep, boundaries and available workplace/family support. "
+            "Persistent burnout-like symptoms or major functional changes deserve professional assessment."
+        ),
+        "older adult": (
+            "For an older adult, consider sleep, loneliness, grief, medication/health changes, daily function and social connection. "
+            "New or marked changes should be discussed with a qualified healthcare professional."
+        ),
+        "elderly": (
+            "For an older adult, consider sleep, loneliness, grief, medication/health changes, daily function and social connection. "
+            "New or marked changes should be discussed with a qualified healthcare professional."
+        ),
+        "adult": (
+            "For an adult or caregiver, consider sleep, workload, relationships, finances, caregiving demands and access to support."
+        ),
+    }
+    stage_note = stage_guidance.get(stage, stage_guidance["adult"])
+
     try:
         stress = max(0, min(10, int(stress_level)))
     except (TypeError, ValueError):
         stress = 0
     if stress >= 8:
         risk = "high"
-        advice = "Your stress score is high. Contact a trusted person or licensed professional today."
+        advice = "Your self-reported stress is very high. Reach out to a trusted person and consider qualified professional support today."
     elif stress >= 5:
         risk = "medium"
-        advice = "Your stress score is moderate. Try a short break, hydration, sleep hygiene, and scheduled support."
+        advice = "Your self-reported stress is moderate. Use a short recovery step now and plan support if it persists."
     else:
         risk = "low"
-        advice = "Your stress score is low. Keep monitoring sleep, mood, and routine."
+        advice = "Your self-reported stress is currently lower. Keep noticing sleep, mood, routine and changes over time."
+
     return {
-        "summary": f"{age_group.title()} support: {advice}",
+        "summary": f"{stage.replace('_', ' ').title()} support: {advice}",
         "risk_level": risk,
-        "next_steps": f"Context noted: {context or 'general wellbeing'}.",
+        "next_steps": f"{stage_note} Context noted: {context or 'general wellbeing'}.",
+        "emergency": False,
     }
+
