@@ -1709,3 +1709,539 @@ button.composer-tool {
     order: 3;
   }
 }
+
+
+/* Commerce and payment experience. */
+.health-shop-category-rail {
+  display: flex;
+  gap: 8px;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  scroll-snap-type: x proximity;
+}
+
+.health-shop-category-rail a {
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+  padding: 10px 13px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--ink-soft);
+  font-size: 12px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.health-shop-category-rail a:hover,
+.health-shop-category-rail a.active {
+  border-color: var(--primary-light);
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.health-shop-search {
+  display: grid;
+  gap: 14px;
+}
+
+.health-shop-search__form {
+  display: block;
+}
+
+.health-shop-search__row {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) auto;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.health-shop-search__row input,
+.health-shop-search__row button {
+  min-height: 52px;
+}
+
+.health-shop-search__row input {
+  border-radius: 14px;
+}
+
+.health-shop-presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.health-shop-presets a {
+  display: inline-flex;
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--ink-soft);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.health-shop-presets a:hover {
+  border-color: var(--primary-light);
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.health-shop-safety-note {
+  display: grid;
+  gap: 3px;
+  padding: 12px 14px;
+  border-left: 4px solid var(--primary);
+  border-radius: 10px;
+  background: var(--surface-accent);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.health-shop-safety-note strong {
+  color: var(--ink);
+}
+
+.health-shop-merchant-grid,
+.health-shop-start-grid,
+.payment-ledger {
+  display: grid;
+  grid-template-columns: repeat(3,minmax(0,1fr));
+  gap: 16px;
+}
+
+.health-shop-merchant-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.health-shop-merchant-card__head,
+.health-shop-saved-item__body {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.health-shop-merchant-card__head h3,
+.health-shop-saved-item__body p {
+  margin: 0;
+}
+
+.health-shop-merchant-card__head p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.health-shop-merchant-avatar {
+  display: grid;
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-weight: 850;
+}
+
+.health-shop-merchant-truth {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.health-shop-merchant-actions {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: stretch;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.health-shop-merchant-actions form,
+.health-shop-merchant-actions button {
+  height: 100%;
+}
+
+.health-shop-medicine-handoff {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 22px;
+}
+
+.health-shop-medicine-handoff p:last-child {
+  margin-bottom: 0;
+}
+
+.health-shop-saved-list {
+  display: grid;
+  gap: 0;
+}
+
+.health-shop-saved-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 0;
+  border-top: 1px solid var(--line);
+}
+
+.health-shop-saved-item:first-child {
+  border-top: 0;
+}
+
+.health-shop-saved-item__body > div {
+  min-width: 0;
+}
+
+.health-shop-saved-item__body strong,
+.health-shop-saved-item__body p {
+  overflow-wrap: anywhere;
+}
+
+.payment-state-guide {
+  display: grid;
+  grid-template-columns: repeat(4,minmax(0,1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--line);
+}
+
+.payment-state-guide > div {
+  display: grid;
+  grid-template-columns: auto minmax(0,1fr);
+  gap: 2px 10px;
+  padding: 14px;
+  background: var(--surface);
+}
+
+.payment-state-guide > div > span {
+  grid-row: 1 / 3;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.payment-state-guide strong {
+  font-size: 13px;
+}
+
+.payment-state-guide small {
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.payment-issue-form {
+  grid-template-columns: minmax(0,1.6fr) minmax(150px,.6fr);
+  align-items: end;
+}
+
+.payment-description-field {
+  grid-column: 1 / -1;
+}
+
+.payment-issue-action {
+  grid-column: 1 / -1;
+}
+
+.payment-ledger {
+  grid-template-columns: repeat(2,minmax(0,1fr));
+}
+
+.payment-ledger-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.payment-ledger-card__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.payment-ledger-card__top p {
+  margin: 4px 0 0;
+}
+
+.payment-ledger-card__amount {
+  display: block;
+  font-size: 1.65rem;
+  font-weight: 850;
+  letter-spacing: -.035em;
+}
+
+.payment-ledger-card__parties {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) auto minmax(0,1fr);
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.payment-ledger-card__parties span:first-child,
+.payment-ledger-card__parties span:last-child {
+  display: grid;
+  gap: 2px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.payment-ledger-card__parties strong {
+  color: var(--ink);
+  font-size: 10px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.payment-ledger-card__state {
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.payment-ledger-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.payment-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0,1.15fr) minmax(320px,.85fr);
+  gap: 18px;
+}
+
+.payment-detail-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+}
+
+.payment-detail-list > div {
+  display: grid;
+  grid-template-columns: minmax(100px,.45fr) minmax(0,1fr);
+  gap: 14px;
+  padding: 11px 0;
+  border-top: 1px solid var(--line);
+}
+
+.payment-detail-list dt {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.payment-detail-list dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.payment-status-timeline {
+  display: grid;
+  gap: 0;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.payment-status-timeline li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 30px minmax(0,1fr);
+  gap: 11px;
+  padding-bottom: 18px;
+  color: var(--muted);
+}
+
+.payment-status-timeline li:not(:last-child):before {
+  content: "";
+  position: absolute;
+  top: 28px;
+  bottom: 0;
+  left: 14px;
+  width: 2px;
+  background: var(--line);
+}
+
+.payment-status-marker {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.payment-status-timeline li.complete .payment-status-marker {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #fff;
+}
+
+.payment-status-timeline li.current .payment-status-marker {
+  box-shadow: 0 0 0 5px var(--primary-soft);
+}
+
+.payment-status-timeline strong {
+  color: var(--ink);
+}
+
+.payment-status-timeline p {
+  margin: 3px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.payment-event-list {
+  display: grid;
+  gap: 0;
+}
+
+.payment-event {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 13px 0;
+  border-top: 1px solid var(--line);
+}
+
+.payment-event:first-child {
+  border-top: 0;
+}
+
+.payment-event p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.payment-event-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px 10px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.payment-truth-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+@media (max-width: 900px) {
+  .health-shop-merchant-grid,
+  .health-shop-start-grid {
+    grid-template-columns: repeat(2,minmax(0,1fr));
+  }
+
+  .payment-state-guide,
+  .payment-detail-grid,
+  .payment-truth-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .payment-ledger {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 650px) {
+  .health-shop-search__row,
+  .health-shop-merchant-grid,
+  .health-shop-start-grid,
+  .payment-state-guide,
+  .payment-detail-grid,
+  .payment-truth-grid,
+  .payment-issue-form {
+    grid-template-columns: 1fr;
+  }
+
+  .health-shop-medicine-handoff,
+  .health-shop-saved-item,
+  .payment-ledger-card__top,
+  .payment-event {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .health-shop-merchant-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .health-shop-merchant-actions > *,
+  .health-shop-saved-item .form-actions,
+  .health-shop-saved-item .form-actions > * {
+    width: 100%;
+  }
+
+  .payment-description-field,
+  .payment-issue-action {
+    grid-column: auto;
+  }
+
+  .payment-event-meta {
+    justify-content: flex-start;
+  }
+}
+
+@media print {
+  .topbar,
+  .experience-strip,
+  .patient-mobile-dock,
+  .site-footer,
+  .payment-detail-head .form-actions,
+  .incoming-call-banner {
+    display: none !important;
+  }
+
+  body {
+    background: #fff;
+  }
+
+  .page {
+    width: 100%;
+    padding: 0;
+  }
+
+  .panel {
+    box-shadow: none;
+  }
+}
