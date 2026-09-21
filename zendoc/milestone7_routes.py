@@ -8,9 +8,11 @@ from .connect import (
     discover_contacts,
     get_conversation,
     get_message_media_access,
+    list_communication_permissions,
     list_conversations,
     list_messages,
     mark_read,
+    revoke_communication_permission,
     send_message,
     share_native_media_message,
     share_report_message,
@@ -145,6 +147,20 @@ def messages_page():
                 audit("share", "report_message", str(message["id"]))
                 flash("Medical report shared with consent.", "success")
                 return redirect(url_for("milestone7.messages_page", conversation_id=message["conversation_id"]))
+            if action == "revoke_permission":
+                conversation_id = int(request.form.get("conversation_id") or 0)
+                permission = revoke_communication_permission(
+                    g.user,
+                    int(request.form.get("permission_id") or 0),
+                )
+                audit("revoke", "communication_permission", str(permission["id"]))
+                flash("Communication permission revoked.", "success")
+                return redirect(
+                    url_for(
+                        "milestone7.messages_page",
+                        conversation_id=conversation_id or None,
+                    )
+                )
             if action in {"block_contact", "unblock_contact"}:
                 conversation_id = int(request.form.get("conversation_id"))
                 conversation = get_conversation(g.user, conversation_id)
@@ -224,6 +240,25 @@ def messages_page():
         current_app.logger.exception("ZENDOC Connect block-list lookup failed.")
         blocked_ids = set()
 
+    communication_permissions = []
+    if selected:
+        other = next(
+            (
+                participant for participant in selected.get("participants", [])
+                if int(participant.get("id") or 0) != int(g.user["id"])
+            ),
+            None,
+        )
+        if other:
+            try:
+                communication_permissions = list_communication_permissions(
+                    g.user,
+                    related_user_id=int(other["id"]),
+                )
+            except Exception:
+                current_app.logger.exception("ZENDOC Connect permission list failed.")
+                communication_permissions = []
+
     return render_template(
         "messages.html",
         conversations=conversations,
@@ -234,6 +269,7 @@ def messages_page():
         incoming_calls=incoming_calls,
         q=request.args.get("q", ""),
         blocked_ids=blocked_ids,
+        communication_permissions=communication_permissions,
     )
 
 
@@ -539,6 +575,33 @@ def api_share_report(conversation_id):
         message = share_report_message(user, conversation_id, data)
         audit("share", "report_message", str(message["id"]), actor=user)
         return jsonify({"message": message}), 201
+    except (ValueError, LookupError, PermissionError) as error:
+        return _api_error(error)
+
+
+@bp.get("/api/v1/communication-permissions")
+def api_list_communication_permissions():
+    user, error = require_api_user()
+    if error:
+        return error
+    related = request.args.get("related_user_id")
+    try:
+        related_id = int(related) if related not in (None, "") else None
+        permissions = list_communication_permissions(user, related_user_id=related_id)
+        return jsonify({"communication_permissions": permissions})
+    except (TypeError, ValueError, PermissionError) as error:
+        return _api_error(error)
+
+
+@bp.post("/api/v1/communication-permissions/<int:permission_id>/revoke")
+def api_revoke_communication_permission(permission_id):
+    user, error = require_api_user()
+    if error:
+        return error
+    try:
+        permission = revoke_communication_permission(user, permission_id)
+        audit("revoke", "communication_permission", str(permission_id), actor=user)
+        return jsonify({"communication_permission": permission})
     except (ValueError, LookupError, PermissionError) as error:
         return _api_error(error)
 
