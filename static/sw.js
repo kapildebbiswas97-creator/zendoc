@@ -1,8 +1,10 @@
-const STATIC_CACHE = "zendoc-static-v1";
+const STATIC_CACHE = "zendoc-static-v2-20260921";
 const STATIC_ASSETS = [
   "/static/style.css",
   "/static/ui-polish.css",
+  "/static/product-expansion.css",
   "/static/app.js",
+  "/static/finder.js",
   "/static/pwa.js",
   "/static/favicon.svg",
   "/offline"
