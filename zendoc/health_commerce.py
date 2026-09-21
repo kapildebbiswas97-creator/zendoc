@@ -11,6 +11,7 @@ integration-specific tests before ZENDOC may claim referral revenue.
 from __future__ import annotations
 
 from copy import deepcopy
+import re
 from urllib.parse import quote_plus, urlparse
 
 
@@ -142,6 +143,8 @@ MERCHANTS = (
 MEDICINE_TERMS = {
     "medicine", "medicines", "drug", "drugs", "tablet", "tablets", "capsule", "capsules",
     "antibiotic", "antibiotics", "injection", "insulin", "prescription medicine",
+    "paracetamol", "acetaminophen", "ibuprofen", "aspirin", "cetirizine", "azithromycin",
+    "amoxicillin", "metformin", "atorvastatin", "omeprazole", "pantoprazole",
 }
 
 
@@ -177,7 +180,11 @@ def _category(value):
 
 def _looks_like_medicine_query(query):
     lowered = query.lower()
-    return any(term in lowered for term in MEDICINE_TERMS)
+    if any(term in lowered for term in MEDICINE_TERMS):
+        return True
+    # Dosage-like queries are routed into the pharmacy safety flow instead of
+    # being treated as ordinary marketplace shopping intent.
+    return bool(re.search(r"\b\d+(?:\.\d+)?\s*(?:mg|mcg|microgram|milligram)\b", lowered))
 
 
 def search_health_products(query, category="general_wellness"):
