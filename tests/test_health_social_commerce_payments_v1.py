@@ -23,22 +23,23 @@ def test_patient_can_reach_new_product_surfaces(tmp_path):
     pages = {
         "/mental-wellness": [
             b"Mental Wellness &amp; Awareness",
-            b"Students",
-            b"Professionals",
-            b"Adults &amp; Parents",
+            b"Children",
+            b"Teenagers",
+            b"Students &amp; Young Adults",
+            b"Working Adults",
+            b"Parents &amp; Caregivers",
             b"Older Adults",
             b"Non-diagnostic",
         ],
-        "/community": [b"Health-only social community", b"24-hour story", b"reporting", b"blocking"],
-        "/health-shop": [b"Health Shop", b"B2C health commerce", b"Clinical independence"],
+        "/community": [b"Health-only social community", b"Your story", b"reporting", b"blocking"],
+        "/health-shop": [b"Health Shop &amp; Wellness Marketplace", b"Clinical independence"],
         "/payments": [b"Payments &amp; invoices", b"Payment truth boundary"],
         "/health-hub": [b"Health Community", b"Health Shop"],
         "/dashboard": [
-            b"Mental Wellness Center",
+            b"Mental Wellness &amp; Awareness",
             b"Health Community",
             b"Health Shop",
             b"Payments",
-            b"/ai#mental-awareness",
         ],
     }
     for path, expected in pages.items():
@@ -127,7 +128,8 @@ def test_business_page_is_public_and_truthful(tmp_path):
     client = app.test_client()
     response = client.get("/business")
     assert response.status_code == 200
-    assert b"B2B + B2C" in response.data
+    assert b"healthcare organizations and care partners" in response.data
+    assert b"Hospitals, clinics, nursing homes, pharmacies &amp; diagnostics" in response.data
     assert b"real merchant affiliate approval" in response.data
     assert b"real contracts" in response.data
 
