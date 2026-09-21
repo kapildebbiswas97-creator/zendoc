@@ -5,11 +5,168 @@ Classifies search queries across doctors, symptoms, diagnostic reports, pharmaci
 ambulance, fitness, family records, and direct platform features.
 """
 
-from .db import get_db
+from flask import has_app_context
+
 from .exercise_library import list_exercises
 from .family_care import list_family_members
-from .healthcare_finder import HealthcareFinder
-from .healthcare_finder import normalize_query
+from .universal_health_search import universal_search as search_healthcare
+
+
+PLATFORM_TOOL_CATALOG = (
+    {
+        "keywords": ("mental wellness", "mental health", "stress", "mood", "journal", "wellbeing", "self care", "self-care"),
+        "title": "Mental Wellness & Awareness",
+        "subtitle": "Private check-ins, private journal and safety-first non-diagnostic support",
+        "url": "/mental-wellness",
+        "type": "mental_wellness",
+    },
+    {
+        "keywords": ("community", "post", "posts", "social", "story", "stories", "feed", "follow"),
+        "title": "ZENDOC Health Community",
+        "subtitle": "Health-focused posts, stories, saved posts, comments, media and moderation controls",
+        "url": "/community",
+        "type": "community",
+    },
+    {
+        "keywords": ("shop", "shopping", "amazon", "flipkart", "meesho", "blinkit", "zomato", "swiggy", "fitness product", "health product", "device"),
+        "title": "ZENDOC Health Shop",
+        "subtitle": "Health-focused external product discovery with truthful referral status",
+        "url": "/health-shop",
+        "type": "health_shop",
+    },
+    {
+        "keywords": ("message", "messages", "chat", "conversation", "whatsapp", "telegram"),
+        "title": "ZENDOC Connect Messages",
+        "subtitle": "Private policy-aware conversations, media sharing and authorized voice/video calls",
+        "url": "/messages",
+        "type": "messages",
+    },
+    {
+        "keywords": ("payment", "payments", "invoice", "razorpay"),
+        "title": "ZENDOC Payments",
+        "subtitle": "Connected payment workflow with real gateway verification when configured",
+        "url": "/payments",
+        "type": "payments",
+    },
+    {
+        "keywords": ("health memory", "timeline", "my records", "records"),
+        "title": "Health Memory",
+        "subtitle": "Your longitudinal records, timeline, reports and consent-controlled access",
+        "url": "/health-summary",
+        "type": "health_memory",
+    },
+    {
+        "keywords": ("ai", "assistant", "ask zendoc", "chatgpt"),
+        "title": "ZENDOC AI",
+        "subtitle": "Educational health guidance, retrieval and safe next-step support",
+        "url": "/ai",
+        "type": "ai_assistant",
+    },
+)
+
+COMMERCE_QUERY_TERMS = (
+    "shop", "shopping", "buy", "amazon", "flipkart", "meesho", "blinkit", "zomato",
+    "swiggy", "instamart", "yoga mat", "fitness equipment", "health product",
+    "wellness product", "bp monitor", "blood pressure monitor", "wearable",
+)
+
+COMMUNITY_QUERY_TERMS = (
+    "community", "post", "posts", "story", "stories", "feed", "social",
+)
+
+
+HEALTHCARE_QUERY_TERMS = (
+    "doctor", "doctors", "cardiologist", "dermatologist", "physician", "specialist",
+    "hospital", "hospitals", "clinic", "clinics", "pharmacy", "pharmacies", "chemist",
+    "medical store", "medical shop", "diagnostic", "diagnostics", "laboratory", "lab",
+    "health centre", "health center", "phc", "chc", "nursing home", "blood bank",
+    "emergency care",
+)
+
+
+def _healthcare_search_items(clean_q):
+    """Reuse the canonical healthcare discovery parser for the legacy global search.
+
+    This keeps shorthand such as ``medical store Fulia`` or ``clinic near Nairobi``
+    aligned with the dedicated Universal Healthcare Search. Results retain their
+    source/verification truth and public/external listings are never promoted to
+    connected ZENDOC booking.
+    """
+    result = search_healthcare(clean_q)
+    items = []
+    for item in result.get("results", [])[:8]:
+        location = item.get("city") or item.get("district") or item.get("state") or item.get("address") or ""
+        source = item.get("source") or "healthcare discovery"
+        verification = item.get("verification_status") or "not_verified"
+        detail = item.get("specialty") or item.get("category") or "Healthcare"
+        subtitle_parts = [str(detail).replace("_", " ").title()]
+        if location:
+            subtitle_parts.append(str(location))
+        if source != "zendoc_provider_network":
+            subtitle_parts.append("External/public discovery")
+        elif verification == "verified":
+            subtitle_parts.append("ZENDOC verified")
+        items.append({
+            "title": item.get("name") or item.get("provider_name") or item.get("organization") or "Healthcare provider",
+            "subtitle": " • ".join(subtitle_parts),
+            "url": f"/universal-search?q={clean_q}",
+            "type": "provider",
+            "source": source,
+            "verification_status": verification,
+            "bookable_in_zendoc": bool(item.get("bookable_in_zendoc")),
+        })
+    return items
+
+
+def _platform_tool_matches(lower):
+    matches = []
+    for item in PLATFORM_TOOL_CATALOG:
+        if any(keyword in lower for keyword in item["keywords"]):
+            matches.append({
+                key: value for key, value in item.items() if key != "keywords"
+            })
+    return matches
+
+
+def _community_matches(user, clean_q, limit=5):
+    if not user or not has_app_context() or not any(term in clean_q.lower() for term in COMMUNITY_QUERY_TERMS):
+        return []
+    try:
+        from .db import get_db
+        from .health_social import blocked_user_ids, ensure_health_social_schema
+        ensure_health_social_schema()
+        blocked = blocked_user_ids(user)
+        params = [f"%{clean_q.lower()}%"]
+        blocked_sql = ""
+        if blocked:
+            placeholders = ",".join("?" for _ in blocked)
+            blocked_sql = f" AND p.author_id NOT IN ({placeholders})"
+            params.extend(sorted(int(uid) for uid in blocked))
+        params.append(max(1, min(int(limit), 10)))
+        rows = get_db().execute(
+            f"""
+            SELECT p.id,p.body,p.lane,p.created_at,u.name author_name
+            FROM health_social_posts p
+            JOIN users u ON u.id=p.author_id
+            WHERE p.moderation_status='published'
+              AND LOWER(p.body) LIKE ?
+              {blocked_sql}
+            ORDER BY p.created_at DESC,p.id DESC
+            LIMIT ?
+            """,
+            tuple(params),
+        ).fetchall()
+        return [
+            {
+                "title": f"{row['author_name']} · {str(row['lane']).replace('_', ' ').title()}",
+                "subtitle": str(row["body"])[:180],
+                "url": f"/community/posts/{row['id']}",
+                "type": "community_post",
+            }
+            for row in rows
+        ]
+    except Exception:
+        return []
 
 
 def search_all(user, query):
@@ -43,26 +200,15 @@ def search_all(user, query):
                 ],
             })
 
-    # 2. Healthcare Provider Search (Doctor, Specialist, Hospital, Pharmacy)
-    if any(k in lower for k in ("doctor", "cardiologist", "dermatologist", "physician", "hospital", "pharmacy", "clinic", "specialist")):
-        category = "pharmacy" if "pharmacy" in lower else "hospital" if "hospital" in lower else "doctor"
-        specialty = clean_q if category == "doctor" and clean_q.lower() not in {"doctor", "specialist"} else ""
-        finder_results = HealthcareFinder().search(normalize_query(category=category, specialty=specialty))
-        external_places = finder_results.get("external_places", {})
-        items = finder_results.get("registered_providers", []) + external_places.get("results", [])
-        if items:
+    # 2. Healthcare discovery. Use the same parser/data tiers as the dedicated
+    # Universal Healthcare Search instead of maintaining a weaker duplicate.
+    if any(term in lower for term in HEALTHCARE_QUERY_TERMS):
+        healthcare_items = _healthcare_search_items(clean_q)
+        if healthcare_items:
             results.append({
                 "category": "Healthcare Providers",
                 "label": "Doctors & Facilities",
-                "items": [
-                    {
-                        "title": item.get("name") or item.get("organization", "Provider"),
-                        "subtitle": f"{item.get('specialty') or item.get('provider_type', 'Healthcare')} • {item.get('city', '')}",
-                        "url": f"/finder?q={clean_q}",
-                        "type": "provider",
-                    }
-                    for item in items[:5]
-                ],
+                "items": healthcare_items,
             })
 
     # 3. Emergency / Transport
@@ -72,8 +218,8 @@ def search_all(user, query):
             "label": "Ambulance Services",
             "items": [
                 {
-                    "title": "Request Medical Transport / Ambulance",
-                    "subtitle": "Emergency 108, BLS, ALS, & Patient Transport",
+                    "title": "Medical Transport Request Intake",
+                    "subtitle": "Request categories and emergency guidance · no ZENDOC dispatch confirmation",
                     "url": "/ambulance",
                     "type": "ambulance",
                 }
@@ -81,14 +227,14 @@ def search_all(user, query):
         })
 
     # 4. Medicine / Pharmacy
-    if any(k in lower for k in ("medicine", "pharmacy", "drug", "tablet", "pill", "prescription")):
+    if any(k in lower for k in ("medicine", "pharmacy", "chemist", "medical store", "medical shop", "drug", "tablet", "pill", "prescription")):
         results.append({
             "category": "Pharmacy & Medicines",
             "label": "Medicine Services",
             "items": [
                 {
                     "title": f"Search Medicines for '{clean_q}'",
-                    "subtitle": "Order delivery & locate nearby pharmacies",
+                    "subtitle": "Medicine safety flow & nearby pharmacy discovery",
                     "url": f"/pharmacy?q={clean_q}",
                     "type": "pharmacy",
                 }
@@ -96,7 +242,11 @@ def search_all(user, query):
         })
 
     # 5. Fitness & Exercises
-    ex_res = list_exercises(q=clean_q, limit=5)
+    # Direct service-level callers may use search_all without a Flask app
+    # context (for example truth-boundary/unit tests). DB-backed exercise
+    # lookup is optional in that case; real web/API requests always have an
+    # app context and retain the full exercise search.
+    ex_res = list_exercises(q=clean_q, limit=5) if has_app_context() else {"exercises": []}
     if ex_res.get("exercises"):
         results.append({
             "category": "Fitness & Exercises",
@@ -185,14 +335,54 @@ def search_all(user, query):
             ],
         })
 
-    # 9. AI Health Assistant
+    # 9. Restored product surfaces. These direct links keep major working
+    # capabilities discoverable even when their data stores have no matches.
+    platform_items = _platform_tool_matches(lower)
+    if platform_items:
+        results.append({
+            "category": "ZENDOC Tools",
+            "label": "Platform Features",
+            "items": platform_items,
+        })
+
+    community_items = _community_matches(user, clean_q)
+    if community_items:
+        results.append({
+            "category": "Health Community",
+            "label": "Community Posts",
+            "items": community_items,
+        })
+
+    if any(term in lower for term in COMMERCE_QUERY_TERMS):
+        try:
+            from .health_commerce import search_health_products
+            commerce = search_health_products(clean_q, "general_wellness")
+            merchant_items = [
+                {
+                    "title": item["label"],
+                    "subtitle": "External discovery only · stock and price not verified",
+                    "url": f"/health-shop?q={clean_q}&category=general_wellness",
+                    "type": "external_merchant_discovery",
+                }
+                for item in commerce.get("results", [])[:6]
+            ]
+            if merchant_items:
+                results.append({
+                    "category": "Health Shop",
+                    "label": "External Merchant Discovery",
+                    "items": merchant_items,
+                })
+        except Exception:
+            pass
+
+    # 10. AI Health Assistant
     results.append({
         "category": "ZENDOC AI",
-        "label": "AI Health Consultation",
+        "label": "AI Health Guidance",
         "items": [
             {
                 "title": f"Ask ZENDOC AI about '{clean_q}'",
-                "subtitle": "Get instant educational advice & symptom guidance",
+                "subtitle": "Get educational health guidance with deterministic safety boundaries",
                 "url": f"/ai?prompt={clean_q}",
                 "type": "ai_assistant",
             }
@@ -201,4 +391,3 @@ def search_all(user, query):
 
     total_matches = sum(len(c["items"]) for c in results)
     return {"query": clean_q, "categories": results, "total_matches": total_matches}
-

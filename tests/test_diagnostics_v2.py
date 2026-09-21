@@ -94,13 +94,14 @@ def test_stale_diagnostic_offer_cannot_be_booked(tmp_path):
         )
         db.commit()
 
+        future_date = (datetime.now(timezone.utc) + timedelta(days=1)).date().isoformat()
         with pytest.raises(ValueError) as exc:
             book_diagnostic_test(
                 actor={"id": patient_id, "role": "patient"},
                 patient_id=patient_id,
                 test_id=1,
                 lab_id=lab_id,
-                scheduled_date="2026-09-20",
+                scheduled_date=future_date,
                 address="Kolkata address",
                 collection_type="home_collection",
                 user_confirmed=True,

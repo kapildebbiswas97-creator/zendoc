@@ -16,11 +16,34 @@
 
 <aside class="trust-note">
   <strong>Consent-first approach</strong><br>
-  Add a family member only when you have their consent or appropriate authority. Information shared with care providers depends on the patient's own privacy settings.
+  Add a family member only when you have their consent or appropriate authority. Information shared with care providers depends on the patient's own privacy settings. Pregnancy, fertility/family-building and menopause status are never inferred from age, gender or relationship; those journeys must be explicitly selected in a dedicated workflow.
 </aside>
 
+<section class="spaced-panel">
+  <div class="panel-head">
+    <div><p class="eyebrow">Life-stage care</p><h2>Family care programs</h2></div>
+  </div>
+  <p class="section-copy">These are care-organization categories, not active paid subscriptions. They organize family workflows and longitudinal continuity while permissions, clinical decisions and payments remain deterministic and outside model control.</p>
+  <div class="grid three">
+    {% for program in family_programs %}
+      <article class="panel">
+        <p class="eyebrow">{{ program.audience }}</p>
+        <h3>{{ program.label }}</h3>
+        <p>{{ program.summary }}</p>
+        {% if program.activation == 'explicit_consent_required' %}
+          <span class="status-badge">Explicit consent required</span>
+        {% elif program.activation == 'user_selected_only' %}
+          <span class="status-badge">User-selected only</span>
+        {% else %}
+          <span class="status-badge">Care category</span>
+        {% endif %}
+        <span class="status-badge">Navigation only</span>
+      </article>
+    {% endfor %}
+  </div>
+</section>
+
 <div class="grid two spaced-panel">
-  <!-- Left: Members list and add form -->
   <article class="panel">
     <div class="panel-head">
       <div><p class="eyebrow">Your care network</p><h2>Family members</h2></div>
@@ -32,7 +55,8 @@
           <div class="appointment-card">
             <div>
               <h3>{{ m.member_name }}</h3>
-              <p>{{ m.relationship.title() }}{% if m.age %} · Age {{ m.age }}{% endif %}{% if m.city %} · {{ m.city }}{% endif %}{% if m.is_remote_parent %} · <span class="status-badge active">Remote parent</span>{% endif %}</p>
+              <p>{{ m.relationship.title() }}{% if m.age is not none %} · Age {{ m.age }}{% endif %}{% if m.city %} · {{ m.city }}{% endif %}{% if m.is_remote_parent %} · <span class="status-badge active">Remote family</span>{% endif %}</p>
+              <p><strong>{{ m.life_stage.label }}</strong> — {{ m.life_stage.focus }}</p>
             </div>
             <a href="{{ url_for('family.family_page', member_id=m.id) }}" class="secondary-action">Tasks &amp; care</a>
           </div>
@@ -79,14 +103,13 @@
             </label>
             <label>City <input type="text" name="city" placeholder="e.g. Kolkata"></label>
           </div>
-          <label class="check-option"><input type="checkbox" name="is_remote_parent" value="1" checked> Mark as remote parent or senior dependent</label>
+          <label class="check-option"><input type="checkbox" name="is_remote_parent" value="1"> Mark as a remote parent or dependent I coordinate care for</label>
           <button type="submit" data-submitting-label="Adding…">Add family member</button>
         </form>
       </div>
     </details>
   </article>
 
-  <!-- Right: Care tasks -->
   <article class="panel">
     <div class="panel-head">
       <div><p class="eyebrow">Upcoming care</p><h2>Care tasks &amp; reminders</h2></div>
@@ -152,4 +175,25 @@
     </details>
   </article>
 </div>
+
+<section class="spaced-panel">
+  <div class="panel-head">
+    <div><p class="eyebrow">Billing boundary</p><h2>Family subscription &amp; payment readiness</h2></div>
+    <span class="status-badge">Not configured</span>
+  </div>
+  <aside class="trust-note">
+    <strong>No payment is executed here.</strong><br>
+    {{ payment.truth_notice }}
+  </aside>
+  <p class="section-copy">A child living abroad may eventually sponsor a parent's care only through a verified payment provider and explicit payer authorization. Until then, cross-border settlement and family-sponsor payment are disabled.</p>
+  <div class="grid three">
+    {% for method in payment.methods %}
+      <article class="panel">
+        <h3>{{ method.label }}</h3>
+        <p>{{ method.region }}</p>
+        <span class="status-badge">Integration required</span>
+      </article>
+    {% endfor %}
+  </div>
+</section>
 {% endblock %}

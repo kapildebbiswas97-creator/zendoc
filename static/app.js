@@ -16,29 +16,6 @@ const primaryNav = document.getElementById("primary-navigation");
 const themeToggle = document.getElementById("theme-toggle-btn");
 const topbar = document.getElementById("site-topbar");
 
-// Agent OS is an authenticated production surface. Add a visible navigation
-// entry for every signed-in role without changing any role/permission checks;
-// the server-side route remains authoritative. The base template only renders
-// #primary-navigation for authenticated users, so guests never receive this link.
-if (primaryNav && !primaryNav.querySelector('a[href="/agent-os"]')) {
-  const agentOsLink = document.createElement("a");
-  agentOsLink.href = "/agent-os";
-  agentOsLink.textContent = "Agent OS";
-  if (window.location.pathname === "/agent-os") {
-    agentOsLink.setAttribute("aria-current", "page");
-  }
-  const aiLink = Array.from(primaryNav.querySelectorAll(":scope > a")).find(
-    (link) => link.textContent.trim() === "AI Assistant"
-  );
-  if (aiLink) {
-    aiLink.insertAdjacentElement("afterend", agentOsLink);
-  } else {
-    const homeLink = primaryNav.querySelector(":scope > a");
-    if (homeLink) homeLink.insertAdjacentElement("afterend", agentOsLink);
-    else primaryNav.prepend(agentOsLink);
-  }
-}
-
 const syncThemeToggle = () => {
   if (!themeToggle) return;
   const isDark = document.documentElement.dataset.theme === "dark";
@@ -272,3 +249,4 @@ if (
       revealObserver.observe(element);
     });
 }
+

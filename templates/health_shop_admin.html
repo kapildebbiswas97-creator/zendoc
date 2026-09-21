@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Commerce & Referral Activity — ZENDOC{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div><p class="eyebrow">Owner-only commerce evidence</p><h1>Commerce & referral activity</h1><p class="section-copy">Inspect real ZENDOC outbound clicks. Outbound clicks do not prove an order, conversion or commission.</p></div>
+  <a class="secondary-action" href="{{ url_for('main.admin') }}">Back to Admin</a>
+</section>
+<aside class="trust-note"><strong>Truth boundary.</strong><br>{{ metrics.truth_notice }} {{ affiliate.truth_notice }}</aside>
+<section class="stats spaced-panel">
+  <article><span>Outbound clicks</span><strong>{{ metrics.total_outbound_clicks }}</strong><small>recorded by ZENDOC</small></article>
+  <article><span>Unique users</span><strong>{{ metrics.unique_users }}</strong><small>with recorded outbound clicks</small></article>
+  <article><span>Affiliate-configured clicks</span><strong>{{ metrics.affiliate_configured_clicks }}</strong><small>not verified conversions</small></article>
+  <article><span>Verified revenue</span><strong>0 claimed</strong><small>no conversion/settlement source configured here</small></article>
+</section>
+<section class="grid two spaced-panel">
+  <article class="panel"><p class="eyebrow">Merchant activity</p><h2>Outbound clicks by merchant</h2>{% for item in metrics.merchants %}<div class="summary-row"><strong>{{ item.merchant_id.replace('_',' ').title() }}</strong><span>{{ item.clicks }} clicks · {{ item.affiliate_configured_clicks or 0 }} affiliate-configured</span></div>{% else %}<div class="empty-state"><p>No outbound commerce activity yet.</p></div>{% endfor %}</article>
+  <article class="panel"><p class="eyebrow">Configuration</p><h2>Approved affiliate templates</h2>{% if affiliate.configured_merchants %}{% for merchant in affiliate.configured_merchants %}<div class="summary-row"><strong>{{ merchant.replace('_',' ').title() }}</strong><span class="status-badge active">Configured</span></div>{% endfor %}{% else %}<div class="empty-state"><p>No approved affiliate templates are configured. External merchant links remain discovery-only.</p></div>{% endif %}</article>
+</section>
+<section class="panel spaced-panel">
+  <div class="panel-head"><div><p class="eyebrow">Recent evidence</p><h2>Outbound click log</h2></div></div>
+  {% for item in metrics.recent %}
+    <div class="summary-row"><div><strong>{{ item.merchant_id.replace('_',' ').title() }}</strong><p>{{ item.query_text }} · {{ item.category.replace('_',' ') }}</p></div><small>{{ item.created_at }}</small></div>
+  {% else %}<div class="empty-state"><p>No commerce clicks have been recorded.</p></div>{% endfor %}
+</section>
+{% endblock %}

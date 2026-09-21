@@ -58,13 +58,72 @@ def get_capability_registry() -> dict:
     )
     places_provider = _env("ZENDOC_PLACES_PROVIDER", "none").lower()
     places = places_provider == "google" and bool(_env("ZENDOC_GOOGLE_PLACES_API_KEY"))
+    production_places_fallback = (
+        _env("ZENDOC_ENV", "development").lower() == "production"
+        and places_provider in {"", "none"}
+    )
+    places_external_available = bool(
+        places
+        or places_provider in {"nominatim", "openstreetmap", "osm"}
+        or production_places_fallback
+    )
     video_provider = _env("ZENDOC_VIDEO_PROVIDER", "none") not in {"", "none"}
+    external_email_configured = (
+        _env("ZENDOC_EMAIL_PROVIDER", "none").lower() == "smtp"
+        and bool(_env("ZENDOC_SMTP_HOST"))
+        and bool(_env("ZENDOC_SMTP_FROM_EMAIL"))
+    )
     database_url = _env("DATABASE_URL")
     postgresql_configured = database_url.startswith(("postgresql://", "postgres://", "postgresql+psycopg://"))
     persistence_verified = _env_bool("ZENDOC_PERSISTENCE_VERIFIED")
-    storage_provider = _env("ZENDOC_STORAGE_PROVIDER", "local")
-    s3_configured = storage_provider != "local" and bool(_env("ZENDOC_STORAGE_BUCKET"))
+    storage_provider = _env("ZENDOC_STORAGE_PROVIDER", "local").lower()
+    s3_provider = storage_provider in {"s3", "s3_compatible", "r2"}
+    s3_configured = s3_provider and all(
+        bool(_env(key))
+        for key in (
+            "ZENDOC_S3_BUCKET",
+            "ZENDOC_S3_ACCESS_KEY_ID",
+            "ZENDOC_S3_SECRET_ACCESS_KEY",
+        )
+    )
     real_evaluation_enabled = _env_bool("ZENDOC_MODEL_EVALUATION_REAL_ENABLED")
+    storage_verified = _env_bool("ZENDOC_STORAGE_VERIFIED")
+    affiliate_templates_configured = any(
+        bool(_env(key))
+        for key in (
+            "ZENDOC_AFFILIATE_AMAZON_INDIA_URL_TEMPLATE",
+            "ZENDOC_AFFILIATE_FLIPKART_URL_TEMPLATE",
+            "ZENDOC_AFFILIATE_MEESHO_URL_TEMPLATE",
+            "ZENDOC_AFFILIATE_BLINKIT_URL_TEMPLATE",
+            "ZENDOC_AFFILIATE_BIGBASKET_URL_TEMPLATE",
+            "ZENDOC_AFFILIATE_ZEPTO_URL_TEMPLATE",
+            "ZENDOC_AFFILIATE_SWIGGY_INSTAMART_URL_TEMPLATE",
+            "ZENDOC_AFFILIATE_ZOMATO_URL_TEMPLATE",
+            "ZENDOC_AFFILIATE_LENSKART_URL_TEMPLATE",
+            "ZENDOC_AFFILIATE_HEALTHKART_URL_TEMPLATE",
+        )
+    )
+    webrtc_ice_configured = bool(_env("ZENDOC_WEBRTC_ICE_SERVERS_JSON"))
+    external_ekyc_provider = _env("ZENDOC_EKYC_PROVIDER", "none").lower()
+    external_ekyc_configured = (
+        external_ekyc_provider not in {"", "none", "manual"}
+        and bool(_env("ZENDOC_EKYC_WEBHOOK_SECRET"))
+    )
+    external_ekyc_verified = external_ekyc_configured and _env_bool("ZENDOC_EKYC_VERIFIED")
+    carefin_partner_name = _env("ZENDOC_CAREFIN_PARTNER_NAME", "none")
+    carefin_partner_configured = (
+        carefin_partner_name.lower() not in {"", "none"}
+        and bool(_env("ZENDOC_CAREFIN_WEBHOOK_SECRET"))
+    )
+    carefin_partner_verified = carefin_partner_configured and _env_bool("ZENDOC_CAREFIN_PARTNER_VERIFIED")
+    razorpay_configured = all(
+        bool(_env(key))
+        for key in (
+            "ZENDOC_RAZORPAY_KEY_ID",
+            "ZENDOC_RAZORPAY_KEY_SECRET",
+            "ZENDOC_RAZORPAY_WEBHOOK_SECRET",
+        )
+    )
 
     return {
         # Core platform
@@ -76,7 +135,58 @@ def get_capability_registry() -> dict:
         "connect_messaging": {
             "status": STATUS_WORKING,
             "label": "ZENDOC Connect Messaging",
-            "description": "Policy-aware messaging, conversations, read receipts, report/video sharing.",
+            "description": "Policy-aware messaging, conversations, read receipts, report/video sharing and participant-protected native image/video attachments.",
+        },
+        "mental_wellness_private": {
+            "status": STATUS_WORKING,
+            "label": "Mental Wellness & Awareness",
+            "description": "Private self-entered check-ins and journal history with non-diagnostic, emergency-first safety boundaries.",
+        },
+        "health_community": {
+            "status": STATUS_WORKING,
+            "label": "ZENDOC Health Community",
+            "description": "Health-only posts, stories, comments, reactions, follows, saved posts, reporting, blocking, author deletion and authenticated media access.",
+        },
+        "community_media_public_durability": {
+            "status": STATUS_BETA if s3_configured and storage_verified else STATUS_INTEGRATION_REQUIRED,
+            "label": "Durable Public Community Media",
+            "description": (
+                "S3-compatible storage is configured and operator-verified."
+                if s3_configured and storage_verified
+                else "Local media works for development; public durable video/image storage requires configured and verified object storage."
+            ),
+        },
+        "health_shop_discovery": {
+            "status": STATUS_WORKING,
+            "label": "Health Shop Discovery",
+            "description": "Health-focused external merchant discovery plus real outbound-click attribution; no stock, price, order or commission is fabricated.",
+        },
+        "affiliate_referral_revenue": {
+            "status": STATUS_BETA if affiliate_templates_configured else STATUS_INTEGRATION_REQUIRED,
+            "label": "Affiliate / Referral Revenue",
+            "description": (
+                "Approved affiliate URL templates are configured; actual conversion and commission still require authoritative merchant evidence."
+                if affiliate_templates_configured
+                else "No approved affiliate templates are configured; merchant handoffs remain discovery-only."
+            ),
+        },
+        "connected_payments_gateway": {
+            "status": STATUS_BETA if razorpay_configured else STATUS_INTEGRATION_REQUIRED,
+            "label": "Connected Payments Gateway",
+            "description": (
+                "Razorpay credentials/webhook secret are configured; only verified gateway/webhook state may confirm payments."
+                if razorpay_configured
+                else "Real payment execution requires configured Razorpay credentials and signed webhook verification."
+            ),
+        },
+        "voice_video_calling": {
+            "status": STATUS_BETA,
+            "label": "Voice / Video Calling",
+            "description": (
+                "Authenticated browser WebRTC signaling, call lifecycle and media controls are implemented; configured ICE servers improve network reachability, but TURN reliability still requires real end-to-end verification."
+                if webrtc_ice_configured else
+                "Authenticated browser WebRTC signaling, call lifecycle and media controls are implemented. No ICE server configuration is present, so many public/NAT networks may require TURN before calls are reliable."
+            ),
         },
         "deterministic_safety_engine": {
             "status": STATUS_WORKING,
@@ -162,9 +272,15 @@ def get_capability_registry() -> dict:
             "description": "Deterministic public-source discovery, missing-information analysis, provenance, and coverage truth-state enforcement.",
         },
         "carefin_live_verification": {
-            "status": STATUS_INTEGRATION_REQUIRED,
+            "status": STATUS_WORKING if carefin_partner_verified else (STATUS_BETA if carefin_partner_configured else STATUS_INTEGRATION_REQUIRED),
             "label": "CareFin Live Coverage Verification",
-            "description": "Personal eligibility, insurer approval, government approval, CSR/trust approval, and payment confirmation require authoritative partner responses.",
+            "description": (
+                f"Signed authoritative CareFin callbacks are configured and operator-verified for '{carefin_partner_name}'."
+                if carefin_partner_verified else
+                f"Signed CareFin callback credentials exist for '{carefin_partner_name}', but operator verification is pending."
+                if carefin_partner_configured else
+                "Personal eligibility, insurer/government/CSR approval and payment confirmation require an authoritative partner response; owner evidence review remains available."
+            ),
         },
         "automatic_care_journey": {
             "status": STATUS_WORKING,
@@ -211,6 +327,22 @@ def get_capability_registry() -> dict:
             "label": "Live Official Dataset Connectors",
             "description": "LGD/OGD/ABDM live retrieval requires dataset-specific downloads/APIs or authorized onboarding; ZENDOC does not claim live access by default.",
         },
+        "identity_evidence_review": {
+            "status": STATUS_WORKING,
+            "label": "Privacy-first Identity Evidence Review",
+            "description": "Consent-based masked identifier workflow stores only last 2–4 characters and keeps manual review explicitly separate from external eKYC.",
+        },
+        "external_ekyc": {
+            "status": STATUS_WORKING if external_ekyc_verified else (STATUS_BETA if external_ekyc_configured else STATUS_INTEGRATION_REQUIRED),
+            "label": "External eKYC Provider",
+            "description": (
+                f"Signed webhook integration for '{external_ekyc_provider}' is configured and operator-verified; each user remains unverified until a valid provider callback arrives."
+                if external_ekyc_verified else
+                f"Signed webhook integration for '{external_ekyc_provider}' is configured but not operator-verified."
+                if external_ekyc_configured else
+                "No authorized eKYC provider is connected. Manual identity evidence review is available but is not eKYC."
+            ),
+        },
         "provider_onboarding_v1": {
             "status": STATUS_WORKING,
             "label": "Provider Onboarding & Evidence Review",
@@ -251,7 +383,10 @@ def get_capability_registry() -> dict:
         "telehealth": {
             "status": STATUS_BETA,
             "label": "Telehealth Beta",
-            "description": "Consultation requests, doctor acceptance, chat. Local demo only — production WebRTC provider required.",
+            "description": (
+                "Consultation requests, provider acceptance, scoped Connect chat and authenticated browser WebRTC voice/video are implemented. "
+                "Reliable public-network calling still depends on verified STUN/TURN infrastructure and two-device testing."
+            ),
         },
         "report_intelligence": {
             "status": STATUS_BETA,
@@ -310,9 +445,15 @@ def get_capability_registry() -> dict:
 
         # External integrations
         "healthcare_finder": {
-            "status": STATUS_WORKING if places else STATUS_BETA,
+            "status": STATUS_WORKING if places_external_available else STATUS_BETA,
             "label": "Healthcare Finder",
-            "description": "Google Places credential and provider are configured; runtime calls remain subject to quota/health." if places else "Local provider directory works; live Google Places requires provider configuration plus a server-side API key.",
+            "description": (
+                "Google Places is configured with OpenStreetMap fallback; runtime calls remain subject to provider health/quota."
+                if places else
+                "OpenStreetMap/Nominatim external discovery is available as a truthful unverified discovery layer."
+                if places_external_available else
+                "Local/official provider discovery works; external map discovery activates with OpenStreetMap/Nominatim or Google Places configuration."
+            ),
         },
         "video_intelligence": {
             "status": STATUS_WORKING if video_provider else STATUS_BETA,
@@ -320,9 +461,13 @@ def get_capability_registry() -> dict:
             "description": "Educational video search." if video_provider else "General ZENDOC guidance cards — video provider not configured.",
         },
         "external_notifications": {
-            "status": STATUS_INTEGRATION_REQUIRED,
+            "status": STATUS_BETA if external_email_configured else STATUS_INTEGRATION_REQUIRED,
             "label": "External Notifications (Email/SMS/WhatsApp/Push)",
-            "description": "Configure ZENDOC_EMAIL_PROVIDER, ZENDOC_SMS_PROVIDER for real delivery.",
+            "description": (
+                "SMTP email sending is configured and records provider acceptance as SENT; SMS, WhatsApp and push still require authorized providers."
+                if external_email_configured else
+                "In-app delivery works. SMTP email, SMS, WhatsApp and push require their real provider configuration."
+            ),
         },
         "in_app_notifications": {
             "status": STATUS_WORKING,
@@ -343,11 +488,25 @@ def get_capability_registry() -> dict:
             ),
         },
         "object_storage": {
-            "status": STATUS_INTEGRATION_REQUIRED if s3_configured else STATUS_WORKING,
+            "status": (
+                STATUS_WORKING
+                if s3_configured and storage_verified
+                else STATUS_BETA
+                if s3_configured
+                else STATUS_INTEGRATION_REQUIRED
+                if s3_provider
+                else STATUS_WORKING
+            ),
             "label": "Object Storage (S3-compatible)",
-            "description": "Local file storage (development)."
-                           if not s3_configured else
-                           f"Provider '{storage_provider}' is configured but its external adapter must be installed and tested.",
+            "description": (
+                f"Provider '{storage_provider}' is configured and operator-verified for durable object storage."
+                if s3_configured and storage_verified
+                else f"Provider '{storage_provider}' is configured; run real save/read/delete verification before calling it durable."
+                if s3_configured
+                else f"Provider '{storage_provider}' is selected but required S3-compatible credentials are incomplete."
+                if s3_provider
+                else "Local file storage works for development; hosted persistence requires verified durable object storage."
+            ),
         },
         "realtime": {
             "status": STATUS_WORKING,

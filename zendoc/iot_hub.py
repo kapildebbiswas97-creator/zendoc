@@ -1,12 +1,12 @@
-"""
-IoT Health Device Hub.
+"""IoT Health Device Hub truth boundary.
 
-Connects smartwatches, BP monitors, glucometers, pulse oximeters, ECG devices,
-and smart scales to ZENDOC. Records measurement provenance as 'device'.
+This module can store a user's device inventory today. Registering a record is
+not proof that a physical device is paired or that ZENDOC has a manufacturer
+integration. Public/browser/API callers cannot create trusted device provenance
+without a separately verified device-ingestion adapter.
 """
 
 from .db import get_db, now_iso
-from .health_analytics import create_measurement
 
 
 DEVICE_TYPES = [
@@ -31,7 +31,7 @@ def list_supported_device_types():
 
 
 def connect_device(user, data):
-    """Register a new health device."""
+    """Register a device record without claiming a live device connection."""
     uid = _user_id(user)
     if not uid:
         raise PermissionError("Authentication required.")
@@ -41,9 +41,13 @@ def connect_device(user, data):
         raise ValueError("device_name is required.")
 
     device_type = str(data.get("device_type") or "smartwatch").strip().lower()
+    known_types = {item["type"] for item in DEVICE_TYPES}
+    if device_type not in known_types:
+        raise ValueError("Unsupported device_type.")
+
     manufacturer = str(data.get("manufacturer") or "").strip() or None
     model = str(data.get("model") or "").strip() or None
-    device_identifier = str(data.get("device_identifier") or f"DEV-{uid}-{now_iso()[:19]}").strip()
+    device_identifier = str(data.get("device_identifier") or "").strip() or None
 
     now = now_iso()
     db = get_db()
@@ -51,14 +55,21 @@ def connect_device(user, data):
         """INSERT INTO health_devices
         (user_id, device_name, device_type, manufacturer, model, device_identifier, status, last_synced_at, created_at)
         VALUES (?,?,?,?,?,?,?,?,?)""",
-        (uid, name, device_type, manufacturer, model, device_identifier, "connected", now, now),
+        (uid, name, device_type, manufacturer, model, device_identifier, "registered", None, now),
     )
     db.commit()
-    return get_device(user, cursor.lastrowid)
+    result = get_device(user, cursor.lastrowid)
+    result["live_device_sync"] = False
+    result["integration_status"] = "integration_required"
+    result["truth_notice"] = (
+        "This is a user-registered device record only. It does not prove pairing, "
+        "manufacturer connectivity, or automatic measurement sync."
+    )
+    return result
 
 
 def list_devices(user):
-    """List connected health devices for user."""
+    """List registered health-device records for the user."""
     uid = _user_id(user)
     rows = get_db().execute(
         "SELECT * FROM health_devices WHERE user_id=? ORDER BY created_at DESC",
@@ -68,7 +79,7 @@ def list_devices(user):
 
 
 def get_device(user, device_id):
-    """Get single connected device."""
+    """Get one registered device record owned by the user."""
     uid = _user_id(user)
     row = get_db().execute(
         "SELECT * FROM health_devices WHERE id=? AND user_id=?",
@@ -80,29 +91,15 @@ def get_device(user, device_id):
 
 
 def sync_device_measurement(user, device_id, metric_type, metric_value, unit=None, recorded_at=None, notes=None):
-    """
-    Log a measurement synced from a connected device.
-    Sets provenance source='device' and notes device_identifier.
-    """
-    device = get_device(user, device_id)
-    now = now_iso()
+    """Fail closed until a real authenticated device-ingestion adapter exists.
 
-    # Update last_synced_at timestamp on device
-    get_db().execute("UPDATE health_devices SET last_synced_at=? WHERE id=?", (now, device_id))
-    get_db().commit()
-
-    # Delegate measurement storage to authoritative health_analytics module with provenance
-    measurement_notes = f"Synced from {device['device_name']} ({device['device_identifier']}). {notes or ''}".strip()
-    measurement_id = create_measurement(
-        user,
-        {
-            "metric_type": metric_type,
-            "metric_value": metric_value,
-            "unit": unit,
-            "recorded_at": recorded_at or now,
-            "source": "device",
-            "notes": measurement_notes,
-        },
-        trusted_source=True,
+    Historically this public helper accepted typed values and stamped them as
+    trusted device evidence. That is not truthful device provenance, so public
+    callers are no longer allowed to use this route. Users can enter values
+    through Health Monitoring, where they remain manual/user-reported.
+    """
+    get_device(user, device_id)
+    raise ValueError(
+        "Automatic device sync is Integration Required. This registered device record is not a live connection. "
+        "Enter measurements through Health Monitoring so they remain manual/user-reported."
     )
-    return dict(get_db().execute("SELECT * FROM health_metrics WHERE id=?", (measurement_id,)).fetchone())

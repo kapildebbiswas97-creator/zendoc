@@ -433,6 +433,16 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
         allowed_roles=["patient", "doctor", "hospital", "admin"],
         risk_class=READ_ONLY,
     ),
+    "search_health_memory_evidence": ToolDefinition(
+        name="search_health_memory_evidence",
+        description=(
+            "Search only authorized ZENDOC-stored Health Memory events using local lexical retrieval. "
+            "Returns provenance-bearing evidence and excludes prior AI chat interactions from medical evidence."
+        ),
+        allowed_agents=["HealthMemoryAgent", "PreventionAgent", "LifecycleAgent"],
+        allowed_roles=["patient", "doctor", "hospital", "admin"],
+        risk_class=READ_ONLY,
+    ),
 }
 
 

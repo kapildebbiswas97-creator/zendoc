@@ -19,7 +19,7 @@
   </form>
 
   <article class="panel">
-    <p class="eyebrow">Booking hours</p><h2>Published schedule</h2>
+    <p class="eyebrow">Booking hours</p><h2>{{ 'Published schedule' if provider_operational_access else 'Schedule for verification review' }}</h2>
     <form method="post" action="{{ url_for('main.provider_schedule') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <label>Day <select name="weekday">{% for day in ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'] %}<option value="{{ loop.index0 }}">{{ day }}</option>{% endfor %}</select></label>
@@ -27,10 +27,13 @@
       <label>Appointment length <select name="slot_minutes"><option value="15">15 minutes</option><option value="20">20 minutes</option><option value="30" selected>30 minutes</option><option value="45">45 minutes</option><option value="60">60 minutes</option></select></label>
       <button type="submit" class="secondary-action" data-submitting-label="Adding hours…">Add hours</button>
     </form>
+    {% if not provider_operational_access %}
+      <aside class="trust-note warning"><strong>Not patient-visible yet</strong><br>These hours are onboarding configuration only. ZENDOC will not expose bookable slots until the provider profile is verified.</aside>
+    {% endif %}
     {% if schedules %}
       {% set weekday_names = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'] %}<div class="schedule-grid spaced-panel">{% for row in schedules %}<div class="summary-row"><strong>{{ weekday_names[row.weekday] }}</strong><span>{{ row.start_time }}–{{ row.end_time }} · {{ row.slot_minutes }} minutes</span></div>{% endfor %}</div>
     {% else %}
-      <div class="empty-state spaced-panel"><h3>No booking hours yet</h3><p>Add your first day and time range so patients can see available appointment slots.</p></div>
+      <div class="empty-state spaced-panel"><h3>No booking hours yet</h3><p>Add your first day and time range for verification review. Patients see slots only after provider verification.</p></div>
     {% endif %}
   </article>
 </section>

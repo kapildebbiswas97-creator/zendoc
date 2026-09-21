@@ -151,6 +151,24 @@ def _first_output(execution):
     return results[0].get("output") if results else None
 
 
+def _payload_for_plan(plan, execution):
+    """Preserve established single-tool payloads while retaining bounded multi-step evidence."""
+    results = execution.get("tool_results") or []
+    if plan.intent == "health_records":
+        health_memory = results[0].get("output") if len(results) > 0 else None
+        retrieval = results[1].get("output") if len(results) > 1 else None
+        return {
+            "health_memory": health_memory or {},
+            "retrieval": retrieval or {
+                "status": "NO_MATCHES",
+                "matches": [],
+                "context_lines": [],
+                "model_called": False,
+            },
+        }
+    return _first_output(execution)
+
+
 def _compose(plan, execution, payload):
     intent = plan.intent
     actions = []
@@ -193,6 +211,23 @@ def _compose(plan, execution, payload):
             "Stock, price, seller suitability, affiliate status, checkout and payment are not claimed or executed."
         )
         actions = [{"type": "commerce_handoffs", "label": "Review external product searches", "results": results}]
+
+    elif intent == "health_records":
+        memory = payload.get("health_memory", {}) if isinstance(payload, dict) else {}
+        retrieval = payload.get("retrieval", {}) if isinstance(payload, dict) else {}
+        matches = retrieval.get("matches", []) if isinstance(retrieval, dict) else []
+        message = (
+            f"Health Memory Agent built the authorized longitudinal context and retrieved {len(matches)} "
+            "matching stored evidence item(s). Provenance is preserved and prior AI chat is excluded from medical evidence."
+        )
+        actions = [{
+            "type": "health_memory_evidence",
+            "label": "Review matching Health Memory evidence",
+            "data": {
+                "context": memory,
+                "retrieval": retrieval,
+            },
+        }]
 
     elif intent == "preventive_care":
         next_actions = payload.get("next_safe_actions", []) if isinstance(payload, dict) else []
@@ -303,5 +338,5 @@ def orchestrate_specialist(actor, command_text: str, context=None) -> dict:
             "status": "waiting_human" if plan.requires_confirmation else "completed",
             "tool_results": [],
         }
-    payload = _first_output(execution)
+    payload = _payload_for_plan(plan, execution)
     return _compose(plan, execution, payload)

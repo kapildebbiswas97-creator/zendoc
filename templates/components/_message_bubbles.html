@@ -1,0 +1,45 @@
+{% for message in messages %}
+  <article class="message-bubble message-type-{{ message.message_type }} {% if message.sender_id == current_user.id %}mine{% else %}theirs{% endif %}" data-message-id="{{ message.id }}">
+    <div class="message-meta">
+      <strong>{{ message.sender_name }}</strong>
+      <span class="message-type-tag">{{ message.message_type.replace('_', ' ').title() }}</span>
+    </div>
+
+    {% if message.message_type == 'system' %}
+      <div class="system-message-content"><p>{{ message.body }}</p></div>
+    {% elif message.message_type in ['image', 'video'] %}
+      <div class="structured-card video-card">
+        <strong>{{ message.body }}</strong>
+        {% for att in message.attachments %}
+          {% if att.metadata and att.metadata.native_media and att.metadata.storage_key %}
+            {% if message.message_type == 'image' %}
+              <img class="community-media" src="{{ url_for('milestone7.message_media_file', attachment_id=att.id) }}" alt="{{ att.title or 'Shared image' }}">
+            {% else %}
+              <video class="community-media" controls preload="metadata" src="{{ url_for('milestone7.message_media_file', attachment_id=att.id) }}"></video>
+            {% endif %}
+          {% elif att.url %}
+            <div class="card-actions">
+              <a href="{{ att.url }}" target="_blank" rel="noopener" class="primary-action">Watch Video</a>
+              <a href="{{ url_for('milestone7.videos_page', q=att.title) }}" class="secondary-action">View Step Guidance</a>
+            </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+    {% elif message.message_type == 'report' or message.message_type == 'record' %}
+      <div class="structured-card report-card">
+        <strong>{{ message.body }}</strong>
+        <p class="card-subtext">Shared with patient/family consent.</p>
+        <div class="card-actions"><a href="{{ url_for('main.records') }}" class="secondary-action">Open Medical Records</a></div>
+      </div>
+    {% elif message.message_type in ['appointment', 'consultation'] %}
+      <div class="structured-card consultation-card">
+        <strong>{{ message.body }}</strong>
+        <div class="card-actions"><a href="{{ url_for('milestone7.telehealth_page') }}" class="secondary-action">Open Telehealth</a></div>
+      </div>
+    {% else %}
+      <p class="message-text">{{ message.body }}</p>
+    {% endif %}
+
+    <div class="message-foot"><small>{{ message.created_at }}</small></div>
+  </article>
+{% endfor %}

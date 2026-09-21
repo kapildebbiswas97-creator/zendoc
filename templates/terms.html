@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Terms of Service — ZENDOC{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Public terms</p>
+    <h1>ZENDOC Terms of Service</h1>
+    <p class="section-copy">Effective 19 September 2026. These terms describe the current boundaries of the ZENDOC service.</p>
+  </div>
+</section>
+
+<section class="panel legal-copy">
+  <h2>1. Service scope</h2>
+  <p>ZENDOC provides healthcare software, care discovery, connected-provider workflows, personal Health Memory, wellness tools, a health-focused user community, external health-commerce discovery and connected-care payment workflows, plus bounded AI assistance. Features labelled beta, readiness, discovery-only, integration-required or demo-only must be understood according to those labels.</p>
+
+  <h2>2. Not a substitute for professional care</h2>
+  <p>ZENDOC does not independently diagnose disease, prescribe medication, change medicine or dosage, certify clinical findings, or dispatch emergency care. Seek qualified medical professionals for diagnosis and treatment. In an emergency, contact the appropriate local emergency service directly.</p>
+
+  <h2>3. Provider and service truth</h2>
+  <p>A public directory or map result is not automatically a ZENDOC-verified provider. Appointment availability is shown as connected and bookable only when ZENDOC has the corresponding verified provider profile and persisted availability. External stock, beds, prices, insurance approval and partner fulfilment are not claimed unless a real integration provides that evidence.</p>
+
+  <h2>4. Accounts</h2>
+  <p>You are responsible for keeping your credentials secure and for information submitted through your account. Do not use another person's account or upload data you are not authorized to manage. The configured owner/admin account is governed separately from ordinary public user accounts.</p>
+
+  <h2>5. User content and records</h2>
+  <p>You retain responsibility for the accuracy and lawfulness of information you enter or upload. ZENDOC may preserve provenance and timestamps, but does not certify that user-provided or uploaded information is clinically complete or correct.</p>
+
+  <h2>6. Health Community</h2>
+  <p>Health Community content is user-generated and not verified medical advice. By publishing, you agree to the <a href="{{ url_for('public_launch.community_guidelines') }}">Health Community Guidelines</a>. ZENDOC may remove content that violates those rules, and users can report content or block accounts. Community popularity does not create clinical authority.</p>
+
+  <h2>7. Commerce and referrals</h2>
+  <p>Health Shop can send you to external merchants you choose. Unless a real integration proves otherwise, ZENDOC does not guarantee merchant stock, price, seller quality, delivery, product suitability or commission. Affiliate or referral relationships must be disclosed when configured and must not alter clinical guidance or provider ranking.</p>
+
+  <h2>8. Connected-care payments</h2>
+  <p>Payment checkout is available only when a real configured payment provider is ready. An invoice is not treated as paid merely because a checkout screen opens or a client callback succeeds. ZENDOC uses server-side verification before recording final payment status. Refunds, disputes and merchant/payment-provider terms may also apply.</p>
+
+  <h2>9. AI assistance</h2>
+  <p>AI output is advisory and may be incomplete or wrong. Consequential healthcare actions remain behind deterministic server checks and human/provider confirmation. Model output does not itself create provider confirmation, payment, prescription authority or clinical evidence.</p>
+
+  <h2>10. Third-party services</h2>
+  <p>Some features may link to or depend on separately configured hosting, maps, public directories, email, storage or other third-party services. Their availability and terms are outside ZENDOC's direct control. ZENDOC should show an integration as unavailable rather than fabricate a successful connection.</p>
+
+  <h2>11. Availability and changes</h2>
+  <p>The service may change, experience downtime or remove unsafe/unavailable functionality. ZENDOC may restrict abusive activity, security threats or attempts to bypass consent and safety controls.</p>
+
+  <h2>12. Privacy and deletion</h2>
+  <p>Use of the service is also subject to the <a href="{{ url_for('public_launch.privacy_policy') }}">Privacy Policy</a>. Account deletion can be initiated from the app or the public <a href="{{ url_for('public_launch.account_deletion') }}">account deletion resource</a>.</p>
+
+  <h2>13. No false integration or performance claims</h2>
+  <p>Configured target names, local CPU execution, simulated data or development fixtures are not proof of external partner integration, production deployment, Snapdragon/NPU execution, clinical effectiveness or benchmark performance.</p>
+</section>
+{% endblock %}

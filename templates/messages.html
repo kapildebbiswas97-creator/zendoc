@@ -5,10 +5,29 @@
   <div>
     <p class="eyebrow">ZENDOC Connect</p>
     <h1>Messages</h1>
-    <p class="section-copy">Private care conversations with the people your account is allowed to contact.</p>
+    <p class="section-copy">Private care conversations with searchable contacts, structured health context, voice/video availability gates and clear privacy boundaries.</p>
   </div>
-  <span class="status-badge active">{{ unread_total }} Unread</span>
+  <div class="form-actions">
+    <a class="secondary-action" href="{{ url_for('health_social.community_page') }}">Health Community</a>
+    {% if current_user.role == 'patient' %}<a class="secondary-action" href="{{ url_for('mental_wellness.mental_wellness_page') }}">Mental Wellness</a>{% endif %}
+    <span class="status-badge active">{{ unread_total }} Unread</span>
+  </div>
 </section>
+
+{% if incoming_calls %}
+<section class="panel spaced-panel" aria-label="Incoming calls">
+  <div class="panel-head"><div><p class="eyebrow">Incoming calls</p><h2>Someone is calling you</h2></div><span class="status-badge active">{{ incoming_calls|length }}</span></div>
+  <div class="grid two">
+    {% for call in incoming_calls %}
+      <article class="subtle-panel">
+        <strong>{{ call.initiator_name }}</strong>
+        <p>{{ call.call_type.title() }} call · {{ call.created_at[:16] }}</p>
+        <a class="primary-action" href="{{ url_for('calls.call_page', call_id=call.id) }}">Open call</a>
+      </article>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
 
 <section class="connect-shell">
   <aside class="connect-list {% if selected %}has-selected{% endif %}">
@@ -68,75 +87,31 @@
         </div>
         <div class="form-actions comm-controls">
           {% if selected.can_call %}
-            <a href="{{ url_for('milestone7.telehealth_page') }}" class="secondary-action call-btn" title="Doctor accepts voice calls">Voice Call</a>
+            <a href="{{ url_for('calls.call_start_page', conversation_id=selected.id, call_type='voice') }}" class="secondary-action call-btn" title="Start an authorized ZENDOC voice call">Voice Call</a>
           {% else %}
             <button type="button" class="secondary-action call-btn" disabled title="Doctor approval or appointment required for voice">Voice Call (Locked)</button>
           {% endif %}
           {% if selected.can_video %}
-            <a href="{{ url_for('milestone7.telehealth_page') }}" class="secondary-action video-btn" title="Doctor accepts video requests">Video Call</a>
+            <a href="{{ url_for('calls.call_start_page', conversation_id=selected.id, call_type='video') }}" class="secondary-action video-btn" title="Start an authorized ZENDOC video call">Video Call</a>
           {% else %}
             <button type="button" class="secondary-action video-btn" disabled title="Doctor approval or appointment required for video">Video Call (Locked)</button>
           {% endif %}
         </div>
       </div>
 
-      <div class="message-stack">
-        {% for message in messages %}
-          <article class="message-bubble message-type-{{ message.message_type }} {% if message.sender_id == current_user.id %}mine{% else %}theirs{% endif %}">
-            <div class="message-meta">
-              <strong>{{ message.sender_name }}</strong>
-              <span class="message-type-tag">{{ message.message_type.replace('_', ' ').title() }}</span>
-            </div>
-
-            {% if message.message_type == 'system' %}
-              <div class="system-message-content">
-                <p>{{ message.body }}</p>
-              </div>
-            {% elif message.message_type == 'video' %}
-              <div class="structured-card video-card">
-                <strong>{{ message.body }}</strong>
-                {% for att in message.attachments %}
-                  {% if att.url %}
-                    <div class="card-actions">
-                      <a href="{{ att.url }}" target="_blank" rel="noopener" class="primary-action">Watch Video</a>
-                      <a href="{{ url_for('milestone7.videos_page', q=att.title) }}" class="secondary-action">View Step Guidance</a>
-                    </div>
-                  {% endif %}
-                {% endfor %}
-              </div>
-            {% elif message.message_type == 'report' or message.message_type == 'record' %}
-              <div class="structured-card report-card">
-                <strong>{{ message.body }}</strong>
-                <p class="card-subtext">Shared with patient/family consent.</p>
-                <div class="card-actions">
-                  <a href="{{ url_for('main.records') }}" class="secondary-action">Open Medical Records</a>
-                </div>
-              </div>
-            {% elif message.message_type in ['appointment', 'consultation'] %}
-              <div class="structured-card consultation-card">
-                <strong>{{ message.body }}</strong>
-                <div class="card-actions">
-                  <a href="{{ url_for('milestone7.telehealth_page') }}" class="secondary-action">Open Telehealth</a>
-                </div>
-              </div>
-            {% else %}
-              <p class="message-text">{{ message.body }}</p>
-            {% endif %}
-
-            <div class="message-foot">
-              <small>{{ message.created_at }}</small>
-            </div>
-          </article>
-        {% endfor %}
+      <div class="message-stack" id="zendoc-live-message-stack" data-live-url="{{ url_for('milestone7.messages_live_fragment', conversation_id=selected.id) }}">
+        {% include "components/_message_bubbles.html" %}
       </div>
 
-      <form method="post" class="message-composer">
+      <form method="post" class="message-composer" enctype="multipart/form-data">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="action" value="send">
         <input type="hidden" name="conversation_id" value="{{ selected.id }}">
         <div class="composer-input-row">
           <div style="flex:1;display:grid;gap:8px;">
-            <textarea name="body" rows="2" maxlength="1500" placeholder="Write a message…" aria-label="Message" required></textarea>
+            <textarea name="body" rows="2" maxlength="1500" placeholder="Write a message or add a caption…" aria-label="Message"></textarea>
+            <label>Optional image/video<input name="media_file" type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm"></label>
+            <small>Native media is private to conversation participants. JPEG, PNG, WebP, MP4 or WebM; maximum 25 MiB.</small>
             <details class="progressive-fields"><summary>Add message context</summary><div><label>Context type<select name="message_type">{% for type in ['text','appointment','consultation','record','report','video','service_update','task_update'] %}<option value="{{ type }}">{{ type.replace('_', ' ').title() }}</option>{% endfor %}</select></label><p class="helper-text">Choose a context only when the message is about a specific care item.</p></div></details>
           </div>
           <button type="submit" class="send-btn" data-submitting-label="Sending…">Send</button>
@@ -160,6 +135,19 @@
             <strong>{{ participant.name }}</strong>
             <span class="role-badge role-{{ participant.role }}">{{ participant.role.title() }}{% if participant.city %} · {{ participant.city }}{% endif %}</span>
             <small>{{ participant.reason }}</small>
+            {% if participant.id != current_user.id %}
+              <form method="post" class="form-actions">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="conversation_id" value="{{ selected.id }}">
+                {% if participant.id in blocked_ids %}
+                  <input type="hidden" name="action" value="unblock_contact">
+                  <button type="submit" class="secondary-action">Unblock</button>
+                {% else %}
+                  <input type="hidden" name="action" value="block_contact">
+                  <button type="submit" class="secondary-action">Block</button>
+                {% endif %}
+              </form>
+            {% endif %}
           </div>
         {% endfor %}
       </div>
@@ -173,4 +161,5 @@
     {% endif %}
   </aside>
 </section>
+{% if selected %}<script src="{{ url_for('static', filename='messages_live.js') }}" defer></script>{% endif %}
 {% endblock %}

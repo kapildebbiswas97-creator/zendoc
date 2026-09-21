@@ -5,19 +5,24 @@ from flask import Flask
 
 from .config import load_config, validate_startup_config
 from .ai_chat_routes import bp as ai_chat_bp
+from .call_signaling import ensure_call_schema
+from .call_routes import bp as calls_bp
 from .care_action_ledger import ensure_care_action_ledger_schema
 from .care_continuity_routes import bp as care_continuity_bp
+from .business_routes import bp as business_bp
 from .care_os_routes import bp as care_os_bp
+from .carefin_cases import ensure_carefin_case_schema
 from .carefin_routes import bp as carefin_bp
 from .care_journey_routes import bp as care_journey_bp
 from .careloop_integration import finish_careloop_request
-from .compat_routes import bp as compat_bp
 from .continental_coverage import install_continental_coverage
 from .continental_medical_authorities import install_continental_medical_authorities
 from .dataset_snapshot_routes import bp as dataset_snapshot_ingestion_bp
 from .db import close_db, get_db, init_db
 from .connected_care_routes import bp as connected_care_bp
 from .document_extraction_routes import bp as document_extraction_bp
+from .edgecare_routes import bp as edgecare_bp
+from .email_verification import ensure_email_verification_schema
 from .ecosystem_routes import bp as ecosystem_bp
 from .family_routes import bp as family_bp
 from .fitness_routes import bp as fitness_bp
@@ -27,6 +32,14 @@ from .global_data_schema import ensure_global_data_schema
 from .global_medical_authorities import install_global_medical_authorities
 from .global_registry_install import install_global_public_sources
 from .health_access import ensure_consent_schema
+from .health_hub_routes import bp as health_hub_bp
+from .identity_verification import ensure_identity_verification_schema
+from .identity_verification_routes import bp as identity_verification_bp
+from .integration_routes import bp as integration_readiness_bp
+from .health_shop import ensure_health_shop_schema
+from .health_shop_routes import bp as health_shop_bp
+from .health_social import ensure_health_social_schema
+from .health_social_routes import bp as health_social_bp
 from .health_routes import bp as health_memory_bp
 from .india_care_rail import bp as india_care_rail_bp
 from .knowledge_routes import bp as medical_knowledge_bp
@@ -35,6 +48,8 @@ from .medical_knowledge_documents import ensure_medical_knowledge_document_schem
 from .medical_knowledge_registry import MEDICAL_KNOWLEDGE_SOURCES
 from .medical_rag_ingestion import ensure_medical_rag_schema
 from .milestone7_routes import bp as milestone7_bp
+from .mental_wellness import ensure_mental_wellness_schema
+from .mental_wellness_routes import bp as mental_wellness_bp
 from .milestone8_routes import bp as milestone8_bp
 from .milestone82_routes import bp as milestone82_bp
 from .nutrition_routes import bp as nutrition_intelligence_bp
@@ -47,11 +62,17 @@ from .operational_fulfilment_release import bp as operational_fulfilment_release
 from .operational_fulfilment_ui import bp as operational_fulfilment_ui_bp
 from .organization_routes import bp as provider_organizations_bp
 from .personal_baseline_routes import bp as personal_health_baseline_bp
+from .policy_acceptance import ensure_policy_acceptance_schema
+from .payments import ensure_payment_schema
+from .payment_routes import bp as payments_bp
 from .pharmacy_order_routes import bp as pharmacy_order_ops_bp
 from .preventive_care import ensure_preventive_care_schema
 from .preventive_care_routes import bp as preventive_care_bp
 from .public_ingestion_routes import bp as public_ingestion_bp
 from .provider_onboarding_routes import bp as provider_onboarding_bp
+from .provider_invitation import ensure_provider_invitation_schema
+from .public_launch_routes import bp as public_launch_bp
+from .release_health_routes import bp as release_health_bp
 from .showcase_routes import bp as showcase_bp
 from .specialist_agent_routes import bp as specialist_agents_bp
 from .system_intelligence_routes import bp as system_intelligence_bp
@@ -59,19 +80,14 @@ from .universal_search_routes import bp as universal_search_bp
 from .database_reliability import readiness_report
 from .observability import finish_request_observation, start_request_observation
 from .routes import bp
+from .security_headers import apply_security_headers
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 def _normalize_hosted_environment():
-    """Fail toward production security when the app is running on Render.
-
-    Render supplies platform metadata independently of Blueprint-managed custom
-    environment variables. A real hosted service must therefore never fall
-    back to development cookie/security/persistence semantics merely because
-    ZENDOC_ENV was omitted in the service dashboard.
-    """
+    """Fail toward production security when the app is running on Render."""
     if os.environ.get("ZENDOC_ENV"):
         return
     if any(
@@ -101,6 +117,11 @@ def create_app(test_config=None):
     )
     app.config.from_mapping(load_config(BASE_DIR, test_config))
 
+    # Unit/integration tests must remain deterministic and offline. Production
+    # and normal development keep OSM POI augmentation enabled by default.
+    if app.config.get("TESTING"):
+        os.environ["ZENDOC_OSM_POI_ENABLED"] = "false"
+
     Path(app.config["UPLOAD_FOLDER"]).mkdir(parents=True, exist_ok=True)
     if app.config.get("DATABASE_ENGINE") == "sqlite" and app.config["DATABASE"] != ":memory:":
         Path(app.config["DATABASE"]).parent.mkdir(parents=True, exist_ok=True)
@@ -108,10 +129,12 @@ def create_app(test_config=None):
     app.before_request(start_request_observation)
 
     app.register_blueprint(ai_chat_bp)
+    app.register_blueprint(calls_bp)
     app.register_blueprint(bp)
-    app.register_blueprint(compat_bp)
+    app.register_blueprint(release_health_bp)
     app.register_blueprint(health_memory_bp)
     app.register_blueprint(care_continuity_bp)
+    app.register_blueprint(business_bp)
     app.register_blueprint(medical_knowledge_bp)
     app.register_blueprint(personal_health_baseline_bp)
     app.register_blueprint(preventive_care_bp)
@@ -119,12 +142,20 @@ def create_app(test_config=None):
     app.register_blueprint(fitness_bp)
     app.register_blueprint(family_bp)
     app.register_blueprint(ecosystem_bp)
+    app.register_blueprint(health_hub_bp)
+    app.register_blueprint(identity_verification_bp)
+    app.register_blueprint(integration_readiness_bp)
+    app.register_blueprint(health_shop_bp)
+    app.register_blueprint(health_social_bp)
+    app.register_blueprint(mental_wellness_bp)
+    app.register_blueprint(payments_bp)
     app.register_blueprint(pharmacy_order_ops_bp)
     app.register_blueprint(operational_fulfilment_bp)
     app.register_blueprint(operational_fulfilment_release_bp)
     app.register_blueprint(operational_fulfilment_ui_bp)
     app.register_blueprint(milestone7_bp)
     app.register_blueprint(milestone8_bp)
+    app.register_blueprint(edgecare_bp)
     app.register_blueprint(milestone82_bp)
     app.register_blueprint(connected_care_bp)
     app.register_blueprint(care_os_bp)
@@ -132,7 +163,6 @@ def create_app(test_config=None):
     app.register_blueprint(universal_search_bp)
     app.register_blueprint(carefin_bp)
     app.register_blueprint(care_journey_bp)
-    app.register_blueprint(specialist_agents_bp)
     app.register_blueprint(nutrition_intelligence_bp)
     app.register_blueprint(provider_organizations_bp)
     app.register_blueprint(language_bp)
@@ -140,22 +170,35 @@ def create_app(test_config=None):
     app.register_blueprint(public_ingestion_bp)
     app.register_blueprint(dataset_snapshot_ingestion_bp)
     app.register_blueprint(provider_onboarding_bp)
+    app.register_blueprint(public_launch_bp)
     app.register_blueprint(global_data_bp)
     app.register_blueprint(showcase_bp)
+    app.register_blueprint(specialist_agents_bp)
     app.register_blueprint(system_intelligence_bp)
     app.after_request(finish_operational_careloop_request)
     app.after_request(finish_careloop_request)
     app.after_request(finish_request_observation)
+    app.after_request(apply_security_headers)
     app.teardown_appcontext(close_db)
     validate_startup_config(app)
     with app.app_context():
         try:
             init_db()
             ensure_global_data_schema()
+            ensure_call_schema()
+            ensure_carefin_case_schema()
             ensure_consent_schema()
+            ensure_email_verification_schema()
             ensure_medical_knowledge_document_schema()
             ensure_medical_rag_schema()
+            ensure_provider_invitation_schema()
             ensure_preventive_care_schema()
+            ensure_policy_acceptance_schema()
+            ensure_mental_wellness_schema()
+            ensure_health_shop_schema()
+            ensure_identity_verification_schema()
+            ensure_health_social_schema()
+            ensure_payment_schema()
             ensure_care_action_ledger_schema()
             ensure_operational_fulfilment_schema()
             get_db().commit()

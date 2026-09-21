@@ -2,6 +2,7 @@ import hashlib
 
 from .db import get_db, is_integrity_error, now_iso
 from .organization_service import provider_resource_context, assert_resource_tenant
+from .provider_service import require_verified_provider, require_verified_provider_id
 from .security import is_owner
 from .telehealth_provider import get_telehealth_provider
 
@@ -47,9 +48,17 @@ def set_doctor_availability(actor, data):
         raise PermissionError("Doctors can only update their own availability.")
     if not _doctor_row(doctor_id):
         raise LookupError("Doctor account not found.")
+    require_verified_provider_id(doctor_id, allowed_roles={"doctor", "hospital"})
+    if _value(actor, "role") in {"doctor", "hospital"}:
+        require_verified_provider(actor, allowed_roles={"doctor", "hospital"})
     status = str(data.get("status") or "offline").strip().lower()
     if status not in DOCTOR_STATUSES:
         raise ValueError("Invalid doctor availability status.")
+    provider_status = get_telehealth_provider().status()
+    if data.get("accepts_voice") and not provider_status.get("supports_voice"):
+        raise ValueError("Voice telehealth is not available on this deployment.")
+    if data.get("accepts_video") and not provider_status.get("supports_video"):
+        raise ValueError("Video telehealth is not available on this deployment.")
     patient_message_policy = str(data.get("patient_message_policy") or "accepted_consultation").strip().lower()
     if patient_message_policy not in PATIENT_MESSAGE_POLICIES:
         raise ValueError("Invalid patient message policy.")
@@ -91,6 +100,7 @@ def set_doctor_availability(actor, data):
 
 
 def get_doctor_availability(doctor_id):
+    require_verified_provider_id(doctor_id, allowed_roles={"doctor", "hospital"})
     row = get_db().execute(
         """
         SELECT da.*, u.name doctor_name
@@ -125,9 +135,27 @@ def request_consultation(actor, data):
     doctor_id = int(data.get("doctor_id") or 0)
     if not _doctor_row(doctor_id):
         raise LookupError("Doctor account not found.")
+    require_verified_provider_id(doctor_id, allowed_roles={"doctor", "hospital"})
     consultation_type = str(data.get("consultation_type") or "chat").strip().lower()
     if consultation_type not in CONSULTATION_TYPES:
         raise ValueError("Invalid consultation type.")
+    provider_status = get_telehealth_provider().status()
+    capability_key = f"supports_{consultation_type}"
+    if not provider_status.get(capability_key):
+        raise ValueError(
+            f"{consultation_type.title()} telehealth is not available on this deployment."
+        )
+    availability = get_doctor_availability(doctor_id)
+    if not availability.get("allow_new_consultation_requests", 1):
+        raise ValueError("This provider is not accepting new consultation requests.")
+    if consultation_type == "voice" and not (
+        availability.get("accepts_voice") and availability.get("allow_voice_requests")
+    ):
+        raise ValueError("This provider is not accepting voice consultation requests.")
+    if consultation_type == "video" and not (
+        availability.get("accepts_video") and availability.get("allow_video_requests")
+    ):
+        raise ValueError("This provider is not accepting video consultation requests.")
     reason = str(data.get("reason") or "").strip()
     if not reason:
         raise ValueError("Consultation reason is required.")
@@ -206,6 +234,7 @@ def list_consultations(actor):
         where = "1=1"
         params = ()
     elif role in {"doctor", "hospital"}:
+        require_verified_provider(actor, allowed_roles={"doctor", "hospital"})
         where = "cr.doctor_id=?"
         params = (uid,)
     else:
@@ -248,6 +277,7 @@ def get_consultation(actor, consultation_id):
     elif uid not in {row["patient_id"], row["doctor_id"]}:
         raise PermissionError("You cannot access another consultation.")
     if role in {"doctor", "hospital"}:
+        require_verified_provider(actor, allowed_roles={"doctor", "hospital"})
         assert_resource_tenant(actor, dict(row))
     return dict(row)
 
@@ -299,6 +329,13 @@ def update_consultation_status(actor, consultation_id, status, scheduled_for=Non
                 consultation.get("organization_id"), consultation.get("organization_location_id"), now
             ),
         )
+    if status in {"accepted", "scheduled"}:
+        try:
+            ensure_consultation_conversation(actor, consultation_id)
+        except (ValueError, LookupError, PermissionError):
+            # The consultation state remains authoritative even if the messaging
+            # surface cannot be opened yet; the detail page reports the limitation.
+            pass
     if status == "ended":
         get_db().execute("UPDATE consultation_rooms SET status='ended', ended_at=? WHERE consultation_id=?", (now, consultation_id))
     db.commit()
@@ -340,3 +377,53 @@ def list_consultation_messages(actor, consultation_id):
         (consultation["id"],),
     ).fetchall()
     return [dict(row) for row in rows]
+
+
+
+def get_consultation_conversation(actor, consultation_id: int):
+    """Return the active ZENDOC Connect conversation scoped to a consultation."""
+    consultation = get_consultation(actor, consultation_id)
+    uid = _user_id(actor)
+    row = get_db().execute(
+        """
+        SELECT c.*
+        FROM conversations c
+        JOIN conversation_participants cp ON cp.conversation_id=c.id
+        WHERE c.status='active'
+          AND cp.user_id=?
+          AND c.context_type='consultation'
+          AND c.context_id=?
+        ORDER BY c.updated_at DESC,c.id DESC
+        LIMIT 1
+        """,
+        (uid, str(int(consultation_id))),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def ensure_consultation_conversation(actor, consultation_id: int):
+    """Create/reuse a conversation after a consultation is accepted/scheduled."""
+    consultation = get_consultation(actor, consultation_id)
+    if str(consultation["status"]) not in {"accepted", "scheduled"}:
+        raise ValueError("Consultation chat/call access begins after provider acceptance.")
+    existing = get_consultation_conversation(actor, consultation_id)
+    if existing:
+        return existing
+    if _value(actor, "role") == "admin":
+        return None
+    target_id = (
+        int(consultation["doctor_id"])
+        if int(consultation["patient_id"]) == _user_id(actor)
+        else int(consultation["patient_id"])
+    )
+    from .connect import start_conversation
+    conversation = start_conversation(
+        actor,
+        {
+            "target_user_id": target_id,
+            "context_type": "consultation",
+            "context_id": str(int(consultation_id)),
+            "title": f"Telehealth: {consultation['patient_name']} · {consultation['doctor_name']}",
+        },
+    )
+    return conversation

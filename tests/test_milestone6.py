@@ -135,8 +135,8 @@ def test_pharmacy_orders_do_not_fabricate_stock_and_can_use_own_account(tmp_path
     assert order.json["medicine_order"]["items"][0]["name"] == "Paracetamol 500mg"
 
 
-def test_iot_sync_records_device_provenance(tmp_path):
-    _app, client = make_client(tmp_path)
+def test_iot_registration_does_not_fabricate_device_provenance(tmp_path):
+    app, client = make_client(tmp_path)
     token = api_token(client, "device@example.com")
 
     device = client.post(
@@ -145,17 +145,26 @@ def test_iot_sync_records_device_provenance(tmp_path):
         headers=headers(token),
     )
     assert device.status_code == 201
-    device_id = device.json["health_device"]["id"]
+    saved = device.json["health_device"]
+    assert saved["status"] == "registered"
+    assert saved["last_synced_at"] is None
+    assert saved["live_device_sync"] is False
+    assert saved["integration_status"] == "integration_required"
+    device_id = saved["id"]
 
     synced = client.post(
         f"/api/v1/iot/devices/{device_id}/sync",
         json={"metric_type": "heart_rate", "metric_value": 72, "unit": "bpm"},
         headers=headers(token),
     )
-    assert synced.status_code == 201
-    measurement = synced.json["synced_measurement"]
-    assert measurement["source"] == "device"
-    assert "Home Pulse Watch" in measurement["notes"]
+    assert synced.status_code == 409
+    assert synced.json["status"] == "integration_required"
+    assert synced.json["trusted_device_provenance_created"] is False
+
+    with app.app_context():
+        assert get_db().execute(
+            "SELECT id FROM health_metrics WHERE source='device'"
+        ).fetchone() is None
 
 
 def test_saved_locations_and_location_permission_boundary(tmp_path):

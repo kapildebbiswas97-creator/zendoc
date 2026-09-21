@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Verify Email — ZENDOC{% endblock %}
+{% block content %}
+<section class="auth-panel">
+  <div class="auth-panel-header">
+    <p class="eyebrow">Account verification</p>
+    <h1>Confirm your email address</h1>
+    <p class="section-copy">This verification link is valid, but ZENDOC will not mark the address verified until you explicitly confirm below.</p>
+  </div>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="token" value="{{ token }}">
+    <p class="trust-note">Email to verify: <strong>{{ email }}</strong></p>
+    <button type="submit" data-submitting-label="Verifying…">Verify this email</button>
+  </form>
+  <p class="form-note">If you did not create or request this ZENDOC account, do not confirm the address.</p>
+</section>
+{% endblock %}

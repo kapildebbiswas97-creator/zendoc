@@ -432,10 +432,18 @@ def build_plan(actor, command_text: str) -> AgentPlan:
             "health_records",
             "HealthMemoryAgent",
             "read_only",
-            (PlanStep(1, "get_health_memory_context", {}, "Build minimum-necessary authorized Health Memory context with provenance."),),
+            (
+                PlanStep(1, "get_health_memory_context", {}, "Build minimum-necessary authorized Health Memory context with provenance."),
+                PlanStep(
+                    2,
+                    "search_health_memory_evidence",
+                    {"query": command, "limit": 5},
+                    "Retrieve only matching stored evidence; exclude prior AI chat from medical evidence.",
+                ),
+            ),
             privacy_class="HEALTH_SENSITIVE",
             required_context=("authorized_patient_context", "timeline_scope"),
-            expected_output="authorized_health_memory_summary",
+            expected_output="authorized_health_memory_summary_with_retrieval_evidence",
             fallback_strategy="deny_without_context_authorization",
         )
     if any(text in lower for text in ("device", "iot", "blood pressure", "heart rate")):

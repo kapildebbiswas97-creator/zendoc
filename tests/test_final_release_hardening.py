@@ -433,17 +433,21 @@ class CompleteReleaseHardeningAudit(unittest.TestCase):
         self.assertEqual(res.status_code, 201)
         dev_id = res.get_json()["health_device"]["id"]
 
-        # 2. Sync IoT measurement (provenance must be recorded as 'device')
+        # 2. Public device sync must fail closed until a real trusted-device
+        # integration can establish device provenance.
         res = self.client.post(f"/api/v1/iot/devices/{dev_id}/sync", headers={"Authorization": f"Bearer {bob_token}"}, json={
             "metric_type": "heart_rate",
             "metric_value": 72,
             "unit": "bpm"
         })
-        self.assertIn(res.status_code, (200, 201))
+        self.assertEqual(res.status_code, 409)
+        self.assertEqual(res.get_json()["status"], "integration_required")
+        self.assertFalse(res.get_json()["trusted_device_provenance_created"])
         with self.app.app_context():
-            metric = get_db().execute("SELECT * FROM health_metrics WHERE metric_type='heart_rate'").fetchone()
-            self.assertIsNotNone(metric)
-            self.assertEqual(metric["source"], "device")
+            metric = get_db().execute(
+                "SELECT * FROM health_metrics WHERE metric_type='heart_rate' AND source='device'"
+            ).fetchone()
+            self.assertIsNone(metric)
 
         # 3. Medical Transport request (with emergency warning)
         res = self.client.post("/api/v1/ambulance/requests", headers={"Authorization": f"Bearer {bob_token}"}, json={

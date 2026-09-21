@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Integration Center — ZENDOC{% endblock %}
+{% block content %}
+<section class="section-head"><div><p class="eyebrow">Owner-only release control</p><h1>Integration Center</h1><p class="section-copy">One place to see what ZENDOC software already supports and what still depends on a real external account, credential, partner, network or verification step.</p></div><a class="secondary-action" href="{{ url_for('main.admin') }}">Back to Admin</a></section>
+<aside class="trust-note"><strong>Truth rule.</strong><br>{{ snapshot.truth_notice }}</aside>
+<section class="stats spaced-panel"><article><span>Tracked integrations</span><strong>{{ snapshot.total_count }}</strong></article><article><span>No external blocker</span><strong>{{ snapshot.ready_count }}</strong></article><article><span>External activation needed</span><strong>{{ snapshot.external_blocker_count }}</strong></article></section>
+<section class="grid two spaced-panel">
+{% for item in snapshot.integrations %}
+<article class="panel">
+  <div class="panel-head"><div><p class="eyebrow">{{ item.key|replace('_',' ')|title }}</p><h2>{{ item.label }}</h2></div><span class="status-badge {{ 'working' if not item.external_required else 'integration' }}">{{ item.status|replace('_',' ') }}</span></div>
+  <p>{{ item.notes }}</p>
+  <div class="summary-row"><strong>ZENDOC software boundary</strong><span>{{ 'Ready' if item.software_ready else 'Incomplete' }}</span></div>
+  <div class="summary-row"><strong>External activation</strong><span>{{ 'Required' if item.external_required else 'Not blocking' }}</span></div>
+  {% if item.required_config %}<p class="form-note">Required configuration names only: {{ item.required_config|join(', ') }}. Secret values are never shown here.</p>{% endif %}
+  {% if item.href %}<a class="secondary-action" href="{{ item.href }}">Open related workspace</a>{% endif %}
+</article>
+{% endfor %}
+</section>
+{% endblock %}

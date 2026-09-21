@@ -49,4 +49,4 @@ def test_ai_page_labels_deterministic_helpers_truthfully(tmp_path):
     assert response.status_code == 200
     assert "Platform navigation helper" in body
     assert "does not call a model or execute tools" in body
-    assert "Not a clinical assessment" in body
+    assert "Not a diagnosis or clinical assessment" in body

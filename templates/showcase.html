@@ -23,7 +23,7 @@
     </div>
 
     <aside class="demo-hero-card" aria-label="ZENDOC system overview">
-      <div class="demo-card-head"><div class="demo-logo-orb">Z</div><span class="demo-live">Production architecture</span></div>
+      <div class="demo-card-head"><div class="demo-logo-orb">Z</div><span class="demo-live">Evidence-gated product architecture</span></div>
       <div class="demo-stack">
         <div class="demo-stack-row"><span class="demo-stack-icon">AI</span><div><strong>Safety-governed AI</strong><small>Approved knowledge only; emergency rules precede assistance.</small></div><span class="demo-stack-state">Guarded</span></div>
         <div class="demo-stack-row"><span class="demo-stack-icon">HM</span><div><strong>Health Memory</strong><small>Timeline, reports, vitals, provenance and access controls.</small></div><span class="demo-stack-state">User-controlled</span></div>
@@ -49,6 +49,61 @@
       <article class="demo-panel"><div class="demo-number">A</div><h3>Trusted Health Data, DPDP, ABDM & Interoperability</h3><p>Consent, provenance, data separation, governed ingestion and patient-controlled records are core architecture decisions.</p></article>
       <article class="demo-panel demo-panel--blue"><div class="demo-number">B</div><h3>AI for Primary Care & Rural Health</h3><p>Safety-first guidance and care discovery are designed for mobile access and can be extended with multilingual, low-bandwidth workflows.</p></article>
       <article class="demo-panel demo-panel--violet"><div class="demo-number">C</div><h3>Smart Hospitals & Workflow Automation</h3><p>Provider onboarding, schedules, messaging, operational workflows and business APIs create an enterprise adoption path.</p></article>
+    </div>
+  </section>
+
+  <section class="demo-section">
+    <div class="demo-section-head">
+      <div class="demo-eyebrow">One governed care loop</div>
+      <h2>From a patient goal to evidence-backed continuity.</h2>
+      <p>ZENDOC is designed so AI can help coordinate the journey without becoming the authority for clinical decisions, prescriptions, provider acceptance, payment or real-world fulfilment.</p>
+    </div>
+    <div class="demo-grid demo-grid--4">
+      <article class="demo-panel">
+        <div class="demo-number">1</div>
+        <h3>Local input + advisory</h3>
+        <p>Typed or local voice input can feed a local-only advisory model. The transcript remains reviewable and model output has no direct tool authority.</p>
+      </article>
+      <article class="demo-panel demo-panel--blue">
+        <div class="demo-number">2</div>
+        <h3>Health Memory + approved RAG</h3>
+        <p>Only minimum-necessary authorized patient context and approved evidence metadata are exposed to the planning layer.</p>
+      </article>
+      <article class="demo-panel demo-panel--violet">
+        <div class="demo-number">3</div>
+        <h3>Agent OS + human gates</h3>
+        <p>Deterministic policy selects bounded tools and keeps booking, sharing and other consequential steps behind explicit confirmation.</p>
+      </article>
+      <article class="demo-panel">
+        <div class="demo-number">4</div>
+        <h3>Confirm → verify → remember</h3>
+        <p>Provider/service state, verified outcomes, longitudinal Health Memory and metadata-only audit evidence remain provenance-separated.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="demo-section">
+    <div class="demo-section-head">
+      <div class="demo-eyebrow">Commercial path</div>
+      <h2>A platform business model built around the same trusted care loop.</h2>
+      <p>These are product and go-to-market paths, not revenue claims. Actual pilots, contracts and revenue are tracked separately as observed evidence in the owner Startup Command Center.</p>
+    </div>
+    <div class="demo-grid demo-grid--3">
+      <article class="demo-panel">
+        <div class="demo-number">P</div>
+        <h3>Patient layer</h3>
+        <p>Free core access can drive discovery, continuity and Health Memory adoption, with future premium convenience and family-care capabilities where appropriate.</p>
+      </article>
+      <article class="demo-panel demo-panel--blue">
+        <div class="demo-number">B2B</div>
+        <h3>Provider & institution workflows</h3>
+        <p>Hospitals, clinics, labs and pharmacies can use verified profiles, operational workflows, patient coordination and pilot-based deployments.</p>
+      </article>
+      <article class="demo-panel demo-panel--violet">
+        <div class="demo-number">API</div>
+        <h3>Business/API layer</h3>
+        <p>Permissioned partner APIs can support institution integration and workflow automation while preserving consent, provenance and audit boundaries.</p>
+      </article>
     </div>
   </section>
 
@@ -87,8 +142,12 @@
   </section>
 
   <section class="demo-cta">
-    <div><div class="demo-eyebrow" style="color:#6ee8d1">Demo journey</div><h2>See the connected-care loop, not a slide-only concept.</h2><p>Start with care guidance, move into provider discovery, review Health Memory and then inspect how verified schedules, appointments, pharmacy observations and governed medical knowledge fit together.</p></div>
-    <div class="demo-actions"><a class="demo-button demo-button--ghost" href="{{ url_for('main.register', role='patient') }}">Start demo →</a></div>
+    <div>
+      <div class="demo-eyebrow" style="color:#6ee8d1">Virtual demo journey</div>
+      <h2>See the connected-care loop, not a slide-only concept.</h2>
+      <p>Start with the patient journey, then demonstrate Agent OS, Health Memory and truthful provider/service confirmation. For competitions, any synthetic local fixture remains visibly marked DEMO ONLY and is never presented as real traction.</p>
+    </div>
+    <div class="demo-actions"><a class="demo-button demo-button--ghost" href="{{ url_for('main.register', role='patient') }}">Start patient journey →</a></div>
   </section>
 </div>
 {% endblock %}

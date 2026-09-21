@@ -132,6 +132,8 @@ def _text_parts(text):
             matched_alias = alias
             break
 
+    # Make natural shorthand such as "pharmacy Kalyani" useful for nearby
+    # discovery without breaking named searches such as "Apollo Hospital".
     if not location and matched_alias and lowered.startswith(matched_alias):
         remainder = term[len(matched_alias):].strip(" ,-:")
         if remainder:
@@ -332,6 +334,8 @@ def universal_search(text=None, category="all", latitude=None, longitude=None, r
             if place_result.message:
                 external_messages.append(place_result.message)
 
+        # Only real configured searches add Overpass. Unit tests that inject a
+        # places provider remain deterministic and make no network calls.
         if places_provider is None:
             osm_category = selected_category if selected_category != "all" else (inferred or "all")
             osm_results, osm_message = _osm_poi_results(

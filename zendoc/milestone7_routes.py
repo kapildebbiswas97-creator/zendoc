@@ -1,26 +1,34 @@
 from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, url_for
 
 from .agent_core import admin_command_center_data, respond_with_core_agent
+from .community_media import get_community_media_storage
+from .call_signaling import list_incoming_calls
 from .connect import (
     create_communication_permission,
     discover_contacts,
     get_conversation,
+    get_message_media_access,
     list_conversations,
     list_messages,
     mark_read,
     send_message,
+    share_native_media_message,
     share_report_message,
     share_video_message,
     start_conversation,
     unread_count,
 )
 from .db import get_db
+from .health_social import block_user, blocked_user_ids, unblock_user
 from .human_operations import create_staff_task, list_staff_tasks, update_staff_task, upsert_staff_profile
 from .pose_coach import POSE_EXERCISES, list_pose_sessions, save_pose_session
 from .routes import audit, require_api_user
 from .security import assert_owner, login_required, owner_required, role_required
+from .telehealth_provider import get_telehealth_provider
 from .telehealth import (
+    ensure_consultation_conversation,
     get_consultation,
+    get_consultation_conversation,
     get_doctor_availability,
     list_consultation_messages,
     list_consultations,
@@ -78,7 +86,11 @@ def doctor_availability_page():
         availability = get_doctor_availability(g.user["id"])
     except LookupError:
         availability = None
-    return render_template("doctor_availability.html", availability=availability)
+    return render_template(
+        "doctor_availability.html",
+        availability=availability,
+        telehealth_status=get_telehealth_provider().status(),
+    )
 
 
 @bp.route("/messages", methods=("GET", "POST"))
@@ -93,7 +105,33 @@ def messages_page():
                 flash("Conversation started.", "success")
                 return redirect(url_for("milestone7.messages_page", conversation_id=conversation["id"]))
             if action == "send":
-                message = send_message(g.user, int(request.form.get("conversation_id")), request.form)
+                conversation_id = int(request.form.get("conversation_id"))
+                upload = request.files.get("media_file")
+                stored = None
+                if upload and getattr(upload, "filename", ""):
+                    try:
+                        stored = get_community_media_storage().save(upload)
+                        message = share_native_media_message(
+                            g.user,
+                            conversation_id,
+                            {
+                                "body": request.form.get("body"),
+                                "media_kind": stored.media_kind,
+                                "storage_key": stored.storage_key,
+                                "mime_type": stored.mime_type,
+                                "original_name": stored.original_filename,
+                                "size_bytes": stored.size_bytes,
+                            },
+                        )
+                    except Exception:
+                        if stored is not None:
+                            try:
+                                get_community_media_storage().delete(stored.storage_key)
+                            except Exception:
+                                pass
+                        raise
+                else:
+                    message = send_message(g.user, conversation_id, request.form)
                 audit("message", "conversation", str(message["conversation_id"]))
                 flash("Message sent.", "success")
                 return redirect(url_for("milestone7.messages_page", conversation_id=message["conversation_id"]))
@@ -107,6 +145,27 @@ def messages_page():
                 audit("share", "report_message", str(message["id"]))
                 flash("Medical report shared with consent.", "success")
                 return redirect(url_for("milestone7.messages_page", conversation_id=message["conversation_id"]))
+            if action in {"block_contact", "unblock_contact"}:
+                conversation_id = int(request.form.get("conversation_id"))
+                conversation = get_conversation(g.user, conversation_id)
+                other = next(
+                    (
+                        participant for participant in conversation.get("participants", [])
+                        if int(participant.get("id") or 0) != int(g.user["id"])
+                    ),
+                    None,
+                )
+                if not other:
+                    raise LookupError("Conversation contact not found.")
+                if action == "block_contact":
+                    block_user(g.user, int(other["id"]))
+                    audit("block", "user", str(other["id"]))
+                    flash("Account blocked. New private messages, calls and record sharing are now unavailable between these accounts.", "success")
+                else:
+                    unblock_user(g.user, int(other["id"]))
+                    audit("unblock", "user", str(other["id"]))
+                    flash("Account unblocked. Normal communication rules apply again.", "success")
+                return redirect(url_for("milestone7.messages_page", conversation_id=conversation_id))
         except (ValueError, LookupError, PermissionError) as error:
             flash(str(error), "error")
         return redirect(url_for("milestone7.messages_page"))
@@ -132,8 +191,43 @@ def messages_page():
         messages=messages,
         contacts=contacts,
         unread_total=unread_count(g.user),
+        incoming_calls=list_incoming_calls(g.user),
         q=request.args.get("q", ""),
+        blocked_ids=blocked_user_ids(g.user),
     )
+
+
+@bp.get("/messages/media/<int:attachment_id>")
+@login_required
+def message_media_file(attachment_id):
+    try:
+        media = get_message_media_access(g.user, attachment_id)
+        return get_community_media_storage().response(
+            media["storage_key"],
+            mime_type=media["mime_type"],
+            download_name=media["title"],
+        )
+    except (LookupError, PermissionError, ValueError, RuntimeError):
+        abort(404)
+
+
+@bp.get("/messages/<int:conversation_id>/live")
+@login_required
+def messages_live_fragment(conversation_id):
+    try:
+        selected = get_conversation(g.user, conversation_id)
+        messages = list_messages(g.user, conversation_id)
+    except (LookupError, PermissionError):
+        abort(404)
+    response = render_template(
+        "components/_message_bubbles.html",
+        selected=selected,
+        messages=messages,
+    )
+    return response, 200, {
+        "Cache-Control": "no-store",
+        "X-ZENDOC-Unread-Count": str(unread_count(g.user)),
+    }
 
 
 @bp.get("/videos")
@@ -197,7 +291,12 @@ def telehealth_page():
             ORDER BY COALESCE(p.organization,u.name),p.specialty
             """
         ).fetchall()
-    return render_template("telehealth.html", consultations=list_consultations(g.user), doctors=doctors)
+    return render_template(
+        "telehealth.html",
+        consultations=list_consultations(g.user),
+        doctors=doctors,
+        telehealth_status=get_telehealth_provider().status(),
+    )
 
 
 @bp.get("/telehealth/<int:consultation_id>")
@@ -209,7 +308,19 @@ def telehealth_detail_page(consultation_id):
     except (LookupError, PermissionError) as error:
         flash(str(error), "error")
         return redirect(url_for("milestone7.telehealth_page"))
-    return render_template("telehealth_detail.html", consultation=consultation, messages=messages)
+    conversation = None
+    if consultation["status"] in {"accepted", "scheduled"} and g.user["role"] != "admin":
+        try:
+            conversation = ensure_consultation_conversation(g.user, consultation_id)
+        except (ValueError, LookupError, PermissionError):
+            conversation = get_consultation_conversation(g.user, consultation_id)
+    return render_template(
+        "telehealth_detail.html",
+        consultation=consultation,
+        messages=messages,
+        conversation=conversation,
+        telehealth_status=get_telehealth_provider().status(),
+    )
 
 
 @bp.route("/fitness/pose-coach", methods=("GET", "POST"))
@@ -280,7 +391,7 @@ def api_get_doctor_availability(doctor_id):
         return error
     try:
         return jsonify({"doctor_availability": get_doctor_availability(doctor_id)})
-    except LookupError as error:
+    except (LookupError, PermissionError) as error:
         return _api_error(error)
 
 

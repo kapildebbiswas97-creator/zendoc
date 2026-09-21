@@ -1,6 +1,7 @@
 from .db import get_db, now_iso
 from .security import is_owner
 from .organization_service import active_membership, assert_same_organization
+from .provider_service import require_verified_provider
 
 
 STAFF_TYPES = (
@@ -158,6 +159,8 @@ def create_staff_task(actor, data):
         raise PermissionError("Only the configured ZENDOC owner may use the admin operations role.")
     if role not in {"admin", "doctor", "hospital", "pharmacy"}:
         raise PermissionError("Only operations roles can create staff tasks.")
+    if role in {"doctor", "hospital", "pharmacy"}:
+        require_verified_provider(actor)
     task_type = str(data.get("task_type") or "").strip().lower()
     if not task_type:
         raise ValueError("task_type is required.")
@@ -214,6 +217,8 @@ def list_staff_tasks(actor):
         where = "1=1"
         params = ()
     else:
+        if role in {"doctor", "hospital", "pharmacy"}:
+            require_verified_provider(actor)
         where = "requested_by=? OR assigned_staff_id=?"
         params = (uid, uid)
     rows = get_db().execute(
@@ -250,6 +255,8 @@ def get_staff_task(actor, task_id):
             raise PermissionError("Only the configured ZENDOC owner may access all staff tasks.")
     elif uid not in {row["requested_by"], row["assigned_staff_id"]}:
         raise PermissionError("You cannot access another staff task.")
+    if role in {"doctor", "hospital", "pharmacy"}:
+        require_verified_provider(actor)
     return dict(row)
 
 

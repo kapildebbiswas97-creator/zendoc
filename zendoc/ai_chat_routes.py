@@ -1,7 +1,7 @@
 """Conversation-first web UI for ZENDOC AI and Doctor AI.
 
-Presentation/orchestration layer over the existing safety-first intelligence
-engine. It does not add autonomous clinical actions.
+This is a presentation/orchestration layer over the existing safety-first
+ZendocIntelligence engine. It does not add autonomous clinical actions.
 """
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from .ai_types import IntelligenceResult
 from .db import get_db, now_iso
 from .intelligence import ZendocIntelligence
 from .security import login_required
+
 
 bp = Blueprint("ai_chat", __name__)
 DOCTOR_PREFIX = "[Doctor AI] "
@@ -45,7 +46,10 @@ def _conversation_for_user(conversation_id, user_id):
         conversation_id = int(conversation_id)
     except (TypeError, ValueError):
         return None
-    return get_db().execute("SELECT * FROM ai_conversations WHERE id=? AND user_id=?", (conversation_id, user_id)).fetchone()
+    return get_db().execute(
+        "SELECT * FROM ai_conversations WHERE id=? AND user_id=?",
+        (conversation_id, user_id),
+    ).fetchone()
 
 
 def _conversation_mode(conversation):
@@ -79,7 +83,11 @@ def _history(user_id, conversation_id):
     if not conversation_id:
         return []
     return get_db().execute(
-        "SELECT * FROM ai_interactions WHERE user_id=? AND conversation_id=? ORDER BY created_at ASC,id ASC LIMIT 100",
+        """
+        SELECT * FROM ai_interactions
+        WHERE user_id=? AND conversation_id=?
+        ORDER BY created_at ASC,id ASC LIMIT 100
+        """,
         (user_id, conversation_id),
     ).fetchall()
 
@@ -93,8 +101,10 @@ def _doctor_scope(result, message):
         return IntelligenceResult(
             intent="doctor_ai_scope",
             urgency="routine",
-            message=("Doctor AI is reserved for health concerns, symptoms, reports, medicines, care navigation, "
-                     "and deciding what type of clinician to contact. Use ZENDOC AI for other platform questions."),
+            message=(
+                "Doctor AI is reserved for health concerns, symptoms, reports, medicines, care navigation, "
+                "and deciding what type of clinician to contact. Use ZENDOC AI for other platform questions."
+            ),
             follow_up_questions=["What health concern would you like help organizing?"],
             possible_actions=[{"type": "find_healthcare", "label": "Find healthcare"}],
             provider="doctor_ai_scope_guard",
@@ -106,15 +116,31 @@ def _doctor_scope(result, message):
 def _log_interaction(user_id, conversation_id, message, result, latency_ms, mode):
     db = get_db()
     db.execute(
-        """INSERT INTO ai_interactions
+        """
+        INSERT INTO ai_interactions
         (user_id,conversation_id,feature,intent,input_text,output_text,risk_level,model_version,provider,emergency,success,latency_ms,created_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-        (user_id, conversation_id, "doctor_ai" if mode == "doctor" else "zendoc_ai", result.intent,
-         message[:500], result.message, result.urgency, "zendoc-chat-v2", result.provider,
-         1 if result.emergency else 0, 1 if result.success else 0, latency_ms, now_iso()),
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """,
+        (
+            user_id,
+            conversation_id,
+            "doctor_ai" if mode == "doctor" else "zendoc_ai",
+            result.intent,
+            message[:500],
+            result.message,
+            result.urgency,
+            "zendoc-chat-v2",
+            result.provider,
+            1 if result.emergency else 0,
+            1 if result.success else 0,
+            latency_ms,
+            now_iso(),
+        ),
     )
-    db.execute("UPDATE ai_conversations SET last_intent=?,updated_at=? WHERE id=? AND user_id=?",
-               (result.intent, now_iso(), conversation_id, user_id))
+    db.execute(
+        "UPDATE ai_conversations SET last_intent=?,updated_at=? WHERE id=? AND user_id=?",
+        (result.intent, now_iso(), conversation_id, user_id),
+    )
     db.commit()
 
 
@@ -125,20 +151,28 @@ def chat_home():
     conversation = _conversation_for_user(request.values.get("conversation_id"), g.user["id"])
     if conversation:
         requested_mode = _conversation_mode(conversation)
+
     if request.method == "POST":
+        # Compatibility with the previous guided symptom form keeps existing
+        # safety regression tests and old bookmarks functional.
         message = (request.form.get("message") or request.form.get("symptoms") or "").strip()
-        if str(request.form.get("feature") or "").strip().lower() == "doctor":
+        legacy_feature = str(request.form.get("feature") or "").strip().lower()
+        if legacy_feature == "doctor":
             requested_mode = "doctor"
         if not message:
             return redirect(url_for("ai_chat.chat_home", mode=requested_mode))
         if conversation is None:
             conversation = _create_conversation(g.user["id"], message, requested_mode)
+
         result, latency_ms = ZendocIntelligence().respond(message, user=g.user, conversation=conversation)
         if requested_mode == "doctor":
             result = _doctor_scope(result, message)
         result.conversation_id = conversation["id"]
         _log_interaction(g.user["id"], conversation["id"], message, result, latency_ms, requested_mode)
-        return redirect(url_for("ai_chat.chat_home", mode=requested_mode, conversation_id=conversation["id"]) + "#chat-end")
+        return redirect(
+            url_for("ai_chat.chat_home", mode=requested_mode, conversation_id=conversation["id"]) + "#chat-end"
+        )
+
     new_chat = str(request.args.get("new") or "").lower() in {"1", "true", "yes"}
     conversations = _recent_conversations(g.user["id"], requested_mode)
     if new_chat:
@@ -146,5 +180,10 @@ def chat_home():
     elif conversation is None and conversations:
         conversation = conversations[0]
     history = _history(g.user["id"], conversation["id"] if conversation else None)
-    return render_template("ai_chat.html", mode=requested_mode, selected_conversation=conversation,
-                           conversations=conversations, history=history)
+    return render_template(
+        "ai_chat.html",
+        mode=requested_mode,
+        selected_conversation=conversation,
+        conversations=conversations,
+        history=history,
+    )

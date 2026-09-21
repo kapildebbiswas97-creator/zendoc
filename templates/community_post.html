@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Community Post — ZENDOC<script src="{{ url_for('static', filename='community_post.js') }}" defer></script>
+{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div><p class="eyebrow">Health Community</p><h1>Community post</h1><p class="section-copy">A stable page you can share with another signed-in ZENDOC member. Community content remains user-generated and is not verified medical advice.</p></div>
+  <a class="secondary-action" href="{{ url_for('health_social.community_page') }}">Back to Community</a>
+</section>
+<article class="panel community-post">
+  <div class="panel-head"><div><strong>{{ post.author_name }}</strong> <span class="role-badge role-{{ post.author_role }}">{{ post.author_role }}</span><p class="eyebrow">{{ post.lane.replace('_',' ').title() }}</p></div><small>{{ post.created_at[:16] }}</small></div>
+  <p>{{ post.body }}</p>
+  {% if post.sponsorship_label %}<p class="privacy-banner"><strong>Commercial disclosure:</strong> {{ post.sponsorship_label }}</p>{% endif %}
+  {% if post.media_storage_key %}
+    {% if post.media_mime_type and post.media_mime_type.startswith('image/') %}<img class="community-media" src="{{ url_for('health_social.community_media_file', storage_key=post.media_storage_key) }}" alt="Media shared by {{ post.author_name }}">
+    {% elif post.media_mime_type and post.media_mime_type.startswith('video/') %}<video class="community-media" controls preload="metadata" src="{{ url_for('health_social.community_media_file', storage_key=post.media_storage_key) }}"></video>{% endif %}
+  {% elif post.media_url %}<a class="secondary-action" href="{{ post.media_url }}" target="_blank" rel="noopener noreferrer">Open video/media</a>{% endif %}
+  <p class="form-note">Community content — not verified medical advice.</p>
+  <div class="form-actions">
+    <form method="post" action="{{ url_for('health_social.community_page') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="like"><input type="hidden" name="post_id" value="{{ post.id }}"><button class="secondary-action" type="submit">{{ 'Liked' if post.liked_by_me else 'Like' }} · {{ post.like_count }}</button></form>
+    <form method="post" action="{{ url_for('health_social.community_page') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="save"><input type="hidden" name="post_id" value="{{ post.id }}"><button class="secondary-action" type="submit">{{ 'Saved' if post.saved_by_me else 'Save' }}</button></form>
+    <button type="button" class="secondary-action" id="share-community-post" data-share-title="ZENDOC Health Community">Share / copy link</button>
+  </div>
+  <p class="form-note" id="share-community-status" aria-live="polite"></p>
+  <div class="comment-stack spaced-panel">{% for comment in comments %}<p><strong>{{ comment.author_name }}</strong> {{ comment.body }}</p>{% else %}<p class="form-note">No comments yet.</p>{% endfor %}</div>
+</article>
+{% endblock %}

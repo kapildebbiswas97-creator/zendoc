@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Health Community Guidelines — ZENDOC{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Health Community safety policy</p>
+    <h1>ZENDOC Health Community Guidelines</h1>
+    <p class="section-copy">Effective 19 September 2026. These rules apply to posts, stories, comments, media links and other user-generated community content.</p>
+  </div>
+</section>
+
+<section class="panel legal-copy">
+  <h2>1. Keep it health-focused</h2>
+  <p>Community content should relate to healthy food, fitness and movement, sleep and recovery, mental wellbeing, caregiving, preventive health, health technology, or lived care-navigation experience.</p>
+
+  <h2>2. Community content is not clinical authority</h2>
+  <p>Do not present a community post as a diagnosis, prescription, individualized treatment order, emergency instruction, or verified clinical evidence. Personal experience may be shared as personal experience, not as proof that the same outcome applies to someone else.</p>
+
+  <h2>3. Medicines and high-risk claims</h2>
+  <p>Do not use Community to sell prescription medicines, tell another person to start/stop/change a medicine or dose, or make unsupported cure claims. Medicine requests belong in the controlled ZENDOC Pharmacy workflow.</p>
+
+  <h2>4. Safety, abuse and privacy</h2>
+  <p>Do not post threats, harassment, hateful abuse, sexual exploitation, doxxing, another person's private medical record, or content that encourages self-harm or dangerous behavior. Do not upload or link media you do not have the right or consent to share.</p>
+
+  <h2>5. Commercial content</h2>
+  <p>Sponsored, affiliate or otherwise compensated content must be clearly disclosed. Commercial relationships must not be represented as medical endorsement, and they do not influence ZENDOC clinical or provider ranking.</p>
+
+  <h2>6. Reporting, blocking and moderation</h2>
+  <p>Users can report content and block accounts. The ZENDOC owner moderation queue can remove reported posts, stories or comments. A single report does not automatically disable an account; account-level action requires owner review.</p>
+
+  <h2>7. Enforcement</h2>
+  <p>ZENDOC may remove content or restrict community access when necessary to enforce these rules, protect users, comply with law, or preserve platform security. Moderation does not convert remaining user-generated content into verified medical advice.</p>
+
+  <h2>8. Related policies</h2>
+  <p>Community use is also subject to the <a href="{{ url_for('public_launch.terms_of_service') }}">Terms of Service</a>, <a href="{{ url_for('public_launch.privacy_policy') }}">Privacy Policy</a>, and <a href="{{ url_for('public_launch.medical_disclaimer') }}">Medical Disclaimer</a>.</p>
+</section>
+{% endblock %}

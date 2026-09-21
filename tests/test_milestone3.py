@@ -102,7 +102,13 @@ def test_provider_profile_and_admin_verification(tmp_path):
         data={"csrf_token": token, "verification_status": "verified"},
         follow_redirects=True,
     )
-    assert b"Provider verification status updated" in response.data
+    assert b"Provider cannot be verified yet" in response.data
+    with app.app_context():
+        current = get_db().execute(
+            "SELECT verification_status FROM provider_profiles WHERE id=?",
+            (profile["id"],),
+        ).fetchone()
+        assert current["verification_status"] == "pending"
 
 
 def test_schedule_slot_booking_and_double_booking_prevention(tmp_path):

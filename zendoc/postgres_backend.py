@@ -72,6 +72,7 @@ LASTROWID_TABLES = {
     "product_feedback",
     "public_entity_claims",
     "provider_profiles",
+    "provider_invitations",
     "provider_schedules",
     "provider_organizations",
     "organization_locations",

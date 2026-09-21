@@ -13,6 +13,10 @@ def test_showcase_is_public_and_renders_core_story(tmp_path):
     assert "Internet result ≠ verified provider" in text
     assert "Web page ≠ AI knowledge" in text
     assert "Listing ≠ live availability" in text
+    assert "One governed care loop" in text
+    assert "Commercial path" in text
+    assert "These are product and go-to-market paths, not revenue claims." in text
+    assert "DEMO ONLY" in text
 
 
 def test_showcase_does_not_claim_fake_live_operations(tmp_path):

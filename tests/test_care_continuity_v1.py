@@ -13,6 +13,7 @@ def test_patient_can_open_care_continuity_console(tmp_path):
     assert "Clinician handoff packet" in body
     assert "AI Evidence Passport" in body
     assert "never sent automatically" in body
+    assert "Care continuity" in body
 
 
 def test_non_patient_cannot_open_patient_continuity_console(tmp_path):
@@ -48,12 +49,18 @@ def test_evidence_passport_never_invents_historical_sources(tmp_path):
     register_web(client, "patient", "passport@example.com", "Passport Patient")
     login_web(client, "patient", "passport@example.com")
     with app.app_context():
-        user = get_db().execute("SELECT id FROM users WHERE email_normalized=?", ("passport@example.com",)).fetchone()
+        user = get_db().execute(
+            "SELECT id FROM users WHERE email_normalized=?",
+            ("passport@example.com",),
+        ).fetchone()
         cursor = get_db().execute(
             """INSERT INTO ai_interactions
                (user_id,conversation_id,feature,intent,input_text,output_text,risk_level,model_version,provider,emergency,success,latency_ms,created_at)
                VALUES (?,NULL,?,?,?,?,?,?,?,?,?,?,?)""",
-            (user["id"], "zendoc_ai", "symptoms", "I have a headache", "Safe guidance", "low", "zendoc-test-model", "test-provider", 0, 1, 15, now_iso()),
+            (
+                user["id"], "zendoc_ai", "symptoms", "I have a headache", "Safe guidance",
+                "low", "zendoc-test-model", "test-provider", 0, 1, 15, now_iso(),
+            ),
         )
         interaction_id = int(cursor.lastrowid)
         get_db().commit()
@@ -72,12 +79,18 @@ def test_patient_cannot_read_another_users_ai_passport(tmp_path):
     register_web(client, "patient", "owner@example.com", "Owner Patient")
     register_web(client, "patient", "other@example.com", "Other Patient")
     with app.app_context():
-        other = get_db().execute("SELECT id FROM users WHERE email_normalized=?", ("other@example.com",)).fetchone()
+        other = get_db().execute(
+            "SELECT id FROM users WHERE email_normalized=?",
+            ("other@example.com",),
+        ).fetchone()
         cursor = get_db().execute(
             """INSERT INTO ai_interactions
                (user_id,conversation_id,feature,intent,input_text,output_text,risk_level,model_version,provider,emergency,success,latency_ms,created_at)
                VALUES (?,NULL,?,?,?,?,?,?,?,?,?,?,?)""",
-            (other["id"], "zendoc_ai", "health_records", "test", "test", "low", "model", "provider", 0, 1, 1, now_iso()),
+            (
+                other["id"], "zendoc_ai", "health_records", "test", "test",
+                "low", "model", "provider", 0, 1, 1, now_iso(),
+            ),
         )
         interaction_id = int(cursor.lastrowid)
         get_db().commit()

@@ -1,0 +1,109 @@
+# Example only. This file is intentionally NOT the active root render.yaml.
+# Use it as a checklist/template when the validated public-release commit is
+# eventually promoted to the production branch.
+services:
+  - type: web
+    name: zendoc-public
+    branch: main
+    autoDeployTrigger: commit
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn -c gunicorn.conf.py run:app
+    healthCheckPath: /api/v1/ready
+    envVars:
+      - key: ZENDOC_ENV
+        value: production
+
+      # Keep false for initial infrastructure verification. Turn true only
+      # after SMTP, object storage, persistence and backup recovery checks pass.
+      - key: ZENDOC_PUBLIC_RELEASE_REQUIRED
+        value: "false"
+
+      - key: ZENDOC_SECRET_KEY
+        sync: false
+      - key: ZENDOC_ADMIN_EMAIL
+        sync: false
+      - key: ZENDOC_ADMIN_PASSWORD
+        sync: false
+      - key: ZENDOC_PUBLIC_BASE_URL
+        sync: false
+      - key: ZENDOC_SUPPORT_EMAIL
+        sync: false
+
+      - key: DATABASE_URL
+        sync: false
+      - key: ZENDOC_REQUIRE_DURABLE_DATABASE
+        value: "true"
+      - key: ZENDOC_PERSISTENCE_VERIFIED
+        value: "false"
+      - key: ZENDOC_BACKUP_VERIFIED
+        value: "false"
+
+      - key: ZENDOC_EMAIL_PROVIDER
+        value: smtp
+      - key: ZENDOC_EMAIL_VERIFIED
+        value: "false"
+      - key: ZENDOC_SMTP_HOST
+        sync: false
+      - key: ZENDOC_SMTP_PORT
+        value: "587"
+      - key: ZENDOC_SMTP_USERNAME
+        sync: false
+      - key: ZENDOC_SMTP_PASSWORD
+        sync: false
+      - key: ZENDOC_SMTP_FROM_EMAIL
+        sync: false
+      - key: ZENDOC_SMTP_USE_TLS
+        value: "true"
+      - key: ZENDOC_SMTP_USE_SSL
+        value: "false"
+
+      - key: ZENDOC_STORAGE_PROVIDER
+        value: s3
+      - key: ZENDOC_STORAGE_VERIFIED
+        value: "false"
+      - key: ZENDOC_S3_ENDPOINT_URL
+        sync: false
+      - key: ZENDOC_S3_REGION
+        sync: false
+      - key: ZENDOC_S3_BUCKET
+        sync: false
+      - key: ZENDOC_S3_ACCESS_KEY_ID
+        sync: false
+      - key: ZENDOC_S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: ZENDOC_S3_SERVER_SIDE_ENCRYPTION
+        value: AES256
+
+      - key: ZENDOC_CONNECTED_CARE_DATA_MODE
+        value: LIVE
+      - key: ZENDOC_TELEHEALTH_PROVIDER
+        value: internal_chat
+      - key: ZENDOC_NOTIFICATION_PROVIDER
+        value: in_app
+      - key: ZENDOC_REALTIME_PROVIDER
+        value: polling
+
+      # External discovery/video providers remain off unless real credentials
+      # and their production data/privacy disclosures are ready.
+      - key: ZENDOC_PLACES_PROVIDER
+        value: none
+      - key: ZENDOC_VIDEO_PROVIDER
+        value: none
+
+      - key: ZENDOC_RATE_LIMIT_PER_MINUTE
+        value: "120"
+      - key: ZENDOC_AUTH_RATE_LIMIT_PER_MINUTE
+        value: "20"
+      - key: ZENDOC_MAX_UPLOAD_BYTES
+        value: "10485760"
+      - key: ZENDOC_GUNICORN_WORKERS
+        value: "1"
+      - key: ZENDOC_GUNICORN_THREADS
+        value: "4"
+
+      # Configure only after the Android TWA package/signing certificate exists.
+      - key: ZENDOC_ANDROID_PACKAGE_NAME
+        sync: false
+      - key: ZENDOC_ANDROID_SHA256_CERT_FINGERPRINT
+        sync: false
