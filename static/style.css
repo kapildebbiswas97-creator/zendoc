@@ -2245,3 +2245,92 @@ button.composer-tool {
     box-shadow: none;
   }
 }
+
+
+/* Explicit Connect permission lifecycle. */
+.connect-permission-list {
+  display: grid;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.connect-permission-card {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) auto;
+  align-items: start;
+  gap: 10px;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.connect-permission-card.inactive {
+  opacity: .72;
+}
+
+.connect-permission-card strong {
+  display: block;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.connect-permission-card small {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.connect-permission-capabilities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 7px;
+}
+
+.connect-permission-capabilities span {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.connect-permission-card form {
+  margin: 0;
+}
+
+.connect-permission-card button {
+  min-height: 32px;
+  padding: 5px 9px;
+  font-size: 11px;
+}
+
+.connect-permissions-mobile {
+  display: none;
+  margin: 10px 14px 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.connect-permissions-mobile > summary {
+  cursor: pointer;
+  padding: 10px 12px;
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.connect-permissions-mobile__body {
+  padding: 0 12px 12px;
+}
+
+@media (max-width: 1080px) {
+  .connect-permissions-mobile {
+    display: block;
+  }
+}
