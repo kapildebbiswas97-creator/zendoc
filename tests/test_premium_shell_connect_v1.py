@@ -1,5 +1,6 @@
 from io import BytesIO
 from pathlib import Path
+import re
 
 import pytest
 
@@ -311,7 +312,12 @@ def test_call_ui_uses_real_peer_state_and_measured_diagnostics():
     assert "currentRoundTripTime" in call_script
     assert "Reconnecting" in call_script
     assert "navigator.vibrate" in incoming_script
-    assert "zendoc-static-v4-premium-shell-20260921" in sw
+    match = re.search(r'const STATIC_CACHE = "zendoc-static-v(\d+)[^"]*";', sw)
+    assert match is not None
+    assert int(match.group(1)) >= 4
+    assert 'zendoc-static-v1' not in sw
+    assert 'zendoc-static-v2' not in sw
+    assert 'zendoc-static-v3' not in sw
     assert '"/static/calls.js"' in sw
     assert '"/static/incoming_calls.js"' in sw
     assert '"/static/messages_composer.js"' in sw
