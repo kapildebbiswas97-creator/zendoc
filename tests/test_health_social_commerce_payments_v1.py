@@ -32,7 +32,7 @@ def test_patient_can_reach_new_product_surfaces(tmp_path):
             b"Non-diagnostic",
         ],
         "/community": [b"Health-only social community", b"Your story", b"reporting", b"blocking"],
-        "/health-shop": [b"Health Shop &amp; Wellness Marketplace", b"Clinical independence"],
+        "/health-shop": [b"<h1>Health Shop</h1>", b"Clinical independence"],
         "/payments": [b"Payments &amp; invoices", b"Payment truth boundary"],
         "/health-hub": [b"Health Community", b"Health Shop"],
         "/dashboard": [
