@@ -108,7 +108,14 @@
     <p class="eyebrow">Safety-first guidance</p>
     <h2>Review a situation with ZENDOC</h2>
     <p class="form-note">This uses ZENDOC's existing deterministic wellbeing guidance with an emergency-first safety check. It is not a clinical assessment.</p>
-    <label>Age group<select name="age_group"><option>student</option><option>working professional</option><option>adult</option><option>elderly</option></select></label>
+    <label>Life stage<select name="age_group">
+      <option value="child">Child (with parent/caregiver support)</option>
+      <option value="teen">Teenager</option>
+      <option value="student">Student / young adult</option>
+      <option value="working professional">Working professional</option>
+      <option value="adult">Adult / parent / caregiver</option>
+      <option value="older adult">Older adult</option>
+    </select></label>
     <label>Stress level from 0 to 10<input name="stress_level" type="number" min="0" max="10" value="5"></label>
     <label>What is happening?<textarea name="context" rows="5" maxlength="1000" placeholder="Share only what you are comfortable sharing."></textarea></label>
     <button type="submit">Review safe next steps</button>
@@ -118,10 +125,12 @@
 <section class="panel spaced-panel">
   <div class="panel-head"><div><p class="eyebrow">Support that matches real life</p><h2>Mental Wellness by life stage</h2></div></div>
   <div class="quick-action-grid">
-    <article class="quick-action"><strong>Students</strong><span>Exam pressure, focus, loneliness, peer pressure, sleep and career uncertainty.</span></article>
-    <article class="quick-action"><strong>Professionals</strong><span>Workload, deadlines, burnout, job uncertainty, recovery and healthy boundaries.</span></article>
-    <article class="quick-action"><strong>Adults &amp; Parents</strong><span>Family pressure, finances, relationships, parenting load and caregiving.</span></article>
-    <article class="quick-action"><strong>Older Adults</strong><span>Loneliness, retirement changes, worry, sleep, loss and staying socially connected.</span></article>
+    <article class="quick-action"><strong>Children</strong><span>Big feelings, school worries, friendship problems, sleep and changes at home. A parent, caregiver or trusted adult should stay involved; ZENDOC never asks a child to handle a safety concern alone.</span></article>
+    <article class="quick-action"><strong>Teenagers</strong><span>School pressure, body changes, bullying, friendships, social media, sleep and identity questions. Encourage safe support from a trusted adult when problems feel persistent or unsafe.</span></article>
+    <article class="quick-action"><strong>Students &amp; Young Adults</strong><span>Exams, focus, loneliness, peer pressure, relationships, sleep, career uncertainty and moving away from home.</span></article>
+    <article class="quick-action"><strong>Working Adults</strong><span>Workload, deadlines, burnout, job uncertainty, relationships, finances, recovery and healthy boundaries.</span></article>
+    <article class="quick-action"><strong>Parents &amp; Caregivers</strong><span>Family pressure, parenting load, finances, caregiving, relationship stress and finding time for rest and support.</span></article>
+    <article class="quick-action"><strong>Older Adults</strong><span>Loneliness, retirement changes, grief, sleep, health worries, maintaining independence and staying socially connected.</span></article>
   </div>
 </section>
 
