@@ -1,11 +1,16 @@
 """Web surface for ZENDOC Universal Healthcare Search."""
 from __future__ import annotations
 
-from flask import Blueprint, g, redirect, render_template, request, session, url_for
+from flask import Blueprint, current_app, g, redirect, render_template, request, session, url_for
 
 from .db import get_db
 from .provider_service import SPECIALTIES
-from .universal_health_search import GROUP_LABELS, SEARCH_CATEGORIES, universal_search
+from .universal_health_search import (
+    GROUP_LABELS,
+    SEARCH_CATEGORIES,
+    degraded_search_result,
+    universal_search,
+)
 
 
 bp = Blueprint("universal_search", __name__)
@@ -35,13 +40,29 @@ def search_home():
 
     result = None
     if str(text or "").strip() or (latitude not in (None, "") and longitude not in (None, "")):
-        result = universal_search(
-            text=text,
-            category=category,
-            latitude=latitude,
-            longitude=longitude,
-            radius_km=radius_km,
-        )
+        try:
+            result = universal_search(
+                text=text,
+                category=category,
+                latitude=latitude,
+                longitude=longitude,
+                radius_km=radius_km,
+            )
+        except Exception:
+            current_app.logger.exception(
+                "Universal healthcare search failed; returning a degraded Finder result instead of HTTP 500."
+            )
+            result = degraded_search_result(
+                text=text,
+                category=category,
+                latitude=latitude,
+                longitude=longitude,
+                radius_km=radius_km,
+                message=(
+                    "Healthcare search is temporarily limited. "
+                    "ZENDOC stayed available; retry in a moment or enter a manual location."
+                ),
+            )
 
     universal_query = {
         "text": str(text or "").strip(),
