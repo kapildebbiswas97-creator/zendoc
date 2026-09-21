@@ -1,6 +1,8 @@
 from io import BytesIO
 from pathlib import Path
 
+import pytest
+
 from zendoc.call_signaling import create_call
 from zendoc.connect import (
     create_communication_permission,
@@ -9,6 +11,7 @@ from zendoc.connect import (
     start_conversation,
 )
 from zendoc.db import get_db
+from zendoc.communication_policy import can_call
 from zendoc.universal_search import search_all
 from tests.test_milestone1 import csrf, login_web, make_app, register_web
 
@@ -237,15 +240,28 @@ def test_incoming_voice_call_is_visible_app_wide_and_rejectable(tmp_path):
             caller,
             {"target_user_id": callee["id"], "context_type": "direct"},
         )
+        with pytest.raises(PermissionError, match="target account"):
+            create_communication_permission(
+                caller,
+                {
+                    "requester_id": caller["id"],
+                    "target_user_id": callee["id"],
+                    "allow_voice": True,
+                },
+            )
+
         create_communication_permission(
-            caller,
+            callee,
             {
+                "requester_id": caller["id"],
                 "target_user_id": callee["id"],
                 "allow_chat": True,
                 "allow_voice": True,
                 "allow_video": False,
             },
         )
+        assert can_call(caller, callee["id"])["allowed"] is True
+
         call = create_call(
             caller,
             conversation["id"],
@@ -297,3 +313,28 @@ def test_call_ui_uses_real_peer_state_and_measured_diagnostics():
     assert '"/static/calls.js"' in sw
     assert '"/static/incoming_calls.js"' in sw
     assert '"/static/messages_composer.js"' in sw
+
+
+
+def test_expired_explicit_call_permission_fails_closed(tmp_path):
+    app = make_app(tmp_path)
+    first = app.test_client()
+    second = app.test_client()
+    register_web(first, "patient", "expired-call-a@example.com", "Expired A")
+    register_web(second, "patient", "expired-call-b@example.com", "Expired B")
+    caller = _user(app, "expired-call-a@example.com")
+    callee = _user(app, "expired-call-b@example.com")
+
+    with app.app_context():
+        create_communication_permission(
+            callee,
+            {
+                "requester_id": caller["id"],
+                "target_user_id": callee["id"],
+                "allow_voice": True,
+                "expires_at": "2020-01-01T00:00:00+00:00",
+            },
+        )
+        decision = can_call(caller, callee["id"])
+        assert decision["allowed"] is False
+        assert "family consent" in decision["reason"].lower()
