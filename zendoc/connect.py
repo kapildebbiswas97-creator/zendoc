@@ -128,8 +128,20 @@ def _conversation_to_dict(row, actor):
     ]
     other_id = next((int(row["user_id"]) for row in participants if int(row["user_id"]) != uid), None)
     item["unread_count"] = unread_count(actor, conversation_id=item["id"])
-    item["can_call"] = can_call(actor, other_id, {"type": item["context_type"], "id": item["context_id"]})["allowed"] if other_id else False
-    item["can_video"] = can_video_call(actor, other_id, {"type": item["context_type"], "id": item["context_id"]})["allowed"] if other_id else False
+    item["can_call"] = False
+    item["can_video"] = False
+    if other_id:
+        policy_context = {"type": item["context_type"], "id": item["context_id"]}
+        try:
+            item["can_call"] = bool(can_call(actor, other_id, policy_context).get("allowed"))
+        except Exception:
+            # A capability check must fail closed, never take down the entire
+            # Messages page for an otherwise valid conversation.
+            item["can_call"] = False
+        try:
+            item["can_video"] = bool(can_video_call(actor, other_id, policy_context).get("allowed"))
+        except Exception:
+            item["can_video"] = False
     last = get_db().execute(
         """
         SELECT m.id, m.message_type, m.body, m.created_at, u.name sender_name
@@ -284,12 +296,13 @@ def list_messages(actor, conversation_id, limit=100):
     return [_message_to_dict(row) for row in rows]
 
 
-def _notify_recipients(message_id, conversation_id, sender_id, message_type):
-    from .notification_providers import deliver_notification
+def _message_recipient_ids(conversation_id, sender_id):
+    return [uid for uid in _participant_ids(conversation_id) if uid != int(sender_id)]
 
-    recipients = [uid for uid in _participant_ids(conversation_id) if uid != int(sender_id)]
+
+def _create_message_receipts(message_id, conversation_id, sender_id):
     now = now_iso()
-    for uid in recipients:
+    for uid in _message_recipient_ids(conversation_id, sender_id):
         get_db().execute(
             """
             INSERT OR IGNORE INTO message_receipts (message_id, user_id, status, delivered_at)
@@ -297,14 +310,29 @@ def _notify_recipients(message_id, conversation_id, sender_id, message_type):
             """,
             (int(message_id), uid, now),
         )
-        deliver_notification(
-            uid,
-            "New ZENDOC message",
-            f"A {message_type.replace('_', ' ')} message is waiting in ZENDOC Connect.",
-            channel="in_app",
-            template_type="connect_message",
-        )
 
+
+def _deliver_message_notifications_best_effort(conversation_id, sender_id, message_type):
+    """Notifications are auxiliary; they must never roll back a valid message."""
+    from .notification_providers import deliver_notification
+
+    for uid in _message_recipient_ids(conversation_id, sender_id):
+        try:
+            deliver_notification(
+                uid,
+                "New ZENDOC message",
+                f"A {message_type.replace('_', ' ')} message is waiting in ZENDOC Connect.",
+                channel="in_app",
+                template_type="connect_message",
+            )
+            get_db().commit()
+        except Exception:
+            # On PostgreSQL an exception can abort the transaction. Roll back
+            # only the notification attempt; the message was committed first.
+            try:
+                get_db().rollback()
+            except Exception:
+                pass
 
 def send_message(actor, conversation_id, data):
     conversation = _conversation_row(conversation_id)
@@ -330,8 +358,12 @@ def send_message(actor, conversation_id, data):
     )
     message_id = cursor.lastrowid
     get_db().execute("UPDATE conversations SET updated_at=? WHERE id=?", (now, int(conversation_id)))
-    _notify_recipients(message_id, conversation_id, sender_id, message_type)
+    _create_message_receipts(message_id, conversation_id, sender_id)
+    # Persist the actual private message before auxiliary notifications. This
+    # prevents an SMTP/notification/schema outage from surfacing as a 500 and
+    # losing a message the user successfully submitted.
     get_db().commit()
+    _deliver_message_notifications_best_effort(conversation_id, sender_id, message_type)
     try:
         from .event_bus import publish_event
         publish_event(
