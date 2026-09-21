@@ -1,7 +1,7 @@
 from flask import Blueprint, abort, current_app, flash, g, jsonify, redirect, render_template, request, url_for
 
 from .agent_core import admin_command_center_data, respond_with_core_agent
-from .community_media import get_community_media_storage
+from .community_media import MESSAGE_MEDIA_TYPES, get_community_media_storage
 from .call_signaling import list_incoming_calls
 from .connect import (
     create_communication_permission,
@@ -110,7 +110,7 @@ def messages_page():
                 stored = None
                 if upload and getattr(upload, "filename", ""):
                     try:
-                        stored = get_community_media_storage().save(upload)
+                        stored = get_community_media_storage().save(upload, allowed_media_types=MESSAGE_MEDIA_TYPES)
                         message = share_native_media_message(
                             g.user,
                             conversation_id,
