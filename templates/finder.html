@@ -39,6 +39,43 @@
     </details>
   </form>
 
+  <nav class="panel finder-source-summary" aria-label="Quick healthcare categories">
+    <p class="eyebrow">Search exactly what you need</p>
+    <div class="feedback-actions">
+      {% set uq = universal_query if universal_query is defined else none %}
+      {% for key,label in [('doctor','Doctors'),('hospital','Hospitals'),('clinic','Clinics'),('pharmacy','Pharmacies'),('diagnostic_centre','Diagnostics'),('laboratory','Labs'),('nursing_home','Nursing homes'),('blood_bank','Blood banks'),('emergency','Emergency')] %}
+        <a class="secondary-action" href="{{ url_for('universal_search.search_home', q=(uq.text if uq else ''), category=key, latitude=(uq.latitude if uq else ''), longitude=(uq.longitude if uq else ''), radius_km=(uq.radius_km if uq else 10)) }}">{{ label }}</a>
+      {% endfor %}
+    </div>
+    <p class="form-note">Choosing a category filters discovery to that care type; for example, Doctors searches doctor listings rather than mixing hospitals and pharmacies.</p>
+  </nav>
+
+  <aside id="government-ors-handoff" class="panel finder-source-summary" aria-label="Government hospital appointment handoff">
+    <div class="panel-head">
+      <div>
+        <p class="eyebrow">Government hospital OPD</p>
+        <h2>Use the official ORS portal for participating government hospitals</h2>
+        <p class="form-note">ZENDOC helps you discover the hospital, but the actual government OPD booking is completed on the official NIC Online Registration System. ZENDOC does not claim that an ORS appointment is confirmed unless you record the details yourself after booking.</p>
+      </div>
+      <a class="primary-action" href="https://ors.gov.in/" target="_blank" rel="noopener noreferrer">Open official ORS</a>
+    </div>
+    {% if current_user and current_user.role == 'patient' %}
+    <details class="progressive-fields">
+      <summary>Already booked on ORS? Save it to my Health Memory</summary>
+      <form method="post" action="{{ url_for('main.record_external_opd_appointment') }}" class="filter-bar finder-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="source" value="ORS">
+        <label>Government hospital name<input name="provider_name" maxlength="160" required placeholder="Hospital shown on your ORS booking"></label>
+        <label>OPD date and time<input name="scheduled_for" type="datetime-local" required></label>
+        <label>Department / purpose<input name="reason" maxlength="300" required placeholder="e.g. Cardiology OPD"></label>
+        <label>Optional ORS reference<input name="reference" maxlength="120" placeholder="Reference/appointment number if you want to save it"></label>
+        <button type="submit">Save patient-reported appointment</button>
+      </form>
+      <p class="form-note">This creates a USER_REPORTED Health Memory event. It does not verify the ORS booking or import data from the government portal.</p>
+    </details>
+    {% endif %}
+  </aside>
+
   <details class="panel finder-options">
     <summary>Advanced category-specific search</summary>
     <form class="filter-bar finder-form" method="post" action="{{ url_for('main.finder') }}">
@@ -67,6 +104,15 @@
     </div>
 
     {% if result and result.results %}
+      {% if result.search_origin %}
+      <section class="panel finder-source-summary" aria-label="Current location search origin">
+        <div class="panel-head">
+          <div><p class="eyebrow">Your search origin</p><h3>Current location used for nearby distance</h3><p class="form-note">Distances below are calculated from the coordinates your browser supplied for this search.</p></div>
+          <a class="secondary-action" href="{{ result.search_origin.google_maps_url }}" target="_blank" rel="noopener noreferrer">View my search point in Google Maps</a>
+        </div>
+      </section>
+      {% endif %}
+
       <section class="panel finder-source-summary" aria-label="Search source summary">
         <div class="summary-row"><span>ZENDOC verified</span><strong>{{ result.source_tiers.zendoc_verified }}</strong></div>
         <div class="summary-row"><span>Official public directory</span><strong>{{ result.source_tiers.official_public_directory_not_zendoc_verified }}</strong></div>
@@ -116,6 +162,7 @@
                   {% else %}
                     <p class="form-note">Booking is not connected for this external listing. Verify details directly before visiting.</p>
                     {% if item.map_url %}<a class="secondary-action" href="{{ item.map_url }}" target="_blank" rel="noopener noreferrer">Open in OpenStreetMap</a>{% endif %}
+                    {% if item.google_directions_url %}<a class="primary-action" href="{{ item.google_directions_url }}" target="_blank" rel="noopener noreferrer">Directions from my location</a>{% endif %}
                     {% if item.google_maps_url %}<a class="secondary-action" href="{{ item.google_maps_url }}" target="_blank" rel="noopener noreferrer">Open in Google Maps</a>{% endif %}
                   {% endif %}
                 </article>
@@ -151,7 +198,8 @@
               {% else %}
                 <p class="form-note">Booking is not connected for this external listing. Verify details directly before visiting.</p>
                 {% if item.map_url %}<a class="secondary-action" href="{{ item.map_url }}" target="_blank" rel="noopener noreferrer">Open in OpenStreetMap</a>{% endif %}
-                {% if item.google_maps_url %}<a class="secondary-action" href="{{ item.google_maps_url }}" target="_blank" rel="noopener noreferrer">Open in Google Maps</a>{% endif %}
+                {% if item.google_directions_url %}<a class="primary-action" href="{{ item.google_directions_url }}" target="_blank" rel="noopener noreferrer">Directions from my location</a>{% endif %}
+                    {% if item.google_maps_url %}<a class="secondary-action" href="{{ item.google_maps_url }}" target="_blank" rel="noopener noreferrer">Open in Google Maps</a>{% endif %}
                 {% if item.attribution %}<p class="form-note">{{ item.attribution }}</p>{% endif %}
                 {% if current_user and current_user.role in ['doctor','hospital','pharmacy'] and item.id and item.claimable_public_listing %}
                 <details class="claim-listing">

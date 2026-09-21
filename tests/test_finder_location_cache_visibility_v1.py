@@ -44,10 +44,11 @@ def test_current_location_button_submits_own_finder_form():
 def test_service_worker_invalidates_old_static_cache_and_precaches_finder_assets():
     script = (ROOT / "static" / "sw.js").read_text(encoding="utf-8")
 
-    assert 'zendoc-static-v2-20260921' in script
+    assert 'zendoc-static-v3-20260921' in script
     assert 'zendoc-static-v1' not in script
     assert '"/static/finder.js"' in script
     assert '"/static/product-expansion.css"' in script
+    assert '"/static/edgecare_voice.js"' in script
 
 
 def test_gps_universal_search_returns_distance_and_google_maps_handoff(tmp_path):
@@ -67,6 +68,12 @@ def test_gps_universal_search_returns_distance_and_google_maps_handoff(tmp_path)
     assert hospital["name"] == "Nearby Test Hospital"
     assert 0 < hospital["distance_km"] < 1
     assert hospital["google_maps_url"].startswith(
+        "https://www.google.com/maps/search/?api=1&query="
+    )
+    assert hospital["google_directions_url"].startswith(
+        "https://www.google.com/maps/dir/?api=1&origin="
+    )
+    assert result["search_origin"]["google_maps_url"].startswith(
         "https://www.google.com/maps/search/?api=1&query="
     )
     assert hospital["bookable_in_zendoc"] is False

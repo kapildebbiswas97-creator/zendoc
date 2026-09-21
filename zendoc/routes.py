@@ -28,6 +28,7 @@ from .email_verification import (
     verify_email_token,
 )
 from .health_analytics import METRIC_TYPES, create_measurement, get_health_trend
+from .health_timeline import add_timeline_event
 from .healthcare_finder import HealthcareFinder, normalize_query
 from .intelligence import ZendocIntelligence
 from .provider_operations import provider_operational_metrics
@@ -1324,6 +1325,49 @@ def finder():
         audit("search", "healthcare_finder", query["category"])
         get_db().commit()
     return render_template("finder.html", result=result, query=query, search_event_id=search_event_id)
+
+
+@bp.post("/finder/external-opd")
+@login_required
+def record_external_opd_appointment():
+    if g.user["role"] != "patient":
+        abort(403)
+    provider_name = " ".join(str(request.form.get("provider_name") or "").strip().split())[:160]
+    reason = " ".join(str(request.form.get("reason") or "").strip().split())[:300]
+    scheduled_for_raw = str(request.form.get("scheduled_for") or "").strip()
+    reference = " ".join(str(request.form.get("reference") or "").strip().split())[:120]
+    source = str(request.form.get("source") or "external").strip().upper()[:40]
+    if not provider_name or not reason or not scheduled_for_raw:
+        flash("Hospital, OPD date/time and purpose are required before saving.", "error")
+        return redirect(url_for("main.finder"))
+    try:
+        scheduled = datetime.fromisoformat(scheduled_for_raw)
+    except ValueError:
+        flash("Enter a valid OPD date and time.", "error")
+        return redirect(url_for("main.finder"))
+
+    summary_parts = [
+        f"Patient-reported {source} government OPD booking",
+        f"Purpose: {reason}",
+        "ZENDOC has not independently verified this external appointment.",
+    ]
+    if reference:
+        summary_parts.append(f"Reference saved by patient: {reference}")
+    event_id = add_timeline_event(
+        int(g.user["id"]),
+        "appointment",
+        f"Government OPD appointment · {provider_name}",
+        event_at=scheduled.isoformat(timespec="minutes"),
+        summary=" · ".join(summary_parts),
+        provider_name=provider_name,
+        source="USER_REPORTED",
+        source_ref=f"{source}:{reference}" if reference else source,
+        created_by=int(g.user["id"]),
+    )
+    audit("record_external_opd", "health_timeline_event", str(event_id))
+    get_db().commit()
+    flash("Government OPD appointment saved to Health Memory as patient-reported.", "success")
+    return redirect(url_for("health_memory.timeline_page"))
 
 
 @bp.post("/finder/feedback")

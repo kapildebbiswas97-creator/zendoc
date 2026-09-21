@@ -35,7 +35,7 @@
   <div>
     <p class="eyebrow">Connected Healthcare Ecosystem</p>
     <h1>Care Coordination &amp; Hyperlocal Fulfilment</h1>
-    <p class="section-copy">Verified hyperlocal pharmacy stock, split fulfilment routing, diagnostic labs, and continuity of care.</p>
+    <p class="section-copy">Provider-reported pharmacy inventory, verified diagnostic offers and continuity workflows are shown only when the connected data supports them.</p>
   </div>
   <div style="display:flex;gap:10px;align-items:center;">
     <a href="{{ url_for('connected_care.inbox_page') }}" class="secondary-action">Unified Inbox</a>
@@ -194,38 +194,70 @@
 <section class="panel" style="margin-top:2rem;">
   <div class="panel-head">
     <div>
-      <p class="eyebrow">Diagnostic Network</p>
-      <h2>Book Laboratory Tests &amp; Home Sample Collection</h2>
+      <p class="eyebrow">Verified diagnostic network</p>
+      <h2>Labs, tests &amp; home sample collection</h2>
+      <p class="section-copy">The catalog explains available test types. A request button appears only for a fresh provider-backed verified offer.</p>
     </div>
   </div>
+
+  {% if page_tab == 'diagnostics' %}
+  <form class="filter-bar" method="get" action="{{ url_for('connected_care.diagnostics_page') }}">
+    <label>Find a diagnostic test
+      <input name="q" value="{{ diagnostic_query or '' }}" placeholder="Test name or code, e.g. CBC">
+    </label>
+    <button type="submit">Find verified lab offers</button>
+  </form>
+  {% endif %}
+
+  {% if diagnostic_query %}
+    <section class="spaced-panel">
+      <div class="panel-head"><div><p class="eyebrow">Provider-backed offers</p><h3>Verified offers for “{{ diagnostic_query }}”</h3></div><span class="status-badge">{{ diagnostic_offers|length }} found</span></div>
+      {% if diagnostic_offers %}
+      <div class="grid two">
+        {% for offer in diagnostic_offers %}
+        <article class="subtle-panel">
+          <div class="summary-row"><div><strong>{{ offer.lab_name }}</strong><p>{{ offer.test_name }} · {{ offer.city or 'Location not listed' }}</p></div><span class="status-badge {{ 'active' if offer.availability_confirmed else 'integration' }}">{{ offer.availability_state|replace('_',' ')|title }}</span></div>
+          <p>Offer price: <strong>₹{{ '%.2f'|format(offer.price_inr) }}</strong>{% if offer.home_collection_available %} · Home collection fee ₹{{ '%.2f'|format(offer.home_collection_fee_inr or 0) }}{% endif %}</p>
+          <p class="form-note">Observed {{ offer.freshness_observed_at or 'time unavailable' }} · {{ offer.provider_status|replace('_',' ')|title }} provider · {{ offer.distance_text }}</p>
+          {% if offer.availability_confirmed %}
+          <button type="button" class="primary-action"
+            onclick='openLabBooking({{ offer.lab_id }}, {{ offer.test_id }}, {{ offer.test_name|tojson }}, {{ "true" if offer.home_collection_available else "false" }}, {{ offer.price_inr }})'>
+            Request {{ 'home collection' if offer.home_collection_available else 'lab visit' }}
+          </button>
+          {% else %}
+          <span class="status-badge integration">Refresh provider availability before requesting</span>
+          {% endif %}
+        </article>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty-state"><h3>No fresh verified lab offer</h3><p>The test may exist in the catalog, but ZENDOC will not invent a lab, price or booking. Try another test or wait for a verified provider offer.</p></div>
+      {% endif %}
+    </section>
+  {% endif %}
+
   {% if diagnostic_catalog %}
-    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));gap:14px;margin-top:12px;">
+  <details class="spaced-panel">
+    <summary><strong>Browse descriptive test catalog</strong> · catalog entries are not bookable offers</summary>
+    <div class="grid three spaced-panel">
       {% for test in diagnostic_catalog %}
-        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:14px;display:flex;flex-direction:column;justify-content:space-between;">
-          <div>
-            <div style="display:flex;justify-content:space-between;align-items:center;">
-              <strong style="font-size:0.95rem;">{{ test.name }}</strong>
-              <span class="status-badge active">{{ test.category }}</span>
-            </div>
-            <p style="font-size:0.84rem;color:#64748b;margin:6px 0;">Code: {{ test.code }} · Fasting: {{ 'Yes' if test.fasting_required else 'No' }}</p>
-            <p style="font-size:0.84rem;color:#475569;margin:0 0 10px 0;">Turnaround: {{ test.tat_hours }}h</p>
-          </div>
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding-top:8px;border-top:1px solid #f1f5f9;">
-            {% set test_price = test.standard_price_inr if test.standard_price_inr is defined and test.standard_price_inr is not none else (test.typical_price_inr if test.typical_price_inr is defined and test.typical_price_inr is not none else 0) %}
-            <strong style="color:#0b6b61;">₹{{ "%.0f"|format(test_price) }}</strong>
-            <button type="button" class="secondary-action compact-action" onclick="openLabBooking({{ test.id }}, '{{ test.name }}', {{ test_price }})">
-              Book Home Collection
-            </button>
-          </div>
-        </div>
+      <article class="subtle-panel">
+        <strong>{{ test.name }}</strong>
+        <p>{{ test.category }} · Code {{ test.code }}</p>
+        <p class="form-note">Fasting: {{ 'Yes' if test.fasting_required else 'No' }} · Turnaround reference: {{ test.tat_hours }}h</p>
+        <a class="secondary-action" href="{{ url_for('connected_care.diagnostics_page', q=test.code) }}">Find verified offers</a>
+      </article>
       {% endfor %}
     </div>
+  </details>
   {% endif %}
 </section>
 {% endif %}
 
 <script>
+const connectedCareCsrfToken = {{ csrf_token|tojson }};
 let currentPlan = null;
+let selectedPlanHash = null;
 
 async function loadFulfilmentPlan(rxId) {
   const section = document.getElementById('fulfilment-section');
@@ -242,7 +274,7 @@ async function loadFulfilmentPlan(rxId) {
   try {
     const res = await fetch('/api/v1/connected-care/fulfilment', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': connectedCareCsrfToken },
       body: JSON.stringify({ prescription_id: rxId, strategy: 'balanced' })
     });
     const data = await res.json();
@@ -261,92 +293,91 @@ async function loadFulfilmentPlan(rxId) {
   }
 }
 
+function escapeConnectedCareText(value) {
+  return String(value == null ? '' : value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
 function renderFulfilmentCards(plan) {
   const container = document.getElementById('fulfilment-cards');
   container.innerHTML = '';
 
-  const options = [
-    {
-      title: 'Green Cross Pharmacy',
-      badge: 'CONFIRMED STOCK',
-      badgeClass: 'active',
-      desc: 'Single pharmacy complete fulfilment. All items verified fresh (< 2 hours ago).',
-      distance: '1.2 km',
-      eta: '45 mins',
-      cost: '₹' + (plan.total_cost_inr || 180),
-      planId: plan.plan_id,
-      freshness: 'Fresh (< 2h)'
-    },
-    {
-      title: 'Split Fulfilment (CarePlus + Neighbour Meds)',
-      badge: 'SPLIT SHIPMENT',
-      badgeClass: 'beta',
-      desc: 'Optimized multi-seller route. Items split across 2 nearby certified pharmacies to guarantee 100% item availability.',
-      distance: '0.8 km & 2.1 km',
-      eta: '60 mins',
-      cost: '₹' + ((plan.total_cost_inr || 180) + 30),
-      planId: plan.plan_id,
-      freshness: 'Verified Stock'
-    },
-    {
-      title: 'HealthHub Pharmacy',
-      badge: 'STALE STOCK WARNING',
-      badgeClass: 'inactive',
-      desc: 'Inventory observation is > 2 hours old. Stock availability cannot be guaranteed in real time.',
-      distance: '3.4 km',
-      eta: '90 mins',
-      cost: '₹' + Math.max(120, (plan.total_cost_inr || 180) - 20),
-      planId: plan.plan_id,
-      freshness: 'Stale (4h ago)'
-    }
-  ];
+  const options = Object.values((plan && plan.options) || {});
+  if (!options.length) {
+    const message = (plan && plan.message) || 'No confirmed participating pharmacy inventory is available for this prescription.';
+    container.innerHTML = '<div class="empty-state"><h3>No order-ready pharmacy option</h3><p>' +
+      escapeConnectedCareText(message) +
+      '</p><p>Try changing location/radius or ask a participating pharmacy to refresh its real inventory.</p></div>';
+    return;
+  }
 
-  options.forEach((opt, idx) => {
-    const card = document.createElement('div');
-    card.style.background = '#fff';
-    card.style.border = idx === 0 ? '2px solid #0b6b61' : '1px solid #e2e8f0';
-    card.style.borderRadius = '8px';
-    card.style.padding = '16px';
-    card.style.display = 'flex';
-    card.style.flexDirection = 'column';
-    card.style.justifyContent = 'space-between';
+  options.forEach((opt) => {
+    const names = Array.isArray(opt.pharmacy_names) && opt.pharmacy_names.length
+      ? opt.pharmacy_names.join(' + ')
+      : 'Participating pharmacy option';
+    const confirmed = opt.overall_status === 'CONFIRMED';
+    const orderReady = confirmed && opt.db_plan_id && opt.total_inr != null;
+    const unknowns = Array.isArray(opt.unknowns) ? opt.unknowns : [];
+    const why = Array.isArray(opt.why_explanation) ? opt.why_explanation : [];
 
+    const card = document.createElement('article');
+    card.className = 'panel connected-care-option';
     card.innerHTML = `
-      <div>
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
-          <h3 style="margin:0;font-size:1.05rem;">${opt.title}</h3>
-          <span class="status-badge ${opt.badgeClass}">${opt.badge}</span>
-        </div>
-        <p style="font-size:0.86rem;color:#475569;margin:0 0 10px 0;">${opt.desc}</p>
-        <div style="font-size:0.84rem;color:#64748b;display:flex;flex-direction:column;gap:4px;margin-bottom:12px;">
-          <span>📍 Distance: <strong>${opt.distance}</strong></span>
-          <span>⏱ Estimated Delivery: <strong>${opt.eta}</strong></span>
-          <span>📡 Stock Observation: <strong>${opt.freshness}</strong></span>
-        </div>
+      <div class="panel-head">
+        <div><h3>${escapeConnectedCareText(names)}</h3><p>${escapeConnectedCareText(opt.strategy_name || opt.strategy_type || 'Fulfilment option')}</p></div>
+        <span class="status-badge ${confirmed ? 'active' : 'integration'}">${escapeConnectedCareText(opt.overall_status || 'UNKNOWN')}</span>
       </div>
-      <div style="display:flex;justify-content:space-between;align-items:center;padding-top:10px;border-top:1px solid #f1f5f9;">
-        <span style="font-size:1.2rem;font-weight:700;color:#0b6b61;">${opt.cost}</span>
-        <button type="button" class="primary-action compact-action" onclick="stageConfirmation(${opt.planId}, '${opt.title}', '${opt.cost}')">
-          Select &amp; Review
-        </button>
+      <div class="provider-facts">
+        <span>Coverage: ${escapeConnectedCareText(opt.coverage_ratio || 'Unknown')}</span>
+        <span>Distance: ${escapeConnectedCareText(opt.distance_summary || 'Distance unavailable')}</span>
+        <span>Freshness: ${escapeConnectedCareText(opt.freshness_summary || 'Stock not confirmed')}</span>
+        <span>${escapeConnectedCareText(opt.deliveries_text || '')}</span>
+      </div>
+      <p>${why.map(escapeConnectedCareText).join(' ')}</p>
+      ${unknowns.length ? '<p class="form-note"><strong>Still unknown:</strong> ' + unknowns.map(escapeConnectedCareText).join(' ') + '</p>' : ''}
+      <div class="summary-row"><strong>Total</strong><span>${opt.total_inr == null ? 'Quote incomplete' : '₹' + Number(opt.total_inr).toFixed(2)}</span></div>
+      <div class="form-actions">
+        ${orderReady ? '<button type="button" class="primary-action connected-care-review-option">Review this real option</button>' : '<span class="status-badge integration">Not order-ready</span>'}
       </div>
     `;
+    if (orderReady) {
+      const button = card.querySelector('.connected-care-review-option');
+      button.addEventListener('click', () => {
+        stageConfirmation(
+          Number(opt.db_plan_id),
+          names,
+          Number(opt.total_inr),
+          String(opt.plan_hash || '')
+        );
+      });
+    }
     container.appendChild(card);
   });
 }
 
-function stageConfirmation(planId, title, cost) {
+function stageConfirmation(planId, title, totalInr, planHash) {
   const gate = document.getElementById('confirmation-gate');
   const summaryBox = document.getElementById('plan-summary-box');
   const planIdInput = document.getElementById('confirmed-plan-id');
 
-  planIdInput.value = planId;
-  summaryBox.innerHTML = `
-    <strong>Selected Option:</strong> ${title}<br>
-    <strong>Total Cost:</strong> ${cost}<br>
-    <strong>Plan Reference:</strong> Plan #${planId}<br>
-    <strong>Integrity Hash:</strong> <code style="font-size:0.8rem;background:#f1f5f9;padding:2px 4px;border-radius:4px;">${currentPlan ? currentPlan.plan_hash : 'verified'}</code>
-  `;
+  selectedPlanHash = planHash || null;
+  planIdInput.value = String(planId);
+  summaryBox.innerHTML = '';
+  const titleRow = document.createElement('p');
+  titleRow.textContent = 'Selected option: ' + title;
+  const totalRow = document.createElement('p');
+  totalRow.textContent = 'Quoted total: ₹' + Number(totalInr).toFixed(2);
+  const refRow = document.createElement('p');
+  refRow.textContent = 'Staged plan reference: #' + planId;
+  const notice = document.createElement('p');
+  notice.className = 'form-note';
+  notice.textContent = 'The quote will be checked again against its plan hash when you confirm. Provider acknowledgement is still required after submission.';
+  summaryBox.append(titleRow, totalRow, refRow, notice);
+
   gate.style.display = 'block';
   gate.scrollIntoView({ behavior: 'smooth' });
 }
@@ -367,9 +398,10 @@ async function executeOrder(e) {
   try {
     const res = await fetch('/api/v1/connected-care/orders/confirm', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': connectedCareCsrfToken },
       body: JSON.stringify({
         plan_id: parseInt(planId),
+        plan_hash: selectedPlanHash,
         user_confirmed: true,
         delivery_address: address
       })
@@ -380,7 +412,7 @@ async function executeOrder(e) {
       btn.disabled = false;
       btn.textContent = 'Confirm & Place Order';
     } else {
-      alert('Order placed successfully! Order Ref: ' + (data.order.order_uid || '#' + data.order.order_id));
+      alert('Order request recorded. Provider fulfilment/acknowledgement remains subject to the connected pharmacy status. Reference: ' + (data.order.order_uid || '#' + data.order.order_id));
       window.location.href = '{{ url_for("connected_care.orders_page") }}';
     }
   } catch (err) {
@@ -390,29 +422,54 @@ async function executeOrder(e) {
   }
 }
 
-function openLabBooking(testId, testName, price) {
-  const address = prompt(`Enter home sample collection address for ${testName} (₹${price}):`, 'Home Address, Main City');
-  if (!address) return;
+function openLabBooking(labId, testId, testName, homeCollectionAvailable, price) {
+  const collectionType = homeCollectionAvailable ? 'home_collection' : 'lab_visit';
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  const scheduledDate = window.prompt('Preferred date for ' + testName + ' (YYYY-MM-DD):', tomorrow);
+  if (!scheduledDate) return;
+
+  const addressPrompt = homeCollectionAvailable
+    ? 'Enter the real home collection address:'
+    : 'Enter your address/contact location for this lab-visit request:';
+  const address = window.prompt(addressPrompt, '');
+  if (!address || !address.trim()) return;
+
+  const confirmed = window.confirm(
+    'Send a REQUEST to this verified lab for ' + testName +
+    ' at the listed offer price ₹' + Number(price).toFixed(2) +
+    '? The provider must still acknowledge/accept it.'
+  );
+  if (!confirmed) return;
 
   fetch('/api/v1/connected-care/diagnostics/book', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': connectedCareCsrfToken },
     body: JSON.stringify({
-      offer_id: testId,
-      scheduled_at: new Date(Date.now() + 86400000).toISOString().slice(0, 10),
-      notes: 'Home sample collection requested via Connected Care portal'
+      test_id: Number(testId),
+      lab_id: Number(labId),
+      scheduled_date: scheduledDate,
+      address: address.trim(),
+      collection_type: collectionType,
+      user_confirmed: true
     })
   })
-  .then(r => r.json())
-  .then(d => {
-    if (d.error) {
-      alert('Booking error: ' + d.error.message);
-    } else {
-      alert(`Booking confirmed! Reference: ${d.booking.booking_uid || '#' + d.booking.id}`);
-      window.location.reload();
+  .then(r => r.json().then(payload => ({ ok: r.ok, payload })))
+  .then(({ ok, payload }) => {
+    if (!ok || payload.error) {
+      const message = payload && payload.error && payload.error.message ? payload.error.message : 'Diagnostic request could not be created.';
+      window.alert('Request not created: ' + message);
+      return;
     }
+    const booking = payload.booking || {};
+    window.alert(
+      'Diagnostic request saved with status ' + (booking.status || 'requested') +
+      '. Provider acknowledgement is still pending. Reference: ' +
+      (booking.booking_uid || booking.booking_id || 'saved')
+    );
+    window.location.reload();
   })
-  .catch(err => alert('Booking failed: ' + err.message));
+  .catch(() => window.alert('Diagnostic request could not reach ZENDOC. Nothing was recorded.'));
 }
 </script>
 {% endblock %}

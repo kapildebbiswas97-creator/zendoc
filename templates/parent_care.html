@@ -22,9 +22,9 @@
             <p class="form-note">Age: {{ parent.age or 'N/A' }} · {{ parent.city or 'India' }}</p>
           </div>
         </div>
-        <h3>Proxy actions for {{ parent.member_name }}</h3>
+        <h3>Supported coordination for {{ parent.member_name }}</h3><p class="form-note">These links open ZENDOC workflows. They do not bypass the family member's consent or claim an external booking/order is complete.</p>
         <div class="button-list">
-          <a href="{{ url_for('main.finder') }}" class="secondary-action">Book doctor consultation</a>
+          <a href="{{ url_for('main.finder') }}" class="secondary-action">Find doctor / care</a>
           <a href="{{ url_for('ecosystem.home_health_page') }}" class="secondary-action">Request nurse / home visit</a>
           <a href="{{ url_for('ecosystem.pharmacy_page') }}" class="secondary-action">Pharmacy requests</a>
           <a href="{{ url_for('ecosystem.ambulance_page') }}" class="secondary-action">Emergency &amp; transport guidance</a>

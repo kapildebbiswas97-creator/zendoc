@@ -34,6 +34,7 @@ from flask import (
 
 from .care_graph import get_patient_care_graph, record_care_continuity_event
 from .carefin_engine import discover_benefits
+from .carefin_cases import carefin_case_options, list_carefin_cases
 from .care_journey_store import create_persisted_journey, list_patient_journeys, advance_persisted_journey
 from .context_engine import (
     build_minimum_context_bundle,
@@ -216,21 +217,31 @@ def connected_care_home():
 
 @bp.route("/connected-care/carefin", methods=("GET", "POST"))
 def carefin_page():
+    # Compatibility surface for the original pilot URL. Discovery stays
+    # directly usable here; durable case/evidence mutations remain canonical
+    # under /carefin.
     uid = _current_user_id()
     if not uid:
         return redirect(url_for("main.login", role="patient"))
+
     db = get_db()
     user = dict(db.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone() or abort(401))
-    result = None
+    source = request.form if request.method == "POST" else request.args
     form_data = {
-        "state": request.values.get("state", ""),
-        "district": request.values.get("district", user.get("city") or ""),
-        "age": request.values.get("age", user.get("age") or ""),
-        "occupation": request.values.get("occupation", ""),
-        "income_band": request.values.get("income_band", ""),
-        "existing_insurer": request.values.get("existing_insurer", ""),
-        "needs_charitable_support": request.values.get("needs_charitable_support") == "yes",
+        "state": source.get("state", ""),
+        "district": source.get("district", user.get("city") or ""),
+        "age": source.get("age", user.get("age") or ""),
+        "occupation": source.get("occupation", ""),
+        "income_band": source.get("income_band", ""),
+        "existing_insurer": source.get("existing_insurer", ""),
+        "needs_charitable_support": source.get("needs_charitable_support") in {"1", "yes", "true", "on"},
     }
+
+    action = str(source.get("action") or "discover").strip().lower()
+    if request.method == "POST" and action != "discover":
+        return redirect(url_for("carefin.carefin_page"), code=307)
+
+    result = None
     if request.method == "POST":
         result = discover_benefits({
             "geography": form_data["state"] or "INDIA",
@@ -252,7 +263,14 @@ def carefin_page():
         })
         audit("carefin.discovery", "carefin", str(uid), user)
         db.commit()
-    return render_template("carefin.html", user=user, result=result, form_data=form_data)
+
+    return render_template(
+        "carefin.html",
+        result=result,
+        form_data=form_data,
+        cases=list_carefin_cases(user),
+        case_options=carefin_case_options(),
+    )
 
 
 @bp.get("/connected-care/journey")
@@ -367,6 +385,7 @@ def diagnostics_page():
     return render_template("connected_care.html", user=user,
                            diagnostic_offers=offers,
                            diagnostic_catalog=[dict(c) for c in catalog],
+                           diagnostic_query=query,
                            page_tab="diagnostics", data_mode=data_mode, demo_mode=data_mode == "DEMO")
 
 

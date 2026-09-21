@@ -118,3 +118,84 @@
 .community-media--story {
   max-height: 360px;
 }
+
+
+/* Social-first Community polish: visual only; moderation/privacy rules remain server-side. */
+.story-card--create {
+  align-content: center;
+  justify-items: center;
+  text-align: center;
+  text-decoration: none;
+  min-width: 150px;
+}
+
+.story-create-ring {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border: 2px solid currentColor;
+  border-radius: 999px;
+  font-size: 30px;
+  font-weight: 700;
+}
+
+.community-composer {
+  position: relative;
+  overflow: hidden;
+}
+
+.community-composer textarea {
+  min-height: 120px;
+  font-size: 1rem;
+}
+
+.community-media-picker {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px dashed var(--border, #dce4e2);
+  border-radius: 16px;
+  cursor: pointer;
+}
+
+.community-feed-controls {
+  align-items: stretch;
+}
+
+.community-feed .community-post {
+  border-radius: 22px;
+}
+
+.community-media--reel {
+  max-height: 680px;
+  aspect-ratio: 9 / 16;
+  object-fit: contain;
+  margin-inline: auto;
+}
+
+@media (min-width: 721px) {
+  .community-media--reel {
+    max-width: 430px;
+  }
+}
+
+@media (max-width: 720px) {
+  .stories-strip {
+    margin-inline: -12px;
+    padding-inline: 12px;
+  }
+
+  .community-feed {
+    gap: 12px;
+  }
+
+  .community-feed .community-post {
+    border-radius: 18px;
+  }
+
+  .community-media--reel {
+    width: 100%;
+    max-height: 70vh;
+  }
+}

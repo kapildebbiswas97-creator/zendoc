@@ -1,4 +1,4 @@
-from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, url_for
+from flask import Blueprint, abort, current_app, flash, g, jsonify, redirect, render_template, request, url_for
 
 from .agent_core import admin_command_center_data, respond_with_core_agent
 from .community_media import get_community_media_storage
@@ -168,32 +168,72 @@ def messages_page():
                 return redirect(url_for("milestone7.messages_page", conversation_id=conversation_id))
         except (ValueError, LookupError, PermissionError) as error:
             flash(str(error), "error")
+        except Exception:
+            try:
+                get_db().rollback()
+            except Exception:
+                pass
+            current_app.logger.exception("Unexpected ZENDOC Connect message action failure.")
+            flash("ZENDOC Connect could not complete that action. Your existing messages were not deleted; please try again.", "error")
         return redirect(url_for("milestone7.messages_page"))
 
-    conversations = list_conversations(g.user)
+    try:
+        conversations = list_conversations(g.user)
+    except Exception:
+        current_app.logger.exception("ZENDOC Connect conversation list failed.")
+        conversations = []
+        flash("Some conversations could not be loaded. ZENDOC kept the rest of the app available.", "error")
     selected = None
     messages = []
     selected_id = request.args.get("conversation_id")
-    if selected_id:
-        try:
+    try:
+        if selected_id:
             selected = get_conversation(g.user, int(selected_id))
             messages = list_messages(g.user, selected["id"])
-        except (LookupError, PermissionError) as error:
-            flash(str(error), "error")
-    elif conversations:
-        selected = conversations[0]
-        messages = list_messages(g.user, selected["id"])
-    contacts = discover_contacts(g.user, request.args.get("q", ""))
+        elif conversations:
+            selected = conversations[0]
+            messages = list_messages(g.user, selected["id"])
+    except (TypeError, ValueError, LookupError, PermissionError):
+        selected = None
+        messages = []
+        flash("That conversation is unavailable or you no longer have access to it.", "error")
+    except Exception:
+        current_app.logger.exception("ZENDOC Connect conversation load failed.")
+        selected = None
+        messages = []
+        flash("The selected conversation could not be loaded. Other ZENDOC features remain available.", "error")
+
+    try:
+        contacts = discover_contacts(g.user, request.args.get("q", ""))
+    except Exception:
+        current_app.logger.exception("ZENDOC Connect contact discovery failed.")
+        contacts = []
+    try:
+        incoming_calls = list_incoming_calls(g.user)
+    except Exception:
+        current_app.logger.exception("ZENDOC Connect incoming-call lookup failed.")
+        incoming_calls = []
+    try:
+        unread_total = unread_count(g.user)
+    except Exception:
+        current_app.logger.exception("ZENDOC Connect unread-count lookup failed.")
+        unread_total = 0
+    try:
+        blocked_ids = blocked_user_ids(g.user)
+    except Exception:
+        current_app.logger.exception("ZENDOC Connect block-list lookup failed.")
+        blocked_ids = set()
+
     return render_template(
         "messages.html",
         conversations=conversations,
         selected=selected,
         messages=messages,
         contacts=contacts,
-        unread_total=unread_count(g.user),
-        incoming_calls=list_incoming_calls(g.user),
+        unread_total=unread_total,
+        incoming_calls=incoming_calls,
         q=request.args.get("q", ""),
-        blocked_ids=blocked_user_ids(g.user),
+        blocked_ids=blocked_ids,
     )
 
 

@@ -45,7 +45,7 @@
 
           {% if current_user.role == 'patient' %}
             <a href="{{ url_for('main.ai_center') }}" {% if endpoint == 'main.ai_center' %}aria-current="page"{% endif %}>AI Assistant</a>
-            <a href="{{ url_for('mental_wellness.mental_wellness_page') }}" {% if endpoint == 'mental_wellness.mental_wellness_page' %}aria-current="page"{% endif %}>Mental Wellness</a>
+            <a href="{{ url_for('mental_wellness.mental_wellness_page') }}" {% if endpoint == 'mental_wellness.mental_wellness_page' %}aria-current="page"{% endif %}>Mental Wellness &amp; Awareness</a>
             <a href="{{ url_for('main.finder') }}" {% if endpoint in ['main.finder','main.provider_detail'] %}aria-current="page"{% endif %}>Find Care</a>
             <a href="{{ url_for('main.appointments') }}" {% if endpoint == 'main.appointments' %}aria-current="page"{% endif %}>Appointments</a>
             <details class="nav-menu" {% if endpoint in ['health_memory.health_summary_page','health_memory.timeline_page','main.records','main.health','health_memory.health_profile_page','health_memory.health_access_page','health_memory.report_detail_page','care_continuity.care_continuity_page'] %}data-active="true"{% endif %}>
@@ -107,10 +107,10 @@
                 <a href="{{ url_for('health_shop.health_shop_page') }}">Health Shop</a>
                 <a href="{{ url_for('payments.payments_page') }}">Payments</a>
                 <a href="{{ url_for('business.business_page') }}">ZENDOC for Business</a>
-                <a href="{{ url_for('main.ai_center') }}#mental-awareness">Mental Wellness &amp; Awareness</a>
+                
                 <a href="{{ url_for('health_memory.health_access_page') }}#identity-trust">Identity &amp; eKYC Readiness</a>
                 <a href="{{ url_for('connected_care.connected_care_home') }}">Connected Care</a>
-                <a href="{{ url_for('connected_care.carefin_page') }}">CareFin benefits</a>
+                <a href="{{ url_for('carefin.carefin_page') }}">CareFin benefits</a>
                 <a href="{{ url_for('connected_care.care_journey_page') }}">Care Journey</a>
                 <a href="{{ url_for('connected_care.diagnostics_page') }}">Diagnostics</a>
                 <a href="{{ url_for('ecosystem.home_health_page') }}">Home healthcare</a>

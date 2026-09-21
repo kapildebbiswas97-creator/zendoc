@@ -1,6 +1,7 @@
 """Dedicated, private Mental Wellness & Awareness surface."""
 from flask import Blueprint, flash, g, redirect, render_template, request, url_for
 
+from .ai import mental_health_support
 from .mental_wellness import (
     create_journal_entry,
     delete_checkin,
@@ -20,6 +21,7 @@ bp = Blueprint("mental_wellness", __name__)
 @login_required
 @role_required("patient")
 def mental_wellness_page():
+    guidance_result = None
     if request.method == "POST":
         action = str(request.form.get("action") or "").strip()
         try:
@@ -31,6 +33,13 @@ def mental_wellness_page():
                 item = create_journal_entry(g.user, request.form)
                 audit("create", "mental_wellness_journal", str(item["id"]), actor=g.user)
                 flash("Private journal entry saved.", "success")
+            elif action == "guidance":
+                guidance_result = mental_health_support(
+                    request.form.get("age_group", "adult"),
+                    request.form.get("context", ""),
+                    request.form.get("stress_level", 0),
+                )
+                audit("use", "mental_wellness_guidance", action, actor=g.user)
             elif action == "delete_checkin":
                 checkin_id = int(request.form.get("checkin_id") or 0)
                 delete_checkin(g.user, checkin_id)
@@ -45,11 +54,14 @@ def mental_wellness_page():
                 raise ValueError("Unsupported Mental Wellness action.")
         except (TypeError, ValueError, LookupError, PermissionError) as exc:
             flash(str(exc), "error")
-        return redirect(url_for("mental_wellness.mental_wellness_page"))
+
+        if action != "guidance" or guidance_result is None:
+            return redirect(url_for("mental_wellness.mental_wellness_page"))
 
     return render_template(
         "mental_wellness.html",
         checkins=list_checkins(g.user),
         journal_entries=list_journal_entries(g.user),
         wellness_summary=wellness_summary(g.user),
+        guidance_result=guidance_result,
     )

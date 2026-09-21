@@ -7,6 +7,7 @@
   const form = input.closest("form");
   const csrfInput = form && form.querySelector("input[name='csrf_token']");
   const endpoint = "/edgecare/asr/transcribe";
+  const BrowserSpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition || null;
 
   const ensureHidden = (name, value = "") => {
     if (!form) return null;
@@ -37,12 +38,20 @@
   let chunks = [];
   let stopTimer = null;
   let busy = false;
+  let browserFallbackMode = false;
+  let browserRecognition = null;
 
   const setButtonState = (recording, processing = false) => {
     button.setAttribute("aria-pressed", String(recording));
     button.setAttribute("aria-busy", String(processing));
     button.disabled = processing;
-    button.textContent = processing ? "Transcribing locally…" : recording ? "Stop recording" : "Use local voice input";
+    button.textContent = processing
+      ? "Transcribing locally…"
+      : recording
+        ? "Stop recording"
+        : browserFallbackMode
+          ? "Use browser dictation"
+          : "Use voice input";
   };
 
   const stopTracks = () => {
@@ -89,6 +98,51 @@
     input.focus();
   };
 
+  const startBrowserDictation = () => {
+    if (!BrowserSpeechRecognition || busy) {
+      status.textContent = "Browser dictation is not available here. Type your request below.";
+      return;
+    }
+
+    try {
+      browserRecognition = new BrowserSpeechRecognition();
+      browserRecognition.lang = document.documentElement.lang || navigator.language || "en-IN";
+      browserRecognition.interimResults = false;
+      browserRecognition.continuous = false;
+      browserRecognition.maxAlternatives = 1;
+
+      button.disabled = true;
+      button.setAttribute("aria-busy", "true");
+      status.textContent = "Listening with your browser speech service… Review the transcript before pressing Send.";
+
+      browserRecognition.onresult = (event) => {
+        const transcript = event.results && event.results[0] && event.results[0][0]
+          ? event.results[0][0].transcript
+          : "";
+        appendTranscript(transcript);
+        if (inputChannel) inputChannel.value = "browser_speech_transcript";
+        if (asrAuditLogId) asrAuditLogId.value = "";
+        status.textContent = "Browser transcript added. Review it, then press Send when ready.";
+      };
+      browserRecognition.onerror = () => {
+        status.textContent = "Browser dictation could not complete. You can try again or type your request.";
+      };
+      browserRecognition.onend = () => {
+        browserRecognition = null;
+        button.disabled = false;
+        button.removeAttribute("aria-busy");
+        setButtonState(false, false);
+      };
+      browserRecognition.start();
+    } catch (_error) {
+      browserRecognition = null;
+      button.disabled = false;
+      button.removeAttribute("aria-busy");
+      status.textContent = "Browser dictation could not start. Type your request below.";
+      setButtonState(false, false);
+    }
+  };
+
   const transcribe = async (blob) => {
     if (!csrfInput || !csrfInput.value) {
       status.textContent = "Your session token is unavailable. Refresh the page, then try again.";
@@ -130,7 +184,12 @@
       if (!response.ok || !result || !result.success) {
         const category = result && result.error_category;
         if (response.status === 503 || category === "disabled" || category === "model_not_configured") {
-          status.textContent = "Local speech recognition is not ready on this device yet. Type your request below.";
+          if (BrowserSpeechRecognition) {
+            browserFallbackMode = true;
+            status.textContent = "Local speech is not ready. Press “Use browser dictation” if you want to use your browser’s speech service instead; review the transcript before Send.";
+          } else {
+            status.textContent = "Local speech recognition is not ready and this browser has no dictation fallback. Type your request below.";
+          }
         } else if (response.status === 401 || response.status === 403) {
           status.textContent = "Your session needs to be refreshed before local voice input can be used.";
         } else {
@@ -212,6 +271,10 @@
   };
 
   button.addEventListener("click", () => {
+    if (browserFallbackMode) {
+      startBrowserDictation();
+      return;
+    }
     if (recorder && recorder.state !== "inactive") {
       status.textContent = "Recording stopped. Transcribing locally…";
       finishRecording();
@@ -233,5 +296,5 @@
   });
 
   setButtonState(false, false);
-  status.textContent = "Voice input uses the configured ZENDOC local speech runtime. Record up to 30 seconds, review the transcript, then press Send.";
+  status.textContent = "Voice input tries the configured ZENDOC local speech runtime first. If it is unavailable, an explicit browser-dictation fallback may be offered. Nothing auto-sends; review the transcript, then press Send.";
 })();

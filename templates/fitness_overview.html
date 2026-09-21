@@ -4,14 +4,26 @@
 {% block content %}
 <section class="section-head">
   <div>
-    <p class="eyebrow">AI Fitness &amp; Lifestyle Intelligence</p>
-    <h1>Fitness Overview</h1>
-    <p class="section-copy">Personalised exercise coaching, workout tracking, video tutorials, and nutrition connected to your ZENDOC Health Memory.</p>
+    <p class="eyebrow">Fitness &amp; Lifestyle</p>
+    <h1>Your Fitness Hub</h1>
+    <p class="section-copy">Plan movement, track workouts, review progress, log nutrition and hydration, and use supported camera/video coaching without turning fitness guidance into medical diagnosis.</p>
   </div>
   <div class="form-actions">
     <a href="{{ url_for('fitness.workout_page') }}" class="primary-action">Start Workout</a>
     <a href="{{ url_for('fitness.plan_page') }}" class="secondary-action">My Plan</a>
   </div>
+</section>
+
+<aside class="trust-note">
+  <strong>Train safely.</strong><br>
+  Stop exercise and seek appropriate medical care for severe chest pain, fainting, severe breathing difficulty, sudden weakness, or another urgent symptom. ZENDOC fitness guidance is general wellness support and does not override clinician advice or personal medical restrictions.
+</aside>
+
+<section class="grid four spaced-panel" aria-label="Daily fitness pillars">
+  <article class="panel"><p class="eyebrow">Move</p><h3>Workout</h3><p>Start or continue a recorded session and keep the plan realistic for your current ability.</p><a class="secondary-action" href="{{ url_for('fitness.workout_page') }}">Start workout</a></article>
+  <article class="panel"><p class="eyebrow">Learn</p><h3>Form &amp; videos</h3><p>Use the exercise library, health videos and camera coach where supported.</p><a class="secondary-action" href="{{ url_for('milestone7.pose_coach_page') }}">Camera coach</a></article>
+  <article class="panel"><p class="eyebrow">Fuel</p><h3>Nutrition</h3><p>Track what you enter; ZENDOC does not invent calorie or macro values that were not recorded.</p><a class="secondary-action" href="{{ url_for('fitness.nutrition_page') }}">Nutrition</a></article>
+  <article class="panel"><p class="eyebrow">Recover</p><h3>Hydration &amp; consistency</h3><p>Use hydration and progress history as simple wellness tracking, not a clinical prescription.</p><a class="secondary-action" href="{{ url_for('fitness.hydration_page') }}">Hydration</a></article>
 </section>
 
 <!-- Fitness Stats Header -->
@@ -48,7 +60,8 @@
   <a href="{{ url_for('fitness.plan_page') }}" class="secondary-action">My Plan</a>
   <a href="{{ url_for('fitness.workout_page') }}" class="secondary-action">Start Workout</a>
   <a href="{{ url_for('fitness.exercises_page') }}" class="secondary-action">Exercise Library</a>
-  <a href="{{ url_for('fitness.videos_page') }}" class="secondary-action">Videos</a>
+  <a href="{{ url_for('fitness.videos_page') }}" class="secondary-action">Fitness Videos</a>
+  <a href="{{ url_for('milestone7.pose_coach_page') }}" class="secondary-action">Camera Coach</a>
   <a href="{{ url_for('fitness.progress_page') }}" class="secondary-action">Progress</a>
   <a href="{{ url_for('fitness.nutrition_page') }}" class="secondary-action">Nutrition</a>
   <a href="{{ url_for('fitness.hydration_page') }}" class="secondary-action">Hydration</a>

@@ -173,7 +173,7 @@ def test_patient_messages_page_shows_permitted_provider_contacts_without_exposin
     assert "Same-role ZENDOC conversation" in searched.data.decode()
 
 
-def test_patient_dashboard_surfaces_new_tools_and_ai_surfaces_mental_awareness(tmp_path):
+def test_patient_dashboard_surfaces_new_tools_and_single_wellness_destination(tmp_path):
     app = make_app(tmp_path)
     client = app.test_client()
     register_web(client, "patient", "feature-visibility@example.com", "Feature Visibility")
@@ -188,16 +188,29 @@ def test_patient_dashboard_surfaces_new_tools_and_ai_surfaces_mental_awareness(t
     assert "Health Hub" in body
     assert 'href="/health-hub"' in body
     assert "Mental Wellness &amp; Awareness" in body
-    assert "#mental-awareness" in body
-    # The same high-value capabilities must remain reachable from the global
-    # navigation, not only from cards on the dashboard.
+    assert 'href="/mental-wellness"' in body
+    assert "/ai#mental-awareness" not in body
     assert body.count('href="/agent-os"') >= 2
     assert body.count('href="/health-hub"') >= 2
-    assert body.count('href="/ai#mental-awareness"') >= 2
 
     ai_page = client.get("/ai")
     assert ai_page.status_code == 200
     ai_body = ai_page.data.decode()
-    assert 'id="mental-awareness"' in ai_body
-    assert "A visible place to check in with yourself" in ai_body
-    assert 'name="feature" value="mental_health"' in ai_body
+    assert 'id="assistant-message"' in ai_body
+    assert 'id="edgecare-voice-input-toggle"' in ai_body
+    assert 'href="/mental-wellness"' in ai_body
+    assert 'id="mental-awareness"' not in ai_body
+    assert 'name="feature" value="mental_health"' not in ai_body
+
+    wellness = client.get("/mental-wellness")
+    assert wellness.status_code == 200
+    wellness_body = wellness.data.decode()
+    for label in (
+        "Children",
+        "Teenagers",
+        "Students &amp; Young Adults",
+        "Working Adults",
+        "Parents &amp; Caregivers",
+        "Older Adults",
+    ):
+        assert label in wellness_body

@@ -19,6 +19,18 @@
   Add a family member only when you have their consent or appropriate authority. Information shared with care providers depends on the patient's own privacy settings. Pregnancy, fertility/family-building and menopause status are never inferred from age, gender or relationship; those journeys must be explicitly selected in a dedicated workflow.
 </aside>
 
+<section class="panel family-command-center spaced-panel" aria-label="Family care command center">
+  <div class="panel-head"><div><p class="eyebrow">Family care command center</p><h2>Coordinate the next step without mixing permissions</h2></div></div>
+  <div class="quick-action-grid">
+    <a class="quick-action" href="{{ url_for('main.finder') }}"><strong>Find care</strong><span>Search doctors, hospitals, pharmacies and diagnostics for a family care need.</span><span class="quick-action-arrow">→</span></a>
+    <a class="quick-action" href="{{ url_for('family.parent_care_page') }}"><strong>Remote parent care</strong><span>Coordinate tasks and supported care actions for parents or senior dependents.</span><span class="quick-action-arrow">→</span></a>
+    <a class="quick-action" href="{{ url_for('milestone7.messages_page') }}"><strong>Messages</strong><span>Use private ZENDOC conversations under the normal communication permissions.</span><span class="quick-action-arrow">→</span></a>
+    <a class="quick-action" href="{{ url_for('health_memory.health_access_page') }}"><strong>Privacy &amp; access</strong><span>Review consent-controlled access instead of assuming family membership grants medical-record access.</span><span class="quick-action-arrow">→</span></a>
+    <a class="quick-action" href="{{ url_for('ecosystem.pharmacy_page') }}"><strong>Pharmacy</strong><span>Continue supported medicine and pharmacy workflows when appropriate.</span><span class="quick-action-arrow">→</span></a>
+    <a class="quick-action" href="{{ url_for('main.appointments') }}"><strong>Appointments</strong><span>Review your own recorded visit requests and confirmed status.</span><span class="quick-action-arrow">→</span></a>
+  </div>
+</section>
+
 <section class="spaced-panel">
   <div class="panel-head">
     <div><p class="eyebrow">Life-stage care</p><h2>Family care programs</h2></div>
@@ -161,9 +173,13 @@
           <div class="form-grid">
             <label>Task type
               <select name="task_type">
-                <option value="checkup">Doctor checkup</option>
+                <option value="checkup">Doctor / care checkup</option>
                 <option value="medicine">Medicine refill</option>
+                <option value="diagnostic">Lab / diagnostic test</option>
+                <option value="vaccination">Vaccination / preventive care</option>
                 <option value="home_care">Home care visit</option>
+                <option value="wellbeing">Wellbeing check-in</option>
+                <option value="fitness">Movement / fitness support</option>
                 <option value="general" selected>General task</option>
               </select>
             </label>

@@ -21,6 +21,11 @@
 <p class="form-note">Native media storage: <strong>{{ media_storage.status.replace('_',' ').title() }}</strong>{% if not media_storage.durable_public_ready %} · Local/development uploads work now; durable public media still requires the production object-storage configuration.{% endif %}</p>
 
 <section class="stories-strip spaced-panel" aria-label="24 hour health stories">
+  <a class="story-card story-card--create" href="#story-composer">
+    <span class="story-create-ring" aria-hidden="true">＋</span>
+    <strong>Your story</strong>
+    <span>Camera, photo or short video</span>
+  </a>
   {% for story in stories %}
     <article class="story-card">
       <strong>{{ story.author_name }}</strong>
@@ -30,7 +35,7 @@
         {% if story.media_mime_type and story.media_mime_type.startswith('image/') %}
           <img class="community-media community-media--story" src="{{ url_for('health_social.community_media_file', storage_key=story.media_storage_key) }}" alt="Media shared by {{ story.author_name }}">
         {% elif story.media_mime_type and story.media_mime_type.startswith('video/') %}
-          <video class="community-media community-media--story" controls preload="metadata" src="{{ url_for('health_social.community_media_file', storage_key=story.media_storage_key) }}"></video>
+          <video class="community-media community-media--story" controls playsinline preload="metadata" src="{{ url_for('health_social.community_media_file', storage_key=story.media_storage_key) }}"></video>
         {% endif %}
       {% elif story.media_url %}<a href="{{ story.media_url }}" target="_blank" rel="noopener noreferrer">Open story media</a>{% endif %}
       <small>Expires {{ story.expires_at[:16] }}</small>
@@ -41,13 +46,14 @@
 </section>
 
 <section class="grid two spaced-panel">
-  <form class="panel" method="post" enctype="multipart/form-data">
+  <form class="panel community-composer" method="post" enctype="multipart/form-data">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="action" value="post">
-    <p class="eyebrow">Create health post</p><h2>Share something useful</h2>
+    <p class="eyebrow">Create health post</p><h2>Share a healthy moment, lesson or update</h2>
+    <p class="form-note">Post like a social feed, but keep it health-focused. Photos and videos stay subject to ZENDOC community safety rules.</p>
     <label>Health lane<select name="lane" required>{% for lane in lanes %}<option value="{{ lane.id }}">{{ lane.label }}</option>{% endfor %}</select></label>
     <label>Post<textarea name="body" maxlength="2000" rows="4" required placeholder="Healthy recipe, workout learning, caregiving tip, recovery routine…"></textarea></label>
-    <label>Optional native image/video upload<input name="media_file" type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm"></label>
+    <label class="community-media-picker">Photo or video from your device<input name="media_file" type="file" accept="image/*,video/*"></label>
     <p class="form-note">JPEG, PNG, WebP, MP4 or WebM; maximum 25 MiB. Use either upload or external link.</p>
     <label>Optional HTTPS video/media link<input name="media_url" type="url" placeholder="https://..."></label>
     <label>Optional sponsorship disclosure<input name="sponsorship_label" maxlength="160" placeholder="e.g. Sponsored by …"></label>
@@ -55,13 +61,13 @@
     <button type="submit">Publish health post</button>
   </form>
 
-  <form class="panel" method="post" enctype="multipart/form-data">
+  <form id="story-composer" class="panel community-composer community-composer--story" method="post" enctype="multipart/form-data">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="action" value="story">
     <p class="eyebrow">24-hour story</p><h2>Share a short update</h2>
     <label>Health lane<select name="lane" required>{% for lane in lanes %}<option value="{{ lane.id }}">{{ lane.label }}</option>{% endfor %}</select></label>
     <label>Story<textarea name="body" maxlength="700" rows="3" required></textarea></label>
-    <label>Optional native image/video upload<input name="media_file" type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm"></label>
+    <label class="community-media-picker">Open camera / record a short update<input name="media_file" type="file" accept="image/*,video/*" capture="environment"></label>
     <p class="form-note">JPEG, PNG, WebP, MP4 or WebM; maximum 25 MiB. Use either upload or external link.</p>
     <label>Optional HTTPS media link<input name="media_url" type="url" placeholder="https://..."></label>
     <label class="check-option"><input type="checkbox" name="accept_guidelines" value="1" required> <span>I will follow the <a href="{{ url_for('public_launch.community_guidelines') }}" target="_blank" rel="noopener">Health Community Guidelines</a>.</span></label>
@@ -69,7 +75,7 @@
   </form>
 </section>
 
-<section class="grid three spaced-panel">
+<section class="grid three spaced-panel community-feed-controls">
   <article class="panel">
     <div class="panel-head"><div><p class="eyebrow">Your feed</p><h2>{{ 'Saved' if mode == 'saved' else ('Following' if mode == 'following' else 'Community') }}</h2></div></div>
     <div class="form-actions">
@@ -141,7 +147,7 @@
         {% if post.media_mime_type and post.media_mime_type.startswith('image/') %}
           <img class="community-media" src="{{ url_for('health_social.community_media_file', storage_key=post.media_storage_key) }}" alt="Media shared by {{ post.author_name }}">
         {% elif post.media_mime_type and post.media_mime_type.startswith('video/') %}
-          <video class="community-media" controls preload="metadata" src="{{ url_for('health_social.community_media_file', storage_key=post.media_storage_key) }}"></video>
+          <video class="community-media community-media--reel" controls playsinline preload="metadata" src="{{ url_for('health_social.community_media_file', storage_key=post.media_storage_key) }}"></video>
         {% endif %}
       {% elif post.media_url %}<a class="secondary-action" href="{{ post.media_url }}" target="_blank" rel="noopener noreferrer">Open video/media</a>{% endif %}
       <p class="form-note">Community content — not verified medical advice.</p>

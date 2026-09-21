@@ -25,13 +25,7 @@
   .ai-chat-composer-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
   .ai-guided-truth{margin-top:4px}
   .ai-guided-truth p{margin:.35rem 0}
-  .mental-awareness{max-width:900px;width:100%;margin:0 auto 18px;padding:18px;border:1px solid var(--border,#dce6e4);border-radius:18px;background:var(--surface,#fff)}
-  .mental-awareness-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:12px 0}
-  .mental-awareness-card{padding:12px;border-radius:14px;background:var(--surface-2,#eef7f5)}
-  .mental-awareness-card strong{display:block;margin-bottom:4px}
-  .mental-awareness-form{display:grid;gap:10px;margin-top:12px}
-  .mental-awareness-form textarea{width:100%;min-height:74px;resize:vertical}
-  @media(max-width:760px){.ai-chat-shell{grid-template-columns:1fr}.ai-chat-sidebar{position:static;max-height:none}.ai-conversation-list{max-height:180px;overflow:auto}.ai-chat-bubble{max-width:95%}.mental-awareness-grid{grid-template-columns:1fr}}
+  @media(max-width:760px){.ai-chat-shell{grid-template-columns:1fr}.ai-chat-sidebar{position:static;max-height:none}.ai-conversation-list{max-height:180px;overflow:auto}.ai-chat-bubble{max-width:95%}}
 </style>
 
 <section class="ai-chat-shell">
@@ -41,7 +35,7 @@
       <a class="secondary-action" href="{{ url_for('ai_chat.chat_home', mode='doctor', new=1) }}" {% if mode == 'doctor' %}aria-current="page"{% endif %}>Doctor AI</a>
     </div>
     <a class="primary-action" href="{{ url_for('ai_chat.chat_home', mode=mode, new=1) }}">+ New chat</a>
-    <a class="secondary-action" href="#mental-awareness">Mental Wellness &amp; Awareness</a>
+    <a class="secondary-action" href="{{ url_for('mental_wellness.mental_wellness_page') }}">Mental Wellness &amp; Awareness</a>
     <div>
       <p class="eyebrow">Previous chats</p>
       <nav class="ai-conversation-list" aria-label="Previous AI chats">
@@ -58,8 +52,8 @@
       <summary>Guided safety tools</summary>
       <p><strong>Platform navigation helper</strong></p>
       <p class="form-note">Deterministic navigation guidance only; it does not call a model or execute tools.</p>
-      <p><strong>Mental wellness check-in</strong></p>
-      <p class="form-note">Supportive wellbeing guidance. Not a diagnosis or clinical assessment.</p>
+      <p><strong>Mental Wellness &amp; Awareness</strong></p>
+      <p class="form-note">Life-stage-aware wellbeing support now lives in its dedicated private area. Not a diagnosis or clinical assessment.</p>
     </details>
   </aside>
 
@@ -71,24 +65,15 @@
     </header>
 
     {% if mode == 'zendoc' %}
-    <section class="mental-awareness" id="mental-awareness" aria-labelledby="mental-awareness-title">
-      <p class="eyebrow">Mental wellness &amp; awareness</p>
-      <h2 id="mental-awareness-title">A visible place to check in with yourself</h2>
-      <p class="section-copy">Use this for everyday stress, mood, sleep and wellbeing reflection. ZENDOC can help organize supportive next steps, but it does not diagnose a mental-health condition and does not replace a qualified professional.</p>
-      <div class="mental-awareness-grid">
-        <div class="mental-awareness-card"><strong>Notice</strong><span>Describe what you are feeling, what changed, and how long it has been affecting you.</span></div>
-        <div class="mental-awareness-card"><strong>Stabilize</strong><span>Ask for simple grounding, sleep, routine, breathing or support-seeking ideas appropriate for everyday wellbeing.</span></div>
-        <div class="mental-awareness-card"><strong>Reach out</strong><span>If distress is persistent, worsening or disrupting daily life, consider speaking with a qualified mental-health professional.</span></div>
+    <section class="panel ai-mode-note" aria-label="Mental Wellness handoff">
+      <div class="panel-head">
+        <div>
+          <p class="eyebrow">Dedicated wellbeing space</p>
+          <h2>Mental Wellness &amp; Awareness</h2>
+        </div>
+        <a class="secondary-action" href="{{ url_for('mental_wellness.mental_wellness_page') }}">Open wellness</a>
       </div>
-      <p class="form-note"><strong>Urgent safety:</strong> If you may hurt yourself or someone else, or you are in immediate danger, contact local emergency services or a trusted person nearby now.</p>
-      <form class="mental-awareness-form" method="post" action="{{ url_for('ai_chat.chat_home') }}">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <input type="hidden" name="mode" value="zendoc">
-        <input type="hidden" name="feature" value="mental_health">
-        <label for="mental-awareness-message"><strong>What would you like help thinking through?</strong></label>
-        <textarea id="mental-awareness-message" name="message" maxlength="3000" placeholder="For example: I have been feeling stressed and sleeping badly this week. Help me organize safe next steps." required></textarea>
-        <div class="form-actions"><button type="submit" data-submitting-label="Reviewing…">Review safe next steps</button></div>
-      </form>
+      <p class="form-note">ZENDOC AI stays conversation-first. Private check-ins, journaling and age-aware wellbeing guidance are kept in the dedicated Mental Wellness area.</p>
     </section>
     {% endif %}
 
@@ -125,7 +110,7 @@
       <div class="ai-chat-composer-footer">
         <span id="edgecare-voice-input-status" class="form-note" role="status" aria-live="polite">Voice creates editable text only; it is never sent until you press Send.</span>
         <span class="form-actions">
-          <button type="button" id="edgecare-voice-input-toggle" class="secondary-action" aria-pressed="false">Use local voice</button>
+          <button type="button" id="edgecare-voice-input-toggle" class="secondary-action" aria-pressed="false">Use voice input</button>
           <button type="submit" data-submitting-label="Thinking…">Send</button>
         </span>
       </div>

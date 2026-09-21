@@ -4,11 +4,25 @@
 <section class="section-head">
   <div>
     <p class="eyebrow">Video Guidance</p>
-    <h1>ZENDOC Videos</h1>
+    <h1>Health Videos &amp; Guided Learning</h1>
     <p class="section-copy">Search an exercise, condition-education topic, device setup, rehabilitation topic, or platform guide. ZENDOC shows real YouTube API results when configured and a truthful YouTube search handoff otherwise.</p>
   </div>
   <a href="{{ url_for('milestone7.pose_coach_page') }}" class="secondary-action">Camera Coach</a>
 </section>
+
+<aside class="trust-note">
+  <strong>Educational video guidance only.</strong><br>
+  Video results can help with technique, device education and general rehabilitation learning, but they do not diagnose a condition or replace a clinician's personalized instruction.
+</aside>
+
+<nav class="panel spaced-panel" aria-label="Video categories">
+  <p class="eyebrow">Browse by topic</p>
+  <div class="feedback-actions">
+    {% for category in categories %}
+      <a class="secondary-action" href="{{ url_for('milestone7.videos_page', q=q or category|replace('_',' '), category=category) }}">{{ category|replace('_',' ')|title }}</a>
+    {% endfor %}
+  </div>
+</nav>
 
 <form method="get" action="{{ url_for('milestone7.videos_page') }}" class="filter-bar">
   <label>Search Videos

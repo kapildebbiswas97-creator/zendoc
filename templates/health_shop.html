@@ -4,7 +4,7 @@
 <section class="section-head">
   <div>
     <p class="eyebrow">B2C health commerce</p>
-    <h1>Health Shop</h1>
+    <h1>Health Shop &amp; Wellness Marketplace</h1>
     <p class="section-copy">Search health-related food, fitness equipment, eyewear, home-health devices and general wellness products across external merchants without mixing commission with clinical guidance.</p>
   </div>
   <a class="secondary-action" href="{{ url_for('business.business_page') }}">B2B with ZENDOC</a>
@@ -14,6 +14,16 @@
   <strong>Clinical independence comes first.</strong><br>
   {{ affiliate.truth_notice }} ZENDOC does not automatically buy products, prescribe supplements, or send prescription-medicine searches to general marketplaces.
 </aside>
+
+<nav class="panel spaced-panel" aria-label="Health Shop categories">
+  <div class="panel-head"><div><p class="eyebrow">Browse safely</p><h2>Choose a health-commerce category</h2></div></div>
+  <div class="feedback-actions">
+    {% for category in categories %}
+      <a class="secondary-action" href="{{ url_for('health_shop.health_shop_page', category=category.id) }}">{{ category.label }}</a>
+    {% endfor %}
+  </div>
+  <p class="form-note">These are discovery shortcuts only. Merchant stock, price, seller and delivery remain external and unverified until the merchant itself shows them.</p>
+</nav>
 
 <form class="panel spaced-panel" method="get">
   <label>What are you looking for?
