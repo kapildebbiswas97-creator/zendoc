@@ -234,6 +234,75 @@ def create_invoice(actor, *, resource_ref: str, amount_inr, description: str) ->
     return get_invoice(actor, int(cursor.lastrowid))
 
 
+PAYMENT_STATUS_STEPS = (
+    ("issued", "Invoice issued", "The verified provider created a charge tied to a connected care item."),
+    ("checkout_ready", "Checkout ready", "A real gateway order exists and the billed patient can open secure checkout."),
+    ("client_verified", "Checkout signature verified", "The browser checkout signature matched. This is not final payment confirmation."),
+    ("paid", "Payment confirmed", "A signed gateway capture webhook confirmed the paid state."),
+)
+
+
+def _invoice_status_meta(status: str) -> dict:
+    current = str(status or "issued").strip().lower()
+    order = [step[0] for step in PAYMENT_STATUS_STEPS]
+    current_index = order.index(current) if current in order else -1
+    steps = []
+    for index, (key, label, explanation) in enumerate(PAYMENT_STATUS_STEPS):
+        steps.append(
+            {
+                "key": key,
+                "label": label,
+                "explanation": explanation,
+                "complete": bool(current_index >= index and current_index >= 0),
+                "current": bool(current == key),
+            }
+        )
+    if current in order:
+        label = PAYMENT_STATUS_STEPS[current_index][1]
+        explanation = PAYMENT_STATUS_STEPS[current_index][2]
+    else:
+        label = current.replace("_", " ").title() or "Unknown"
+        explanation = "This invoice is in a non-standard state. ZENDOC will not infer payment completion."
+    return {
+        "key": current,
+        "label": label,
+        "explanation": explanation,
+        "steps": steps,
+        "final_paid": current == "paid",
+    }
+
+
+def _display_provider_ref(value) -> str | None:
+    clean = str(value or "").strip()
+    if not clean:
+        return None
+    if len(clean) <= 14:
+        return clean
+    return f"{clean[:7]}…{clean[-4:]}"
+
+
+def _invoice_events(invoice_id: int) -> list[dict]:
+    rows = get_db().execute(
+        """
+        SELECT event_type,provider_event_ref,signature_verified,payload_digest,created_at
+        FROM payment_events
+        WHERE invoice_id=?
+        ORDER BY created_at ASC,id ASC
+        """,
+        (int(invoice_id),),
+    ).fetchall()
+    return [
+        {
+            "event_type": row["event_type"],
+            "provider_event_ref": _display_provider_ref(row["provider_event_ref"]),
+            "signature_verified": bool(row["signature_verified"]),
+            "payload_digest_prefix": str(row["payload_digest"] or "")[:12],
+            "created_at": row["created_at"],
+        }
+        for row in rows
+    ]
+
+
 def get_invoice(user, invoice_id: int) -> dict:
     ensure_payment_schema()
     uid = _actor_id(user)
@@ -251,6 +320,8 @@ def get_invoice(user, invoice_id: int) -> dict:
         raise LookupError("Invoice not found.")
     item = dict(row)
     item["amount_inr"] = f"{int(item['amount_paise']) / 100:.2f}"
+    item["status_meta"] = _invoice_status_meta(item.get("status"))
+    item["events"] = _invoice_events(int(item["id"]))
     return item
 
 
