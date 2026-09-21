@@ -268,13 +268,41 @@ def _google_maps_url(item):
     return "https://www.google.com/maps/search/?api=1&query=" + quote_plus(query)
 
 
-def _with_map_handoffs(records):
+def _google_directions_url(item, origin_latitude=None, origin_longitude=None):
+    if origin_latitude is None or origin_longitude is None:
+        return None
+    latitude = item.get("latitude")
+    longitude = item.get("longitude")
+    if latitude in (None, "") or longitude in (None, ""):
+        return None
+    try:
+        origin = f"{float(origin_latitude):.6f},{float(origin_longitude):.6f}"
+        destination = f"{float(latitude):.6f},{float(longitude):.6f}"
+    except (TypeError, ValueError):
+        return None
+    return (
+        "https://www.google.com/maps/dir/?api=1&origin="
+        + quote_plus(origin)
+        + "&destination="
+        + quote_plus(destination)
+        + "&travelmode=driving"
+    )
+
+
+def _with_map_handoffs(records, origin_latitude=None, origin_longitude=None):
     enriched = []
     for record in records:
         item = dict(record)
         google_maps_url = _google_maps_url(item)
         if google_maps_url:
             item["google_maps_url"] = google_maps_url
+        directions_url = _google_directions_url(
+            item,
+            origin_latitude=origin_latitude,
+            origin_longitude=origin_longitude,
+        )
+        if directions_url:
+            item["google_directions_url"] = directions_url
         enriched.append(item)
     return enriched
 
@@ -394,7 +422,11 @@ def universal_search(text=None, category="all", latitude=None, longitude=None, r
         )
 
     records.extend(external_results)
-    records = _with_map_handoffs(records)
+    records = _with_map_handoffs(
+        records,
+        origin_latitude=query["latitude"],
+        origin_longitude=query["longitude"],
+    )
     records = _dedupe(records)
     records.sort(key=lambda item: _rank(item, query["text"]))
 
@@ -421,6 +453,18 @@ def universal_search(text=None, category="all", latitude=None, longitude=None, r
         "results": flat,
         "grouped_results": grouped,
         "category_counts": {key: value["count"] for key, value in grouped.items()},
+        "search_origin": (
+            {
+                "latitude": query["latitude"],
+                "longitude": query["longitude"],
+                "google_maps_url": (
+                    "https://www.google.com/maps/search/?api=1&query="
+                    + quote_plus(f"{query['latitude']:.6f},{query['longitude']:.6f}")
+                ),
+            }
+            if query["latitude"] is not None and query["longitude"] is not None
+            else None
+        ),
         "source_tiers": source_tiers,
         "message": message,
         "truth_notice": "Results combine ZENDOC verified profiles, public directories and external map listings. Only explicitly connected ZENDOC providers are bookable inside ZENDOC.",
