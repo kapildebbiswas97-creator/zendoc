@@ -244,6 +244,96 @@ def create_communication_permission(actor, data):
     return dict(get_db().execute("SELECT * FROM communication_permissions WHERE id=?", (cursor.lastrowid,)).fetchone())
 
 
+def list_communication_permissions(actor, related_user_id=None):
+    """List explicit communication grants visible to the signed-in participant."""
+    if not actor:
+        raise PermissionError("Authentication required.")
+    actor_id = _user_id(actor)
+    params = [actor_id, actor_id]
+    related_clause = ""
+    if related_user_id is not None:
+        related_id = int(related_user_id)
+        related_clause = """
+          AND (
+            (cp.requester_id=? AND cp.target_user_id=?)
+            OR (cp.requester_id=? AND cp.target_user_id=?)
+          )
+        """
+        params.extend([actor_id, related_id, related_id, actor_id])
+
+    rows = get_db().execute(
+        f"""
+        SELECT cp.*,
+               requester.name requester_name,
+               requester.role requester_role,
+               target.name target_name,
+               target.role target_role
+        FROM communication_permissions cp
+        JOIN users requester ON requester.id=cp.requester_id
+        JOIN users target ON target.id=cp.target_user_id
+        WHERE (cp.requester_id=? OR cp.target_user_id=?)
+        {related_clause}
+        ORDER BY cp.created_at DESC,cp.id DESC
+        LIMIT 100
+        """,
+        tuple(params),
+    ).fetchall()
+    now = now_iso()
+    result = []
+    for row in rows:
+        item = dict(row)
+        expires_at = str(item.get("expires_at") or "").strip()
+        item["expired"] = bool(expires_at and expires_at <= now)
+        item["effective"] = bool(
+            str(item.get("status") or "") == "active"
+            and not item.get("revoked_at")
+            and not item["expired"]
+        )
+        result.append(item)
+    return result
+
+
+def revoke_communication_permission(actor, permission_id):
+    """Revoke a grant as either participant or an authorized admin."""
+    if not actor:
+        raise PermissionError("Authentication required.")
+    row = get_db().execute(
+        "SELECT * FROM communication_permissions WHERE id=?",
+        (int(permission_id),),
+    ).fetchone()
+    if not row:
+        raise LookupError("Communication permission not found.")
+
+    item = dict(row)
+    actor_id = _user_id(actor)
+    actor_role = _value(actor, "role")
+    if actor_role != "admin" and actor_id not in {
+        int(item["requester_id"]),
+        int(item["target_user_id"]),
+    }:
+        raise PermissionError("Only a permission participant or admin can revoke it.")
+
+    if item.get("revoked_at") or str(item.get("status") or "") == "revoked":
+        return item
+
+    now = now_iso()
+    get_db().execute(
+        """
+        UPDATE communication_permissions
+        SET status='revoked',revoked_at=?,updated_at=?
+        WHERE id=?
+        """,
+        (now, now, int(permission_id)),
+    )
+    get_db().commit()
+    return dict(
+        get_db().execute(
+            "SELECT * FROM communication_permissions WHERE id=?",
+            (int(permission_id),),
+        ).fetchone()
+    )
+
+
 def discover_contacts(actor, query="", limit=12):
     return discover_permitted_contacts(actor, query=query, limit=limit)
 
