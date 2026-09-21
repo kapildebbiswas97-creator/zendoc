@@ -221,7 +221,7 @@
           <p class="form-note">Observed {{ offer.freshness_observed_at or 'time unavailable' }} · {{ offer.provider_status|replace('_',' ')|title }} provider · {{ offer.distance_text }}</p>
           {% if offer.availability_confirmed %}
           <button type="button" class="primary-action"
-            onclick="openLabBooking({{ offer.lab_id }}, {{ offer.test_id }}, {{ offer.test_name|tojson }}, {{ 'true' if offer.home_collection_available else 'false' }}, {{ offer.price_inr }})">
+            onclick='openLabBooking({{ offer.lab_id }}, {{ offer.test_id }}, {{ offer.test_name|tojson }}, {{ "true" if offer.home_collection_available else "false" }}, {{ offer.price_inr }})'>
             Request {{ 'home collection' if offer.home_collection_available else 'lab visit' }}
           </button>
           {% else %}
