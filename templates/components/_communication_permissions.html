@@ -1,0 +1,39 @@
+{% if communication_permissions %}
+<section class="connect-permission-list" aria-label="Explicit communication permissions">
+  <p class="eyebrow">Explicit communication access</p>
+  {% for grant in communication_permissions %}
+    <article class="connect-permission-card {% if not grant.effective %}inactive{% endif %}">
+      <div>
+        <strong>{{ grant.requester_name }} may contact {{ grant.target_name }}</strong>
+        <div class="connect-permission-capabilities" aria-label="Granted capabilities">
+          {% if grant.allow_chat %}<span>Chat</span>{% endif %}
+          {% if grant.allow_voice %}<span>Voice</span>{% endif %}
+          {% if grant.allow_video %}<span>Video</span>{% endif %}
+          {% if grant.allow_record_sharing %}<span>Record sharing</span>{% endif %}
+        </div>
+        <small>
+          {% if grant.revoked_at or grant.status == 'revoked' %}
+            Revoked
+          {% elif grant.expired %}
+            Expired{% if grant.expires_at %} · {{ grant.expires_at[:16] }}{% endif %}
+          {% elif grant.expires_at %}
+            Active until {{ grant.expires_at[:16] }}
+          {% else %}
+            Active until revoked
+          {% endif %}
+        </small>
+      </div>
+      {% if grant.effective %}
+        <form method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="action" value="revoke_permission">
+          <input type="hidden" name="permission_id" value="{{ grant.id }}">
+          <input type="hidden" name="conversation_id" value="{{ selected.id if selected else '' }}">
+          <button type="submit" class="secondary-action">Revoke</button>
+        </form>
+      {% endif %}
+    </article>
+  {% endfor %}
+  <p class="form-note">Either participant can revoke an explicit grant. Revocation does not delete past messages; it removes the permission for future actions that depended on that grant.</p>
+</section>
+{% endif %}

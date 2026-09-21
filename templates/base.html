@@ -30,8 +30,22 @@
 
       {% if current_user %}
         <form action="{{ url_for('ecosystem.search_page') }}" method="get" class="global-search" role="search">
-          <label class="sr-only" for="global-search-input">Search ZENDOC</label>
-          <input id="global-search-input" type="search" name="q" placeholder="Search care, records, services…" autocomplete="off">
+          <label class="sr-only" for="global-search-input">Universal ZENDOC search</label>
+          <input id="global-search-input" type="search" name="q" placeholder="Search care, records, messages, benefits…" autocomplete="off" aria-describedby="global-search-help">
+          <div class="global-search-popover" aria-label="Universal search shortcuts">
+            <div class="global-search-popover__head">
+              <strong>Universal Search</strong>
+              <small id="global-search-help">Search ZENDOC and connected care surfaces from one place.</small>
+            </div>
+            <div class="global-search-shortcuts">
+              <a href="{{ url_for('universal_search.search_home', category='doctor') }}">Doctors</a>
+              <a href="{{ url_for('universal_search.search_home', category='hospital') }}">Hospitals</a>
+              <a href="{{ url_for('universal_search.search_home', category='pharmacy') }}">Pharmacies</a>
+              <a href="{{ url_for('connected_care.diagnostics_page') }}">Diagnostics</a>
+              <a href="{{ url_for('main.finder') }}#government-ors-handoff">Government OPD</a>
+              <a href="{{ url_for('health_memory.health_summary_page') }}">Health Memory</a>
+            </div>
+          </div>
         </form>
 
         <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="primary-navigation">
@@ -44,27 +58,72 @@
           <a href="{{ url_for('main.dashboard') }}" {% if endpoint == 'main.dashboard' %}aria-current="page"{% endif %}>Home</a>
 
           {% if current_user.role == 'patient' %}
-            <a href="{{ url_for('main.ai_center') }}" {% if endpoint == 'main.ai_center' %}aria-current="page"{% endif %}>AI Assistant</a>
-            <a href="{{ url_for('mental_wellness.mental_wellness_page') }}" {% if endpoint == 'mental_wellness.mental_wellness_page' %}aria-current="page"{% endif %}>Mental Wellness &amp; Awareness</a>
-            <a href="{{ url_for('main.finder') }}" {% if endpoint in ['main.finder','main.provider_detail'] %}aria-current="page"{% endif %}>Find Care</a>
-            <a href="{{ url_for('main.appointments') }}" {% if endpoint == 'main.appointments' %}aria-current="page"{% endif %}>Appointments</a>
-            <details class="nav-menu" {% if endpoint in ['health_memory.health_summary_page','health_memory.timeline_page','main.records','main.health','health_memory.health_profile_page','health_memory.health_access_page','health_memory.report_detail_page','care_continuity.care_continuity_page'] %}data-active="true"{% endif %}>
-              <summary>Health Memory</summary>
-              <div class="nav-menu-panel">
-                <a href="{{ url_for('health_memory.health_summary_page') }}">Health snapshot</a>
-                <a href="{{ url_for('health_memory.timeline_page') }}">Timeline</a>
-                <a href="{{ url_for('main.records') }}">Records &amp; reports</a>
-                <a href="{{ url_for('main.health') }}">Vitals</a>
-                <a href="{{ url_for('health_memory.health_access_page') }}">Privacy &amp; access</a>
-                <a href="{{ url_for('care_continuity.care_continuity_page') }}">Care continuity</a>
+            <details class="nav-menu" {% if endpoint in ['main.finder','main.provider_detail','main.appointments','connected_care.diagnostics_page','connected_care.care_journey_page','connected_care.connected_care_home','ecosystem.pharmacy_page','ecosystem.home_health_page','ecosystem.ambulance_page'] %}data-active="true"{% endif %}>
+              <summary>Care</summary>
+              <div class="nav-menu-panel nav-menu-panel-care">
+                <span class="nav-menu-label">Discover &amp; visit</span>
+                <a href="{{ url_for('main.finder') }}">Find Care</a>
+                <a href="{{ url_for('main.appointments') }}">Appointments</a>
+                <a href="{{ url_for('main.finder') }}#government-ors-handoff">Government OPD · ORS</a>
+                <a href="{{ url_for('connected_care.diagnostics_page') }}">Diagnostics &amp; labs</a>
+                <span class="nav-menu-label">Continue care</span>
+                <a href="{{ url_for('ecosystem.pharmacy_page') }}">Pharmacy</a>
+                <a href="{{ url_for('connected_care.care_journey_page') }}">Care Journey</a>
+                <a href="{{ url_for('connected_care.connected_care_home') }}">Connected Care</a>
+                <a href="{{ url_for('ecosystem.home_health_page') }}">Home healthcare</a>
               </div>
             </details>
-            <a href="{{ url_for('milestone7.messages_page') }}" {% if endpoint == 'milestone7.messages_page' %}aria-current="page"{% endif %}>Messages</a>
-            <a href="{{ url_for('payments.payments_page') }}" {% if endpoint == 'payments.payments_page' %}aria-current="page"{% endif %}>Payments</a>
-            <a href="{{ url_for('health_shop.health_shop_page') }}" {% if endpoint == 'health_shop.health_shop_page' %}aria-current="page"{% endif %}>Health Shop</a>
-            <a href="{{ url_for('health_social.community_page') }}" {% if endpoint == 'health_social.community_page' %}aria-current="page"{% endif %}>Community</a>
-            <a href="{{ url_for('family.family_page') }}" {% if endpoint in ['family.family_page','family.parent_care_page'] %}aria-current="page"{% endif %}>Family</a>
-            <a href="{{ url_for('fitness.overview') }}" {% if endpoint.startswith('fitness.') or endpoint == 'milestone7.pose_coach_page' %}aria-current="page"{% endif %}>Fitness</a>
+
+            <details class="nav-menu nav-menu-memory" {% if endpoint in ['health_memory.health_summary_page','health_memory.timeline_page','main.records','main.health','health_memory.health_profile_page','health_memory.health_access_page','health_memory.report_detail_page','care_continuity.care_continuity_page','family.family_page','family.parent_care_page'] %}data-active="true"{% endif %}>
+              <summary>Health Memory</summary>
+              <div class="nav-menu-panel nav-menu-mega">
+                <div class="nav-menu-column">
+                  <span class="nav-menu-label">My health</span>
+                  <a href="{{ url_for('health_memory.health_summary_page') }}">Health snapshot</a>
+                  <a href="{{ url_for('health_memory.timeline_page') }}">Timeline</a>
+                  <a href="{{ url_for('main.records') }}">Records &amp; reports</a>
+                  <a href="{{ url_for('main.health') }}">Vitals &amp; trends</a>
+                </div>
+                <div class="nav-menu-column">
+                  <span class="nav-menu-label">Privacy &amp; continuity</span>
+                  <a href="{{ url_for('health_memory.health_profile_page') }}">Health profile</a>
+                  <a href="{{ url_for('health_memory.health_access_page') }}">Privacy &amp; access</a>
+                  <a href="{{ url_for('care_continuity.care_continuity_page') }}">Care continuity</a>
+                  <a href="{{ url_for('family.family_page') }}">Family Care</a>
+                </div>
+                <div class="nav-menu-column">
+                  <span class="nav-menu-label">Smart actions</span>
+                  <a href="{{ url_for('main.records') }}">Upload a report</a>
+                  <a href="{{ url_for('main.ai_center') }}">Ask ZENDOC AI</a>
+                  <a href="{{ url_for('main.finder') }}">Find follow-up care</a>
+                  <a href="{{ url_for('health_memory.health_access_page') }}">Review sharing access</a>
+                </div>
+              </div>
+            </details>
+
+            <a href="{{ url_for('main.ai_center') }}" {% if endpoint in ['main.ai_center','ai_chat.chat_home'] %}aria-current="page"{% endif %}>AI Assistant</a>
+
+            <details class="nav-menu" {% if endpoint in ['milestone7.messages_page','health_social.community_page'] or endpoint.startswith('calls.') %}data-active="true"{% endif %}>
+              <summary>Connect</summary>
+              <div class="nav-menu-panel">
+                <span class="nav-menu-label">Private</span>
+                <a href="{{ url_for('milestone7.messages_page') }}">Messages</a>
+                <span class="nav-menu-hint">Voice &amp; video calls start inside an authorized conversation.</span>
+                <span class="nav-menu-label">Community</span>
+                <a href="{{ url_for('health_social.community_page') }}">Health Community</a>
+              </div>
+            </details>
+
+            <details class="nav-menu" {% if endpoint == 'mental_wellness.mental_wellness_page' or endpoint.startswith('fitness.') or endpoint in ['milestone7.pose_coach_page','milestone7.videos_page','health_hub.health_hub_page'] %}data-active="true"{% endif %}>
+              <summary>Wellbeing</summary>
+              <div class="nav-menu-panel">
+                <a href="{{ url_for('mental_wellness.mental_wellness_page') }}">Mental Wellness &amp; Awareness</a>
+                <a href="{{ url_for('fitness.overview') }}">Fitness Hub</a>
+                <a href="{{ url_for('milestone7.pose_coach_page') }}">Camera Coach</a>
+                <a href="{{ url_for('milestone7.videos_page') }}">Health Videos</a>
+                <a href="{{ url_for('health_hub.health_hub_page') }}">Health Hub</a>
+              </div>
+            </details>
           {% elif current_user.role in ['doctor','hospital'] %}
             {% if provider_operational_access %}
               <a href="{{ url_for('main.appointments') }}" {% if endpoint == 'main.appointments' %}aria-current="page"{% endif %}>Appointments</a>
@@ -167,6 +226,31 @@
     </div>
   </div>
 
+  {% if current_user %}
+  <aside
+    id="zendoc-incoming-call"
+    class="incoming-call-banner"
+    data-incoming-calls-url="{{ url_for('calls.incoming_calls') }}"
+    data-csrf-token="{{ csrf_token }}"
+    hidden
+    aria-live="assertive"
+    aria-label="Incoming ZENDOC call">
+    <div class="incoming-call-banner__identity">
+      <span class="incoming-call-banner__avatar" id="zendoc-incoming-call-avatar" aria-hidden="true">Z</span>
+      <div>
+        <span class="incoming-call-banner__kicker" id="zendoc-incoming-call-kind">Incoming call</span>
+        <strong id="zendoc-incoming-call-name">ZENDOC contact</strong>
+        <small id="zendoc-incoming-call-time">Waiting for your response</small>
+      </div>
+    </div>
+    <div class="incoming-call-banner__actions">
+      <button type="button" class="secondary-action" id="zendoc-incoming-call-dismiss">Dismiss banner</button>
+      <button type="button" class="danger-action" id="zendoc-incoming-call-reject">Reject</button>
+      <a class="primary-action" id="zendoc-incoming-call-open" href="#">Open call</a>
+    </div>
+  </aside>
+  {% endif %}
+
   <main id="main-content" class="{% block main_class %}page{% endblock %}" tabindex="-1">
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
@@ -248,6 +332,7 @@
   </footer>
 
   <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+  {% if current_user %}<script src="{{ url_for('static', filename='incoming_calls.js') }}" defer></script>{% endif %}
   <script src="{{ url_for('static', filename='pwa.js') }}" defer></script>
 </body>
 </html>

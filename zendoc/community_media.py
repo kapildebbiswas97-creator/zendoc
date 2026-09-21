@@ -23,12 +23,21 @@ ALLOWED_MEDIA_TYPES = {
     "video/mp4": "video",
     "video/webm": "video",
 }
+MESSAGE_MEDIA_TYPES = {
+    **ALLOWED_MEDIA_TYPES,
+    "audio/webm": "audio",
+    "audio/ogg": "audio",
+    "audio/mp4": "audio",
+}
 EXTENSIONS = {
     "image/jpeg": ".jpg",
     "image/png": ".png",
     "image/webp": ".webp",
     "video/mp4": ".mp4",
     "video/webm": ".webm",
+    "audio/webm": ".webm",
+    "audio/ogg": ".ogg",
+    "audio/mp4": ".m4a",
 }
 
 
@@ -51,16 +60,23 @@ def _looks_like_supported_bytes(mime_type: str, header: bytes) -> bool:
         return len(header) >= 12 and header[:4] == b"RIFF" and header[8:12] == b"WEBP"
     if mime_type == "video/mp4":
         return len(header) >= 12 and header[4:8] == b"ftyp"
-    if mime_type == "video/webm":
+    if mime_type in {"video/webm", "audio/webm"}:
         return header.startswith(b"\x1aE\xdf\xa3")
+    if mime_type == "audio/ogg":
+        return header.startswith(b"OggS")
+    if mime_type == "audio/mp4":
+        return len(header) >= 12 and header[4:8] == b"ftyp"
     return False
 
 
-def validate_community_upload(upload):
+def validate_community_upload(upload, *, allowed_media_types=None):
+    allowed = allowed_media_types or ALLOWED_MEDIA_TYPES
     if not upload or not getattr(upload, "filename", ""):
-        raise ValueError("Choose an image or video to upload.")
+        raise ValueError("Choose a supported media file to upload.")
     mime_type = str(getattr(upload, "mimetype", "") or "").lower().strip()
-    if mime_type not in ALLOWED_MEDIA_TYPES:
+    if mime_type not in allowed:
+        if allowed is MESSAGE_MEDIA_TYPES:
+            raise ValueError("Private message media must be JPEG, PNG, WebP, MP4, WebM, OGG audio, or M4A/MP4 audio.")
         raise ValueError("Community media must be JPEG, PNG, WebP, MP4, or WebM.")
 
     stream = upload.stream
@@ -97,8 +113,9 @@ class LocalCommunityMediaStorage:
             raise ValueError("Community media storage key is invalid.")
         return target
 
-    def save(self, upload) -> StoredCommunityMedia:
-        mime_type, original_name = validate_community_upload(upload)
+    def save(self, upload, *, allowed_media_types=None) -> StoredCommunityMedia:
+        allowed = allowed_media_types or ALLOWED_MEDIA_TYPES
+        mime_type, original_name = validate_community_upload(upload, allowed_media_types=allowed)
         key = f"{secrets.token_hex(20)}{EXTENSIONS[mime_type]}"
         destination = self._path(key)
 
@@ -122,7 +139,7 @@ class LocalCommunityMediaStorage:
             storage_key=key,
             original_filename=original_name,
             mime_type=mime_type,
-            media_kind=ALLOWED_MEDIA_TYPES[mime_type],
+            media_kind=allowed[mime_type],
             size_bytes=total,
         )
 
@@ -199,8 +216,9 @@ class S3CommunityMediaStorage:
             raise ValueError("Community media storage key is invalid.")
         return key
 
-    def save(self, upload) -> StoredCommunityMedia:
-        mime_type, original_name = validate_community_upload(upload)
+    def save(self, upload, *, allowed_media_types=None) -> StoredCommunityMedia:
+        allowed = allowed_media_types or ALLOWED_MEDIA_TYPES
+        mime_type, original_name = validate_community_upload(upload, allowed_media_types=allowed)
         # Bound the upload in memory to keep the maximum explicit and portable.
         body = upload.stream.read(MAX_COMMUNITY_MEDIA_BYTES + 1)
         if not body:
@@ -226,7 +244,7 @@ class S3CommunityMediaStorage:
             storage_key=key,
             original_filename=original_name,
             mime_type=mime_type,
-            media_kind=ALLOWED_MEDIA_TYPES[mime_type],
+            media_kind=allowed[mime_type],
             size_bytes=stored_size,
         )
 
@@ -299,7 +317,7 @@ class UnavailableCommunityMediaStorage:
     def _raise(self):
         raise RuntimeError(f"Community media storage provider '{self.name}' is Integration Required.")
 
-    def save(self, upload):
+    def save(self, upload, *, allowed_media_types=None):
         self._raise()
 
     def delete(self, storage_key: str):

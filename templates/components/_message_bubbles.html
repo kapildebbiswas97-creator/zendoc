@@ -7,15 +7,17 @@
 
     {% if message.message_type == 'system' %}
       <div class="system-message-content"><p>{{ message.body }}</p></div>
-    {% elif message.message_type in ['image', 'video'] %}
-      <div class="structured-card video-card">
+    {% elif message.message_type in ['image', 'video', 'audio'] %}
+      <div class="structured-card message-media-card message-media-card--{{ message.message_type }}">
         <strong>{{ message.body }}</strong>
         {% for att in message.attachments %}
           {% if att.metadata and att.metadata.native_media and att.metadata.storage_key %}
             {% if message.message_type == 'image' %}
               <img class="community-media" src="{{ url_for('milestone7.message_media_file', attachment_id=att.id) }}" alt="{{ att.title or 'Shared image' }}">
+            {% elif message.message_type == 'video' %}
+              <video class="community-media message-video" controls playsinline preload="metadata" src="{{ url_for('milestone7.message_media_file', attachment_id=att.id) }}"></video>
             {% else %}
-              <video class="community-media" controls preload="metadata" src="{{ url_for('milestone7.message_media_file', attachment_id=att.id) }}"></video>
+              <audio class="message-audio" controls preload="metadata" src="{{ url_for('milestone7.message_media_file', attachment_id=att.id) }}"></audio>
             {% endif %}
           {% elif att.url %}
             <div class="card-actions">
@@ -40,6 +42,14 @@
       <p class="message-text">{{ message.body }}</p>
     {% endif %}
 
-    <div class="message-foot"><small>{{ message.created_at }}</small></div>
+    <div class="message-foot">
+      <small>{{ message.created_at }}</small>
+      {% if message.sender_id == current_user.id and message.message_type != 'system' %}
+        {% set receipt = message.receipt_summary.status if message.receipt_summary else 'sent' %}
+        <small class="message-receipt message-receipt--{{ receipt }}" title="{% if receipt == 'read' %}Read by all recipients{% elif receipt == 'delivered' %}Delivered to the recipients' ZENDOC inbox{% else %}Saved in ZENDOC{% endif %}">
+          {% if receipt == 'read' %}✓✓ Read{% elif receipt == 'delivered' %}✓✓ Delivered{% else %}✓ Sent{% endif %}
+        </small>
+      {% endif %}
+    </div>
   </article>
 {% endfor %}

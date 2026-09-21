@@ -1,10 +1,14 @@
-const STATIC_CACHE = "zendoc-static-v3-20260921";
+const STATIC_CACHE = "zendoc-static-v4-premium-shell-20260921";
 const STATIC_ASSETS = [
   "/static/style.css",
   "/static/ui-polish.css",
   "/static/product-expansion.css",
   "/static/app.js",
   "/static/finder.js",
+  "/static/messages_live.js",
+  "/static/messages_composer.js",
+  "/static/incoming_calls.js",
+  "/static/calls.js",
   "/static/edgecare_voice.js",
   "/static/pwa.js",
   "/static/favicon.svg",

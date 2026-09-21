@@ -24,6 +24,7 @@ MESSAGE_TYPES = (
     "report",
     "image",
     "video",
+    "audio",
     "service_update",
     "task_update",
 )
@@ -105,6 +106,33 @@ def _message_to_dict(row):
         }
         for att in attachments
     ]
+
+    receipts = get_db().execute(
+        """
+        SELECT status,delivered_at,read_at
+        FROM message_receipts
+        WHERE message_id=?
+        """,
+        (item["id"],),
+    ).fetchall()
+    total_receipts = len(receipts)
+    read_count = sum(1 for receipt in receipts if str(receipt["status"] or "").lower() == "read")
+    delivered_count = sum(
+        1 for receipt in receipts
+        if str(receipt["status"] or "").lower() in {"delivered", "read"}
+    )
+    if total_receipts and read_count == total_receipts:
+        receipt_status = "read"
+    elif total_receipts and delivered_count == total_receipts:
+        receipt_status = "delivered"
+    else:
+        receipt_status = "sent"
+    item["receipt_summary"] = {
+        "status": receipt_status,
+        "recipient_count": total_receipts,
+        "delivered_count": delivered_count,
+        "read_count": read_count,
+    }
     return item
 
 
@@ -126,7 +154,17 @@ def _conversation_to_dict(row, actor):
         public_contact(dict(row), reason="Conversation participant", context={"type": item["context_type"], "id": item["context_id"]})
         for row in participants
     ]
-    other_id = next((int(row["user_id"]) for row in participants if int(row["user_id"]) != uid), None)
+    other_participant = next(
+        (participant for participant in item["participants"] if int(participant.get("id") or 0) != uid),
+        None,
+    )
+    item["other_participant"] = other_participant
+    item["display_name"] = (
+        other_participant.get("name")
+        if other_participant and str(item.get("conversation_type") or "direct") == "direct"
+        else item.get("title") or "ZENDOC Conversation"
+    )
+    other_id = int(other_participant["id"]) if other_participant else None
     item["unread_count"] = unread_count(actor, conversation_id=item["id"])
     item["can_call"] = False
     item["can_video"] = False
@@ -160,13 +198,24 @@ def create_communication_permission(actor, data):
         raise PermissionError("Authentication required.")
     requester_id = int(data.get("requester_id") or _user_id(actor))
     target_user_id = int(data.get("target_user_id") or 0)
+    requester = get_user(requester_id)
     target = get_user(target_user_id)
+    if not requester:
+        raise LookupError("Permission requester not found.")
     if not target:
         raise LookupError("Permission target not found.")
+    if requester_id == target_user_id:
+        raise ValueError("Communication permission must be granted to another account.")
+
     actor_id = _user_id(actor)
     actor_role = _value(actor, "role")
-    if actor_role != "admin" and actor_id not in {requester_id, target_user_id}:
-        raise PermissionError("Only a participant or admin can create communication permission.")
+    # An active permission is a grant *to* requester_id. The requester must
+    # never be able to mint that grant for themselves. Only the target account
+    # (the account being contacted) or an authorized admin can activate it.
+    if actor_role != "admin" and actor_id != target_user_id:
+        raise PermissionError(
+            "Only the target account can grant active communication permission."
+        )
     context = normalize_context(data)
     now = now_iso()
     cursor = get_db().execute(
@@ -193,6 +242,96 @@ def create_communication_permission(actor, data):
     )
     get_db().commit()
     return dict(get_db().execute("SELECT * FROM communication_permissions WHERE id=?", (cursor.lastrowid,)).fetchone())
+
+
+def list_communication_permissions(actor, related_user_id=None):
+    """List explicit communication grants visible to the signed-in participant."""
+    if not actor:
+        raise PermissionError("Authentication required.")
+    actor_id = _user_id(actor)
+    params = [actor_id, actor_id]
+    related_clause = ""
+    if related_user_id is not None:
+        related_id = int(related_user_id)
+        related_clause = """
+          AND (
+            (cp.requester_id=? AND cp.target_user_id=?)
+            OR (cp.requester_id=? AND cp.target_user_id=?)
+          )
+        """
+        params.extend([actor_id, related_id, related_id, actor_id])
+
+    rows = get_db().execute(
+        f"""
+        SELECT cp.*,
+               requester.name requester_name,
+               requester.role requester_role,
+               target.name target_name,
+               target.role target_role
+        FROM communication_permissions cp
+        JOIN users requester ON requester.id=cp.requester_id
+        JOIN users target ON target.id=cp.target_user_id
+        WHERE (cp.requester_id=? OR cp.target_user_id=?)
+        {related_clause}
+        ORDER BY cp.created_at DESC,cp.id DESC
+        LIMIT 100
+        """,
+        tuple(params),
+    ).fetchall()
+    now = now_iso()
+    result = []
+    for row in rows:
+        item = dict(row)
+        expires_at = str(item.get("expires_at") or "").strip()
+        item["expired"] = bool(expires_at and expires_at <= now)
+        item["effective"] = bool(
+            str(item.get("status") or "") == "active"
+            and not item.get("revoked_at")
+            and not item["expired"]
+        )
+        result.append(item)
+    return result
+
+
+def revoke_communication_permission(actor, permission_id):
+    """Revoke a grant as either participant or an authorized admin."""
+    if not actor:
+        raise PermissionError("Authentication required.")
+    row = get_db().execute(
+        "SELECT * FROM communication_permissions WHERE id=?",
+        (int(permission_id),),
+    ).fetchone()
+    if not row:
+        raise LookupError("Communication permission not found.")
+
+    item = dict(row)
+    actor_id = _user_id(actor)
+    actor_role = _value(actor, "role")
+    if actor_role != "admin" and actor_id not in {
+        int(item["requester_id"]),
+        int(item["target_user_id"]),
+    }:
+        raise PermissionError("Only a permission participant or admin can revoke it.")
+
+    if item.get("revoked_at") or str(item.get("status") or "") == "revoked":
+        return item
+
+    now = now_iso()
+    get_db().execute(
+        """
+        UPDATE communication_permissions
+        SET status='revoked',revoked_at=?,updated_at=?
+        WHERE id=?
+        """,
+        (now, now, int(permission_id)),
+    )
+    get_db().commit()
+    return dict(
+        get_db().execute(
+            "SELECT * FROM communication_permissions WHERE id=?",
+            (int(permission_id),),
+        ).fetchone()
+    )
 
 
 def discover_contacts(actor, query="", limit=12):
@@ -494,10 +633,10 @@ def share_report_message(actor, conversation_id, data):
 
 
 def share_native_media_message(actor, conversation_id, data):
-    """Attach already-validated/stored native image or video media to a conversation."""
+    """Attach already-validated/stored native image, video or audio media to a conversation."""
     media_kind = str(data.get("media_kind") or "").strip().lower()
-    if media_kind not in {"image", "video"}:
-        raise ValueError("Message media must be an image or video.")
+    if media_kind not in {"image", "video", "audio"}:
+        raise ValueError("Message media must be an image, video or audio clip.")
     storage_key = str(data.get("storage_key") or "").strip()
     mime_type = str(data.get("mime_type") or "").strip().lower()
     original_name = str(data.get("original_name") or "message-media").strip()[:255]
@@ -505,7 +644,12 @@ def share_native_media_message(actor, conversation_id, data):
     if not storage_key or not mime_type or size_bytes <= 0:
         raise ValueError("Stored message media metadata is incomplete.")
     caption = str(data.get("body") or data.get("caption") or "").strip()
-    body = caption[:1500] if caption else ("Shared an image." if media_kind == "image" else "Shared a video.")
+    default_body = {
+        "image": "Shared an image.",
+        "video": "Shared a video.",
+        "audio": "Shared a voice note.",
+    }[media_kind]
+    body = caption[:1500] if caption else default_body
     message = send_message(
         actor,
         conversation_id,

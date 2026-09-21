@@ -10,7 +10,7 @@
   <div class="form-actions">
     <a class="secondary-action" href="{{ url_for('health_social.community_page') }}">Health Community</a>
     {% if current_user.role == 'patient' %}<a class="secondary-action" href="{{ url_for('mental_wellness.mental_wellness_page') }}">Mental Wellness</a>{% endif %}
-    <span class="status-badge active">{{ unread_total }} Unread</span>
+    <span class="status-badge active" id="zendoc-unread-total">{{ unread_total }} Unread</span>
   </div>
 </section>
 
@@ -31,7 +31,7 @@
 
 <section class="connect-shell">
   <aside class="connect-list {% if selected %}has-selected{% endif %}">
-    <form method="get" action="{{ url_for('milestone7.messages_page') }}" class="search-form">
+    <form id="connect-contact-search" method="get" action="{{ url_for('milestone7.messages_page') }}" class="search-form">
       <label>Find a care contact
         <input name="q" value="{{ q }}" placeholder="Search by name, role, or specialty">
       </label>
@@ -60,7 +60,7 @@
       {% for conversation in conversations %}
         <a class="conversation-link {% if selected and selected.id == conversation.id %}active{% endif %}" href="{{ url_for('milestone7.messages_page', conversation_id=conversation.id) }}">
           <div class="conv-header">
-            <strong>{{ conversation.title or 'ZENDOC Conversation' }}</strong>
+            <strong>{{ conversation.display_name or conversation.title or 'ZENDOC Conversation' }}</strong>
             {% if conversation.unread_count %}<span class="unread-pill">{{ conversation.unread_count }}</span>{% endif %}
           </div>
           {% if conversation.last_message %}
@@ -82,7 +82,15 @@
           <a class="mobile-back secondary-action" href="{{ url_for('milestone7.messages_page') }}">&larr; Back</a>
           <div>
             <p class="eyebrow">{{ selected.context_type.replace('_', ' ').title() if selected.context_type else 'Direct' }} Conversation</p>
-            <h2>{{ selected.title }}</h2>
+            <div class="thread-person">
+              <span class="thread-avatar" aria-hidden="true">{{ (selected.display_name or selected.title or 'Z')[:1]|upper }}</span>
+              <div>
+                <h2>{{ selected.display_name or selected.title }}</h2>
+                {% if selected.other_participant %}
+                  <p class="thread-person-meta">{{ selected.other_participant.role|title }}{% if selected.other_participant.city %} · {{ selected.other_participant.city }}{% endif %}</p>
+                {% endif %}
+              </div>
+            </div>
           </div>
         </div>
         <div class="form-actions comm-controls">
@@ -99,28 +107,67 @@
         </div>
       </div>
 
+      {% if communication_permissions %}
+      <details class="connect-permissions-mobile">
+        <summary>Communication permissions</summary>
+        <div class="connect-permissions-mobile__body">
+          {% include "components/_communication_permissions.html" %}
+        </div>
+      </details>
+      {% endif %}
+
       <div class="message-stack" id="zendoc-live-message-stack" data-live-url="{{ url_for('milestone7.messages_live_fragment', conversation_id=selected.id) }}">
         {% include "components/_message_bubbles.html" %}
       </div>
 
-      <form method="post" class="message-composer" enctype="multipart/form-data">
+      <form method="post" class="message-composer message-composer--premium" enctype="multipart/form-data" data-zendoc-message-composer>
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="action" value="send">
         <input type="hidden" name="conversation_id" value="{{ selected.id }}">
-        <div class="composer-input-row">
-          <div style="flex:1;display:grid;gap:8px;">
-            <textarea name="body" rows="2" maxlength="1500" placeholder="Write a message or add a caption…" aria-label="Message"></textarea>
-            <label>Optional image/video<input name="media_file" type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm"></label>
-            <small>Native media is private to conversation participants. JPEG, PNG, WebP, MP4 or WebM; maximum 25 MiB.</small>
-            <details class="progressive-fields"><summary>Add message context</summary><div><label>Context type<select name="message_type">{% for type in ['text','appointment','consultation','record','report','video','service_update','task_update'] %}<option value="{{ type }}">{{ type.replace('_', ' ').title() }}</option>{% endfor %}</select></label><p class="helper-text">Choose a context only when the message is about a specific care item.</p></div></details>
+
+        <div class="message-composer-toolbar" aria-label="Message attachments">
+          <label class="composer-tool" title="Attach a private photo or video">
+            <span aria-hidden="true">＋</span><span>Media</span>
+            <input id="message-media-file" name="media_file" type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,audio/webm,audio/ogg,audio/mp4" hidden>
+          </label>
+          <button type="button" class="composer-tool" id="message-voice-note" aria-pressed="false" title="Record a private voice note">
+            <span aria-hidden="true">●</span><span>Voice note</span>
+          </button>
+          <details class="composer-context">
+            <summary class="composer-tool">Care context</summary>
+            <div class="composer-context-panel">
+              <label>Message context
+                <select name="message_type">{% for type in ['text','appointment','consultation','record','report','service_update','task_update'] %}<option value="{{ type }}">{{ type.replace('_', ' ').title() }}</option>{% endfor %}</select>
+              </label>
+              <p class="helper-text">Use structured context only when the message is actually about that care item.</p>
+            </div>
+          </details>
+        </div>
+
+        <div class="message-attachment-preview" id="message-attachment-preview" hidden>
+          <div>
+            <strong id="message-attachment-name">Attachment ready</strong>
+            <small id="message-attachment-note">Private to conversation participants.</small>
           </div>
+          <audio id="message-audio-preview" controls hidden></audio>
+          <button type="button" class="secondary-action" id="message-attachment-clear">Remove</button>
+        </div>
+
+        <div class="composer-input-row composer-input-row--premium">
+          <textarea name="body" rows="2" maxlength="1500" placeholder="Message {{ selected.display_name or 'this conversation' }}…" aria-label="Message"></textarea>
           <button type="submit" class="send-btn" data-submitting-label="Sending…">Send</button>
         </div>
+        <p class="composer-status form-note" id="message-composer-status" role="status" aria-live="polite">Text, image, video and recorded voice notes remain private to conversation participants. Media limit: 25 MiB.</p>
       </form>
     {% else %}
-      <div class="empty-state thread-empty-notice">
+      <div class="empty-state thread-empty-notice connect-empty-premium">
+        <span class="empty-state__icon" aria-hidden="true">✉</span>
         <h2>Select or start a conversation</h2>
-        <p>Search returns only care contacts your account has permission to message.</p>
+        <p>Search returns only people your account is permitted to message. Private healthcare communication stays separate from public Community posts.</p>
+        <div class="form-actions">
+          <a class="primary-action" href="#connect-contact-search">Find a contact</a>
+          <a class="secondary-action" href="{{ url_for('health_social.community_page') }}">Open Health Community</a>
+        </div>
       </div>
     {% endif %}
   </section>
@@ -151,6 +198,7 @@
           </div>
         {% endfor %}
       </div>
+      {% include "components/_communication_permissions.html" %}
       <div class="connect-policy-notice">
         <p class="privacy-banner">
           <strong>Privacy protected:</strong> Private emails, phone numbers, and internal IDs are not shown here. Operational metrics do not expose casual private conversation contents.
@@ -161,5 +209,8 @@
     {% endif %}
   </aside>
 </section>
-{% if selected %}<script src="{{ url_for('static', filename='messages_live.js') }}" defer></script>{% endif %}
+{% if selected %}
+<script src="{{ url_for('static', filename='messages_live.js') }}" defer></script>
+<script src="{{ url_for('static', filename='messages_composer.js') }}" defer></script>
+{% endif %}
 {% endblock %}
