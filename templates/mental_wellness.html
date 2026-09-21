@@ -102,9 +102,9 @@
     </div>
   </article>
 
-  <form class="panel" method="post" action="{{ url_for('main.ai_center') }}">
+  <form class="panel" method="post" action="{{ url_for('mental_wellness.mental_wellness_page') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <input type="hidden" name="feature" value="mental_health">
+    <input type="hidden" name="action" value="guidance">
     <p class="eyebrow">Safety-first guidance</p>
     <h2>Review a situation with ZENDOC</h2>
     <p class="form-note">This uses ZENDOC's existing deterministic wellbeing guidance with an emergency-first safety check. It is not a clinical assessment.</p>
@@ -121,6 +121,21 @@
     <button type="submit">Review safe next steps</button>
   </form>
 </section>
+
+{% if guidance_result %}
+<section class="result ai-response {% if guidance_result.risk_level == 'high' %}emergency{% endif %} spaced-panel" aria-live="polite">
+  <div class="panel-head">
+    <div><p class="eyebrow">Wellbeing guidance</p><h2>{{ 'Get support now' if guidance_result.risk_level == 'high' else 'A safe next step' }}</h2></div>
+    <span class="status-badge {{ 'inactive' if guidance_result.risk_level == 'high' else 'active' }}">{{ guidance_result.risk_level|title }}</span>
+  </div>
+  <p>{{ guidance_result.summary }}</p>
+  <p>{{ guidance_result.next_steps }}</p>
+  {% if guidance_result.emergency %}
+    <p><strong>Do not rely on ZENDOC for emergency response.</strong> Contact local emergency services and a trusted person nearby.</p>
+  {% endif %}
+  <p class="form-note">This is deterministic wellbeing guidance, not a diagnosis, screening score, personality assessment or prescription.</p>
+</section>
+{% endif %}
 
 <section class="panel spaced-panel">
   <div class="panel-head"><div><p class="eyebrow">Support that matches real life</p><h2>Mental Wellness by life stage</h2></div></div>
