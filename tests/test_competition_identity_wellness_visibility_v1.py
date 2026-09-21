@@ -29,7 +29,8 @@ def test_mental_wellness_has_life_stage_surfaces_and_safety_boundary():
     ):
         assert label in body
     assert "Non-diagnostic" in body
-    assert "does not perform personality scoring" in body
+    assert "perform personality scoring" in body
+    assert "does not diagnose a mental-health condition" in body
     assert "never asks a child to handle a safety concern alone" in body
 
 
