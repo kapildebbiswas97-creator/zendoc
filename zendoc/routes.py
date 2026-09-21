@@ -1314,16 +1314,63 @@ def finder():
     )
     search_event_id = None
     if request.method == "POST" or request.args:
-        result = HealthcareFinder().search(query)
-        search_event_id = record_finder_search(
-            g.user,
-            category=query["category"],
-            location=query["location"],
-            result_count=len(result.get("results") or []),
-            source_tiers=result.get("source_tiers") or {},
-        )
-        audit("search", "healthcare_finder", query["category"])
-        get_db().commit()
+        try:
+            result = HealthcareFinder().search(query)
+        except Exception:
+            current_app.logger.exception(
+                "Healthcare Finder failed; returning a degraded search result instead of HTTP 500."
+            )
+            result = {
+                "query": query,
+                "registered_providers": [],
+                "official_public_directory": [],
+                "claimed_public_directory_links": [],
+                "external_places": {
+                    "available": False,
+                    "results": [],
+                    "message": "External healthcare discovery is temporarily unavailable.",
+                    "source": "degraded",
+                },
+                "results": [],
+                "source_tiers": {
+                    "zendoc_verified": 0,
+                    "official_public_directory_not_zendoc_verified": 0,
+                    "approved_public_listings_merged_into_verified": 0,
+                    "external_unverified": 0,
+                },
+                "search_status": "degraded",
+                "warnings": [
+                    "Healthcare search is temporarily limited. "
+                    "ZENDOC stayed available instead of returning an internal-server error."
+                ],
+                "message": (
+                    "Healthcare search is temporarily limited. "
+                    "Retry in a moment or enter a different city, area, or PIN code."
+                ),
+            }
+
+        # Search analytics and audit evidence are best-effort. A telemetry
+        # write problem must never turn valid healthcare results into a 500.
+        try:
+            search_event_id = record_finder_search(
+                g.user,
+                category=query["category"],
+                location=query["location"],
+                result_count=len(result.get("results") or []),
+                source_tiers=result.get("source_tiers") or {},
+            )
+            audit("search", "healthcare_finder", query["category"])
+            get_db().commit()
+        except Exception:
+            current_app.logger.exception(
+                "Finder analytics/audit persistence failed after search results were produced."
+            )
+            try:
+                get_db().rollback()
+            except Exception:
+                current_app.logger.exception("Finder analytics rollback also failed.")
+            search_event_id = None
+
     return render_template("finder.html", result=result, query=query, search_event_id=search_event_id)
 
 
