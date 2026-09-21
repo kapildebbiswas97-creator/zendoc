@@ -216,8 +216,21 @@ def test_signed_payment_webhook_requires_matching_invoice_amount_and_currency(tm
         signature = hmac.new(webhook_secret.encode(), raw, hashlib.sha256).hexdigest()
         result = verify_webhook(raw, signature)
         assert result["handled"] is True
+        assert result["duplicate"] is False
         row = db.execute("SELECT status FROM care_invoices WHERE gateway_order_id='order_match'").fetchone()
         assert row["status"] == "paid"
+
+        retried = verify_webhook(raw, signature)
+        assert retried["handled"] is True
+        assert retried["duplicate"] is True
+        event_count = db.execute(
+            """
+            SELECT COUNT(*) c FROM payment_events
+            WHERE invoice_id=? AND event_type='payment.captured'
+            """,
+            (result["invoice_id"],),
+        ).fetchone()["c"]
+        assert event_count == 1
 
         bad_event = {
             "event": "payment.captured",
