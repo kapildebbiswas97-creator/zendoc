@@ -1,55 +1,100 @@
 {% extends "base.html" %}
-{% block title %}Search Results for "{{ q }}" — ZENDOC{% endblock %}
+{% block title %}Universal Search{% if q %} · {{ q }}{% endif %} — ZENDOC{% endblock %}
 
 {% block content %}
-<section class="section-head">
+<section class="section-head universal-search-hero">
   <div>
-    <p class="eyebrow">Universal Search Engine</p>
-    <h1>Search Results</h1>
-    <p class="section-copy">Showing results for <strong>"{{ q }}"</strong> across doctors, family records, medicines, fitness, and platform services.</p>
+    <p class="eyebrow">ZENDOC Universal Search</p>
+    <h1>One search across your care journey</h1>
+    <p class="section-copy">Search healthcare discovery, Health Memory destinations, permitted care contacts, conversations, fitness, Community, Health Shop, benefits, videos and ZENDOC tools from one place.</p>
   </div>
-  <a href="{{ url_for('main.dashboard') }}" class="secondary-action">Dashboard</a>
+  <a href="{{ url_for('universal_search.search_home') }}" class="secondary-action">Nearby healthcare search</a>
 </section>
 
-<!-- Search Input -->
-<form method="get" action="{{ url_for('ecosystem.search_page') }}" class="filter-bar">
-  <label style="grid-column: 1 / -2;">Universal Search
-    <input type="text" name="q" value="{{ q }}" placeholder="Search doctors, symptoms, medicines, fitness, or family members..." required>
+<form method="get" action="{{ url_for('ecosystem.search_page') }}" class="panel universal-search-form" role="search">
+  <label for="universal-search-page-input">What are you looking for?
+    <div class="universal-search-input-row">
+      <input id="universal-search-page-input" type="search" name="q" value="{{ q }}" placeholder="Try: cardiologist Fulia, my reports, Debraj, CareFin, pharmacy, mental wellness…" required autofocus>
+      <button type="submit" class="primary-action">Search ZENDOC</button>
+    </div>
   </label>
-  <button type="submit" class="primary-action">Search</button>
+  <div class="universal-search-quick" aria-label="Popular search destinations">
+    <a href="{{ url_for('universal_search.search_home', category='doctor') }}">Doctors</a>
+    <a href="{{ url_for('universal_search.search_home', category='hospital') }}">Hospitals</a>
+    <a href="{{ url_for('universal_search.search_home', category='pharmacy') }}">Pharmacies</a>
+    <a href="{{ url_for('connected_care.diagnostics_page') }}">Diagnostics</a>
+    <a href="{{ url_for('main.finder') }}#government-ors-handoff">Government OPD</a>
+    <a href="{{ url_for('health_memory.health_summary_page') }}">Health Memory</a>
+    <a href="{{ url_for('milestone7.messages_page') }}">Messages</a>
+    <a href="{{ url_for('carefin.carefin_page') }}">Care Benefits</a>
+  </div>
 </form>
 
-{% if search_data.categories %}
-  <p style="color:var(--muted);margin-bottom:20px;">Found <strong>{{ search_data.total_matches }}</strong> matching results</p>
+{% if q %}
+<section class="universal-search-summary spaced-panel">
+  <div>
+    <p class="eyebrow">Results</p>
+    <h2>{{ search_data.total_matches }} match{% if search_data.total_matches != 1 %}es{% endif %} for “{{ q }}”</h2>
+  </div>
+  <p class="form-note">Healthcare/public listings keep their source and verification truth. Private results appear only from data your signed-in account is allowed to access.</p>
+</section>
 
-  <div class="grid two">
+{% if search_data.categories %}
+  <nav class="universal-search-category-strip" aria-label="Result categories">
     {% for cat in search_data.categories %}
-      <article class="panel">
-        <h2 style="color:var(--primary);margin-top:0;">{{ cat.category }}</h2>
-        <div class="summary-block">
+      <a href="#search-category-{{ loop.index }}">{{ cat.category }} <span>{{ cat["items"]|length }}</span></a>
+    {% endfor %}
+  </nav>
+
+  <div class="universal-search-results">
+    {% for cat in search_data.categories %}
+      <section class="panel universal-search-category" id="search-category-{{ loop.index }}">
+        <div class="panel-head">
+          <div><p class="eyebrow">{{ cat.label }}</p><h2>{{ cat.category }}</h2></div>
+          <span class="status-badge">{{ cat["items"]|length }} result{% if cat["items"]|length != 1 %}s{% endif %}</span>
+        </div>
+        <div class="universal-search-result-list">
           {% for item in cat["items"] %}
-            <div class="summary-row" style="display:flex;justify-content:space-between;align-items:center;">
-              <div>
+            <article class="universal-search-result">
+              <div class="universal-search-result__body">
                 <strong>{{ item.title }}</strong>
-                <p style="margin:2px 0 0;color:var(--muted);font-size:13px;">{{ item.subtitle }}</p>
+                <p>{{ item.subtitle }}</p>
+                <div class="universal-search-result__meta">
+                  {% if item.verification_status %}
+                    <span class="provenance-chip">{{ item.verification_status|replace('_',' ')|title }}</span>
+                  {% endif %}
+                  {% if item.source %}
+                    <span>{{ item.source|replace('_',' ')|title }}</span>
+                  {% endif %}
+                  {% if item.bookable_in_zendoc is defined %}
+                    <span>{{ 'Connected ZENDOC action' if item.bookable_in_zendoc else 'Discovery / external handoff' }}</span>
+                  {% endif %}
+                </div>
               </div>
-              <a href="{{ item.url }}" class="primary-action" style="padding:6px 12px;min-height:auto;font-size:12px;">Open &rarr;</a>
-            </div>
+              <a href="{{ item.url }}" class="secondary-action">Open</a>
+            </article>
           {% endfor %}
         </div>
-      </article>
+      </section>
     {% endfor %}
   </div>
 {% else %}
-  <article class="panel">
+  <article class="panel spaced-panel">
     <div class="empty-state">
-      <h2>No Direct Matches Found for "{{ q }}"</h2>
-      <p>Try searching for specific terms like <em>cardiologist, fever, paracetamol, ambulance, squat, or blood test</em>.</p>
-      
-      <div style="margin-top:16px;">
-        <a href="{{ url_for('main.ai_center') }}" class="primary-action">Ask ZENDOC AI Assistant &rarr;</a>
+      <h2>No direct product or data match</h2>
+      <p>Try a care type, place, person you are permitted to contact, Health Memory feature, benefit, fitness topic, Community term or product category.</p>
+      <div class="form-actions">
+        <a href="{{ url_for('universal_search.search_home') }}" class="primary-action">Search nearby healthcare</a>
+        <a href="{{ url_for('main.ai_center') }}" class="secondary-action">Ask ZENDOC AI</a>
       </div>
     </div>
   </article>
+{% endif %}
+{% else %}
+<section class="grid three spaced-panel universal-search-start">
+  <a class="panel" href="{{ url_for('universal_search.search_home') }}"><p class="eyebrow">Care</p><h2>Find nearby healthcare</h2><p>Doctors, hospitals, pharmacies, labs, nursing homes, blood banks and other healthcare discovery.</p></a>
+  <a class="panel" href="{{ url_for('health_memory.health_summary_page') }}"><p class="eyebrow">Memory</p><h2>Open Health Memory</h2><p>Timeline, reports, appointments, vitals, profile, privacy and continuity.</p></a>
+  <a class="panel" href="{{ url_for('milestone7.messages_page') }}"><p class="eyebrow">Connect</p><h2>Find permitted contacts</h2><p>Search people and conversations your account is allowed to message.</p></a>
+</section>
 {% endif %}
 {% endblock %}
