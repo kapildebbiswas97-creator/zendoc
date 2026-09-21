@@ -217,28 +217,56 @@ def connected_care_home():
 
 @bp.route("/connected-care/carefin", methods=("GET", "POST"))
 def carefin_page():
-    # Keep the legacy pilot URL directly usable while canonicalizing all
-    # mutations through /carefin. GET renders the same durable case model.
+    # Compatibility surface for the original pilot URL. Discovery stays
+    # directly usable here; durable case/evidence mutations remain canonical
+    # under /carefin.
     uid = _current_user_id()
     if not uid:
         return redirect(url_for("main.login", role="patient"))
-    if request.method == "POST":
-        return redirect(url_for("carefin.carefin_page"), code=307)
 
     db = get_db()
     user = dict(db.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone() or abort(401))
+    source = request.form if request.method == "POST" else request.args
     form_data = {
-        "state": request.args.get("state", ""),
-        "district": request.args.get("district", user.get("city") or ""),
-        "age": request.args.get("age", user.get("age") or ""),
-        "occupation": request.args.get("occupation", ""),
-        "income_band": request.args.get("income_band", ""),
-        "existing_insurer": request.args.get("existing_insurer", ""),
-        "needs_charitable_support": request.args.get("needs_charitable_support") in {"1", "yes", "true", "on"},
+        "state": source.get("state", ""),
+        "district": source.get("district", user.get("city") or ""),
+        "age": source.get("age", user.get("age") or ""),
+        "occupation": source.get("occupation", ""),
+        "income_band": source.get("income_band", ""),
+        "existing_insurer": source.get("existing_insurer", ""),
+        "needs_charitable_support": source.get("needs_charitable_support") in {"1", "yes", "true", "on"},
     }
+
+    action = str(source.get("action") or "discover").strip().lower()
+    if request.method == "POST" and action != "discover":
+        return redirect(url_for("carefin.carefin_page"), code=307)
+
+    result = None
+    if request.method == "POST":
+        result = discover_benefits({
+            "geography": form_data["state"] or "INDIA",
+            "state": form_data["state"],
+            "district": form_data["district"],
+            "age": form_data["age"],
+            "occupation": form_data["occupation"],
+            "income_band": form_data["income_band"],
+            "existing_insurer": form_data["existing_insurer"],
+            "needs_charitable_support": form_data["needs_charitable_support"],
+            "desired_categories": [
+                "government_scheme",
+                "government_health_assurance",
+                "state_health_scheme",
+                "charitable_support",
+                "csr",
+                "life_insurance",
+            ],
+        })
+        audit("carefin.discovery", "carefin", str(uid), user)
+        db.commit()
+
     return render_template(
         "carefin.html",
-        result=None,
+        result=result,
         form_data=form_data,
         cases=list_carefin_cases(user),
         case_options=carefin_case_options(),
