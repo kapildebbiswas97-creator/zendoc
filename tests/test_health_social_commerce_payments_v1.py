@@ -32,7 +32,7 @@ def test_patient_can_reach_new_product_surfaces(tmp_path):
             b"Non-diagnostic",
         ],
         "/community": [b"Health-only social community", b"Your story", b"reporting", b"blocking"],
-        "/health-shop": [b"Health Shop &amp; Wellness Marketplace", b"Clinical independence"],
+        "/health-shop": [b"<h1>Health Shop</h1>", b"Clinical independence"],
         "/payments": [b"Payments &amp; invoices", b"Payment truth boundary"],
         "/health-hub": [b"Health Community", b"Health Shop"],
         "/dashboard": [
@@ -216,8 +216,21 @@ def test_signed_payment_webhook_requires_matching_invoice_amount_and_currency(tm
         signature = hmac.new(webhook_secret.encode(), raw, hashlib.sha256).hexdigest()
         result = verify_webhook(raw, signature)
         assert result["handled"] is True
+        assert result["duplicate"] is False
         row = db.execute("SELECT status FROM care_invoices WHERE gateway_order_id='order_match'").fetchone()
         assert row["status"] == "paid"
+
+        retried = verify_webhook(raw, signature)
+        assert retried["handled"] is True
+        assert retried["duplicate"] is True
+        event_count = db.execute(
+            """
+            SELECT COUNT(*) c FROM payment_events
+            WHERE invoice_id=? AND event_type='payment.captured'
+            """,
+            (result["invoice_id"],),
+        ).fetchone()["c"]
+        assert event_count == 1
 
         bad_event = {
             "event": "payment.captured",
@@ -631,3 +644,139 @@ def test_health_shop_saved_list_is_private_and_truthful(tmp_path):
             "SELECT id FROM health_shop_saved_items WHERE id=?",
             (saved_id,),
         ).fetchone() is not None
+
+
+
+def test_health_shop_exposes_presets_domains_and_truthful_merchant_count():
+    result = search_health_products("blood pressure monitor", "home_health")
+    assert result["merchant_count"] == len(result["results"])
+    assert result["merchant_count"] > 0
+    assert "digital thermometer" in result["presets"]
+    assert all(item.get("domain") for item in result["results"])
+    assert all(item["stock_verified"] is False for item in result["results"])
+    assert all(item["price_verified"] is False for item in result["results"])
+    assert result["clinical_recommendation"] is False
+
+
+def test_health_shop_redesign_keeps_medicine_out_of_general_merchants(tmp_path):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    register_web(client, "patient", "shop-redesign@example.com", "Shop Redesign")
+    login_web(client, "patient", "shop-redesign@example.com")
+
+    browse = client.get("/health-shop?category=fitness")
+    assert browse.status_code == 200
+    assert b"Search merchants" in browse.data
+    assert b"Saved Health List" in browse.data
+    assert b"Commerce never controls care" in browse.data
+
+    medicine = client.get("/health-shop?q=antibiotic+tablets&category=general_wellness")
+    assert medicine.status_code == 200
+    assert b"Medicine search stays inside ZENDOC Pharmacy" in medicine.data
+    assert b"Open Amazon India" not in medicine.data
+    assert b"Open Flipkart" not in medicine.data
+
+
+def test_invoice_detail_is_participant_scoped_and_explains_nonfinal_signature_state(tmp_path):
+    app = make_app(tmp_path)
+    patient_client = app.test_client()
+    outsider_client = app.test_client()
+    register_web(patient_client, "patient", "invoice-patient@example.com", "Invoice Patient")
+    register_web(patient_client, "hospital", "invoice-hospital@example.com", "Invoice Hospital")
+    register_web(outsider_client, "patient", "invoice-outsider@example.com", "Invoice Outsider")
+
+    with app.app_context():
+        db = get_db()
+        patient_id = int(db.execute(
+            "SELECT id FROM users WHERE email_normalized='invoice-patient@example.com'"
+        ).fetchone()["id"])
+        hospital_id = int(db.execute(
+            "SELECT id FROM users WHERE email_normalized='invoice-hospital@example.com'"
+        ).fetchone()["id"])
+        now = "2026-09-21T18:30:00+00:00"
+        cursor = db.execute(
+            """
+            INSERT INTO care_invoices
+            (invoice_uid,patient_id,payee_user_id,resource_type,resource_id,amount_paise,currency,
+             description,status,gateway,gateway_order_id,gateway_payment_id,created_by,created_at,updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                "inv_detail_truth",
+                patient_id,
+                hospital_id,
+                "appointment",
+                501,
+                25000,
+                "INR",
+                "Connected consultation invoice",
+                "client_verified",
+                "razorpay",
+                "order_detail_truth",
+                "pay_detail_truth",
+                hospital_id,
+                now,
+                now,
+            ),
+        )
+        invoice_id = int(cursor.lastrowid)
+        db.execute(
+            """
+            INSERT INTO payment_events
+            (invoice_id,event_type,provider_event_ref,signature_verified,payload_digest,created_at)
+            VALUES (?,?,?,?,?,?)
+            """,
+            (
+                invoice_id,
+                "checkout_signature_verified",
+                "pay_detail_truth",
+                1,
+                "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+                now,
+            ),
+        )
+        db.commit()
+
+    login_web(patient_client, "patient", "invoice-patient@example.com")
+    detail = patient_client.get(f"/payments/invoices/{invoice_id}")
+    assert detail.status_code == 200
+    assert b"Checkout signature verified" in detail.data
+    assert b"This is not final payment confirmation" in detail.data
+    assert b"Signature verified" in detail.data
+    assert b"No client-side success claim" in detail.data
+    assert b"Print / save invoice" in detail.data
+
+    login_web(outsider_client, "patient", "invoice-outsider@example.com")
+    denied = outsider_client.get(f"/payments/invoices/{invoice_id}", follow_redirects=True)
+    assert denied.status_code == 200
+    assert b"Invoice not found" in denied.data
+    assert b"inv_detail_truth" not in denied.data
+
+
+def test_payment_ledger_and_pwa_cache_use_evidence_first_ui(tmp_path):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    register_web(client, "patient", "payment-ui@example.com", "Payment UI")
+    login_web(client, "patient", "payment-ui@example.com")
+
+    page = client.get("/payments")
+    assert page.status_code == 200
+    assert b"Invoice issued" in page.data
+    assert b"Checkout ready" in page.data
+    assert b"Signature verified" in page.data
+    assert b"Signed capture webhook confirmed" in page.data
+    assert b"does not invent a BHIM, UPI, card or wallet success screen" in page.data
+
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    sw = (root / "static" / "sw.js").read_text(encoding="utf-8")
+    assert "zendoc-static-v5-commerce-payments-20260921" in sw
+
+
+
+def test_common_medicine_and_dosage_queries_never_open_general_marketplaces():
+    for query in ("paracetamol", "ibuprofen 400 mg", "azithromycin 500mg", "metformin"):
+        result = search_health_products(query, "general_wellness")
+        assert result["medicine_query"] is True
+        assert result["results"] == []
+        assert result["pharmacy_handoff"].startswith("/pharmacy")
