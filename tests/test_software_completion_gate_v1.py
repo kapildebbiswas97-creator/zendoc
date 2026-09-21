@@ -10,7 +10,10 @@ def test_repository_owned_software_completion_gate_is_green(tmp_path):
 
     assert report["status"] == "SOFTWARE_IMPLEMENTATION_COMPLETE", report["blockers"]
     assert report["blockers"] == []
-    assert report["route_count"] >= 50
+    assert report["route_count"] >= 53
+    registered = {str(rule.rule) for rule in app.url_map.iter_rules()}
+    assert "/health" in registered
+    assert "/healthz" in registered
     assert report["artifact_count"] >= 45
     assert report["regression_file_count"] >= 20
     assert report["validation_status"] == "EXACT_HEAD_CI_STILL_REQUIRED"
