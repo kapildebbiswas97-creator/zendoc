@@ -1,9 +1,10 @@
 import os
 from pathlib import Path
 
-from flask import Flask
+from flask import Flask, g, request
 
 from .config import load_config, validate_startup_config
+from .copilot import copilot_context
 from .ai_chat_routes import bp as ai_chat_bp
 from .call_signaling import ensure_call_schema
 from .call_routes import bp as calls_bp
@@ -127,6 +128,19 @@ def create_app(test_config=None):
         Path(app.config["DATABASE"]).parent.mkdir(parents=True, exist_ok=True)
 
     app.before_request(start_request_observation)
+
+    @app.context_processor
+    def inject_zendoc_copilot():
+        user = getattr(g, "user", None)
+        role = None
+        if user is not None:
+            try:
+                role = user["role"]
+            except (KeyError, TypeError):
+                role = getattr(user, "role", None)
+        return {
+            "zendoc_copilot": copilot_context(request.endpoint, role),
+        }
 
     app.register_blueprint(ai_chat_bp)
     app.register_blueprint(calls_bp)
