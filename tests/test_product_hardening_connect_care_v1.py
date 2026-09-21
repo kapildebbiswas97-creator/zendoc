@@ -200,8 +200,9 @@ def test_carefin_template_renders_and_legacy_connected_url_redirects(tmp_path):
     assert b"My tracked support" in page.data
 
     legacy = client.get("/connected-care/carefin", follow_redirects=False)
-    assert legacy.status_code in {301, 302, 303, 307, 308}
-    assert legacy.headers["Location"].endswith("/carefin")
+    assert legacy.status_code == 200
+    assert b"CareFin benefits discovery" in legacy.data
+    assert b"My CareFin cases" in legacy.data
 
 
 def test_care_journey_links_real_care_surfaces():
