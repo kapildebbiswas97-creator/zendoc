@@ -10,6 +10,18 @@
   <span class="status-badge working">State engine working</span>
 </section>
 
+<section class="panel spaced-panel" aria-label="Connected care journey map">
+  <div class="panel-head"><div><p class="eyebrow">One connected path</p><h2>Move from discovery to follow-up without losing the care context</h2></div></div>
+  <div class="quick-action-grid">
+    <a class="quick-action" href="{{ url_for('main.finder') }}"><strong>1 · Find Care</strong><span>Search exactly the care type you need, including nearby distance and Google Maps directions.</span><span class="quick-action-arrow">→</span></a>
+    <a class="quick-action" href="{{ url_for('main.finder') }}#government-ors-handoff"><strong>2 · Government OPD</strong><span>Use official ORS for participating government hospitals, then save the patient-reported booking to Health Memory.</span><span class="quick-action-arrow">→</span></a>
+    <a class="quick-action" href="{{ url_for('connected_care.diagnostics_page') }}"><strong>3 · Diagnostics</strong><span>Find provider-backed verified lab offers; catalog-only tests are never presented as confirmed bookings.</span><span class="quick-action-arrow">→</span></a>
+    <a class="quick-action" href="{{ url_for('carefin.carefin_page') }}"><strong>4 · Care Benefits</strong><span>Explore government, insurance or charitable support with evidence-backed status boundaries.</span><span class="quick-action-arrow">→</span></a>
+    <a class="quick-action" href="{{ url_for('connected_care.connected_care_home') }}"><strong>5 · Connected Services</strong><span>Follow supported prescription, pharmacy, fulfilment and provider-acknowledgement workflows.</span><span class="quick-action-arrow">→</span></a>
+    <a class="quick-action" href="{{ url_for('health_memory.timeline_page') }}"><strong>6 · Health Memory</strong><span>Keep authorized outcomes and patient-reported external events in the longitudinal timeline.</span><span class="quick-action-arrow">→</span></a>
+  </div>
+</section>
+
 <section class="grid two">
   <form class="panel" method="post" action="{{ url_for('connected_care.care_journey_create_page') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -63,7 +75,7 @@
             'FOLLOW_UP': ['COMPLETED','PROVIDER_SEARCH']
           } %}
           {% if options.get(item.state) %}
-          <form method="post" action="{{ url_for('connected_care.care_journey_transition_page', journey_id=item.id) }}">
+          <details class="progressive-fields spaced-panel"><summary>Record a care status update</summary><div><form method="post" action="{{ url_for('connected_care.care_journey_transition_page', journey_id=item.id) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <label>Next state
               <select name="target_state">
@@ -71,8 +83,8 @@
               </select>
             </label>
             <label>Reason <input name="reason" required maxlength="500" placeholder="What changed?"></label>
-            <button type="submit" class="secondary-action">Record transition</button>
-          </form>
+            <button type="submit" class="secondary-action">Record status update</button>
+          </form></div></details>
           {% endif %}
         {% endif %}
 
