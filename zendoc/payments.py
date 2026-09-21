@@ -483,6 +483,22 @@ def verify_webhook(raw_body: bytes, signature: str) -> dict:
         raise PermissionError("Order event is not in paid state.")
 
     invoice_id = int(row["id"])
+    event_recorded = _record_event(
+        invoice_id,
+        event_type,
+        payment_id or order_id,
+        True,
+        raw_body,
+    )
+    if not event_recorded and str(row["status"] or "").lower() == "paid":
+        return {
+            "accepted": True,
+            "handled": True,
+            "duplicate": True,
+            "event": event_type,
+            "invoice_id": invoice_id,
+        }
+
     now = now_iso()
     get_db().execute(
         """
@@ -493,18 +509,48 @@ def verify_webhook(raw_body: bytes, signature: str) -> dict:
         """,
         (payment_id, now, now, invoice_id),
     )
-    _record_event(invoice_id, event_type, payment_id or order_id, True, raw_body)
     get_db().commit()
-    return {"accepted": True, "handled": True, "event": event_type, "invoice_id": invoice_id}
+    return {
+        "accepted": True,
+        "handled": True,
+        "duplicate": False,
+        "event": event_type,
+        "invoice_id": invoice_id,
+    }
 
 
-def _record_event(invoice_id: int, event_type: str, ref: str, verified: bool, raw_body: bytes):
+def _record_event(invoice_id: int, event_type: str, ref: str, verified: bool, raw_body: bytes) -> bool:
+    """Record gateway/client verification evidence once, even when providers retry."""
     digest = hashlib.sha256(raw_body).hexdigest()
+    clean_type = str(event_type)[:120]
+    clean_ref = str(ref or "")[:200]
+    existing = get_db().execute(
+        """
+        SELECT id FROM payment_events
+        WHERE invoice_id=?
+          AND event_type=?
+          AND COALESCE(provider_event_ref,'')=?
+          AND payload_digest=?
+        LIMIT 1
+        """,
+        (int(invoice_id), clean_type, clean_ref, digest),
+    ).fetchone()
+    if existing:
+        return False
+
     get_db().execute(
         """
         INSERT INTO payment_events
         (invoice_id,event_type,provider_event_ref,signature_verified,payload_digest,created_at)
         VALUES (?,?,?,?,?,?)
         """,
-        (int(invoice_id), str(event_type)[:120], str(ref or "")[:200] or None, 1 if verified else 0, digest, now_iso()),
+        (
+            int(invoice_id),
+            clean_type,
+            clean_ref or None,
+            1 if verified else 0,
+            digest,
+            now_iso(),
+        ),
     )
+    return True
