@@ -1,12 +1,75 @@
-"""Milestone 7 regression suite with current messaging-policy overrides.
+"""Milestone 7 regression suite with current product-policy overrides.
 
 The original suite is preserved in ``tests.legacy_milestone7`` so downstream
-tests can keep importing helpers such as ``headers`` from this module while the
-two messaging expectations changed by the current product policy are tested
-against their new contract.
+tests can keep importing helpers such as ``headers`` from this module while
+expectations changed by the current product policy are tested against their
+new contract.
 """
 
 from tests.legacy_milestone7 import *  # noqa: F401,F403
+
+
+def test_doctor_availability_consultation_and_messaging_isolation(tmp_path):
+    """Keep the legacy isolation regression while honoring the configured provider."""
+    app, client = make_client(tmp_path)
+    patient_token = api_token(client, "tele-patient@example.com")
+    doctor_token = api_token(client, "tele-doctor@example.com", role="doctor")
+    outsider_token = api_token(client, "tele-outsider@example.com")
+    doctor_id = user_id(app, "tele-doctor@example.com")
+
+    video_capable = client.put(
+        "/api/v1/doctor/availability",
+        json={"status": "available", "accepts_chat": True, "accepts_video": True},
+        headers=headers(doctor_token),
+    )
+    assert video_capable.status_code == 200
+    assert video_capable.json["doctor_availability"]["accepts_video"] == 1
+
+    availability = client.put(
+        "/api/v1/doctor/availability",
+        json={"status": "available", "accepts_chat": True, "accepts_video": False},
+        headers=headers(doctor_token),
+    )
+    assert availability.status_code == 200
+    assert availability.json["doctor_availability"]["accepts_video"] == 0
+
+    rejected_video = client.post(
+        "/api/v1/consultations",
+        json={"doctor_id": doctor_id, "consultation_type": "video", "reason": "Follow-up"},
+        headers=headers(patient_token),
+    )
+    assert rejected_video.status_code == 400
+    assert "not accepting video consultation requests" in rejected_video.json["error"]["message"]
+
+    requested = client.post(
+        "/api/v1/consultations",
+        json={"doctor_id": doctor_id, "consultation_type": "chat", "reason": "Follow-up"},
+        headers=headers(patient_token),
+    )
+    assert requested.status_code == 201
+    consultation_id = requested.json["consultation"]["id"]
+    assert requested.json["consultation"]["status"] == "requested"
+
+    denied = client.get(
+        f"/api/v1/consultations/{consultation_id}/messages",
+        headers=headers(outsider_token),
+    )
+    assert denied.status_code == 403
+
+    accepted = client.post(
+        f"/api/v1/consultations/{consultation_id}/status",
+        json={"status": "accepted"},
+        headers=headers(doctor_token),
+    )
+    assert accepted.status_code == 200
+    assert accepted.json["consultation"]["room_provider"] == app.config["TELEHEALTH_PROVIDER"]
+
+    message = client.post(
+        f"/api/v1/consultations/{consultation_id}/messages",
+        json={"body": "Hello doctor"},
+        headers=headers(patient_token),
+    )
+    assert message.status_code == 201
 
 
 def test_pharmacy_and_staff_task_communication_contexts(tmp_path):
