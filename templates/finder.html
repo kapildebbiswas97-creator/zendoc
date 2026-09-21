@@ -34,7 +34,7 @@
         {% set active_longitude = universal_query.longitude if universal_query is defined else query.longitude %}
         <label>Latitude <input name="latitude" value="{{ active_latitude or '' }}" inputmode="decimal" placeholder="Added when location is allowed"></label>
         <label>Longitude <input name="longitude" value="{{ active_longitude or '' }}" inputmode="decimal" placeholder="Added when location is allowed"></label>
-        <div><button type="button" id="use-location" class="secondary-action">Use my current location</button><p id="location-status" class="helper-text" role="status" aria-live="polite">Your browser will ask permission first. ZENDOC uses the coordinates only for this nearby search.</p></div>
+        <div><button type="button" id="use-location" class="secondary-action">Use my current location &amp; search</button><p id="location-status" class="helper-text" role="status" aria-live="polite">Your browser will ask permission first. After permission, ZENDOC immediately searches nearby care using these coordinates.</p></div>
       </div>
     </details>
   </form>
