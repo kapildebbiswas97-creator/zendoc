@@ -216,43 +216,11 @@ def connected_care_home():
 
 @bp.route("/connected-care/carefin", methods=("GET", "POST"))
 def carefin_page():
-    uid = _current_user_id()
-    if not uid:
-        return redirect(url_for("main.login", role="patient"))
-    db = get_db()
-    user = dict(db.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone() or abort(401))
-    result = None
-    form_data = {
-        "state": request.values.get("state", ""),
-        "district": request.values.get("district", user.get("city") or ""),
-        "age": request.values.get("age", user.get("age") or ""),
-        "occupation": request.values.get("occupation", ""),
-        "income_band": request.values.get("income_band", ""),
-        "existing_insurer": request.values.get("existing_insurer", ""),
-        "needs_charitable_support": request.values.get("needs_charitable_support") == "yes",
-    }
+    # CareFin has one canonical implementation with durable case tracking.
+    # Keep this legacy Connected Care URL as a compatibility handoff.
     if request.method == "POST":
-        result = discover_benefits({
-            "geography": form_data["state"] or "INDIA",
-            "state": form_data["state"],
-            "district": form_data["district"],
-            "age": form_data["age"],
-            "occupation": form_data["occupation"],
-            "income_band": form_data["income_band"],
-            "existing_insurer": form_data["existing_insurer"],
-            "needs_charitable_support": form_data["needs_charitable_support"],
-            "desired_categories": [
-                "government_scheme",
-                "government_health_assurance",
-                "state_health_scheme",
-                "charitable_support",
-                "csr",
-                "life_insurance",
-            ],
-        })
-        audit("carefin.discovery", "carefin", str(uid), user)
-        db.commit()
-    return render_template("carefin.html", user=user, result=result, form_data=form_data)
+        return redirect(url_for("carefin.carefin_page"), code=307)
+    return redirect(url_for("carefin.carefin_page"))
 
 
 @bp.get("/connected-care/journey")
@@ -367,6 +335,7 @@ def diagnostics_page():
     return render_template("connected_care.html", user=user,
                            diagnostic_offers=offers,
                            diagnostic_catalog=[dict(c) for c in catalog],
+                           diagnostic_query=query,
                            page_tab="diagnostics", data_mode=data_mode, demo_mode=data_mode == "DEMO")
 
 
