@@ -107,6 +107,15 @@
         </div>
       </div>
 
+      {% if communication_permissions %}
+      <details class="connect-permissions-mobile">
+        <summary>Communication permissions</summary>
+        <div class="connect-permissions-mobile__body">
+          {% include "components/_communication_permissions.html" %}
+        </div>
+      </details>
+      {% endif %}
+
       <div class="message-stack" id="zendoc-live-message-stack" data-live-url="{{ url_for('milestone7.messages_live_fragment', conversation_id=selected.id) }}">
         {% include "components/_message_bubbles.html" %}
       </div>
@@ -189,6 +198,7 @@
           </div>
         {% endfor %}
       </div>
+      {% include "components/_communication_permissions.html" %}
       <div class="connect-policy-notice">
         <p class="privacy-banner">
           <strong>Privacy protected:</strong> Private emails, phone numbers, and internal IDs are not shown here. Operational metrics do not expose casual private conversation contents.
