@@ -66,6 +66,7 @@ services:
     restart: unless-stopped
     environment:
       ZENDOC_DOMAIN: ${ZENDOC_DOMAIN:?set ZENDOC_DOMAIN in deploy/oci/.env}
+      ZENDOC_TLS_EMAIL: ${ZENDOC_TLS_EMAIL:?set ZENDOC_TLS_EMAIL in deploy/oci/.env}
     ports:
       - "80:80"
       - "443:443"
@@ -85,8 +86,6 @@ services:
       context: ../..
       dockerfile: deploy/oci/backup.Dockerfile
     profiles: ["ops"]
-    env_file:
-      - .env
     environment:
       DATABASE_URL: "postgresql://${POSTGRES_USER:-zendoc}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-zendoc}"
       ZENDOC_POSTGRES_BACKUP_DIR: /backups
