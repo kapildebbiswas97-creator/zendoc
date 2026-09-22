@@ -29,6 +29,35 @@ DOCTOR_HEALTH_TERMS = {
     "sugar", "diabetes", "pregnan", "child", "mental", "anxiety", "depress",
 }
 
+COPILOT_CONTEXT_KEYS = {
+    "operations",
+    "provider_connect",
+    "provider_workspace",
+    "government_workspace",
+    "find_care",
+    "health_memory",
+    "appointments",
+    "connect",
+    "mental_wellness",
+    "family",
+    "fitness",
+    "community",
+    "health_shop",
+    "payments",
+    "diagnostics",
+    "connected_care",
+    "carefin",
+    "pharmacy",
+    "monitoring",
+    "dashboard",
+    "general",
+}
+
+
+def _source_context(value):
+    key = " ".join(str(value or "").strip().split()).lower()[:80]
+    return key if key in COPILOT_CONTEXT_KEYS else None
+
 
 def _mode(value):
     return "doctor" if str(value or "").strip().lower() == "doctor" else "zendoc"
@@ -181,7 +210,7 @@ def chat_home():
         conversation = conversations[0]
     history = _history(g.user["id"], conversation["id"] if conversation else None)
     draft = " ".join(str(request.args.get("draft") or "").strip().split())[:3000]
-    source_context = " ".join(str(request.args.get("context") or "").strip().split())[:80]
+    source_context = _source_context(request.args.get("context"))
     return render_template(
         "ai_chat.html",
         mode=requested_mode,
