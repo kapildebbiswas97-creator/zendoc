@@ -9,9 +9,4 @@
   header {
     -Server
   }
-
-  log {
-    output stdout
-    format console
-  }
 }
