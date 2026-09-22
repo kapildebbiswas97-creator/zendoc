@@ -141,6 +141,14 @@ def test_deployment_verifier_is_wired_to_optional_main_cd_job():
     assert "--require-persistence-verified" in workflow
 
 
+def test_ci_publishes_pull_request_gate_on_the_reviewed_head_sha():
+    root = Path(__file__).resolve().parents[1]
+    workflow = (root / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert "context.eventName === 'pull_request'" in workflow
+    assert "context.payload.pull_request.head.sha" in workflow
+    assert "sha: statusSha" in workflow
+
+
 def test_render_cd_chain_deploys_on_commit_and_marks_verified_persistence():
     root = Path(__file__).resolve().parents[1]
     render = (root / "render.yaml").read_text(encoding="utf-8")
@@ -203,3 +211,4 @@ def test_merged_release_verification_uses_auto_deploy_when_hook_is_absent():
     assert "relying on render.yaml autoDeployTrigger=commit" in workflow
     assert "scripts/verify_deployment.py" in workflow
     assert "--expected-commit" in workflow
+
