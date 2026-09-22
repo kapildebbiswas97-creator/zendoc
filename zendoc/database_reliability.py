@@ -160,25 +160,43 @@ def postgis_status():
 
 
 def deployment_identity():
-    """Return non-secret deployment metadata when provided by the hosting platform."""
+    """Return non-secret deployment metadata when provided by the hosting platform.
+
+    Render metadata remains auto-detected. Self-managed deployments such as OCI
+    must opt in explicitly with ZENDOC_DEPLOYMENT_PLATFORM so a copied
+    environment cannot accidentally claim a platform it is not running on.
+    """
+    explicit_platform = str(os.environ.get("ZENDOC_DEPLOYMENT_PLATFORM") or "").strip().lower()
+    is_render = any(
+        os.environ.get(key)
+        for key in ("RENDER", "RENDER_SERVICE_ID", "RENDER_SERVICE_NAME", "RENDER_EXTERNAL_HOSTNAME")
+    )
+    platform = explicit_platform or ("render" if is_render else "unknown")
     commit = (
-        os.environ.get("RENDER_GIT_COMMIT")
+        os.environ.get("ZENDOC_GIT_COMMIT")
+        or os.environ.get("RENDER_GIT_COMMIT")
         or os.environ.get("GIT_COMMIT")
         or os.environ.get("SOURCE_VERSION")
         or ""
     ).strip()
     service = (
-        os.environ.get("RENDER_SERVICE_NAME")
+        os.environ.get("ZENDOC_SERVICE_NAME")
+        or os.environ.get("RENDER_SERVICE_NAME")
         or os.environ.get("SERVICE_NAME")
         or "zendoc"
     ).strip()
-    hostname = (os.environ.get("RENDER_EXTERNAL_HOSTNAME") or "").strip()
-    service_id = (os.environ.get("RENDER_SERVICE_ID") or "").strip()
+    hostname = (
+        os.environ.get("ZENDOC_EXTERNAL_HOSTNAME")
+        or os.environ.get("RENDER_EXTERNAL_HOSTNAME")
+        or ""
+    ).strip()
+    service_id = (
+        os.environ.get("ZENDOC_SERVICE_ID")
+        or os.environ.get("RENDER_SERVICE_ID")
+        or ""
+    ).strip()
     return {
-        "platform": "render" if any(
-            os.environ.get(key)
-            for key in ("RENDER", "RENDER_SERVICE_ID", "RENDER_SERVICE_NAME", "RENDER_EXTERNAL_HOSTNAME")
-        ) else "unknown",
+        "platform": platform,
         "service_name": service,
         "service_id": service_id or None,
         "external_hostname": hostname or None,
