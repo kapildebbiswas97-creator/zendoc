@@ -76,7 +76,7 @@ def copilot_context(endpoint: str | None, role: str | None) -> dict | None:
             "key": "government_workspace",
             "title": "Public Health Workspace Copilot",
             "eyebrow": "Institutional AI",
-            "description": "Navigate public-health and program workflows without exposing patient records or bypassing authorization.",
+            "description": "Navigate public-health and program workflows without exposing private health records or bypassing authorization.",
             "prompts": [
                 "Explain what I can do in this government workspace.",
                 "Help me organize a public-health operations checklist.",
