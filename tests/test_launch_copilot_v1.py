@@ -111,3 +111,22 @@ def test_copilot_ai_draft_is_editable_contextual_and_html_escaped(tmp_path):
     assert b"&lt;/textarea&gt;" in response.data
     assert b"&lt;script&gt;" in response.data
     assert b"edit before sending" in response.data
+
+
+def test_ai_context_badge_rejects_untrusted_or_spoofed_context(tmp_path):
+    _app, client = make_client(tmp_path)
+    register_web(client, "patient", "copilot-context@example.com", "Copilot Context")
+    login_web(client, "patient", "copilot-context@example.com")
+
+    response = client.get(
+        "/ai",
+        query_string={
+            "new": "1",
+            "draft": "Explain this page",
+            "context": "admin_superuser_spoof",
+        },
+    )
+
+    assert response.status_code == 200
+    assert b"Opened from Admin Superuser Spoof" not in response.data
+    assert b"edit before sending" not in response.data
