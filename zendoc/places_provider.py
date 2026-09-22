@@ -49,6 +49,40 @@ GOOGLE_TEXT_CATEGORY = {
     "emergency": "hospital",
 }
 
+GOOGLE_ALL_TYPES = tuple(
+    dict.fromkeys(
+        place_type
+        for category_types in GOOGLE_CATEGORY_TYPES.values()
+        for place_type in category_types
+    )
+)
+
+GOOGLE_TYPE_CATEGORY = {
+    "doctor": "doctor",
+    "medical_clinic": "clinic",
+    "medical_center": "clinic",
+    "hospital": "hospital",
+    "general_hospital": "hospital",
+    "pharmacy": "pharmacy",
+    "drugstore": "pharmacy",
+    "medical_lab": "diagnostic_centre",
+}
+
+NOMINATIM_TYPE_CATEGORY = {
+    "doctor": "doctor",
+    "doctors": "doctor",
+    "clinic": "clinic",
+    "medical_clinic": "clinic",
+    "hospital": "hospital",
+    "pharmacy": "pharmacy",
+    "chemist": "pharmacy",
+    "laboratory": "laboratory",
+    "medical_lab": "laboratory",
+    "blood_bank": "blood_bank",
+    "nursing_home": "nursing_home",
+    "health_centre": "health_centre",
+}
+
 
 class PlacesResult:
     def __init__(self, available, results=None, message=None, source="none"):
@@ -123,6 +157,7 @@ class NominatimPlacesProvider(PlacesProvider):
         category = str(normalized.get("category") or "doctor").strip().lower()
         specialty = str(normalized.get("specialty") or "").strip()
         human_category = {
+            "all": "healthcare",
             "diagnostic_centre": "diagnostic centre",
             "laboratory": "medical laboratory",
             "emergency": "hospital",
@@ -229,16 +264,39 @@ class FallbackPlacesProvider(PlacesProvider):
         self.fallback = fallback
 
     def search(self, query):
-        primary = self.primary.search(query)
+        try:
+            primary = self.primary.search(query)
+        except Exception:
+            primary = PlacesResult(
+                available=False,
+                results=[],
+                message="The primary healthcare map source is temporarily unavailable.",
+                source=getattr(self.primary, "source", "primary"),
+            )
         if primary.results:
             return primary
 
-        fallback = self.fallback.search(query)
+        try:
+            fallback = self.fallback.search(query)
+        except Exception:
+            fallback = PlacesResult(
+                available=False,
+                results=[],
+                message="The fallback healthcare map source is temporarily unavailable.",
+                source=getattr(self.fallback, "source", "fallback"),
+            )
         if fallback.results:
             return fallback
 
-        if primary.available and primary.message:
-            fallback.message = fallback.message or primary.message
+        messages = [
+            message for message in (primary.message, fallback.message)
+            if str(message or "").strip()
+        ]
+        fallback.message = " ".join(dict.fromkeys(messages)) or (
+            "External healthcare map sources are temporarily unavailable. "
+            "ZENDOC did not fabricate replacement listings."
+        )
+        fallback.available = bool(primary.available or fallback.available)
         return fallback
 
 
@@ -306,8 +364,13 @@ class GooglePlacesProvider(PlacesProvider):
     def _nearby_search_body(self, query, latitude, longitude):
         category = str(query.get("category") or "doctor").strip().lower()
         radius_km = _bounded_radius_km(query.get("radius_km"))
+        included_types = (
+            GOOGLE_ALL_TYPES
+            if category == "all"
+            else GOOGLE_CATEGORY_TYPES.get(category, GOOGLE_CATEGORY_TYPES["doctor"])
+        )
         body = {
-            "includedTypes": list(GOOGLE_CATEGORY_TYPES.get(category, GOOGLE_CATEGORY_TYPES["doctor"])),
+            "includedTypes": list(included_types),
             "maxResultCount": 20,
             "rankPreference": "DISTANCE",
             "languageCode": "en",
@@ -330,15 +393,16 @@ class GooglePlacesProvider(PlacesProvider):
         category = str(query.get("category") or "doctor").strip().lower()
         specialty = str(query.get("specialty") or "").strip()
         location = str(query.get("location") or "").strip()
-        human_category = category.replace("_", " ")
+        human_category = "healthcare" if category == "all" else category.replace("_", " ")
         terms = [term for term in (specialty, human_category, f"in {location}" if location else "") if term]
         body = {
             "textQuery": " ".join(terms),
-            "includedType": GOOGLE_TEXT_CATEGORY.get(category, "doctor"),
-            "strictTypeFiltering": True,
             "pageSize": 20,
             "languageCode": "en",
         }
+        if category != "all":
+            body["includedType"] = GOOGLE_TEXT_CATEGORY.get(category, "doctor")
+            body["strictTypeFiltering"] = True
         country_code = _normalized_country_code(query.get("country_code"))
         if country_code:
             body["regionCode"] = country_code
@@ -436,7 +500,20 @@ def _public_place(place, query):
         return None
 
     point = place.get("location") if isinstance(place.get("location"), dict) else {}
-    category = str(query.get("category") or "doctor").strip().lower()
+    requested_category = str(query.get("category") or "doctor").strip().lower()
+    category = requested_category
+    if requested_category == "all":
+        place_types = [place.get("primaryType"), *(place.get("types") or [])]
+        category = next(
+            (
+                GOOGLE_TYPE_CATEGORY.get(str(place_type or "").strip().lower())
+                for place_type in place_types
+                if GOOGLE_TYPE_CATEGORY.get(str(place_type or "").strip().lower())
+            ),
+            None,
+        )
+        if not category:
+            return None
     return {
         "id": f"google:{place['id']}",
         "place_id": place["id"],
@@ -472,7 +549,26 @@ def _public_nominatim_place(place, query):
     if not name:
         return None
 
-    category = str(query.get("category") or "doctor").strip().lower()
+    requested_category = str(query.get("category") or "doctor").strip().lower()
+    category = requested_category
+    if requested_category == "all":
+        category_candidates = [
+            place.get("type"),
+            place.get("category"),
+            address.get("healthcare"),
+            address.get("amenity"),
+            address.get("office"),
+        ]
+        category = next(
+            (
+                NOMINATIM_TYPE_CATEGORY.get(str(candidate or "").strip().lower())
+                for candidate in category_candidates
+                if NOMINATIM_TYPE_CATEGORY.get(str(candidate or "").strip().lower())
+            ),
+            None,
+        )
+        if not category:
+            return None
     osm_type = str(place.get("osm_type") or "").strip().lower()
     osm_id = place.get("osm_id")
     map_url = None

@@ -103,6 +103,34 @@
       {% if result and result.results %}<p>{{ result.results|length }} result{% if result.results|length != 1 %}s{% endif %}</p>{% endif %}
     </div>
 
+    {% if result and result.search_status in ['partial','degraded'] %}
+      <aside class="panel finder-search-health {% if result.search_status == 'degraded' %}finder-search-health--degraded{% endif %}" role="status" aria-live="polite">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">{{ 'Search temporarily limited' if result.search_status == 'degraded' else 'Partial results' }}</p>
+            <h3>{{ 'ZENDOC is still available' if result.search_status == 'degraded' else 'Some healthcare sources are temporarily unavailable' }}</h3>
+          </div>
+          <span class="status-badge warning">{{ result.search_status|title }}</span>
+        </div>
+        <p class="form-note">
+          {% if result.search_status == 'partial' %}
+            Available ZENDOC, public-directory and map results are still shown below. Missing upstream sources were not replaced with fabricated listings.
+          {% else %}
+            The Finder page stayed online instead of returning an internal-server error. Retry the same search or use a manual location while the upstream source recovers.
+          {% endif %}
+        </p>
+        {% if result.warnings %}
+          <ul class="finder-search-warnings">
+            {% for warning in result.warnings[:3] %}<li>{{ warning }}</li>{% endfor %}
+          </ul>
+        {% endif %}
+        <div class="form-actions">
+          <a class="secondary-action" href="{{ request.full_path if request.query_string else request.path }}">Retry search</a>
+          <a class="secondary-action" href="{{ url_for('main.finder') }}">Manual / advanced search</a>
+        </div>
+      </aside>
+    {% endif %}
+
     {% if result and result.results %}
       {% if result.search_origin %}
       <section class="panel finder-source-summary" aria-label="Current location search origin">

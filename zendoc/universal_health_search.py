@@ -367,36 +367,120 @@ def _osm_poi_results(location, category, latitude, longitude, radius_km):
     return list(result.get("results") or []), result.get("message")
 
 
+def degraded_search_result(
+    text=None,
+    category="all",
+    latitude=None,
+    longitude=None,
+    radius_km=10,
+    message="Healthcare search is temporarily limited. Please retry in a moment.",
+):
+    """Return a Finder-compatible failure shape instead of leaking a 500 page."""
+    query = normalize_universal_query(text, category, latitude, longitude, radius_km)
+    warning = str(message or "Healthcare search is temporarily limited.").strip()
+    return {
+        "universal": True,
+        "query": query,
+        "text": query["text"],
+        "results": [],
+        "grouped_results": OrderedDict(),
+        "category_counts": {},
+        "search_origin": (
+            {
+                "latitude": query["latitude"],
+                "longitude": query["longitude"],
+                "google_maps_url": (
+                    "https://www.google.com/maps/search/?api=1&query="
+                    + quote_plus(f"{query['latitude']:.6f},{query['longitude']:.6f}")
+                ),
+            }
+            if query["latitude"] is not None and query["longitude"] is not None
+            else None
+        ),
+        "source_tiers": {
+            "zendoc_verified": 0,
+            "official_public_directory_not_zendoc_verified": 0,
+            "external_unverified": 0,
+        },
+        "search_status": "degraded",
+        "warnings": [warning],
+        "message": warning,
+        "truth_notice": (
+            "ZENDOC did not fabricate replacement healthcare listings. "
+            "Retry the search or use a manual location while an upstream source recovers."
+        ),
+    }
+
+
 def universal_search(text=None, category="all", latitude=None, longitude=None, radius_km=10, places_provider=None):
     query = normalize_universal_query(text, category, latitude, longitude, radius_km)
     term, explicit_location, inferred = _text_parts(query["text"])
     selected_category = query["category"]
 
     internal_text = query["text"]
-    records = _registered_matches(internal_text, selected_category, query["latitude"], query["longitude"], query["radius_km"])
-    records += _public_matches(internal_text, selected_category, query["latitude"], query["longitude"], query["radius_km"])
+    records = _registered_matches(
+        internal_text,
+        selected_category,
+        query["latitude"],
+        query["longitude"],
+        query["radius_km"],
+    )
+    records += _public_matches(
+        internal_text,
+        selected_category,
+        query["latitude"],
+        query["longitude"],
+        query["radius_km"],
+    )
 
     provider = places_provider or configured_places_provider()
     external_results = []
     external_messages = []
+    warnings = []
     external_location = explicit_location or query["text"]
     external_hint = term if explicit_location else ""
-    external_categories = [selected_category] if selected_category != "all" else list(EXTERNAL_CATEGORIES)
-    if inferred and selected_category == "all" and explicit_location:
-        external_categories = [inferred]
+
+    # One broad provider call for an "all healthcare" search prevents a single
+    # user request from serially multiplying external timeouts across every
+    # care category. Google/OSM adapters classify broad results back into the
+    # supported healthcare groups; explicit category searches remain exact.
+    external_categories = [
+        selected_category if selected_category != "all" else (inferred or "all")
+    ]
+
     if external_location or query["latitude"] is not None:
         for external_category in external_categories:
-            place_result = provider.search({
-                "category": external_category,
-                "specialty": external_hint,
-                "location": external_location,
-                "latitude": query["latitude"],
-                "longitude": query["longitude"],
-                "radius_km": query["radius_km"],
-            })
-            external_results.extend(place_result.results)
-            if place_result.message:
-                external_messages.append(place_result.message)
+            try:
+                place_result = provider.search({
+                    "category": external_category,
+                    "specialty": external_hint,
+                    "location": external_location,
+                    "latitude": query["latitude"],
+                    "longitude": query["longitude"],
+                    "radius_km": query["radius_km"],
+                    "country_code": "in",
+                })
+            except Exception:
+                place_result = None
+                warnings.append(
+                    "An external healthcare map source is temporarily unavailable. "
+                    "Other available sources are still shown."
+                )
+
+            if place_result is not None:
+                safe_results = [
+                    dict(item)
+                    for item in (place_result.results or [])
+                    if isinstance(item, dict)
+                ]
+                external_results.extend(safe_results)
+                if place_result.message:
+                    external_messages.append(str(place_result.message))
+                if not place_result.available:
+                    warnings.append(
+                        str(place_result.message or "").strip()
+                        or "An external healthcare map source is temporarily unavailable."
+                    )
 
         # Only real configured searches add Overpass. Unit tests that inject a
         # places provider remain deterministic and make no network calls.
@@ -409,21 +493,31 @@ def universal_search(text=None, category="all", latitude=None, longitude=None, r
                 query["longitude"],
                 query["radius_km"],
             )
-            external_results.extend(osm_results)
+            external_results.extend(
+                dict(item) for item in osm_results if isinstance(item, dict)
+            )
             if osm_message:
-                external_messages.append(osm_message)
+                external_messages.append(str(osm_message))
+                if "unavailable" in str(osm_message).lower() or "could not" in str(osm_message).lower():
+                    warnings.append(str(osm_message))
 
-    if query["latitude"] is not None and query["longitude"] is not None:
-        external_results = nearby_records(
-            external_results,
-            query["latitude"],
-            query["longitude"],
-            query["radius_km"],
-        )
+    if query["latitude"] is not None and query["longitude"] is not None and external_results:
+        try:
+            external_results = nearby_records(
+                external_results,
+                query["latitude"],
+                query["longitude"],
+                query["radius_km"],
+            )
+        except Exception:
+            warnings.append(
+                "Distance filtering for one external source was unavailable. "
+                "The remaining listings are shown without inventing distance."
+            )
 
     records.extend(external_results)
     records = _with_map_handoffs(
-        records,
+        [item for item in records if isinstance(item, dict)],
         origin_latitude=query["latitude"],
         origin_longitude=query["longitude"],
     )
@@ -440,11 +534,29 @@ def universal_search(text=None, category="all", latitude=None, longitude=None, r
     source_tiers = {
         "zendoc_verified": sum(1 for item in flat if item.get("source") == "zendoc_provider_network"),
         "official_public_directory_not_zendoc_verified": sum(1 for item in flat if item.get("source") == "official_public_directory"),
-        "external_unverified": sum(1 for item in flat if item.get("source") not in {"zendoc_provider_network", "official_public_directory"}),
+        "external_unverified": sum(
+            1
+            for item in flat
+            if item.get("source") not in {"zendoc_provider_network", "official_public_directory"}
+        ),
     }
+
+    warnings = list(dict.fromkeys(
+        warning.strip()
+        for warning in warnings
+        if str(warning or "").strip()
+    ))
+    search_status = "partial" if warnings and flat else "degraded" if warnings else "complete"
+
     message = None
     if not flat:
-        message = external_messages[0] if external_messages else "No healthcare matches were found. Try a broader name, specialty, city, area or PIN code."
+        message = (
+            warnings[0]
+            if warnings
+            else external_messages[0]
+            if external_messages
+            else "No healthcare matches were found. Try a broader name, specialty, city, area or PIN code."
+        )
 
     return {
         "universal": True,
@@ -466,6 +578,12 @@ def universal_search(text=None, category="all", latitude=None, longitude=None, r
             else None
         ),
         "source_tiers": source_tiers,
+        "search_status": search_status,
+        "warnings": warnings,
         "message": message,
-        "truth_notice": "Results combine ZENDOC verified profiles, public directories and external map listings. Only explicitly connected ZENDOC providers are bookable inside ZENDOC.",
+        "truth_notice": (
+            "Results combine ZENDOC verified profiles, public directories and external map listings. "
+            "Only explicitly connected ZENDOC providers are bookable inside ZENDOC."
+        ),
     }
+
