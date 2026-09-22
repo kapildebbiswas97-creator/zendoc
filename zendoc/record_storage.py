@@ -100,13 +100,23 @@ class S3CompatibleRecordStorage:
             import boto3
         except ImportError as exc:
             raise RuntimeError("boto3 is required for S3-compatible record storage.") from exc
-        return boto3.client(
-            "s3",
-            endpoint_url=settings["endpoint_url"],
-            region_name=settings["region"],
-            aws_access_key_id=settings["access_key"],
-            aws_secret_access_key=settings["secret_key"],
-        ), settings
+        client_kwargs = {
+            "endpoint_url": settings["endpoint_url"],
+            "region_name": settings["region"],
+            "aws_access_key_id": settings["access_key"],
+            "aws_secret_access_key": settings["secret_key"],
+        }
+        if settings["endpoint_url"]:
+            # OCI Object Storage and many S3-compatible providers use a
+            # custom endpoint where explicit path-style + SigV4 avoids AWS
+            # virtual-host assumptions. AWS S3 keeps boto3's native defaults.
+            from botocore.config import Config
+
+            client_kwargs["config"] = Config(
+                signature_version="s3v4",
+                s3={"addressing_style": "path"},
+            )
+        return boto3.client("s3", **client_kwargs), settings
 
     def _key(self, storage_key: str) -> str:
         key = str(storage_key or "").strip()
