@@ -143,10 +143,10 @@ def create_backup(database_url: str, output_dir: Path, *, pg_dump: str = "pg_dum
         manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
         manifest_path.chmod(0o600)
         return {
+            **manifest,
             "archive": str(final_path),
             "checksum": str(checksum_path),
             "manifest": str(manifest_path),
-            **manifest,
         }
     finally:
         if temp_path.exists():
