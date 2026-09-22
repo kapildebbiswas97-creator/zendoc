@@ -46,3 +46,9 @@ def test_real_oci_env_is_gitignored_and_example_defaults_fail_closed():
     assert "ZENDOC_PUBLIC_RELEASE_REQUIRED=false" in example
     assert "ZENDOC_EMAIL_VERIFIED=false" in example
     assert "ZENDOC_STORAGE_VERIFIED=false" in example
+
+
+def test_oci_edge_does_not_enable_query_string_access_logging_by_default():
+    caddyfile = (ROOT / "deploy" / "oci" / "Caddyfile").read_text(encoding="utf-8")
+
+    assert "log {" not in caddyfile
