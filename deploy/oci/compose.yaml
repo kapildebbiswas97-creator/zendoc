@@ -1,0 +1,110 @@
+services:
+  db:
+    image: postgres:16-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-zendoc}
+      POSTGRES_USER: ${POSTGRES_USER:-zendoc}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/oci/.env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-zendoc} -d ${POSTGRES_DB:-zendoc}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  web:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["gunicorn", "-c", "gunicorn.conf.py", "run:app"]
+    env_file:
+      - .env
+    environment:
+      PORT: "8000"
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-zendoc}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-zendoc}"
+      ZENDOC_ENV: production
+      ZENDOC_DEPLOYMENT_PLATFORM: oci
+      ZENDOC_SERVICE_NAME: zendoc
+      ZENDOC_EXTERNAL_HOSTNAME: ${ZENDOC_DOMAIN}
+      ZENDOC_GIT_COMMIT: ${ZENDOC_GIT_COMMIT}
+      ZENDOC_PUBLIC_BASE_URL: "https://${ZENDOC_DOMAIN}"
+      ZENDOC_REQUIRE_DURABLE_DATABASE: "true"
+      ZENDOC_PERSISTENCE_VERIFIED: ${ZENDOC_PERSISTENCE_VERIFIED:-false}
+      ZENDOC_BACKUP_VERIFIED: ${ZENDOC_BACKUP_VERIFIED:-false}
+      ZENDOC_PUBLIC_RELEASE_REQUIRED: ${ZENDOC_PUBLIC_RELEASE_REQUIRED:-false}
+    expose:
+      - "8000"
+    volumes:
+      - uploads:/app/uploads
+    networks:
+      - backend
+      - edge
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/ready', timeout=8).read()",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 45s
+
+  caddy:
+    image: caddy:2.9-alpine
+    restart: unless-stopped
+    environment:
+      ZENDOC_DOMAIN: ${ZENDOC_DOMAIN:?set ZENDOC_DOMAIN in deploy/oci/.env}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - edge
+    depends_on:
+      web:
+        condition: service_healthy
+
+  backup:
+    build:
+      context: ../..
+      dockerfile: deploy/oci/backup.Dockerfile
+    profiles: ["ops"]
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-zendoc}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-zendoc}"
+      ZENDOC_POSTGRES_BACKUP_DIR: /backups
+    volumes:
+      - /var/backups/zendoc:/backups
+    networks:
+      - backend
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  uploads:
+  caddy_data:
+  caddy_config:
+
+networks:
+  backend:
+    internal: true
+  edge:
