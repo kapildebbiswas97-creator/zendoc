@@ -71,6 +71,26 @@ def copilot_context(endpoint: str | None, role: str | None) -> dict | None:
             ],
         }
 
+    if role == "government":
+        return {
+            "key": "government_workspace",
+            "title": "Public Health Workspace Copilot",
+            "eyebrow": "Institutional AI",
+            "description": "Navigate public-health and program workflows without exposing patient records or bypassing authorization.",
+            "prompts": [
+                "Explain what I can do in this government workspace.",
+                "Help me organize a public-health operations checklist.",
+                "Summarize what needs verification before publishing program information.",
+            ],
+            "agent_command": None,
+            "actions": [{"label": "Dashboard", "endpoint": "main.dashboard"}],
+        }
+
+    # Future roles must opt in explicitly instead of silently inheriting
+    # patient-facing AI behavior.
+    if role != "patient":
+        return None
+
     # Patient contexts.
     if _matches(endpoint, "main.finder", "universal_search.search_home", "main.provider_detail"):
         return {
@@ -231,6 +251,21 @@ def copilot_context(endpoint: str | None, role: str | None) -> dict | None:
             "actions": [{"label": "Payments", "endpoint": "payments.payments_page"}],
         }
 
+    if _matches(endpoint, "connected_care.diagnostics_page"):
+        return {
+            "key": "diagnostics",
+            "title": "Diagnostics Copilot",
+            "eyebrow": "Test navigation AI",
+            "description": "Help understand test workflows and availability states without interpreting results as a diagnosis.",
+            "prompts": [
+                "Explain what I should prepare for before a diagnostic test.",
+                "Help me understand the availability status shown here.",
+                "What questions should I ask the diagnostic provider?",
+            ],
+            "agent_command": "Find diagnostic options and show only truthful availability states",
+            "actions": [{"label": "Diagnostics", "endpoint": "connected_care.diagnostics_page"}],
+        }
+
     if _matches(endpoint, "connected_care", "care_journey"):
         return {
             "key": "connected_care",
@@ -259,21 +294,6 @@ def copilot_context(endpoint: str | None, role: str | None) -> dict | None:
             ],
             "agent_command": "Find possible government schemes, insurance benefits or financial support for healthcare",
             "actions": [{"label": "CareFin", "endpoint": "carefin.carefin_page"}],
-        }
-
-    if _matches(endpoint, "connected_care.diagnostics_page"):
-        return {
-            "key": "diagnostics",
-            "title": "Diagnostics Copilot",
-            "eyebrow": "Test navigation AI",
-            "description": "Help understand test workflows and availability states without interpreting results as a diagnosis.",
-            "prompts": [
-                "Explain what I should prepare for before a diagnostic test.",
-                "Help me understand the availability status shown here.",
-                "What questions should I ask the diagnostic provider?",
-            ],
-            "agent_command": "Find diagnostic options and show only truthful availability states",
-            "actions": [{"label": "Diagnostics", "endpoint": "connected_care.diagnostics_page"}],
         }
 
     if _matches(endpoint, "ecosystem.pharmacy_page", "pharmacy_order_ops"):
