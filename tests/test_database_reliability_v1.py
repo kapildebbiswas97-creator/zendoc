@@ -157,3 +157,32 @@ def test_deployment_identity_uses_render_metadata(monkeypatch):
     assert identity["external_hostname"] == "zendoc-test.onrender.com"
     assert identity["git_commit"] == "0123456789abcdef0123456789abcdef01234567"
     assert identity["git_commit_short"] == "0123456789ab"
+
+
+def test_deployment_identity_supports_explicit_oci_metadata(monkeypatch):
+    monkeypatch.delenv("RENDER", raising=False)
+    monkeypatch.delenv("RENDER_SERVICE_NAME", raising=False)
+    monkeypatch.delenv("RENDER_SERVICE_ID", raising=False)
+    monkeypatch.delenv("RENDER_EXTERNAL_HOSTNAME", raising=False)
+    monkeypatch.delenv("RENDER_GIT_COMMIT", raising=False)
+    monkeypatch.setenv("ZENDOC_DEPLOYMENT_PLATFORM", "oci")
+    monkeypatch.setenv("ZENDOC_SERVICE_NAME", "zendoc")
+    monkeypatch.setenv("ZENDOC_EXTERNAL_HOSTNAME", "app.example.test")
+    monkeypatch.setenv("ZENDOC_GIT_COMMIT", "abcdef0123456789abcdef0123456789abcdef01")
+
+    identity = deployment_identity()
+
+    assert identity["platform"] == "oci"
+    assert identity["service_name"] == "zendoc"
+    assert identity["external_hostname"] == "app.example.test"
+    assert identity["git_commit"] == "abcdef0123456789abcdef0123456789abcdef01"
+    assert identity["git_commit_short"] == "abcdef012345"
+
+
+def test_explicit_deployment_platform_takes_precedence_over_render_autodetection(monkeypatch):
+    monkeypatch.setenv("RENDER", "true")
+    monkeypatch.setenv("ZENDOC_DEPLOYMENT_PLATFORM", "oci")
+
+    identity = deployment_identity()
+
+    assert identity["platform"] == "oci"
