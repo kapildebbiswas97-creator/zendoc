@@ -71,6 +71,7 @@ from .preventive_care import ensure_preventive_care_schema
 from .preventive_care_routes import bp as preventive_care_bp
 from .public_ingestion_routes import bp as public_ingestion_bp
 from .provider_onboarding_routes import bp as provider_onboarding_bp
+from .provider_service import PROVIDER_ROLES, get_provider_profile_for_user
 from .provider_invitation import ensure_provider_invitation_schema
 from .public_launch_routes import bp as public_launch_bp
 from .release_health_routes import bp as release_health_bp
@@ -138,6 +139,19 @@ def create_app(test_config=None):
                 role = user["role"]
             except (KeyError, TypeError):
                 role = getattr(user, "role", None)
+
+        # Strict public-release provider quarantine applies to navigation too.
+        # Pending/rejected/suspended providers must not receive Copilot links
+        # into operational surfaces before owner verification.
+        if (
+            user is not None
+            and role in PROVIDER_ROLES
+            and app.config.get("PUBLIC_RELEASE_REQUIRED")
+        ):
+            profile = get_provider_profile_for_user(user["id"])
+            if not profile or str(profile["verification_status"]) != "verified":
+                return {"zendoc_copilot": None}
+
         return {
             "zendoc_copilot": copilot_context(request.endpoint, role),
         }
