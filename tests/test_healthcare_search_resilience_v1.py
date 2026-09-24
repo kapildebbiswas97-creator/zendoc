@@ -749,3 +749,71 @@ def test_nominatim_named_provider_search_uses_direct_text(monkeypatch):
     assert result.available is True
     assert requested
     assert "q=Apollo+Hospital" in requested[0]
+
+
+def test_near_me_without_coordinates_does_not_send_me_as_external_location(tmp_path):
+    app = make_app(tmp_path)
+
+    class CapturingProvider(PlacesProvider):
+        source = "capturing-near-me"
+
+        def __init__(self):
+            self.queries = []
+
+        def search(self, query):
+            self.queries.append(dict(query))
+            return PlacesResult(
+                available=True,
+                results=[],
+                message="No matches.",
+                source=self.source,
+            )
+
+    provider = CapturingProvider()
+    with app.app_context():
+        result = universal_search(
+            "hospital near me",
+            category="all",
+            places_provider=provider,
+        )
+
+    assert provider.queries == []
+    assert result["search_status"] in {"partial", "degraded"}
+    assert any("current location" in warning.lower() for warning in result["warnings"])
+
+
+def test_near_me_with_coordinates_uses_coordinates_not_literal_me(tmp_path):
+    app = make_app(tmp_path)
+
+    class CapturingProvider(PlacesProvider):
+        source = "capturing-near-me-gps"
+
+        def __init__(self):
+            self.queries = []
+
+        def search(self, query):
+            self.queries.append(dict(query))
+            return PlacesResult(
+                available=True,
+                results=[],
+                message="No nearby matches.",
+                source=self.source,
+            )
+
+    provider = CapturingProvider()
+    with app.app_context():
+        universal_search(
+            "hospital near me",
+            category="all",
+            latitude=22.975,
+            longitude=88.434,
+            places_provider=provider,
+        )
+
+    assert len(provider.queries) == 1
+    query = provider.queries[0]
+    assert query["location"] == ""
+    assert query["search_text"] == ""
+    assert query["latitude"] == 22.975
+    assert query["longitude"] == 88.434
+    assert query["category"] == "hospital"
