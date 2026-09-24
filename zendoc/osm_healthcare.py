@@ -229,11 +229,16 @@ def _public_element(element, requested_category):
 class OverpassHealthcareProvider:
     source = "openstreetmap_overpass"
 
-    def __init__(self, timeout_seconds=12):
+    def __init__(self, timeout_seconds=None):
+        configured_timeout = (
+            timeout_seconds
+            if timeout_seconds is not None
+            else os.environ.get("ZENDOC_OVERPASS_TIMEOUT_SECONDS", "7")
+        )
         try:
-            timeout = int(timeout_seconds or 12)
+            timeout = int(configured_timeout or 7)
         except (TypeError, ValueError):
-            timeout = 12
+            timeout = 7
         self.timeout_seconds = max(3, min(timeout, 25))
         self.nominatim_url = os.environ.get("ZENDOC_NOMINATIM_URL", DEFAULT_NOMINATIM_URL).strip() or DEFAULT_NOMINATIM_URL
         self.overpass_url = os.environ.get("ZENDOC_OVERPASS_URL", DEFAULT_OVERPASS_URL).strip() or DEFAULT_OVERPASS_URL
