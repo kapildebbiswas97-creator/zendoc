@@ -130,6 +130,42 @@ The M8 executor has no generic shell, SQL, Python, filesystem, database, browser
 
 A future browser/operator connector must therefore be a separately authenticated capability with site-specific permissions and deterministic action gates. Merely having an LLM or browser window does not grant ZENDOC permission to log in, book, purchase or pay on a third-party service.
 
+## Jev / System One Decision Layer
+
+ZENDOC supports an optional Jev-compatible System One decision layer between
+the deterministic plan and specialist execution. The role of Jev is narrow and
+machine-oriented: make typed control decisions such as PROCEED, ASK_HUMAN,
+ESCALATE or STOP for work that has already passed ZENDOC's deterministic
+authorization and safety policy.
+
+The decision layer is intentionally subordinate to the existing control plane:
+
+- deterministic emergency/safety checks always run first;
+- Jev never receives credentials or unrestricted tool access;
+- Jev cannot make a blocked action executable;
+- explicit booking/order/record-sharing/payment/permission gates remain intact;
+- clinical authority remains with qualified clinicians and deterministic policy;
+- low-confidence Jev output narrows automation instead of broadening it;
+- provider failure falls back to the existing deterministic bounded policy;
+- metadata-only mode is the default, so raw user text is not sent to an external
+  decision provider;
+- a private verified Jev-compatible endpoint can be configured separately when
+  the operator has established the required privacy/compliance boundary.
+
+Each Fleet Agent keeps its own mission, inputs, outputs, deterministic checks,
+human gates and forbidden actions. The Jev question is built from that
+specialist profile rather than giving one generic model universal authority.
+
+This yields the runtime pattern:
+
+deterministic Safety -> deterministic planner -> specialist profile ->
+optional Jev typed control decision -> permissioned tools -> deterministic
+executor -> verification -> event/audit -> longitudinal memory.
+
+Jev complements rather than replaces the LLM/SLM layer. Jev is used for
+bounded routing/control judgments; LLM/SLM models remain appropriate for
+language generation, explanation and open-ended reasoning.
+
 ## Model Router
 
 Emergency safety and deterministic-only tasks run before model selection. For allowed low-risk tasks, configured local inference is preferred before explicitly approved cloud inference; deterministic fallback is always available. `HEALTH_SENSITIVE` and `HIGH_RISK` content is never sent to cloud, while `PERSONAL` cloud routing requires consent. Provider configuration never grants permissions and model output never exposes or invokes agent tools directly. Strict structured output is validated before any later planning, permission, approval or execution stage. Routing logs contain metadata only, not prompts, responses, credentials or hidden reasoning.
