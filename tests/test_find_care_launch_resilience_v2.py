@@ -1,5 +1,5 @@
 from zendoc.db import get_db
-from zendoc.places_provider import PlacesProvider, PlacesResult, UnconfiguredPlacesProvider
+from zendoc.places_provider import GooglePlacesProvider, NominatimPlacesProvider, PlacesProvider, PlacesResult, UnconfiguredPlacesProvider
 from zendoc.universal_health_search import universal_search
 import zendoc.universal_health_search as health_search
 from tests.test_milestone1 import login_web, make_app, register_web
@@ -174,3 +174,80 @@ def test_production_nominatim_path_falls_back_once_when_overpass_has_no_results(
 
     assert provider.calls == 1
     assert any(item["name"] == "Nominatim Fallback Hospital" for item in result["results"])
+
+
+class CapturingNamedProvider(PlacesProvider):
+    source = "capturing_named"
+
+    def __init__(self):
+        self.queries = []
+
+    def search(self, query):
+        self.queries.append(dict(query))
+        return PlacesResult(
+            available=True,
+            results=[{
+                "id": "named:hospital:1",
+                "name": "Apollo Hospital",
+                "category": "hospital",
+                "source": self.source,
+                "verification_status": "external_unverified",
+                "bookable_in_zendoc": False,
+            }],
+            source=self.source,
+        )
+
+
+def test_named_provider_query_is_sent_as_direct_external_search_text(tmp_path):
+    app = make_app(tmp_path)
+    provider = CapturingNamedProvider()
+
+    with app.app_context():
+        result = universal_search(
+            "Apollo Hospital",
+            places_provider=provider,
+        )
+
+    assert provider.queries
+    assert provider.queries[0]["search_text"] == "Apollo Hospital"
+    assert provider.queries[0]["location"] == ""
+    assert provider.queries[0]["category"] == "hospital"
+    assert result["results"][0]["name"] == "Apollo Hospital"
+
+
+def test_google_named_search_uses_direct_text_query():
+    provider = GooglePlacesProvider("test-key", timeout_seconds=3)
+    body = provider._text_search_body({
+        "category": "hospital",
+        "search_text": "Apollo Hospital",
+        "location": "",
+        "specialty": "",
+    })
+
+    assert body["textQuery"] == "Apollo Hospital"
+    assert body["includedType"] == "hospital"
+
+
+def test_nominatim_named_search_uses_direct_text_query(monkeypatch):
+    provider = NominatimPlacesProvider(timeout_seconds=1)
+    requested = []
+
+    def fake_get_json(url):
+        requested.append(url)
+        return []
+
+    monkeypatch.setattr(provider, "_get_json", fake_get_json)
+
+    result = provider.search({
+        "category": "hospital",
+        "search_text": "Apollo Hospital",
+        "location": "",
+        "latitude": None,
+        "longitude": None,
+        "radius_km": 10,
+    })
+
+    assert result.available is True
+    assert requested
+    assert "q=Apollo+Hospital" in requested[0]
+    assert "hospital+in+Apollo" not in requested[0]
