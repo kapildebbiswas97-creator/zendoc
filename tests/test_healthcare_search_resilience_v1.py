@@ -9,7 +9,7 @@ from zendoc.universal_health_search import universal_search
 import zendoc.universal_health_search as universal_health_search
 import zendoc.routes as main_routes
 import zendoc.universal_search_routes as universal_search_routes
-from tests.test_milestone1 import login_web, make_app, register_web
+from tests.test_milestone1 import api_token, login_web, make_app, register_web
 
 
 class ExplodingProvider(PlacesProvider):
@@ -532,3 +532,99 @@ def test_named_location_query_preserves_provider_name_for_internal_search(tmp_pa
         )
 
     assert seen == [("Apollo", "hospital")]
+
+
+def test_healthcare_search_api_returns_degraded_json_instead_of_500(tmp_path, monkeypatch):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    token = api_token(client, "api-search-resilience@example.com")
+
+    monkeypatch.setattr(
+        HealthcareFinder,
+        "search",
+        lambda _self, _query: (_ for _ in ()).throw(RuntimeError("finder upstream failed")),
+    )
+
+    response = client.get(
+        "/api/v1/healthcare/search?category=hospital&location=Kalyani",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["search_status"] == "degraded"
+    assert payload["results"] == []
+    assert payload["warnings"]
+    assert "temporarily limited" in payload["message"].lower()
+
+
+def test_healthcare_search_api_results_survive_analytics_failure(tmp_path, monkeypatch):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    token = api_token(client, "api-search-analytics@example.com")
+
+    fake = {
+        "query": {"category": "hospital", "location": "Kalyani"},
+        "registered_providers": [],
+        "official_public_directory": [],
+        "claimed_public_directory_links": [],
+        "external_places": {"available": True, "results": [], "message": None, "source": "test"},
+        "results": [
+            {
+                "id": "safe:1",
+                "name": "API Safe Hospital",
+                "category": "hospital",
+                "source": "external_test",
+                "verification_status": "external_unverified",
+                "bookable_in_zendoc": False,
+            }
+        ],
+        "source_tiers": {
+            "zendoc_verified": 0,
+            "official_public_directory_not_zendoc_verified": 0,
+            "approved_public_listings_merged_into_verified": 0,
+            "external_unverified": 1,
+        },
+        "search_status": "complete",
+        "warnings": [],
+        "message": None,
+    }
+    monkeypatch.setattr(HealthcareFinder, "search", lambda _self, _query: fake)
+    monkeypatch.setattr(
+        main_routes,
+        "record_finder_search",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("analytics unavailable")),
+    )
+
+    response = client.get(
+        "/api/v1/healthcare/search?category=hospital&location=Kalyani",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["results"][0]["name"] == "API Safe Hospital"
+    assert payload["search_status"] == "complete"
+
+
+def test_provider_discovery_api_returns_degraded_json_instead_of_500(tmp_path, monkeypatch):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    token = api_token(client, "api-provider-resilience@example.com")
+
+    monkeypatch.setattr(
+        HealthcareFinder,
+        "search",
+        lambda _self, _query: (_ for _ in ()).throw(RuntimeError("provider discovery failed")),
+    )
+
+    response = client.get(
+        "/api/v1/providers?category=doctor&location=Kalyani",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["search_status"] == "degraded"
+    assert payload["results"] == []
+    assert "temporarily limited" in payload["message"].lower()
