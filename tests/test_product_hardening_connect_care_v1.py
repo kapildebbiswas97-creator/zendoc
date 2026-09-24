@@ -2,6 +2,7 @@ from pathlib import Path
 
 import zendoc.call_signaling as call_signaling
 import zendoc.connect as connect_module
+import zendoc.milestone7_routes as milestone7_routes
 from zendoc.db import get_db
 from tests.test_milestone1 import api_token, csrf, login_web, make_app, register_web
 
@@ -218,3 +219,37 @@ def test_care_journey_links_real_care_surfaces():
         assert endpoint in body
     assert "Government OPD" in body
     assert "patient-reported" in body
+
+
+def test_live_message_fragment_survives_unread_counter_failure(tmp_path, monkeypatch):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    register_web(client, "patient", "live-fragment-a@example.com", "Live A")
+    register_web(client, "patient", "live-fragment-b@example.com", "Live B")
+    login_web(client, "patient", "live-fragment-a@example.com")
+    sender = _user(app, "live-fragment-a@example.com")
+    recipient = _user(app, "live-fragment-b@example.com")
+
+    with app.app_context():
+        conversation = connect_module.start_conversation(
+            sender,
+            {"target_user_id": recipient["id"], "context_type": "direct"},
+        )
+        connect_module.send_message(
+            sender,
+            conversation["id"],
+            {"body": "Live fragment resilience", "message_type": "text"},
+        )
+
+    monkeypatch.setattr(
+        milestone7_routes,
+        "unread_count",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("counter unavailable")),
+    )
+
+    response = client.get(f"/messages/{conversation['id']}/live")
+
+    assert response.status_code == 200
+    assert b"Live fragment resilience" in response.data
+    assert response.headers["Cache-Control"] == "no-store"
+    assert response.headers["X-ZENDOC-Unread-Count"] == "0"
