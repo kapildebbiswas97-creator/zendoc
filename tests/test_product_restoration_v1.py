@@ -494,3 +494,15 @@ def test_global_search_surfaces_restored_product_modules(tmp_path):
             for item in category["items"]
         ]
         assert "/messages" in message_urls
+
+
+def test_legacy_mental_lounge_url_redirects_to_restored_wellness_surface(tmp_path):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    register_web(client, "patient", "mental-lounge-legacy@example.com", "Mental Lounge Legacy")
+    login_web(client, "patient", "mental-lounge-legacy@example.com")
+
+    response = client.get("/mental-lounge", follow_redirects=False)
+
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/mental-wellness")

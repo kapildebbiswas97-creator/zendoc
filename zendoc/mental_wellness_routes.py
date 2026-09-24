@@ -17,6 +17,13 @@ from .security import login_required, role_required
 bp = Blueprint("mental_wellness", __name__)
 
 
+@bp.get("/mental-lounge")
+@login_required
+def mental_lounge_legacy_redirect():
+    """Keep pre-restoration Mental Lounge links from becoming 404s."""
+    return redirect(url_for("mental_wellness.mental_wellness_page"))
+
+
 @bp.route("/mental-wellness", methods=("GET", "POST"))
 @login_required
 @role_required("patient")
