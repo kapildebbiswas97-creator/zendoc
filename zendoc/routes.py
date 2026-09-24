@@ -1300,6 +1300,17 @@ def notifications():
     return render_template("notifications.html", notifications=rows)
 
 
+@bp.get("/find-care")
+@bp.get("/nearby-care")
+@login_required
+def finder_alias():
+    """Keep older/shared Find Care links from turning into a 404."""
+    args = request.args.to_dict(flat=True)
+    if str(args.get("q") or "").strip():
+        return redirect(url_for("universal_search.search_home", **args))
+    return redirect(url_for("main.finder", **args))
+
+
 @bp.route("/finder", methods=("GET", "POST"))
 @login_required
 def finder():
