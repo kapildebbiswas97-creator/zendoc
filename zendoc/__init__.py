@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-from flask import Flask, g, request
+from flask import Flask, g, jsonify, render_template, request
 
 from .config import load_config, validate_startup_config
 from .copilot import copilot_context
@@ -202,6 +202,21 @@ def create_app(test_config=None):
     app.register_blueprint(showcase_bp)
     app.register_blueprint(specialist_agents_bp)
     app.register_blueprint(system_intelligence_bp)
+
+    @app.errorhandler(404)
+    def zendoc_not_found(_error):
+        if request.path.startswith("/api/"):
+            return jsonify({
+                "error": {
+                    "code": 404,
+                    "message": "The requested ZENDOC API route was not found.",
+                }
+            }), 404
+        return render_template(
+            "404.html",
+            missing_path=request.path,
+        ), 404
+
     app.after_request(finish_operational_careloop_request)
     app.after_request(finish_careloop_request)
     app.after_request(finish_request_observation)
