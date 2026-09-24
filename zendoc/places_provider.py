@@ -468,11 +468,11 @@ def places_configuration_status():
 
 def configured_places_provider():
     _configured_provider, provider, _production_fallback_active = _effective_places_provider()
-    timeout = os.environ.get("ZENDOC_PLACES_TIMEOUT_SECONDS", "8")
+    timeout = os.environ.get("ZENDOC_PLACES_TIMEOUT_SECONDS", "5")
     try:
         timeout = int(timeout)
     except (TypeError, ValueError):
-        timeout = 8
+        timeout = 5
 
     if provider == "google":
         fallback = NominatimPlacesProvider(timeout_seconds=timeout)
