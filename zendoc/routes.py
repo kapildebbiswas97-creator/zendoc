@@ -363,6 +363,35 @@ def normalize_role(role):
     return role
 
 
+def degraded_finder_result(query, message=None):
+    warning = str(
+        message
+        or "Healthcare search is temporarily limited. ZENDOC stayed available instead of returning an internal-server error."
+    ).strip()
+    return {
+        "query": dict(query or {}),
+        "registered_providers": [],
+        "official_public_directory": [],
+        "claimed_public_directory_links": [],
+        "external_places": {
+            "available": False,
+            "results": [],
+            "message": "External healthcare discovery is temporarily unavailable.",
+            "source": "degraded",
+        },
+        "results": [],
+        "source_tiers": {
+            "zendoc_verified": 0,
+            "official_public_directory_not_zendoc_verified": 0,
+            "approved_public_listings_merged_into_verified": 0,
+            "external_unverified": 0,
+        },
+        "search_status": "degraded",
+        "warnings": [warning],
+        "message": warning,
+    }
+
+
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_UPLOADS
 
@@ -1320,34 +1349,10 @@ def finder():
             current_app.logger.exception(
                 "Healthcare Finder failed; returning a degraded search result instead of HTTP 500."
             )
-            result = {
-                "query": query,
-                "registered_providers": [],
-                "official_public_directory": [],
-                "claimed_public_directory_links": [],
-                "external_places": {
-                    "available": False,
-                    "results": [],
-                    "message": "External healthcare discovery is temporarily unavailable.",
-                    "source": "degraded",
-                },
-                "results": [],
-                "source_tiers": {
-                    "zendoc_verified": 0,
-                    "official_public_directory_not_zendoc_verified": 0,
-                    "approved_public_listings_merged_into_verified": 0,
-                    "external_unverified": 0,
-                },
-                "search_status": "degraded",
-                "warnings": [
-                    "Healthcare search is temporarily limited. "
-                    "ZENDOC stayed available instead of returning an internal-server error."
-                ],
-                "message": (
-                    "Healthcare search is temporarily limited. "
-                    "Retry in a moment or enter a different city, area, or PIN code."
-                ),
-            }
+            result = degraded_finder_result(
+                query,
+                "Healthcare search is temporarily limited. Retry in a moment or enter a different city, area, or PIN code.",
+            )
 
         # Search analytics and audit evidence are best-effort. A telemetry
         # write problem must never turn valid healthcare results into a 500.
@@ -3118,15 +3123,36 @@ def api_healthcare_search():
         request.args.get("longitude"),
         request.args.get("radius_km", 10),
     )
-    result = HealthcareFinder().search(query)
-    record_finder_search(
-        user,
-        category=query["category"],
-        location=query["location"],
-        result_count=len(result.get("results") or []),
-        source_tiers=result.get("source_tiers") or {},
-    )
-    get_db().commit()
+    try:
+        result = HealthcareFinder().search(query)
+    except Exception:
+        current_app.logger.exception(
+            "Healthcare search API failed; returning degraded search JSON instead of HTTP 500."
+        )
+        result = degraded_finder_result(
+            query,
+            "Healthcare search is temporarily limited. Retry shortly or use a different city, area, or PIN code.",
+        )
+
+    # Search telemetry is useful but non-critical. API/mobile clients should
+    # still receive the healthcare result if analytics persistence has a fault.
+    try:
+        record_finder_search(
+            user,
+            category=query["category"],
+            location=query["location"],
+            result_count=len(result.get("results") or []),
+            source_tiers=result.get("source_tiers") or {},
+        )
+        get_db().commit()
+    except Exception:
+        current_app.logger.exception(
+            "Healthcare search API analytics failed after results were produced."
+        )
+        try:
+            get_db().rollback()
+        except Exception:
+            current_app.logger.exception("Healthcare search API analytics rollback failed.")
     return jsonify(result)
 
 
@@ -3135,7 +3161,25 @@ def api_providers():
     user, error = require_api_user()
     if error:
         return error
-    return jsonify(HealthcareFinder().search({"category": request.args.get("category", "doctor"), "specialty": request.args.get("specialty"), "location": request.args.get("location")}))
+    query = normalize_query(
+        request.args.get("category", "doctor"),
+        request.args.get("specialty"),
+        request.args.get("location"),
+        request.args.get("latitude"),
+        request.args.get("longitude"),
+        request.args.get("radius_km", 10),
+    )
+    try:
+        result = HealthcareFinder().search(query)
+    except Exception:
+        current_app.logger.exception(
+            "Provider discovery API failed; returning degraded search JSON instead of HTTP 500."
+        )
+        result = degraded_finder_result(
+            query,
+            "Provider discovery is temporarily limited. Retry shortly or use a different location.",
+        )
+    return jsonify(result)
 
 
 @bp.get("/api/v1/providers/<int:profile_id>/slots")
