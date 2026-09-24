@@ -4,6 +4,7 @@ from __future__ import annotations
 from flask import Blueprint, current_app, flash, g, jsonify, redirect, render_template, request, url_for
 
 from .agent_autonomy import bounded_autonomy_manifest
+from .agentic_decision_layer import decision_layer_manifest
 from .agent_fleet import list_fleet_agents
 from .agent_handoffs import handoff_for_intent, handoff_manifest
 from .appointment_continuity import complete_follow_up, sync_provider_appointment_status
@@ -343,6 +344,7 @@ def api_agent_autonomy():
         return error
     return jsonify({
         "autonomy": bounded_autonomy_manifest(),
+        "decision_layer": decision_layer_manifest(),
         "handoffs": handoff_manifest(),
         "fleet": list_fleet_agents(),
         "actor_role": str(user["role"] or ""),
