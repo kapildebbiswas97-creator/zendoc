@@ -334,6 +334,79 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
         risk_class=READ_ONLY,
     ),
 
+    "get_fitness_snapshot": ToolDefinition(
+        name="get_fitness_snapshot",
+        description="Read the authenticated patient's fitness profile, current plan and recent progress for general-wellness automation.",
+        allowed_agents=["FitnessAgent"],
+        allowed_roles=["patient"],
+        risk_class=READ_ONLY,
+    ),
+    "generate_fitness_plan": ToolDefinition(
+        name="generate_fitness_plan",
+        description=(
+            "Generate and persist a general-wellness workout plan from the authenticated patient's existing fitness profile. "
+            "This does not diagnose, prescribe exercise as treatment, or override declared clinical restrictions."
+        ),
+        allowed_agents=["FitnessAgent"],
+        allowed_roles=["patient"],
+        risk_class=LOW_RISK,
+        idempotent=False,
+    ),
+    "get_family_care_snapshot": ToolDefinition(
+        name="get_family_care_snapshot",
+        description=(
+            "Read only family members, scoped care tasks and access-grant metadata visible to the authenticated actor. "
+            "It never expands family consent or exposes another adult's care without an active grant."
+        ),
+        allowed_agents=["FamilyCareAgent"],
+        allowed_roles=["patient", "admin"],
+        risk_class=READ_ONLY,
+    ),
+    "get_home_health_options": ToolDefinition(
+        name="get_home_health_options",
+        description=(
+            "List ZENDOC home-health service categories and the actor's existing request truth states. "
+            "It does not claim provider assignment, availability, price or fulfilment."
+        ),
+        allowed_agents=["HomeHealthAgent"],
+        allowed_roles=["patient", "doctor", "admin"],
+        risk_class=READ_ONLY,
+    ),
+    "confirm_home_health_request": ToolDefinition(
+        name="confirm_home_health_request",
+        description=(
+            "Create a home-health intake request after fresh explicit user confirmation. "
+            "The request remains unconfirmed until a verified provider accepts it."
+        ),
+        allowed_agents=["HomeHealthAgent"],
+        allowed_roles=["patient", "doctor", "admin"],
+        risk_class=CONSENT_REQUIRED,
+        requires_consent=True,
+        idempotent=False,
+    ),
+    "get_transport_options": ToolDefinition(
+        name="get_transport_options",
+        description=(
+            "List medical-transport categories and the actor's existing request truth states. "
+            "It never claims a vehicle, ETA, provider acceptance or dispatch."
+        ),
+        allowed_agents=["TransportAgent"],
+        allowed_roles=["patient", "doctor", "hospital", "admin"],
+        risk_class=READ_ONLY,
+    ),
+    "confirm_transport_request": ToolDefinition(
+        name="confirm_transport_request",
+        description=(
+            "Record a non-autonomous medical-transport intake request after fresh explicit user confirmation. "
+            "This does not dispatch an ambulance or confirm a vehicle/provider."
+        ),
+        allowed_agents=["TransportAgent"],
+        allowed_roles=["patient", "doctor", "hospital", "admin"],
+        risk_class=CONSENT_REQUIRED,
+        requires_consent=True,
+        idempotent=False,
+    ),
+
     "autonomous_prescribe": ToolDefinition(
         name="autonomous_prescribe",
         description="[BLOCKED] Autonomous prescribing is CRITICAL_BLOCKED. Requires legally valid doctor workflow.",
