@@ -89,6 +89,9 @@ services:
     environment:
       DATABASE_URL: "postgresql://${POSTGRES_USER:-zendoc}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-zendoc}"
       ZENDOC_POSTGRES_BACKUP_DIR: /backups
+      ZENDOC_POSTGRES_RESTORE_DATABASE_URL: "postgresql://${POSTGRES_USER:-zendoc}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-zendoc}"
+      ZENDOC_POSTGRES_RESTORE_EXPECT_DATABASE: "${POSTGRES_DB:-zendoc}"
+      ZENDOC_POSTGRES_RESTORE_ALLOW_RESET: "${ZENDOC_POSTGRES_RESTORE_ALLOW_RESET:-false}"
     volumes:
       - /var/backups/zendoc:/backups
     networks:
