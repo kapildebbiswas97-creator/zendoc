@@ -5,11 +5,16 @@ Classifies search queries across doctors, symptoms, diagnostic reports, pharmaci
 ambulance, fitness, family records, and direct platform features.
 """
 
+import logging
+
 from flask import has_app_context
 
 from .exercise_library import list_exercises
 from .family_care import list_family_members
 from .universal_health_search import universal_search as search_healthcare
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 PLATFORM_TOOL_CATALOG = (
@@ -155,7 +160,14 @@ def _healthcare_search_items(clean_q):
     source/verification truth and public/external listings are never promoted to
     connected ZENDOC booking.
     """
-    result = search_healthcare(clean_q)
+    try:
+        result = search_healthcare(clean_q)
+    except Exception:
+        LOGGER.exception(
+            "Global search healthcare bridge failed; continuing with non-healthcare search categories."
+        )
+        return []
+
     items = []
     for item in result.get("results", [])[:8]:
         location = item.get("city") or item.get("district") or item.get("state") or item.get("address") or ""
