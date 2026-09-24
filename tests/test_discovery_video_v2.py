@@ -7,7 +7,7 @@ from zendoc.video_provider import NullVideoProvider, _youtube_search_url
 
 def test_natural_pharmacy_location_shorthand_is_understood():
     term, location, category = _text_parts("pharmacy Kalyani")
-    assert term == "pharmacy Kalyani"
+    assert term == ""
     assert location == "Kalyani"
     assert category == "pharmacy"
 

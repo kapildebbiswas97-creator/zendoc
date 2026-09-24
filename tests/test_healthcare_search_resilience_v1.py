@@ -6,9 +6,10 @@ from zendoc.places_provider import (
 )
 from zendoc.healthcare_finder import HealthcareFinder
 from zendoc.universal_health_search import universal_search
+import zendoc.universal_health_search as universal_health_search
 import zendoc.routes as main_routes
 import zendoc.universal_search_routes as universal_search_routes
-from tests.test_milestone1 import login_web, make_app, register_web
+from tests.test_milestone1 import api_token, login_web, make_app, register_web
 
 
 class ExplodingProvider(PlacesProvider):
@@ -337,3 +338,414 @@ def test_advanced_finder_external_exception_becomes_degraded_result(tmp_path):
     assert result["search_status"] in {"partial", "degraded"}
     assert result["warnings"]
     assert "temporarily unavailable" in " ".join(result["warnings"]).lower()
+
+
+class EmptyAvailableProvider(PlacesProvider):
+    source = "empty-available"
+
+    def search(self, query):
+        return PlacesResult(
+            available=True,
+            results=[],
+            message="No primary matches.",
+            source=self.source,
+        )
+
+
+class UnavailableProvider(PlacesProvider):
+    source = "unavailable"
+
+    def search(self, query):
+        return PlacesResult(
+            available=False,
+            results=[],
+            message="Primary source temporarily unavailable.",
+            source=self.source,
+        )
+
+
+def test_real_search_does_not_chain_overpass_after_primary_results(tmp_path, monkeypatch):
+    app = make_app(tmp_path)
+    monkeypatch.setattr(
+        universal_health_search,
+        "configured_places_provider",
+        lambda: WorkingHospitalProvider(),
+    )
+
+    called = {"osm": 0}
+
+    def fail_if_osm(*args, **kwargs):
+        called["osm"] += 1
+        raise AssertionError("Overpass must not run after usable primary results")
+
+    monkeypatch.setattr(universal_health_search, "_osm_poi_results", fail_if_osm)
+
+    with app.app_context():
+        result = universal_search(
+            "hospital in Kalyani",
+            category="all",
+            radius_km=10,
+        )
+
+    assert called["osm"] == 0
+    assert any(item["name"] == "Resilient Test Hospital" for item in result["results"])
+
+
+def test_real_search_skips_second_remote_source_when_primary_is_unavailable(tmp_path, monkeypatch):
+    app = make_app(tmp_path)
+    monkeypatch.setattr(
+        universal_health_search,
+        "configured_places_provider",
+        lambda: UnavailableProvider(),
+    )
+
+    called = {"osm": 0}
+
+    def fail_if_osm(*args, **kwargs):
+        called["osm"] += 1
+        raise AssertionError("A primary outage must not chain another remote timeout")
+
+    monkeypatch.setattr(universal_health_search, "_osm_poi_results", fail_if_osm)
+
+    with app.app_context():
+        result = universal_search(
+            "hospital in Kalyani",
+            category="all",
+            radius_km=10,
+        )
+
+    assert called["osm"] == 0
+    assert result["search_status"] in {"partial", "degraded"}
+    assert any("temporarily unavailable" in warning.lower() for warning in result["warnings"])
+
+
+def test_real_search_uses_overpass_only_as_empty_success_fallback(tmp_path, monkeypatch):
+    app = make_app(tmp_path)
+    monkeypatch.setattr(
+        universal_health_search,
+        "configured_places_provider",
+        lambda: EmptyAvailableProvider(),
+    )
+
+    calls = []
+
+    def fake_osm(location, category, latitude, longitude, radius_km):
+        calls.append(
+            {
+                "location": location,
+                "category": category,
+                "latitude": latitude,
+                "longitude": longitude,
+                "radius_km": radius_km,
+            }
+        )
+        return (
+            [
+                {
+                    "id": "osm:fallback:1",
+                    "name": "Fallback Kalyani Hospital",
+                    "category": "hospital",
+                    "city": "Kalyani",
+                    "source": "openstreetmap_overpass",
+                    "verification_status": "external_unverified",
+                    "bookable_in_zendoc": False,
+                }
+            ],
+            None,
+        )
+
+    monkeypatch.setattr(universal_health_search, "_osm_poi_results", fake_osm)
+
+    with app.app_context():
+        result = universal_search(
+            "hospital in Kalyani",
+            category="all",
+            radius_km=10,
+        )
+
+    assert len(calls) == 1
+    assert calls[0]["location"] == "Kalyani"
+    assert calls[0]["category"] == "hospital"
+    assert any(item["name"] == "Fallback Kalyani Hospital" for item in result["results"])
+
+
+def test_natural_location_query_uses_location_and_inferred_category_for_internal_sources(
+    tmp_path,
+    monkeypatch,
+):
+    app = make_app(tmp_path)
+    seen = {"registered": None, "public": None}
+
+    def fake_registered(text, category, latitude, longitude, radius_km, location_text=""):
+        seen["registered"] = (text, category, location_text)
+        return []
+
+    def fake_public(text, category, latitude, longitude, radius_km, location_text=""):
+        seen["public"] = (text, category, location_text)
+        return [
+            {
+                "id": 1,
+                "name": "Kalyani Public Hospital",
+                "category": "hospital",
+                "city": "Kalyani",
+                "source": "official_public_directory",
+                "verification_status": "not_verified",
+                "bookable_in_zendoc": False,
+            }
+        ]
+
+    monkeypatch.setattr(universal_health_search, "_registered_matches", fake_registered)
+    monkeypatch.setattr(universal_health_search, "_public_matches", fake_public)
+
+    with app.app_context():
+        result = universal_search(
+            "hospital in Kalyani",
+            category="all",
+            places_provider=EmptyAvailableProvider(),
+        )
+
+    assert seen["registered"] == ("", "hospital", "Kalyani")
+    assert seen["public"] == ("", "hospital", "Kalyani")
+    assert result["results"][0]["name"] == "Kalyani Public Hospital"
+
+
+def test_named_location_query_preserves_provider_name_for_internal_search(tmp_path, monkeypatch):
+    app = make_app(tmp_path)
+    seen = []
+
+    monkeypatch.setattr(
+        universal_health_search,
+        "_registered_matches",
+        lambda text, category, latitude, longitude, radius_km, location_text="": seen.append((text, category, location_text)) or [],
+    )
+    monkeypatch.setattr(
+        universal_health_search,
+        "_public_matches",
+        lambda text, category, latitude, longitude, radius_km, location_text="": [],
+    )
+
+    with app.app_context():
+        universal_search(
+            "Apollo Hospital in Kolkata",
+            category="all",
+            places_provider=EmptyAvailableProvider(),
+        )
+
+    assert seen == [("Apollo", "hospital", "Kolkata")]
+
+
+def test_healthcare_search_api_returns_degraded_json_instead_of_500(tmp_path, monkeypatch):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    token = api_token(client, "api-search-resilience@example.com")
+
+    monkeypatch.setattr(
+        HealthcareFinder,
+        "search",
+        lambda _self, _query: (_ for _ in ()).throw(RuntimeError("finder upstream failed")),
+    )
+
+    response = client.get(
+        "/api/v1/healthcare/search?category=hospital&location=Kalyani",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["search_status"] == "degraded"
+    assert payload["results"] == []
+    assert payload["warnings"]
+    assert "temporarily limited" in payload["message"].lower()
+
+
+def test_healthcare_search_api_results_survive_analytics_failure(tmp_path, monkeypatch):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    token = api_token(client, "api-search-analytics@example.com")
+
+    fake = {
+        "query": {"category": "hospital", "location": "Kalyani"},
+        "registered_providers": [],
+        "official_public_directory": [],
+        "claimed_public_directory_links": [],
+        "external_places": {"available": True, "results": [], "message": None, "source": "test"},
+        "results": [
+            {
+                "id": "safe:1",
+                "name": "API Safe Hospital",
+                "category": "hospital",
+                "source": "external_test",
+                "verification_status": "external_unverified",
+                "bookable_in_zendoc": False,
+            }
+        ],
+        "source_tiers": {
+            "zendoc_verified": 0,
+            "official_public_directory_not_zendoc_verified": 0,
+            "approved_public_listings_merged_into_verified": 0,
+            "external_unverified": 1,
+        },
+        "search_status": "complete",
+        "warnings": [],
+        "message": None,
+    }
+    monkeypatch.setattr(HealthcareFinder, "search", lambda _self, _query: fake)
+    monkeypatch.setattr(
+        main_routes,
+        "record_finder_search",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("analytics unavailable")),
+    )
+
+    response = client.get(
+        "/api/v1/healthcare/search?category=hospital&location=Kalyani",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["results"][0]["name"] == "API Safe Hospital"
+    assert payload["search_status"] == "complete"
+
+
+def test_provider_discovery_api_returns_degraded_json_instead_of_500(tmp_path, monkeypatch):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    token = api_token(client, "api-provider-resilience@example.com")
+
+    monkeypatch.setattr(
+        HealthcareFinder,
+        "search",
+        lambda _self, _query: (_ for _ in ()).throw(RuntimeError("provider discovery failed")),
+    )
+
+    response = client.get(
+        "/api/v1/providers?category=doctor&location=Kalyani",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["search_status"] == "degraded"
+    assert payload["results"] == []
+    assert "temporarily limited" in payload["message"].lower()
+
+
+def test_find_care_aliases_redirect_without_404(tmp_path):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    register_web(client, "patient", "finder-alias-current@example.com", "Finder Alias")
+    login_web(client, "patient", "finder-alias-current@example.com")
+
+    simple = client.get("/nearby-care")
+    assert simple.status_code == 302
+    assert simple.headers["Location"].endswith("/finder")
+
+    searched = client.get("/find-care?q=Kalyani&category=hospital")
+    assert searched.status_code == 302
+    assert "/universal-search?" in searched.headers["Location"]
+    assert "q=Kalyani" in searched.headers["Location"]
+    assert "category=hospital" in searched.headers["Location"]
+
+
+def test_specialist_in_location_uses_stored_specialty_and_location_filters(tmp_path, monkeypatch):
+    app = make_app(tmp_path)
+    seen = []
+
+    monkeypatch.setattr(
+        universal_health_search,
+        "_registered_matches",
+        lambda text, category, latitude, longitude, radius_km, location_text="": seen.append(
+            ("registered", text, category, location_text)
+        ) or [],
+    )
+    monkeypatch.setattr(
+        universal_health_search,
+        "_public_matches",
+        lambda text, category, latitude, longitude, radius_km, location_text="": seen.append(
+            ("public", text, category, location_text)
+        ) or [],
+    )
+
+    with app.app_context():
+        universal_search(
+            "cardiologist in Kalyani",
+            category="all",
+            places_provider=EmptyAvailableProvider(),
+        )
+
+    assert ("registered", "cardiology", "doctor", "Kalyani") in seen
+    assert ("public", "cardiology", "doctor", "Kalyani") in seen
+
+
+class CapturingNamedProvider(PlacesProvider):
+    source = "capturing-named"
+
+    def __init__(self):
+        self.queries = []
+
+    def search(self, query):
+        self.queries.append(dict(query))
+        return PlacesResult(
+            available=True,
+            results=[{
+                "id": "named:hospital:1",
+                "name": "Apollo Hospital",
+                "category": "hospital",
+                "source": self.source,
+                "verification_status": "external_unverified",
+                "bookable_in_zendoc": False,
+            }],
+            source=self.source,
+        )
+
+
+def test_named_provider_query_uses_direct_external_search_text(tmp_path):
+    app = make_app(tmp_path)
+    provider = CapturingNamedProvider()
+
+    with app.app_context():
+        result = universal_search("Apollo Hospital", places_provider=provider)
+
+    assert provider.queries
+    assert provider.queries[0]["search_text"] == "Apollo Hospital"
+    assert provider.queries[0]["location"] == ""
+    assert provider.queries[0]["category"] == "hospital"
+    assert result["results"][0]["name"] == "Apollo Hospital"
+
+
+def test_google_named_provider_search_uses_direct_text():
+    provider = GooglePlacesProvider("test-key", timeout_seconds=3)
+    body = provider._text_search_body({
+        "category": "hospital",
+        "search_text": "Apollo Hospital",
+        "location": "",
+        "specialty": "",
+    })
+
+    assert body["textQuery"] == "Apollo Hospital"
+    assert body["includedType"] == "hospital"
+
+
+def test_nominatim_named_provider_search_uses_direct_text(monkeypatch):
+    from zendoc.places_provider import NominatimPlacesProvider
+
+    provider = NominatimPlacesProvider(timeout_seconds=1)
+    requested = []
+
+    def fake_get_json(url):
+        requested.append(url)
+        return []
+
+    monkeypatch.setattr(provider, "_get_json", fake_get_json)
+    result = provider.search({
+        "category": "hospital",
+        "search_text": "Apollo Hospital",
+        "location": "",
+        "latitude": None,
+        "longitude": None,
+        "radius_km": 10,
+    })
+
+    assert result.available is True
+    assert requested
+    assert "q=Apollo+Hospital" in requested[0]

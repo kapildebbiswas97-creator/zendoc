@@ -136,9 +136,10 @@ class NominatimPlacesProvider(PlacesProvider):
     def search(self, query):
         normalized = dict(query or {})
         location = str(normalized.get("location") or "").strip()
+        search_text = str(normalized.get("search_text") or "").strip()
         latitude = _coordinate_number(normalized.get("latitude"), -90, 90)
         longitude = _coordinate_number(normalized.get("longitude"), -180, 180)
-        if not location and (latitude is None or longitude is None):
+        if not location and not search_text and (latitude is None or longitude is None):
             return PlacesResult(
                 available=True,
                 results=[],
@@ -162,7 +163,9 @@ class NominatimPlacesProvider(PlacesProvider):
             "laboratory": "medical laboratory",
             "emergency": "hospital",
         }.get(category, category.replace("_", " "))
-        if location:
+        if search_text:
+            terms = [search_text]
+        elif location:
             terms = [term for term in (specialty, human_category, f"in {location}") if term]
         else:
             # Nominatim has no nearby-search endpoint. A bounded coordinate
@@ -320,13 +323,14 @@ class GooglePlacesProvider(PlacesProvider):
         latitude = _coordinate_number(normalized.get("latitude"), -90, 90)
         longitude = _coordinate_number(normalized.get("longitude"), -180, 180)
         location = str(normalized.get("location") or "").strip()
+        search_text = str(normalized.get("search_text") or "").strip()
 
         if latitude is None or longitude is None:
-            if not location:
+            if not location and not search_text:
                 return PlacesResult(
                     available=True,
                     results=[],
-                    message="Google Places is configured. Share a city/location or allow location access to search nearby healthcare providers.",
+                    message="Google Places is configured. Share a provider name, city/location, or allow location access to search nearby healthcare providers.",
                     source=self.source,
                 )
             url = GOOGLE_TEXT_SEARCH_URL
@@ -393,10 +397,11 @@ class GooglePlacesProvider(PlacesProvider):
         category = str(query.get("category") or "doctor").strip().lower()
         specialty = str(query.get("specialty") or "").strip()
         location = str(query.get("location") or "").strip()
+        search_text = str(query.get("search_text") or "").strip()
         human_category = "healthcare" if category == "all" else category.replace("_", " ")
         terms = [term for term in (specialty, human_category, f"in {location}" if location else "") if term]
         body = {
-            "textQuery": " ".join(terms),
+            "textQuery": search_text or " ".join(terms),
             "pageSize": 20,
             "languageCode": "en",
         }
@@ -468,11 +473,11 @@ def places_configuration_status():
 
 def configured_places_provider():
     _configured_provider, provider, _production_fallback_active = _effective_places_provider()
-    timeout = os.environ.get("ZENDOC_PLACES_TIMEOUT_SECONDS", "8")
+    timeout = os.environ.get("ZENDOC_PLACES_TIMEOUT_SECONDS", "5")
     try:
         timeout = int(timeout)
     except (TypeError, ValueError):
-        timeout = 8
+        timeout = 5
 
     if provider == "google":
         fallback = NominatimPlacesProvider(timeout_seconds=timeout)
