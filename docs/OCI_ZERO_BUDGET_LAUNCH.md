@@ -6,7 +6,7 @@ This is an early-stage cost-control option, not a claim of managed HA, managed P
 
 ## Architecture
 
-Internet -> free/student domain -> OCI public IP -> Caddy on 80/443 -> ZENDOC web container -> PostgreSQL 16 on an internal-only Docker network.
+Browser -> Vercel public URL -> HTTPS OCI origin -> Caddy on 80/443 -> ZENDOC web container -> PostgreSQL 16 on an internal-only Docker network. PostgreSQL is never exposed to Vercel.
 
 PostgreSQL has no published host port. Do not open TCP/5432 in OCI security lists, NSGs, or the VM firewall.
 
@@ -39,7 +39,7 @@ Generate separate strong random secrets. Hex is recommended for POSTGRES_PASSWOR
 
     openssl rand -hex 32
 
-Set ZENDOC_DOMAIN, ZENDOC_TLS_EMAIL, ZENDOC_GIT_COMMIT, POSTGRES_PASSWORD, ZENDOC_SECRET_KEY, ZENDOC_ADMIN_EMAIL and ZENDOC_ADMIN_PASSWORD. Keep ZENDOC_PERSISTENCE_VERIFIED, ZENDOC_BACKUP_VERIFIED and ZENDOC_PUBLIC_RELEASE_REQUIRED false initially. Never flip verification flags only to satisfy startup checks.
+Set ZENDOC_DOMAIN to the OCI origin hostname, ZENDOC_PUBLIC_BASE_URL to the Vercel production URL, plus ZENDOC_TLS_EMAIL, ZENDOC_GIT_COMMIT, POSTGRES_PASSWORD, ZENDOC_SECRET_KEY, ZENDOC_ADMIN_EMAIL and ZENDOC_ADMIN_PASSWORD. Keep ZENDOC_PERSISTENCE_VERIFIED, ZENDOC_BACKUP_VERIFIED and ZENDOC_PUBLIC_RELEASE_REQUIRED false initially. Never flip verification flags only to satisfy startup checks.
 
 ## 4. Start PostgreSQL, ZENDOC and HTTPS
 
@@ -135,3 +135,12 @@ Keep the previous database backup, stop writes before restoring, never operate t
 If an OCI VM is reclaimed or unavailable, restore from the off-instance backup to a replacement PostgreSQL target rather than assuming local disk state survived.
 
 This path is intentionally conservative: zero-cost infrastructure can support a beta launch, but truth, privacy, recoverability and access control remain release requirements.
+
+
+## Vercel gateway
+
+After the OCI origin, restored data, readiness, and persistence checks pass, configure the Vercel project with only:
+
+    ZENDOC_ORIGIN_URL=https://YOUR_OCI_ORIGIN
+
+Do not put DATABASE_URL or any OCI/PostgreSQL application secret into Vercel. See docs/VERCEL_OCI_GATEWAY.md.
