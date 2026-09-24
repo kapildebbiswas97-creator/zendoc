@@ -484,6 +484,14 @@ def universal_search(text=None, category="all", latitude=None, longitude=None, r
     query = normalize_universal_query(text, category, latitude, longitude, radius_km)
     term, explicit_location, inferred = _text_parts(query["text"])
     selected_category = query["category"]
+    near_me_requested = explicit_location.casefold() in {
+        "me",
+        "my location",
+        "current location",
+        "my current location",
+    }
+    if near_me_requested:
+        explicit_location = ""
 
     internal_text, internal_category, internal_location = _internal_search_plan(
         query["text"],
@@ -518,7 +526,12 @@ def universal_search(text=None, category="all", latitude=None, longitude=None, r
     external_hint = term if explicit_location else ""
     external_search_text = ""
 
-    if not explicit_location:
+    if near_me_requested:
+        if query["latitude"] is None or query["longitude"] is None:
+            warnings.append(
+                "“Near me” needs your current location. Use the location button or enter a city, area, or PIN code."
+            )
+    elif not explicit_location:
         if inferred:
             external_search_text = query["text"]
         else:
