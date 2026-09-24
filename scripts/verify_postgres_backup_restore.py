@@ -47,7 +47,14 @@ def _parse_pg_url(value: str, label: str):
 
 def _pg_env(url: str):
     parsed, database = _parse_pg_url(url, "PostgreSQL URL")
-    env = os.environ.copy()
+    # pg_dump/pg_restore need only a minimal process environment. Do not pass
+    # unrelated ZENDOC admin, SMTP, AI-provider, payment or storage secrets to
+    # database utility subprocesses.
+    env = {
+        key: value
+        for key in ("PATH", "HOME", "LANG", "LC_ALL", "TMPDIR", "TEMP", "TMP")
+        if (value := os.environ.get(key))
+    }
     env.update(
         {
             "PGHOST": parsed.hostname or "",

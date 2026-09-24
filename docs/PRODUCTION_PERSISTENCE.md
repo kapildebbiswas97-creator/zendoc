@@ -20,6 +20,23 @@ Never put a database URL, password, or real user credential in source, tests, do
 
 The application recognizes `postgresql://`, Render's legacy `postgres://` alias, and `postgresql+psycopg://`. The URL is used only by the database driver and is never returned by owner status APIs.
 
+## Zero-budget beta path: self-managed PostgreSQL on OCI
+
+When managed PostgreSQL is temporarily unaffordable, ZENDOC may use a
+self-managed PostgreSQL instance colocated with the web application on an OCI
+compute VM. This preserves the tested PostgreSQL database boundary and avoids a
+cross-engine rewrite to Oracle Database.
+
+This path is operationally weaker than managed PostgreSQL: patching, VM
+availability, backups, restore drills, firewalling, TLS edge configuration and
+off-instance recovery are operator responsibilities. PostgreSQL must not be
+published directly to the public internet.
+
+Use [OCI_ZERO_BUDGET_LAUNCH.md](OCI_ZERO_BUDGET_LAUNCH.md) for the reviewed
+Compose topology, persistence proof, backup tooling and cutover procedure.
+Free-tier/account eligibility is an external OCI fact and must not be encoded
+as a permanent ZENDOC capability claim.
+
 ## Compatible fallback: persistent SQLite mount
 
 A paid single-instance service may use SQLite on a verified persistent disk:
