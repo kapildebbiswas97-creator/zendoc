@@ -474,6 +474,11 @@ def universal_search(text=None, category="all", latitude=None, longitude=None, r
     external_category = effective_category
     external_location = explicit_location or (query["text"] if not inferred else "")
     external_hint = term if explicit_location else ""
+    external_search_text = (
+        query["text"]
+        if inferred and not explicit_location and bool(term)
+        else ""
+    )
 
     broad_local_search = bool(
         query["latitude"] is not None
@@ -488,7 +493,7 @@ def universal_search(text=None, category="all", latitude=None, longitude=None, r
     )
 
     def add_provider_result():
-        if not (external_location or query["latitude"] is not None):
+        if not (external_location or external_search_text or query["latitude"] is not None):
             return
         try:
             place_result = provider.search({
@@ -499,6 +504,7 @@ def universal_search(text=None, category="all", latitude=None, longitude=None, r
                 "longitude": query["longitude"],
                 "radius_km": query["radius_km"],
                 "country_code": "in",
+                "search_text": external_search_text,
             })
         except Exception:
             warnings.append(
