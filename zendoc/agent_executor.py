@@ -459,6 +459,259 @@ def _health_memory_context(actor, arguments):
     }
 
 
+def _appointment_summary(actor, arguments):
+    from .db import get_db
+
+    rows = get_db().execute(
+        "SELECT status, COUNT(*) AS count FROM appointments GROUP BY status ORDER BY status"
+    ).fetchall()
+    return {
+        "status": "OK",
+        "by_status": {str(row["status"] or "unknown"): int(row["count"]) for row in rows},
+        "total": sum(int(row["count"]) for row in rows),
+    }
+
+
+def _check_communication_permission(actor, arguments):
+    from .agent_core import tool_check_communication_permission
+
+    target_user_id = int(arguments.get("target_user_id") or 0)
+    if not target_user_id:
+        raise ValueError("target_user_id is required.")
+    return tool_check_communication_permission(
+        actor,
+        target_user_id,
+        channel=str(arguments.get("channel") or "chat")[:40],
+        context=arguments.get("context") if isinstance(arguments.get("context"), dict) else None,
+    )
+
+
+def _start_conversation(actor, arguments):
+    from .agent_core import tool_start_conversation
+
+    target_user_id = int(arguments.get("target_user_id") or 0)
+    if not target_user_id:
+        raise ValueError("target_user_id is required.")
+    return tool_start_conversation(
+        actor,
+        target_user_id,
+        context=arguments.get("context") if isinstance(arguments.get("context"), dict) else None,
+        title=str(arguments.get("title") or "").strip()[:160] or None,
+    )
+
+
+def _send_message(actor, arguments):
+    from .agent_core import tool_send_message
+
+    conversation_id = int(arguments.get("conversation_id") or 0)
+    body = str(arguments.get("body") or "").strip()
+    if not conversation_id or not body:
+        raise ValueError("conversation_id and body are required.")
+    return tool_send_message(
+        actor,
+        conversation_id,
+        body[:4000],
+        message_type=str(arguments.get("message_type") or "text")[:40],
+        metadata=arguments.get("metadata") if isinstance(arguments.get("metadata"), dict) else None,
+    )
+
+
+def _request_doctor_chat(actor, arguments):
+    from .agent_core import tool_request_doctor_chat
+
+    doctor_id = int(arguments.get("doctor_id") or 0)
+    if not doctor_id:
+        raise ValueError("doctor_id is required.")
+    return tool_request_doctor_chat(
+        actor,
+        doctor_id,
+        reason=str(arguments.get("reason") or "Doctor consultation request")[:500],
+    )
+
+
+def _request_voice_call(actor, arguments):
+    from .agent_core import tool_request_voice_call
+
+    target_user_id = int(arguments.get("target_user_id") or 0)
+    if not target_user_id:
+        raise ValueError("target_user_id is required.")
+    return tool_request_voice_call(
+        actor,
+        target_user_id,
+        context=arguments.get("context") if isinstance(arguments.get("context"), dict) else None,
+    )
+
+
+def _request_video_call(actor, arguments):
+    from .agent_core import tool_request_video_call
+
+    target_user_id = int(arguments.get("target_user_id") or 0)
+    if not target_user_id:
+        raise ValueError("target_user_id is required.")
+    return tool_request_video_call(
+        actor,
+        target_user_id,
+        context=arguments.get("context") if isinstance(arguments.get("context"), dict) else None,
+    )
+
+
+def _share_video(actor, arguments):
+    from .agent_core import tool_share_video
+
+    conversation_id = int(arguments.get("conversation_id") or 0)
+    video_url = str(arguments.get("video_url") or "").strip()
+    if not conversation_id or not video_url:
+        raise ValueError("conversation_id and video_url are required.")
+    return tool_share_video(
+        actor,
+        conversation_id,
+        video_url,
+        title=str(arguments.get("title") or "Educational Video")[:200],
+    )
+
+
+def _share_report_with_consent(actor, arguments):
+    from .agent_core import tool_share_report_with_consent
+
+    conversation_id = int(arguments.get("conversation_id") or 0)
+    record_id = int(arguments.get("record_id") or 0)
+    if not conversation_id or not record_id:
+        raise ValueError("conversation_id and record_id are required.")
+    return tool_share_report_with_consent(
+        actor,
+        conversation_id,
+        record_id,
+        title=str(arguments.get("title") or "").strip()[:200] or None,
+    )
+
+
+def _consultation_queue(actor, arguments):
+    from .db import get_db
+
+    rows = get_db().execute(
+        "SELECT status, COUNT(*) AS count FROM consultation_requests GROUP BY status ORDER BY status"
+    ).fetchall()
+    return {
+        "status": "OK",
+        "by_status": {str(row["status"] or "unknown"): int(row["count"]) for row in rows},
+        "total": sum(int(row["count"]) for row in rows),
+    }
+
+
+def _create_followup_task(actor, arguments):
+    from .human_operations import create_staff_task
+
+    data = dict(arguments)
+    data.setdefault("task_type", "care_followup")
+    data.setdefault("title", "ZENDOC care follow-up")
+    return create_staff_task(actor, data)
+
+
+def _pending_operations(actor, arguments):
+    from .agent_approvals import list_pending_approvals
+    from .agent_task_engine import list_agent_tasks
+
+    return {
+        "queued": list_agent_tasks(status="queued", limit=50, actor=actor),
+        "waiting_human": list_agent_tasks(status="waiting_human", limit=50, actor=actor),
+        "waiting_approval": list_agent_tasks(status="waiting_approval", limit=50, actor=actor),
+        "approvals": list_pending_approvals(),
+    }
+
+
+def _staff_task_summary(actor, arguments):
+    from .human_operations import list_staff_tasks
+
+    tasks = list_staff_tasks(actor)
+    by_status = {}
+    for task in tasks:
+        status = str(task.get("status") or "unknown")
+        by_status[status] = by_status.get(status, 0) + 1
+    return {"status": "OK", "total": len(tasks), "by_status": by_status, "tasks": tasks[:50]}
+
+
+def _provider_status(actor, arguments):
+    from .db import get_db
+
+    rows = get_db().execute(
+        "SELECT verification_status, COUNT(*) AS count FROM provider_profiles GROUP BY verification_status ORDER BY verification_status"
+    ).fetchall()
+    return {
+        "status": "OK",
+        "by_verification_status": {
+            str(row["verification_status"] or "unknown"): int(row["count"]) for row in rows
+        },
+        "total": sum(int(row["count"]) for row in rows),
+    }
+
+
+def _system_health(actor, arguments):
+    from .agent_core import get_platform_health
+    from .integration_readiness import integration_readiness_snapshot
+
+    return {
+        "platform": get_platform_health(),
+        "integrations": integration_readiness_snapshot(),
+    }
+
+
+def _assign_allowed_task(actor, arguments):
+    from .db import get_db, now_iso
+    from .human_operations import get_staff_profile, get_staff_task
+
+    task_id = int(arguments.get("task_id") or 0)
+    assigned_staff_id = int(arguments.get("assigned_staff_id") or 0)
+    if not task_id or not assigned_staff_id:
+        raise ValueError("task_id and assigned_staff_id are required.")
+    task = get_staff_task(actor, task_id)
+    profile = get_staff_profile(assigned_staff_id)
+    if not bool(profile.get("verified")) or str(profile.get("status") or "").lower() not in {"available", "active"}:
+        raise PermissionError("Assigned staff must be verified and currently available.")
+    get_db().execute(
+        "UPDATE staff_tasks SET assigned_staff_id=?, status='assigned', updated_at=? WHERE id=?",
+        (assigned_staff_id, now_iso(), task_id),
+    )
+    get_db().commit()
+    return get_staff_task(actor, task_id)
+
+
+def _retry_safe_task(actor, arguments):
+    from .agent_task_engine import retry_task
+
+    task_id = int(arguments.get("task_id") or 0)
+    if not task_id:
+        raise ValueError("task_id is required.")
+    return retry_task(task_id, actor)
+
+
+def _escalate_task(actor, arguments):
+    from .agent_task_engine import get_agent_task, set_task_waiting
+
+    task_id = int(arguments.get("task_id") or 0)
+    if not task_id:
+        raise ValueError("task_id is required.")
+    get_agent_task(task_id, actor=actor)
+    return set_task_waiting(
+        task_id,
+        "waiting_human",
+        str(arguments.get("reason") or "Escalated by Operations Agent for human review")[:300],
+    )
+
+
+def _request_owner_approval(actor, arguments):
+    from .agent_task_engine import request_approval_for_task
+
+    task_id = int(arguments.get("task_id") or 0)
+    if not task_id:
+        raise ValueError("task_id is required.")
+    return request_approval_for_task(
+        task_id,
+        requested_by_user_id=int(_value(actor, "id", 0) or 0),
+        action_type=str(arguments.get("action_type") or "agent_action")[:120],
+        payload_summary=str(arguments.get("payload_summary") or "Owner review requested")[:500],
+    )
+
+
 def _fitness_snapshot(actor, arguments):
     from .fitness_analytics import get_fitness_progress
     from .fitness_profile import get_fitness_profile
@@ -589,6 +842,25 @@ def _search_health_memory_evidence(actor, arguments):
 
 TOOL_HANDLERS = {
     "get_platform_summary": _platform_summary,
+    "get_appointment_summary": _appointment_summary,
+    "check_communication_permission": _check_communication_permission,
+    "start_conversation": _start_conversation,
+    "send_message": _send_message,
+    "request_doctor_chat": _request_doctor_chat,
+    "request_voice_call": _request_voice_call,
+    "request_video_call": _request_video_call,
+    "share_video": _share_video,
+    "share_report_with_consent": _share_report_with_consent,
+    "get_consultation_queue": _consultation_queue,
+    "create_followup_task": _create_followup_task,
+    "get_pending_operations": _pending_operations,
+    "get_staff_task_summary": _staff_task_summary,
+    "get_provider_status": _provider_status,
+    "get_system_health": _system_health,
+    "assign_allowed_task": _assign_allowed_task,
+    "retry_safe_task": _retry_safe_task,
+    "escalate_task": _escalate_task,
+    "request_owner_approval": _request_owner_approval,
     "get_failed_operations": _failed_operations,
     "find_contact": _find_contact,
     "get_unread_summary": _unread_summary,
