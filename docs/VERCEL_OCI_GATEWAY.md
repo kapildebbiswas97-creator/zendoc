@@ -12,6 +12,12 @@ Vercel is the public edge/domain gateway. The application and PostgreSQL remain 
 
 This avoids rewriting ZENDOC to Oracle Database and preserves the PostgreSQL engine already covered by production migration/readiness tests.
 
+## Safe merge state
+
+The repository keeps automatic Vercel Git deployments disabled in `vercel.ts` until the OCI origin has been restored and verified. This allows the gateway code to live in `main` without an accidental broken deployment.
+
+When the real OCI origin is verified and the Vercel project has `ZENDOC_ORIGIN_URL`, remove the `git.deploymentEnabled: false` guard in a reviewed change, run the Production Gate, then deploy/promote the verified build.
+
 ## Required Vercel variable
 
 Set only:
