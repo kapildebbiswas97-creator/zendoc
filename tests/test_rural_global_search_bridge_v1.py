@@ -69,3 +69,21 @@ def test_legacy_search_does_not_promote_external_listing_to_booking(tmp_path, mo
     item = next(group for group in result["categories"] if group["category"] == "Healthcare Providers")["items"][0]
     assert item["source"] == "openstreetmap"
     assert item["bookable_in_zendoc"] is False
+
+
+def test_global_search_survives_healthcare_discovery_failure(tmp_path, monkeypatch):
+    app = make_app(tmp_path)
+
+    def fail_healthcare(_query):
+        raise RuntimeError("external healthcare discovery unavailable")
+
+    monkeypatch.setattr(global_search, "search_healthcare", fail_healthcare)
+    with app.app_context():
+        result = global_search.search_all(None, "hospital ai")
+
+    assert result["query"] == "hospital ai"
+    assert all(group["category"] != "Healthcare Providers" for group in result["categories"])
+    ai_group = next(group for group in result["categories"] if group["category"] == "ZENDOC AI")
+    assert ai_group["items"][0]["url"].startswith("/ai")
+    tool_group = next(group for group in result["categories"] if group["category"] == "ZENDOC Tools")
+    assert any(item["type"] == "find_care" for item in tool_group["items"])
