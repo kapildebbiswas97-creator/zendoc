@@ -1,0 +1,92 @@
+{% if current_user and zendoc_copilot %}
+<section
+  class="zendoc-copilot"
+  data-zendoc-copilot
+  data-copilot-key="{{ zendoc_copilot.key }}"
+  aria-label="{{ zendoc_copilot.title }}">
+  <button
+    type="button"
+    class="zendoc-copilot__launcher"
+    data-copilot-toggle
+    aria-expanded="false"
+    aria-controls="zendoc-copilot-panel">
+    <span class="zendoc-copilot__spark" aria-hidden="true">✦</span>
+    <span class="zendoc-copilot__launcher-copy">
+      <strong>{{ zendoc_copilot.title }}</strong>
+      <small>{{ zendoc_copilot.eyebrow }}</small>
+    </span>
+  </button>
+
+  <aside id="zendoc-copilot-panel" class="zendoc-copilot__panel" hidden>
+    <header class="zendoc-copilot__head">
+      <div>
+        <p class="eyebrow">{{ zendoc_copilot.eyebrow }}</p>
+        <h2>{{ zendoc_copilot.title }}</h2>
+        <p>{{ zendoc_copilot.description }}</p>
+      </div>
+      <button type="button" class="zendoc-copilot__close" data-copilot-close aria-label="Close ZENDOC Copilot">×</button>
+    </header>
+
+    <div class="zendoc-copilot__truth">
+      <span aria-hidden="true">◎</span>
+      <p><strong>AI helps; ZENDOC rules execute.</strong> Suggestions never bypass consent, provider confirmation, payment verification, prescribing boundaries, or emergency safeguards.</p>
+    </div>
+
+    {% if zendoc_copilot.prompts %}
+    <section class="zendoc-copilot__section">
+      <div class="zendoc-copilot__section-title">
+        <strong>Ask AI</strong>
+        <small>Opens as an editable draft</small>
+      </div>
+      <div class="zendoc-copilot__prompt-list">
+        {% for prompt in zendoc_copilot.prompts %}
+          <a
+            href="{{ url_for('ai_chat.chat_home', mode='zendoc', new=1, draft=prompt, context=zendoc_copilot.key) }}"
+            class="zendoc-copilot__prompt">
+            <span>{{ prompt }}</span><span aria-hidden="true">→</span>
+          </a>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    {% if zendoc_copilot.agent_command %}
+    <section class="zendoc-copilot__section zendoc-copilot__agent">
+      <div class="zendoc-copilot__section-title">
+        <strong>Agent OS workflow</strong>
+        <small>Server-bounded + human gates</small>
+      </div>
+      <a
+        href="{{ url_for('specialist_agents.agent_os_page', command=zendoc_copilot.agent_command) }}"
+        class="zendoc-copilot__agent-card">
+        <span class="zendoc-copilot__agent-icon" aria-hidden="true">OS</span>
+        <span>
+          <strong>{{ zendoc_copilot.agent_command }}</strong>
+          <small>Review the plan before any consequential action.</small>
+        </span>
+        <span aria-hidden="true">→</span>
+      </a>
+    </section>
+    {% endif %}
+
+    {% if zendoc_copilot.actions %}
+    <nav class="zendoc-copilot__section" aria-label="Related ZENDOC actions">
+      <div class="zendoc-copilot__section-title">
+        <strong>Related tools</strong>
+        <small>Stay in control</small>
+      </div>
+      <div class="zendoc-copilot__actions">
+        {% for action in zendoc_copilot.actions %}
+          <a class="secondary-action" href="{{ url_for(action.endpoint) }}">{{ action.label }}</a>
+        {% endfor %}
+      </div>
+    </nav>
+    {% endif %}
+
+    <footer class="zendoc-copilot__footer">
+      <a href="{{ url_for('ai_chat.chat_home', mode='zendoc', new=1, context=zendoc_copilot.key) }}">Open full ZENDOC AI</a>
+      <a href="{{ url_for('specialist_agents.agent_os_page') }}">Open Agent OS</a>
+    </footer>
+  </aside>
+</section>
+{% endif %}

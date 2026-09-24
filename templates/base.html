@@ -18,6 +18,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='ui-polish.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='product-expansion.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='launch-ai.css') }}">
 </head>
 <body class="{% block body_class %}{% endblock %}{% if current_user and current_user.role == 'patient' %} has-patient-dock{% endif %}">
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -267,6 +268,8 @@
     {% block content %}{% endblock %}
   </main>
 
+  {% include "components/_copilot.html" %}
+
   {% if current_user and current_user.role == 'patient' %}
     {% set endpoint = request.endpoint or '' %}
     <nav class="patient-mobile-dock" aria-label="Patient quick navigation">
@@ -333,6 +336,7 @@
 
   <script src="{{ url_for('static', filename='app.js') }}" defer></script>
   {% if current_user %}<script src="{{ url_for('static', filename='incoming_calls.js') }}" defer></script>{% endif %}
+  {% if current_user %}<script src="{{ url_for('static', filename='copilot.js') }}" defer></script>{% endif %}
   <script src="{{ url_for('static', filename='pwa.js') }}" defer></script>
 </body>
 </html>
