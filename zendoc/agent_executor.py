@@ -459,6 +459,122 @@ def _health_memory_context(actor, arguments):
     }
 
 
+def _fitness_snapshot(actor, arguments):
+    from .fitness_analytics import get_fitness_progress
+    from .fitness_profile import get_fitness_profile
+    from .workout_engine import get_latest_plan
+
+    profile = get_fitness_profile(actor)
+    return {
+        "status": "OK",
+        "profile": profile,
+        "latest_plan": get_latest_plan(actor),
+        "progress_30d": get_fitness_progress(actor, period="30d"),
+        "truth_notice": (
+            "General-wellness fitness context only. ZENDOC does not turn this snapshot into diagnosis, "
+            "treatment or clinical exercise clearance."
+        ),
+    }
+
+
+def _generate_fitness_plan(actor, arguments):
+    from .fitness_profile import get_fitness_profile
+    from .workout_engine import create_plan
+
+    profile = get_fitness_profile(actor)
+    if not profile.get("fitness_goal"):
+        raise ValueError("Set a fitness goal in the fitness profile before automatic plan generation.")
+    if profile.get("limitations"):
+        return {
+            "status": "REVIEW_RECOMMENDED",
+            "plan_created": False,
+            "reason": (
+                "The fitness profile contains declared limitations. Review them with an appropriate "
+                "professional before generating a new automated workout plan."
+            ),
+        }
+    plan = create_plan(
+        actor,
+        label=str(arguments.get("label") or "").strip()[:120] or None,
+        fitness_profile=profile,
+    )
+    return {
+        "status": "CREATED",
+        "plan_created": True,
+        "plan": plan,
+        "truth_notice": "General-wellness workout plan only; not a medical exercise prescription.",
+    }
+
+
+def _family_care_snapshot(actor, arguments):
+    from .family_care import list_care_tasks, list_family_access_grants, list_family_members
+
+    return {
+        "status": "OK",
+        "family_members": list_family_members(actor),
+        "care_tasks": list_care_tasks(actor, status=arguments.get("status")),
+        "access_given": list_family_access_grants(actor, direction="given"),
+        "access_received": list_family_access_grants(actor, direction="received"),
+        "truth_notice": (
+            "Only relationships, tasks and grants visible to the authenticated actor are returned. "
+            "This tool cannot create or expand consent."
+        ),
+    }
+
+
+def _home_health_options(actor, arguments):
+    from .home_health import list_home_health_requests, list_home_health_services
+
+    return {
+        "status": "OK",
+        "services": list_home_health_services(),
+        "requests": list_home_health_requests(actor),
+        "request_confirmation_required": True,
+        "truth_notice": (
+            "Service categories and recorded request states are shown without claiming live provider availability, "
+            "price, assignment or fulfilment."
+        ),
+    }
+
+
+def _confirm_home_health_request(actor, arguments):
+    from .home_health import create_home_health_request
+
+    if arguments.get("user_confirmed") is not True:
+        raise PermissionError("Fresh explicit user confirmation is required before creating a home-health request.")
+    result = create_home_health_request(actor, arguments)
+    result["payment_executed"] = False
+    result["user_confirmed"] = True
+    return result
+
+
+def _transport_options(actor, arguments):
+    from .medical_transport import list_transport_requests, list_transport_types
+
+    return {
+        "status": "OK",
+        "transport_types": list_transport_types(),
+        "requests": list_transport_requests(actor),
+        "request_confirmation_required": True,
+        "dispatch_executed": False,
+        "truth_notice": (
+            "Transport categories and recorded request states are shown without claiming dispatch, vehicle, ETA, "
+            "price or provider acceptance. Emergencies must use the deterministic emergency guidance path."
+        ),
+    }
+
+
+def _confirm_transport_request(actor, arguments):
+    from .medical_transport import create_transport_request
+
+    if arguments.get("user_confirmed") is not True:
+        raise PermissionError("Fresh explicit user confirmation is required before recording a transport request.")
+    result = create_transport_request(actor, arguments)
+    result["payment_executed"] = False
+    result["user_confirmed"] = True
+    return result
+
+
 def _search_health_memory_evidence(actor, arguments):
     from .health_memory_rag import search_health_memory_evidence
 
@@ -495,4 +611,11 @@ TOOL_HANDLERS = {
     "get_unified_healthcare_inbox": _unified_inbox,
     "get_health_memory_context": _health_memory_context,
     "search_health_memory_evidence": _search_health_memory_evidence,
+    "get_fitness_snapshot": _fitness_snapshot,
+    "generate_fitness_plan": _generate_fitness_plan,
+    "get_family_care_snapshot": _family_care_snapshot,
+    "get_home_health_options": _home_health_options,
+    "confirm_home_health_request": _confirm_home_health_request,
+    "get_transport_options": _transport_options,
+    "confirm_transport_request": _confirm_transport_request,
 }
