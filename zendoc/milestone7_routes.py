@@ -300,9 +300,16 @@ def messages_live_fragment(conversation_id):
         selected=selected,
         messages=messages,
     )
+    try:
+        live_unread_count = unread_count(g.user)
+    except Exception:
+        current_app.logger.exception(
+            "ZENDOC Connect live unread-count lookup failed after messages loaded."
+        )
+        live_unread_count = 0
     return response, 200, {
         "Cache-Control": "no-store",
-        "X-ZENDOC-Unread-Count": str(unread_count(g.user)),
+        "X-ZENDOC-Unread-Count": str(live_unread_count),
     }
 
 
