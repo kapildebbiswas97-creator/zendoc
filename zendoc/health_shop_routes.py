@@ -68,12 +68,24 @@ def delete_saved_health_shop_item_route(item_id):
 @bp.get("/health-shop/out/<merchant_id>")
 @login_required
 def outbound(merchant_id):
-    handoff = build_outbound_handoff(
-        g.user,
-        merchant_id,
-        request.args.get("q", ""),
-        request.args.get("category", "general_wellness"),
-    )
+    query = request.args.get("q", "")
+    category = request.args.get("category", "general_wellness")
+    try:
+        handoff = build_outbound_handoff(
+            g.user,
+            merchant_id,
+            query,
+            category,
+        )
+    except (ValueError, LookupError, PermissionError) as exc:
+        flash(str(exc), "error")
+        return redirect(
+            url_for(
+                "health_shop.health_shop_page",
+                q=query,
+                category=category,
+            )
+        )
     return redirect(handoff["url"])
 
 
