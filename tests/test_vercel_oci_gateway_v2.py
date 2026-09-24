@@ -17,7 +17,7 @@ def test_vercel_gateway_requires_https_origin_and_has_no_database_secret():
     assert "parsedOrigin.password" in text
     assert "x-vercel-enable-rewrite-caching" in text
     assert "value: '0'" in text
-    assert "routes.rewrite('/:path*', \`${origin}/:path*\`)" in text
+    assert "routes.rewrite('/:path*', `${origin}/:path*`)" in text
     assert "routes.header('/:path*'" in text
     assert "DATABASE_URL" not in text
     assert "POSTGRES_PASSWORD" not in text
