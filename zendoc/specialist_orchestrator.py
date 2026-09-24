@@ -13,6 +13,7 @@ import re
 from dataclasses import replace
 
 from .agent_executor import execute_plan
+from .agentic_decision_layer import evaluate_agent_control
 from .agent_planner import PlanStep, build_plan
 
 
@@ -330,13 +331,21 @@ def orchestrate_specialist(actor, command_text: str, context=None) -> dict:
         raise PermissionError(plan.authorization_error)
     context = _clean_context(context)
     plan = _specialize_plan(plan, context)
+    decision_control = evaluate_agent_control(plan, command_text, context)
 
-    if plan.steps:
+    if plan.steps and decision_control.get("allow_reversible_execution", True):
         execution = execute_plan(plan, actor)
+    elif plan.steps:
+        execution = {
+            "status": "blocked" if decision_control.get("action") == "STOP" else "waiting_human",
+            "tool_results": [],
+        }
     else:
         execution = {
             "status": "waiting_human" if plan.requires_confirmation else "completed",
             "tool_results": [],
         }
     payload = _payload_for_plan(plan, execution)
-    return _compose(plan, execution, payload)
+    result = _compose(plan, execution, payload)
+    result["decision_control"] = decision_control
+    return result
