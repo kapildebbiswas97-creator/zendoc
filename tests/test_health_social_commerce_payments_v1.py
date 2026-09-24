@@ -780,3 +780,29 @@ def test_common_medicine_and_dosage_queries_never_open_general_marketplaces():
         assert result["medicine_query"] is True
         assert result["results"] == []
         assert result["pharmacy_handoff"].startswith("/pharmacy")
+
+
+def test_health_shop_outbound_failure_returns_user_to_shop_instead_of_500(tmp_path, monkeypatch):
+    import zendoc.health_shop_routes as health_shop_routes
+
+    app = make_app(tmp_path)
+    client = app.test_client()
+    register_web(client, "patient", "shop-outbound-safe@example.com", "Shop Outbound Safe")
+    login_web(client, "patient", "shop-outbound-safe@example.com")
+
+    monkeypatch.setattr(
+        health_shop_routes,
+        "build_outbound_handoff",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            ValueError("Configured affiliate URL template is invalid.")
+        ),
+    )
+
+    response = client.get(
+        "/health-shop/out/flipkart?q=yoga+mat&category=fitness",
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert b"Configured affiliate URL template is invalid." in response.data
+    assert b"Health Shop" in response.data
