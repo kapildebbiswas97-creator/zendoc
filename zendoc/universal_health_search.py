@@ -77,6 +77,18 @@ CATEGORY_ALIASES = {
     "emergency": "emergency",
 }
 
+# Normalize common specialist nouns into stored specialty vocabulary.
+SPECIALTY_TERM_ALIASES = {
+    "cardiologist": "cardiology",
+    "dermatologist": "dermatology",
+    "neurologist": "neurology",
+    "pediatrician": "pediatrics",
+    "gynaecologist": "gynaecology",
+    "gynecologist": "gynecology",
+    "psychiatrist": "psychiatry",
+}
+
+
 GROUP_LABELS = OrderedDict((
     ("doctor", "Doctors"),
     ("hospital", "Hospitals"),
@@ -115,7 +127,7 @@ def normalize_universal_query(text=None, category=None, latitude=None, longitude
 
 
 def _text_parts(text):
-    """Return free-text term, explicit location and inferred category."""
+    """Return normalized free-text term, explicit location and inferred category."""
     raw = str(text or "").strip()
     term = raw
     location = ""
@@ -133,12 +145,16 @@ def _text_parts(text):
             matched_alias = alias
             break
 
-    # Make natural shorthand such as "pharmacy Kalyani" useful for nearby
-    # discovery without breaking named searches such as "Apollo Hospital".
-    if not location and matched_alias and lowered.startswith(matched_alias):
-        remainder = term[len(matched_alias):].strip(" ,-:")
-        if remainder:
-            location = remainder
+    if matched_alias:
+        normalized_specialty = SPECIALTY_TERM_ALIASES.get(matched_alias, "")
+        if lowered == matched_alias:
+            term = normalized_specialty
+        elif not location and lowered.startswith(matched_alias):
+            remainder = term[len(matched_alias):].strip(" ,-:")
+            if remainder:
+                location = remainder
+                term = normalized_specialty
+
     return term, location, inferred
 
 
@@ -146,7 +162,7 @@ def _like(value):
     return f"%{value}%"
 
 
-def _registered_matches(text, category, latitude, longitude, radius_km):
+def _registered_matches(text, category, latitude, longitude, radius_km, location_text=""):
     db = get_db()
     clauses = ["u.active=1", "p.verification_status='verified'"]
     params = []
@@ -166,6 +182,13 @@ def _registered_matches(text, category, latitude, longitude, radius_km):
             "OR LOWER(COALESCE(p.postal_code,'')) LIKE LOWER(?))"
         )
         params.extend([value] * 7)
+    if location_text:
+        value = _like(location_text)
+        clauses.append(
+            "(LOWER(COALESCE(p.address,'')) LIKE LOWER(?) OR LOWER(COALESCE(p.city,'')) LIKE LOWER(?) "
+            "OR LOWER(COALESCE(p.state,'')) LIKE LOWER(?) OR LOWER(COALESCE(p.postal_code,'')) LIKE LOWER(?))"
+        )
+        params.extend([value] * 4)
     rows = db.execute(
         f"""
         SELECT p.*, u.name AS account_name
@@ -186,7 +209,7 @@ def _registered_matches(text, category, latitude, longitude, radius_km):
     return records
 
 
-def _public_matches(text, category, latitude, longitude, radius_km):
+def _public_matches(text, category, latitude, longitude, radius_km, location_text=""):
     db = get_db()
     clauses = ["active=1"]
     params = []
@@ -207,6 +230,14 @@ def _public_matches(text, category, latitude, longitude, radius_km):
             "OR LOWER(COALESCE(postal_code,'')) LIKE LOWER(?))"
         )
         params.extend([value] * 7)
+    if location_text:
+        location_value = _like(location_text)
+        clauses.append(
+            "(LOWER(COALESCE(address,'')) LIKE LOWER(?) OR LOWER(COALESCE(city,'')) LIKE LOWER(?) "
+            "OR LOWER(COALESCE(district,'')) LIKE LOWER(?) OR LOWER(COALESCE(state,'')) LIKE LOWER(?) "
+            "OR LOWER(COALESCE(postal_code,'')) LIKE LOWER(?))"
+        )
+        params.extend([location_value] * 5)
     rows = db.execute(
         f"""
         SELECT * FROM public_healthcare_entities
@@ -416,90 +447,104 @@ def universal_search(text=None, category="all", latitude=None, longitude=None, r
     query = normalize_universal_query(text, category, latitude, longitude, radius_km)
     term, explicit_location, inferred = _text_parts(query["text"])
     selected_category = query["category"]
+    effective_category = selected_category if selected_category != "all" else (inferred or "all")
 
-    internal_text = query["text"]
     records = _registered_matches(
-        internal_text,
-        selected_category,
+        term,
+        effective_category,
         query["latitude"],
         query["longitude"],
         query["radius_km"],
+        location_text=explicit_location,
     )
     records += _public_matches(
-        internal_text,
-        selected_category,
+        term,
+        effective_category,
         query["latitude"],
         query["longitude"],
         query["radius_km"],
+        location_text=explicit_location,
     )
 
     provider = places_provider or configured_places_provider()
+    provider_source = str(getattr(provider, "source", "") or "").strip().lower()
     external_results = []
     external_messages = []
     warnings = []
-    external_location = explicit_location or query["text"]
+    external_category = effective_category
+    external_location = explicit_location or (query["text"] if not inferred else "")
     external_hint = term if explicit_location else ""
 
-    # One broad provider call for an "all healthcare" search prevents a single
-    # user request from serially multiplying external timeouts across every
-    # care category. Google/OSM adapters classify broad results back into the
-    # supported healthcare groups; explicit category searches remain exact.
-    external_categories = [
-        selected_category if selected_category != "all" else (inferred or "all")
-    ]
+    broad_local_search = bool(
+        query["latitude"] is not None
+        or explicit_location
+        or (not inferred and query["text"])
+        or (effective_category != "all" and not term)
+    )
+    use_osm_first = (
+        places_provider is None
+        and provider_source == "openstreetmap_nominatim"
+        and broad_local_search
+    )
 
-    if external_location or query["latitude"] is not None:
-        for external_category in external_categories:
-            try:
-                place_result = provider.search({
-                    "category": external_category,
-                    "specialty": external_hint,
-                    "location": external_location,
-                    "latitude": query["latitude"],
-                    "longitude": query["longitude"],
-                    "radius_km": query["radius_km"],
-                    "country_code": "in",
-                })
-            except Exception:
-                place_result = None
-                warnings.append(
-                    "An external healthcare map source is temporarily unavailable. "
-                    "Other available sources are still shown."
-                )
-
-            if place_result is not None:
-                safe_results = [
-                    dict(item)
-                    for item in (place_result.results or [])
-                    if isinstance(item, dict)
-                ]
-                external_results.extend(safe_results)
-                if place_result.message:
-                    external_messages.append(str(place_result.message))
-                if not place_result.available:
-                    warnings.append(
-                        str(place_result.message or "").strip()
-                        or "An external healthcare map source is temporarily unavailable."
-                    )
-
-        # Only real configured searches add Overpass. Unit tests that inject a
-        # places provider remain deterministic and make no network calls.
-        if places_provider is None:
-            osm_category = selected_category if selected_category != "all" else (inferred or "all")
-            osm_results, osm_message = _osm_poi_results(
-                explicit_location or query["text"],
-                osm_category,
-                query["latitude"],
-                query["longitude"],
-                query["radius_km"],
+    def add_provider_result():
+        if not (external_location or query["latitude"] is not None):
+            return
+        try:
+            place_result = provider.search({
+                "category": external_category,
+                "specialty": external_hint,
+                "location": external_location,
+                "latitude": query["latitude"],
+                "longitude": query["longitude"],
+                "radius_km": query["radius_km"],
+                "country_code": "in",
+            })
+        except Exception:
+            warnings.append(
+                "An external healthcare map source is temporarily unavailable. "
+                "Other available sources are still shown."
             )
-            external_results.extend(
-                dict(item) for item in osm_results if isinstance(item, dict)
+            return
+
+        external_results.extend(
+            dict(item) for item in (place_result.results or []) if isinstance(item, dict)
+        )
+        if place_result.message:
+            external_messages.append(str(place_result.message))
+        if not place_result.available:
+            warnings.append(
+                str(place_result.message or "").strip()
+                or "An external healthcare map source is temporarily unavailable."
             )
-            if osm_message:
-                external_messages.append(str(osm_message))
-                if "unavailable" in str(osm_message).lower() or "could not" in str(osm_message).lower():
-                    warnings.append(str(osm_message))
+
+    def add_osm_result():
+        if places_provider is not None:
+            return
+        osm_results, osm_message = _osm_poi_results(
+            explicit_location or (query["text"] if not inferred else ""),
+            external_category,
+            query["latitude"],
+            query["longitude"],
+            query["radius_km"],
+        )
+        external_results.extend(
+            dict(item) for item in osm_results if isinstance(item, dict)
+        )
+        if osm_message:
+            external_messages.append(str(osm_message))
+            lowered_message = str(osm_message).lower()
+            if "unavailable" in lowered_message or "could not" in lowered_message:
+                warnings.append(str(osm_message))
+
+    if use_osm_first:
+        add_osm_result()
+        if not external_results:
+            add_provider_result()
+    else:
+        add_provider_result()
+        if places_provider is None and broad_local_search and not external_results:
+            add_osm_result()
 
     if query["latitude"] is not None and query["longitude"] is not None and external_results:
         try:
@@ -522,7 +567,8 @@ def universal_search(text=None, category="all", latitude=None, longitude=None, r
         origin_longitude=query["longitude"],
     )
     records = _dedupe(records)
-    records.sort(key=lambda item: _rank(item, query["text"]))
+    ranking_text = term or explicit_location or query["text"]
+    records.sort(key=lambda item: _rank(item, ranking_text))
 
     grouped = OrderedDict()
     for key, label in GROUP_LABELS.items():
@@ -586,4 +632,3 @@ def universal_search(text=None, category="all", latitude=None, longitude=None, r
             "Only explicitly connected ZENDOC providers are bookable inside ZENDOC."
         ),
     }
-
