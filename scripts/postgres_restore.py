@@ -19,8 +19,12 @@ from urllib.parse import unquote, urlsplit
 
 import psycopg
 
-from scripts.postgres_backup import connection_environment
-from scripts.verify_postgres_backup import VerificationError, verify_backup
+try:
+    from scripts.postgres_backup import connection_environment
+    from scripts.verify_postgres_backup import VerificationError, verify_backup
+except ModuleNotFoundError:  # Direct execution from /opt/zendoc/scripts.
+    from postgres_backup import connection_environment
+    from verify_postgres_backup import VerificationError, verify_backup
 
 
 TARGET_ENV = "ZENDOC_POSTGRES_RESTORE_DATABASE_URL"
