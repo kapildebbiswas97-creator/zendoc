@@ -146,6 +146,7 @@ def test_private_verified_endpoint_can_receive_minimum_text_when_explicitly_enab
     monkeypatch.delenv("ZENDOC_JEV_API_KEY", raising=False)
     monkeypatch.setenv("ZENDOC_JEV_CONTEXT_MODE", "minimum_text")
     monkeypatch.setenv("ZENDOC_JEV_TRUST_MODE", "private_verified")
+    monkeypatch.setenv("ZENDOC_JEV_ALLOW_HEALTH_TEXT", "true")
 
     captured = {}
 
@@ -303,3 +304,26 @@ def test_external_integration_mesh_has_registered_agent_owners():
         assert policy["autonomous_scope"]
         assert policy["fallback_mode"]
         assert policy["human_gate"]
+
+
+def test_private_verified_still_withholds_health_text_without_second_opt_in(monkeypatch):
+    monkeypatch.setenv("ZENDOC_JEV_ENABLED", "true")
+    monkeypatch.setenv("ZENDOC_JEV_BASE_URL", "http://127.0.0.1:8765")
+    monkeypatch.setenv("ZENDOC_JEV_CONTEXT_MODE", "minimum_text")
+    monkeypatch.setenv("ZENDOC_JEV_TRUST_MODE", "private_verified")
+    monkeypatch.delenv("ZENDOC_JEV_ALLOW_HEALTH_TEXT", raising=False)
+
+    captured = {}
+
+    def transport(_endpoint, payload, _headers, _timeout):
+        captured["state"] = payload["state"]
+        return _jev_response()
+
+    result = evaluate_agent_control(
+        _plan(privacy="HEALTH_SENSITIVE"),
+        "sensitive minimum context",
+        {},
+        transport=transport,
+    )
+    assert result["raw_text_sent"] is False
+    assert "minimum_user_text" not in captured["state"]
