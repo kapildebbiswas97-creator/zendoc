@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Page not found — ZENDOC{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Page not found</p>
+    <h1>This ZENDOC link is no longer available</h1>
+    <p class="section-copy">The address may be old, renamed, or typed incorrectly. Your account and health data were not changed.</p>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Continue without losing your place</h2>
+  <p class="form-note">Requested path: <code>{{ missing_path }}</code></p>
+  <div class="feedback-actions">
+    <a class="primary-action" href="{{ url_for('ecosystem.search_page') }}">Search ZENDOC</a>
+    <a class="secondary-action" href="{{ url_for('universal_search.search_home') }}">Find Care</a>
+    {% if g.user %}
+      <a class="secondary-action" href="{{ url_for('main.dashboard') }}">Dashboard</a>
+    {% else %}
+      <a class="secondary-action" href="{{ url_for('main.home') }}">Home</a>
+    {% endif %}
+  </div>
+</section>
+
+<aside class="trust-note"><strong>Still seeing this after using a current link?</strong><br>Use ZENDOC Search or Find Care instead of retrying the outdated address.</aside>
+{% endblock %}
