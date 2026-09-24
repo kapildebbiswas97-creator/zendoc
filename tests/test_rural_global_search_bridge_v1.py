@@ -87,3 +87,27 @@ def test_global_search_survives_healthcare_discovery_failure(tmp_path, monkeypat
     assert ai_group["items"][0]["url"].startswith("/ai")
     tool_group = next(group for group in result["categories"] if group["category"] == "ZENDOC Tools")
     assert any(item["type"] == "find_care" for item in tool_group["items"])
+
+
+def test_global_search_survives_family_and_fitness_lookup_failures(tmp_path, monkeypatch):
+    app = make_app(tmp_path)
+
+    monkeypatch.setattr(
+        global_search,
+        "list_family_members",
+        lambda _user: (_ for _ in ()).throw(RuntimeError("family unavailable")),
+    )
+    monkeypatch.setattr(
+        global_search,
+        "list_exercises",
+        lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("fitness unavailable")),
+    )
+
+    fake_user = {"id": 1, "role": "patient"}
+    with app.app_context():
+        result = global_search.search_all(fake_user, "fitness ai")
+
+    assert result["total_matches"] >= 1
+    assert all(group["category"] != "Family Care" for group in result["categories"])
+    assert all(group["category"] != "Fitness & Exercises" for group in result["categories"])
+    assert any(group["category"] == "ZENDOC AI" for group in result["categories"])
