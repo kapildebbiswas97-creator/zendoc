@@ -25,9 +25,9 @@ if (
 const origin = parsedOrigin.origin
 
 export const config: VercelConfig = {
-  rewrites: [routes.rewrite('/(.*)', `${origin}/$1`)],
+  rewrites: [routes.rewrite('/:path*', `${origin}/:path*`)],
   headers: [
-    routes.header('/(.*)', [
+    routes.header('/:path*', [
       {
         key: 'x-vercel-enable-rewrite-caching',
         value: '0',
