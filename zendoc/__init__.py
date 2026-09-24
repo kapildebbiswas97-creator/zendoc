@@ -1,9 +1,10 @@
 import os
 from pathlib import Path
 
-from flask import Flask
+from flask import Flask, g, request
 
 from .config import load_config, validate_startup_config
+from .copilot import copilot_context
 from .ai_chat_routes import bp as ai_chat_bp
 from .call_signaling import ensure_call_schema
 from .call_routes import bp as calls_bp
@@ -70,6 +71,7 @@ from .preventive_care import ensure_preventive_care_schema
 from .preventive_care_routes import bp as preventive_care_bp
 from .public_ingestion_routes import bp as public_ingestion_bp
 from .provider_onboarding_routes import bp as provider_onboarding_bp
+from .provider_service import PROVIDER_ROLES, get_provider_profile_for_user
 from .provider_invitation import ensure_provider_invitation_schema
 from .public_launch_routes import bp as public_launch_bp
 from .release_health_routes import bp as release_health_bp
@@ -127,6 +129,31 @@ def create_app(test_config=None):
         Path(app.config["DATABASE"]).parent.mkdir(parents=True, exist_ok=True)
 
     app.before_request(start_request_observation)
+
+    @app.context_processor
+    def inject_zendoc_copilot():
+        user = getattr(g, "user", None)
+        role = None
+        if user is not None:
+            try:
+                role = user["role"]
+            except (KeyError, TypeError):
+                role = getattr(user, "role", None)
+
+        # Pending/rejected/suspended providers stay quarantined from
+        # operational Copilot shortcuts when strict public release is enabled.
+        if (
+            user is not None
+            and role in PROVIDER_ROLES
+            and app.config.get("PUBLIC_RELEASE_REQUIRED")
+        ):
+            profile = get_provider_profile_for_user(user["id"])
+            if not profile or str(profile["verification_status"]) != "verified":
+                return {"zendoc_copilot": None}
+
+        return {
+            "zendoc_copilot": copilot_context(request.endpoint, role),
+        }
 
     app.register_blueprint(ai_chat_bp)
     app.register_blueprint(calls_bp)
