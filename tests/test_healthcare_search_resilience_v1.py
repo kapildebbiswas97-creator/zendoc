@@ -778,6 +778,7 @@ def test_near_me_without_coordinates_does_not_send_me_as_external_location(tmp_p
         )
 
     assert provider.queries == []
+    assert result["query"]["text"] == "hospital near me"
     assert result["search_status"] in {"partial", "degraded"}
     assert any("current location" in warning.lower() for warning in result["warnings"])
 
