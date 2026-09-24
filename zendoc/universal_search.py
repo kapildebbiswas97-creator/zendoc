@@ -256,24 +256,34 @@ def search_all(user, query):
     lower = clean_q.lower()
     results = []
 
-    # 1. Family member matching
+    # 1. Family member matching. One optional subsystem must not make the
+    # entire global search unavailable.
     if user:
-        family_members = list_family_members(user)
-        matched_family = [fm for fm in family_members if lower in fm["member_name"].lower() or lower in fm["relationship"].lower()]
-        if matched_family:
-            results.append({
-                "category": "Family Care",
-                "label": "Family Members",
-                "items": [
-                    {
-                        "title": fm["member_name"],
-                        "subtitle": f"{fm['relationship'].title()} • {fm['city'] or 'Home'}",
-                        "url": f"/family?member_id={fm['id']}",
-                        "type": "family_member",
-                    }
-                    for fm in matched_family
-                ],
-            })
+        try:
+            family_members = list_family_members(user)
+            matched_family = [
+                fm for fm in family_members
+                if lower in str(fm.get("member_name") or "").lower()
+                or lower in str(fm.get("relationship") or "").lower()
+            ]
+            if matched_family:
+                results.append({
+                    "category": "Family Care",
+                    "label": "Family Members",
+                    "items": [
+                        {
+                            "title": fm["member_name"],
+                            "subtitle": f"{str(fm.get('relationship') or 'family').title()} • {fm.get('city') or 'Home'}",
+                            "url": f"/family?member_id={fm['id']}",
+                            "type": "family_member",
+                        }
+                        for fm in matched_family
+                    ],
+                })
+        except Exception:
+            LOGGER.exception(
+                "Global search family lookup failed; continuing with other categories."
+            )
 
     # 2. Healthcare discovery. Use the same parser/data tiers as the dedicated
     # Universal Healthcare Search instead of maintaining a weaker duplicate.
@@ -321,7 +331,13 @@ def search_all(user, query):
     # context (for example truth-boundary/unit tests). DB-backed exercise
     # lookup is optional in that case; real web/API requests always have an
     # app context and retain the full exercise search.
-    ex_res = list_exercises(q=clean_q, limit=5) if has_app_context() else {"exercises": []}
+    try:
+        ex_res = list_exercises(q=clean_q, limit=5) if has_app_context() else {"exercises": []}
+    except Exception:
+        LOGGER.exception(
+            "Global search exercise lookup failed; continuing with other categories."
+        )
+        ex_res = {"exercises": []}
     if ex_res.get("exercises"):
         results.append({
             "category": "Fitness & Exercises",
@@ -329,11 +345,12 @@ def search_all(user, query):
             "items": [
                 {
                     "title": ex["name"],
-                    "subtitle": f"{ex['category'].title()} • {ex['muscle_group']}",
+                    "subtitle": f"{str(ex.get('category') or 'exercise').title()} • {ex.get('muscle_group') or 'General'}",
                     "url": f"/fitness/exercises/{ex['id']}",
                     "type": "exercise",
                 }
                 for ex in ex_res["exercises"]
+                if isinstance(ex, dict) and ex.get("id") and ex.get("name")
             ],
         })
 
