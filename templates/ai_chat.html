@@ -25,6 +25,7 @@
   .ai-chat-composer-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
   .ai-guided-truth{margin-top:4px}
   .ai-guided-truth p{margin:.35rem 0}
+  .ai-context-chip{display:inline-flex;margin-top:8px;padding:6px 10px;border:1px solid var(--line,#dce6e4);border-radius:999px;background:var(--surface-2,#eef7f5);font-size:.78rem;font-weight:700}
   @media(max-width:760px){.ai-chat-shell{grid-template-columns:1fr}.ai-chat-sidebar{position:static;max-height:none}.ai-conversation-list{max-height:180px;overflow:auto}.ai-chat-bubble{max-width:95%}}
 </style>
 
@@ -60,6 +61,7 @@
   <section class="ai-chat-main" aria-labelledby="ai-chat-title">
     <header class="ai-chat-heading">
       <p class="eyebrow">{{ 'Clinical guidance mode' if mode == 'doctor' else 'Healthcare assistant' }}</p>
+      {% if source_context %}<div class="ai-context-chip" role="status">Opened from {{ source_context.replace('_',' ')|title }} · edit before sending</div>{% endif %}
       <h1 id="ai-chat-title">{{ 'Doctor AI' if mode == 'doctor' else 'ZENDOC AI' }}</h1>
       <p class="section-copy">{{ 'Safety-first educational guidance for symptoms, reports, medicines and deciding what kind of care to seek. It does not diagnose or prescribe.' if mode == 'doctor' else 'One conversation at a time, with your previous chats kept separate.' }}</p>
     </header>
@@ -106,7 +108,7 @@
       <input type="hidden" name="mode" value="{{ mode }}">
       {% if selected_conversation %}<input type="hidden" name="conversation_id" value="{{ selected_conversation.id }}">{% endif %}
       <label class="sr-only" for="assistant-message">Message {{ 'Doctor AI' if mode == 'doctor' else 'ZENDOC AI' }}</label>
-      <textarea id="assistant-message" name="message" maxlength="3000" rows="3" placeholder="{{ 'Describe your health concern…' if mode == 'doctor' else 'Message ZENDOC AI…' }}" required></textarea>
+      <textarea id="assistant-message" name="message" maxlength="3000" rows="3" placeholder="{{ 'Describe your health concern…' if mode == 'doctor' else 'Message ZENDOC AI…' }}" required>{{ draft or '' }}</textarea>
       <div class="ai-chat-composer-footer">
         <span id="edgecare-voice-input-status" class="form-note" role="status" aria-live="polite">Voice creates editable text only; it is never sent until you press Send.</span>
         <span class="form-actions">
