@@ -770,7 +770,9 @@ def test_payment_ledger_and_pwa_cache_use_evidence_first_ui(tmp_path):
     from pathlib import Path
     root = Path(__file__).resolve().parents[1]
     sw = (root / "static" / "sw.js").read_text(encoding="utf-8")
-    assert "zendoc-static-v5-commerce-payments-20260921" in sw
+    assert "zendoc-static-v6-launch-refresh-20260924" in sw
+    assert "fetch(request)" in sw
+    assert ".catch(() => caches.match(request))" in sw
 
 
 
