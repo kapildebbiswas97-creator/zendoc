@@ -6,7 +6,7 @@ This is an early-stage cost-control option, not a claim of managed HA, managed P
 
 ## Architecture
 
-Internet -> free/student domain -> OCI public IP -> Caddy on 80/443 -> ZENDOC web container -> PostgreSQL 16 on an internal-only Docker network.
+Browser -> Vercel public URL -> HTTPS OCI origin hostname -> Caddy on 80/443 -> ZENDOC web container -> PostgreSQL 16 on an internal-only Docker network. Vercel never connects to PostgreSQL.
 
 PostgreSQL has no published host port. Do not open TCP/5432 in OCI security lists, NSGs, or the VM firewall.
 
@@ -39,7 +39,7 @@ Generate separate strong random secrets. Hex is recommended for POSTGRES_PASSWOR
 
     openssl rand -hex 32
 
-Set ZENDOC_DOMAIN, ZENDOC_TLS_EMAIL, ZENDOC_GIT_COMMIT, POSTGRES_PASSWORD, ZENDOC_SECRET_KEY, ZENDOC_ADMIN_EMAIL and ZENDOC_ADMIN_PASSWORD. Keep ZENDOC_PERSISTENCE_VERIFIED, ZENDOC_BACKUP_VERIFIED and ZENDOC_PUBLIC_RELEASE_REQUIRED false initially. Never flip verification flags only to satisfy startup checks.
+Set ZENDOC_DOMAIN to the OCI origin hostname, ZENDOC_PUBLIC_BASE_URL to the Vercel production URL, plus ZENDOC_TLS_EMAIL, ZENDOC_GIT_COMMIT, POSTGRES_PASSWORD, ZENDOC_SECRET_KEY, ZENDOC_ADMIN_EMAIL and ZENDOC_ADMIN_PASSWORD. Keep ZENDOC_PERSISTENCE_VERIFIED, ZENDOC_BACKUP_VERIFIED and ZENDOC_PUBLIC_RELEASE_REQUIRED false initially. Never flip verification flags only to satisfy startup checks.
 
 ## 4. Start PostgreSQL, ZENDOC and HTTPS
 
@@ -51,14 +51,14 @@ From deploy/oci:
 
 Check:
 
-    curl -fsS https://YOUR_DOMAIN/api/v1/health
-    curl -fsS https://YOUR_DOMAIN/api/v1/ready
+    curl -fsS https://YOUR_OCI_ORIGIN/api/v1/health
+    curl -fsS https://YOUR_OCI_ORIGIN/api/v1/ready
 
 Readiness must truthfully report PostgreSQL, a reachable database, ready migrations/schema, deployment.platform=oci and the expected Git commit.
 
 Automated verification:
 
-    python scripts/verify_deployment.py https://YOUR_DOMAIN --expected-commit COMMIT_SHA --require-platform oci --require-engine postgresql
+    python scripts/verify_deployment.py https://YOUR_OCI_ORIGIN --expected-commit COMMIT_SHA --require-platform oci --require-engine postgresql
 
 Do not add --require-persistence-verified until the manual persistence test has actually passed.
 
