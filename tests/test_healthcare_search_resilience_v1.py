@@ -476,12 +476,12 @@ def test_natural_location_query_uses_location_and_inferred_category_for_internal
     app = make_app(tmp_path)
     seen = {"registered": None, "public": None}
 
-    def fake_registered(text, category, latitude, longitude, radius_km):
-        seen["registered"] = (text, category)
+    def fake_registered(text, category, latitude, longitude, radius_km, location_text=""):
+        seen["registered"] = (text, category, location_text)
         return []
 
-    def fake_public(text, category, latitude, longitude, radius_km):
-        seen["public"] = (text, category)
+    def fake_public(text, category, latitude, longitude, radius_km, location_text=""):
+        seen["public"] = (text, category, location_text)
         return [
             {
                 "id": 1,
@@ -504,8 +504,8 @@ def test_natural_location_query_uses_location_and_inferred_category_for_internal
             places_provider=EmptyAvailableProvider(),
         )
 
-    assert seen["registered"] == ("Kalyani", "hospital")
-    assert seen["public"] == ("Kalyani", "hospital")
+    assert seen["registered"] == ("", "hospital", "Kalyani")
+    assert seen["public"] == ("", "hospital", "Kalyani")
     assert result["results"][0]["name"] == "Kalyani Public Hospital"
 
 
@@ -516,12 +516,12 @@ def test_named_location_query_preserves_provider_name_for_internal_search(tmp_pa
     monkeypatch.setattr(
         universal_health_search,
         "_registered_matches",
-        lambda text, category, latitude, longitude, radius_km: seen.append((text, category)) or [],
+        lambda text, category, latitude, longitude, radius_km, location_text="": seen.append((text, category, location_text)) or [],
     )
     monkeypatch.setattr(
         universal_health_search,
         "_public_matches",
-        lambda text, category, latitude, longitude, radius_km: [],
+        lambda text, category, latitude, longitude, radius_km, location_text="": [],
     )
 
     with app.app_context():
@@ -531,7 +531,7 @@ def test_named_location_query_preserves_provider_name_for_internal_search(tmp_pa
             places_provider=EmptyAvailableProvider(),
         )
 
-    assert seen == [("Apollo", "hospital")]
+    assert seen == [("Apollo", "hospital", "Kolkata")]
 
 
 def test_healthcare_search_api_returns_degraded_json_instead_of_500(tmp_path, monkeypatch):
@@ -628,3 +628,124 @@ def test_provider_discovery_api_returns_degraded_json_instead_of_500(tmp_path, m
     assert payload["search_status"] == "degraded"
     assert payload["results"] == []
     assert "temporarily limited" in payload["message"].lower()
+
+
+def test_find_care_aliases_redirect_without_404(tmp_path):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    register_web(client, "patient", "finder-alias-current@example.com", "Finder Alias")
+    login_web(client, "patient", "finder-alias-current@example.com")
+
+    simple = client.get("/nearby-care")
+    assert simple.status_code == 302
+    assert simple.headers["Location"].endswith("/finder")
+
+    searched = client.get("/find-care?q=Kalyani&category=hospital")
+    assert searched.status_code == 302
+    assert "/universal-search?" in searched.headers["Location"]
+    assert "q=Kalyani" in searched.headers["Location"]
+    assert "category=hospital" in searched.headers["Location"]
+
+
+def test_specialist_in_location_uses_stored_specialty_and_location_filters(tmp_path, monkeypatch):
+    app = make_app(tmp_path)
+    seen = []
+
+    monkeypatch.setattr(
+        universal_health_search,
+        "_registered_matches",
+        lambda text, category, latitude, longitude, radius_km, location_text="": seen.append(
+            ("registered", text, category, location_text)
+        ) or [],
+    )
+    monkeypatch.setattr(
+        universal_health_search,
+        "_public_matches",
+        lambda text, category, latitude, longitude, radius_km, location_text="": seen.append(
+            ("public", text, category, location_text)
+        ) or [],
+    )
+
+    with app.app_context():
+        universal_search(
+            "cardiologist in Kalyani",
+            category="all",
+            places_provider=EmptyAvailableProvider(),
+        )
+
+    assert ("registered", "cardiology", "doctor", "Kalyani") in seen
+    assert ("public", "cardiology", "doctor", "Kalyani") in seen
+
+
+class CapturingNamedProvider(PlacesProvider):
+    source = "capturing-named"
+
+    def __init__(self):
+        self.queries = []
+
+    def search(self, query):
+        self.queries.append(dict(query))
+        return PlacesResult(
+            available=True,
+            results=[{
+                "id": "named:hospital:1",
+                "name": "Apollo Hospital",
+                "category": "hospital",
+                "source": self.source,
+                "verification_status": "external_unverified",
+                "bookable_in_zendoc": False,
+            }],
+            source=self.source,
+        )
+
+
+def test_named_provider_query_uses_direct_external_search_text(tmp_path):
+    app = make_app(tmp_path)
+    provider = CapturingNamedProvider()
+
+    with app.app_context():
+        result = universal_search("Apollo Hospital", places_provider=provider)
+
+    assert provider.queries
+    assert provider.queries[0]["search_text"] == "Apollo Hospital"
+    assert provider.queries[0]["location"] == ""
+    assert provider.queries[0]["category"] == "hospital"
+    assert result["results"][0]["name"] == "Apollo Hospital"
+
+
+def test_google_named_provider_search_uses_direct_text():
+    provider = GooglePlacesProvider("test-key", timeout_seconds=3)
+    body = provider._text_search_body({
+        "category": "hospital",
+        "search_text": "Apollo Hospital",
+        "location": "",
+        "specialty": "",
+    })
+
+    assert body["textQuery"] == "Apollo Hospital"
+    assert body["includedType"] == "hospital"
+
+
+def test_nominatim_named_provider_search_uses_direct_text(monkeypatch):
+    from zendoc.places_provider import NominatimPlacesProvider
+
+    provider = NominatimPlacesProvider(timeout_seconds=1)
+    requested = []
+
+    def fake_get_json(url):
+        requested.append(url)
+        return []
+
+    monkeypatch.setattr(provider, "_get_json", fake_get_json)
+    result = provider.search({
+        "category": "hospital",
+        "search_text": "Apollo Hospital",
+        "location": "",
+        "latitude": None,
+        "longitude": None,
+        "radius_km": 10,
+    })
+
+    assert result.available is True
+    assert requested
+    assert "q=Apollo+Hospital" in requested[0]
