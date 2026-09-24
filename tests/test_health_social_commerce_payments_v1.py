@@ -773,6 +773,9 @@ def test_payment_ledger_and_pwa_cache_use_evidence_first_ui(tmp_path):
     assert "zendoc-static-v6-launch-refresh-20260924" in sw
     assert "fetch(request)" in sw
     assert ".catch(() => caches.match(request))" in sw
+    pwa = (root / "static" / "pwa.js").read_text(encoding="utf-8")
+    assert 'updateViaCache: "none"' in pwa
+    assert ".then((registration) => registration.update())" in pwa
 
 
 

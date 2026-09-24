@@ -2,9 +2,12 @@
   if (!("serviceWorker" in navigator) || !window.isSecureContext) return;
 
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {
-      // PWA installation is optional; the web app continues without it.
-    });
+    navigator.serviceWorker
+      .register("/sw.js", { scope: "/", updateViaCache: "none" })
+      .then((registration) => registration.update())
+      .catch(() => {
+        // PWA installation is optional; the web app continues without it.
+      });
   });
 
   let installPrompt = null;
