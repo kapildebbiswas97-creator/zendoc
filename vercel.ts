@@ -25,6 +25,9 @@ if (
 const origin = parsedOrigin.origin
 
 export const config: VercelConfig = {
+  git: {
+    deploymentEnabled: false,
+  },
   rewrites: [routes.rewrite('/:path*', `${origin}/:path*`)],
   headers: [
     routes.header('/:path*', [
