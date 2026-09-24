@@ -89,6 +89,7 @@ def jev_runtime_status() -> dict:
         "context_mode": context_mode,
         "trust_mode": trust_mode,
         "external_provider": not loopback,
+        "health_text_opt_in": _env_bool("ZENDOC_JEV_ALLOW_HEALTH_TEXT", False),
         "confidence_threshold": _env_float(
             "ZENDOC_JEV_CONFIDENCE_THRESHOLD", 0.85, minimum=0.50, maximum=0.99
         ),
