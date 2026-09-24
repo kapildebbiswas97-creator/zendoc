@@ -1,6 +1,7 @@
 from zendoc.agent_planner import AgentPlan, PlanStep
 from zendoc.agent_fleet import list_fleet_agents
 from zendoc.agent_registry import list_agents
+from zendoc.agent_executor import TOOL_HANDLERS
 from zendoc.agentic_decision_layer import (
     ASK_HUMAN,
     HUMAN_GATE,
@@ -203,3 +204,50 @@ def test_decision_manifest_covers_every_registered_agent(monkeypatch):
     assert profiled == registered
     assert all(agent["decision_engine"] == "jev_system_one_optional" for agent in manifest["agents"])
     assert all(agent["mission"] for agent in manifest["agents"])
+
+
+def test_every_assigned_agent_tool_has_bounded_executor_handler():
+    assigned = {
+        tool
+        for agent in list_agents()
+        for tool in agent["allowed_tools"]
+    }
+    assert assigned
+    assert assigned <= set(TOOL_HANDLERS)
+
+
+def test_planner_routes_remaining_domain_agents_to_real_tools():
+    actor = {"id": 501, "role": "patient", "active": 1}
+
+    fitness = __import__("zendoc.agent_planner", fromlist=["build_plan"]).build_plan(
+        actor, "show my fitness progress"
+    )
+    assert fitness.assigned_agent == "FitnessAgent"
+    assert [step.tool_name for step in fitness.steps] == ["get_fitness_snapshot"]
+
+    fitness_generate = __import__("zendoc.agent_planner", fromlist=["build_plan"]).build_plan(
+        actor, "create workout plan"
+    )
+    assert fitness_generate.assigned_agent == "FitnessAgent"
+    assert [step.tool_name for step in fitness_generate.steps] == [
+        "get_fitness_snapshot",
+        "generate_fitness_plan",
+    ]
+
+    family = __import__("zendoc.agent_planner", fromlist=["build_plan"]).build_plan(
+        actor, "show my family care tasks"
+    )
+    assert family.assigned_agent == "FamilyCareAgent"
+    assert family.steps[0].tool_name == "get_family_care_snapshot"
+
+    home = __import__("zendoc.agent_planner", fromlist=["build_plan"]).build_plan(
+        actor, "show home health nurse options"
+    )
+    assert home.assigned_agent == "HomeHealthAgent"
+    assert home.steps[0].tool_name == "get_home_health_options"
+
+    transport = __import__("zendoc.agent_planner", fromlist=["build_plan"]).build_plan(
+        actor, "show medical transport options"
+    )
+    assert transport.assigned_agent == "TransportAgent"
+    assert transport.steps[0].tool_name == "get_transport_options"
