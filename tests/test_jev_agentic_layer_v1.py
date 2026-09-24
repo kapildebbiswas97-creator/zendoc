@@ -1,7 +1,9 @@
+import pytest
+
 from zendoc.agent_planner import AgentPlan, PlanStep
 from zendoc.agent_fleet import list_fleet_agents
 from zendoc.agent_registry import list_agents
-from zendoc.agent_executor import TOOL_HANDLERS
+from zendoc.agent_executor import TOOL_HANDLERS, execute_plan
 from zendoc.agentic_decision_layer import (
     ASK_HUMAN,
     HUMAN_GATE,
@@ -251,3 +253,28 @@ def test_planner_routes_remaining_domain_agents_to_real_tools():
     )
     assert transport.assigned_agent == "TransportAgent"
     assert transport.steps[0].tool_name == "get_transport_options"
+
+
+@pytest.mark.parametrize(
+    ("agent_id", "tool_name"),
+    [
+        ("HomeHealthAgent", "confirm_home_health_request"),
+        ("TransportAgent", "confirm_transport_request"),
+    ],
+)
+def test_consequential_service_intake_cannot_run_inside_autonomous_plan(agent_id, tool_name):
+    plan = AgentPlan(
+        plan_id="human-gate-test",
+        command="confirm request",
+        intent="service_request",
+        urgency="routine",
+        assigned_agent=agent_id,
+        risk_level="consent_required",
+        steps=(PlanStep(1, tool_name, {"user_confirmed": True}, "must stay human gated"),),
+        requires_confirmation=True,
+        privacy_class="HEALTH_SENSITIVE",
+        human_gate="explicit_user_confirmation",
+    )
+    actor = {"id": 501, "role": "patient", "active": 1}
+    with pytest.raises(PermissionError, match="explicit human authorization workflow"):
+        execute_plan(plan, actor)
