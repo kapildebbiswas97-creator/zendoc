@@ -1,4 +1,4 @@
-const STATIC_CACHE = "zendoc-static-v5-commerce-payments-20260921";
+const STATIC_CACHE = "zendoc-static-v6-launch-refresh-20260924";
 const STATIC_ASSETS = [
   "/static/style.css",
   "/static/ui-polish.css",
@@ -39,21 +39,23 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
 
   // Never cache API responses or authenticated HTML/health data. Static assets
-  // are the only cache-first resources in this service worker.
+  // use network-first delivery so a new deployment does not keep serving stale
+  // JavaScript/CSS from an older installed PWA; cache is offline fallback only.
   if (url.pathname.startsWith("/api/")) return;
 
   if (url.pathname.startsWith("/static/")) {
     event.respondWith(
-      caches.match(request).then((cached) => {
-        if (cached) return cached;
-        return fetch(request).then((response) => {
+      fetch(request)
+        .then((response) => {
           if (response.ok) {
             const copy = response.clone();
-            caches.open(STATIC_CACHE).then((cache) => cache.put(request, copy));
+            event.waitUntil(
+              caches.open(STATIC_CACHE).then((cache) => cache.put(request, copy))
+            );
           }
           return response;
-        });
-      })
+        })
+        .catch(() => caches.match(request))
     );
     return;
   }
