@@ -146,6 +146,46 @@ def _like(value):
     return f"%{value}%"
 
 
+def _internal_search_plan(query_text, term, explicit_location, inferred_category, selected_category):
+    """Choose a useful DB search term/category from natural healthcare text.
+
+    External providers already understand constructs such as "hospital in Kalyani".
+    The local/public DB should not search that entire phrase literally because it
+    hides valid directory rows whose location is Kalyani and category is hospital.
+    Named searches such as "Apollo Hospital in Kolkata" preserve "Apollo Hospital"
+    instead of degrading to a location-only lookup.
+    """
+    effective_category = selected_category
+    if effective_category == "all" and inferred_category:
+        effective_category = inferred_category
+
+    raw_term = str(term or "").strip()
+    location = str(explicit_location or "").strip()
+    if not location:
+        return str(query_text or "").strip(), effective_category
+
+    remainder = raw_term
+    if inferred_category:
+        aliases = [
+            alias for alias, category in CATEGORY_ALIASES.items()
+            if category == inferred_category
+        ]
+        for alias in sorted(aliases, key=len, reverse=True):
+            remainder = re.sub(
+                rf"\b{re.escape(alias)}\b",
+                " ",
+                remainder,
+                flags=re.IGNORECASE,
+            )
+        remainder = " ".join(remainder.replace(",", " ").split()).strip()
+
+    # "hospital in Kalyani" and "pharmacy Kalyani" should search local/public
+    # rows by Kalyani, while "Apollo Hospital in Kolkata" should keep Apollo.
+    if not remainder or remainder.casefold() == location.casefold():
+        return location, effective_category
+    return raw_term or location, effective_category
+
+
 def _registered_matches(text, category, latitude, longitude, radius_km):
     db = get_db()
     clauses = ["u.active=1", "p.verification_status='verified'"]
@@ -417,17 +457,23 @@ def universal_search(text=None, category="all", latitude=None, longitude=None, r
     term, explicit_location, inferred = _text_parts(query["text"])
     selected_category = query["category"]
 
-    internal_text = query["text"]
+    internal_text, internal_category = _internal_search_plan(
+        query["text"],
+        term,
+        explicit_location,
+        inferred,
+        selected_category,
+    )
     records = _registered_matches(
         internal_text,
-        selected_category,
+        internal_category,
         query["latitude"],
         query["longitude"],
         query["radius_km"],
     )
     records += _public_matches(
         internal_text,
-        selected_category,
+        internal_category,
         query["latitude"],
         query["longitude"],
         query["radius_km"],
@@ -482,9 +528,15 @@ def universal_search(text=None, category="all", latitude=None, longitude=None, r
                         or "An external healthcare map source is temporarily unavailable."
                     )
 
-        # Only real configured searches add Overpass. Unit tests that inject a
-        # places provider remain deterministic and make no network calls.
-        if places_provider is None:
+        # Overpass is a fallback, not a second mandatory network dependency.
+        # Running Nominatim/Google and Overpass serially on every request can
+        # stack upstream latency on small/free hosts and surface as a proxy 502.
+        # Use Overpass only when the configured places provider responded
+        # successfully but returned no usable listings. If the primary source
+        # timed out/unavailable, return a degraded page immediately instead of
+        # waiting on another remote service.
+        primary_available = bool(place_result is not None and place_result.available)
+        if places_provider is None and not external_results and primary_available:
             osm_category = selected_category if selected_category != "all" else (inferred or "all")
             osm_results, osm_message = _osm_poi_results(
                 explicit_location or query["text"],
