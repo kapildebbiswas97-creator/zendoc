@@ -11,6 +11,7 @@ from .notification_providers import notification_provider_status
 from .payments import payment_gateway_status
 from .community_media import get_community_media_storage
 from .record_storage import get_record_storage
+from .jev_system_one import jev_runtime_status
 
 
 def _present(*keys):
@@ -40,8 +41,20 @@ def integration_readiness_snapshot():
     media=get_community_media_storage().status()
     records=get_record_storage().status()
     notifications=notification_provider_status()
+    jev=jev_runtime_status()
 
     rows=[
+        _item(
+            "jev_decisions","Jev / System One agent decisions",
+            jev["status"].upper(),True,not bool(jev["configured"]),
+            (),
+            (
+                "The bounded Jev decision adapter and per-agent control profiles are implemented. "
+                "A real TypeSafe API key or an approved local Jev-compatible endpoint is still required before live Jev decisions run. "
+                "Configuration never grants tool permission and does not prove provider uptime or decision quality."
+            ),
+            "/agent-os",
+        ),
         _item(
             "payments","Care payments / UPI-capable gateway",
             registry["connected_payments_gateway"]["status"],True,not gateway["ready_for_live_payment"],
