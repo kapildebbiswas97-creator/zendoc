@@ -149,6 +149,8 @@ The decision layer is intentionally subordinate to the existing control plane:
 - provider failure falls back to the existing deterministic bounded policy;
 - metadata-only mode is the default, so raw user text is not sent to an external
   decision provider;
+- health-sensitive/high-risk text requires both a private-verified trust mode
+  and the separate `ZENDOC_JEV_ALLOW_HEALTH_TEXT=true` operator opt-in;
 - a private verified Jev-compatible endpoint can be configured separately when
   the operator has established the required privacy/compliance boundary.
 
