@@ -23,11 +23,16 @@ STOP = "STOP"
 def _privacy_allows_text(privacy_class: str) -> bool:
     mode = str(os.environ.get("ZENDOC_JEV_CONTEXT_MODE") or "metadata_only").strip().lower()
     trust = str(os.environ.get("ZENDOC_JEV_TRUST_MODE") or "external_unverified").strip().lower()
+    privacy = str(privacy_class or "").upper()
     if mode != "minimum_text":
         return False
     if trust == "private_verified":
+        if privacy in {"HEALTH_SENSITIVE", "HIGH_RISK"}:
+            return str(os.environ.get("ZENDOC_JEV_ALLOW_HEALTH_TEXT") or "").strip().lower() in {
+                "1", "true", "yes", "on"
+            }
         return True
-    return str(privacy_class or "").upper() in {"PUBLIC", "INTERNAL"}
+    return privacy in {"PUBLIC", "INTERNAL"}
 
 
 def _decision_state(plan, command_text: str, context: dict | None) -> tuple[dict, bool]:
