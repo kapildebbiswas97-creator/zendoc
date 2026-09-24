@@ -155,6 +155,13 @@ def _first_output(execution):
 def _payload_for_plan(plan, execution):
     """Preserve established single-tool payloads while retaining bounded multi-step evidence."""
     results = execution.get("tool_results") or []
+    if plan.intent == "fitness":
+        snapshot = results[0].get("output") if len(results) > 0 else None
+        generated = results[1].get("output") if len(results) > 1 else None
+        return {
+            "snapshot": snapshot or {},
+            "generated_plan": generated,
+        }
     if plan.intent == "health_records":
         health_memory = results[0].get("output") if len(results) > 0 else None
         retrieval = results[1].get("output") if len(results) > 1 else None
@@ -252,11 +259,58 @@ def _compose(plan, execution, payload):
         actions = [{"type": "learning_resources", "label": "Review health learning resources", "data": payload or {}}]
 
     elif intent == "fitness":
+        generated = payload.get("generated_plan") if isinstance(payload, dict) else None
+        if isinstance(generated, dict) and generated.get("plan_created"):
+            plan_data = generated.get("plan") or {}
+            message = (
+                f"Fitness Agent created general-wellness workout plan #{plan_data.get('id')}. "
+                "Medical exercise restrictions remain outside autonomous fitness coaching."
+            )
+        elif isinstance(generated, dict) and generated.get("status") == "REVIEW_RECOMMENDED":
+            message = generated.get("reason") or "Fitness Agent paused plan generation for review."
+        else:
+            message = (
+                "Fitness Agent reviewed the authenticated user's fitness profile, current plan and recent progress "
+                "without treating fitness guidance as medical treatment."
+            )
+        actions = [{"type": "fitness", "label": "Open Fitness", "url": "/fitness", "data": payload or {}}]
+
+    elif intent == "family_care":
+        members = payload.get("family_members", []) if isinstance(payload, dict) else []
+        tasks = payload.get("care_tasks", []) if isinstance(payload, dict) else []
         message = (
-            "Fitness Agent is responsible for this request. It can work with the authenticated user's fitness profile, plans, "
-            "sessions and progress while keeping medical restrictions outside autonomous fitness coaching."
+            f"Family Care Agent found {len(members)} family/dependent record(s) and {len(tasks)} scoped care task(s) "
+            "visible under the current consent grants."
         )
-        actions = [{"type": "fitness", "label": "Open Fitness", "url": "/fitness"}]
+        actions = [{"type": "family_care", "label": "Open Family Care", "url": "/family", "data": payload or {}}]
+
+    elif intent == "home_health":
+        services = payload.get("services", []) if isinstance(payload, dict) else []
+        message = (
+            f"Home Health Agent prepared {len(services)} service category option(s). "
+            "Creating an intake request requires fresh confirmation and does not mean a provider accepted it."
+        )
+        actions = [{
+            "type": "home_health_options",
+            "label": "Review Home Health options",
+            "url": "/home-health",
+            "data": payload or {},
+            "confirmation_endpoint": "/api/v1/agent/home-health/confirm",
+        }]
+
+    elif intent == "medical_transport":
+        options = payload.get("transport_types", []) if isinstance(payload, dict) else []
+        message = (
+            f"Transport Agent prepared {len(options)} medical-transport category option(s). "
+            "A confirmed intake records a request only; ZENDOC does not claim vehicle dispatch or provider acceptance."
+        )
+        actions = [{
+            "type": "transport_options",
+            "label": "Review Transport options",
+            "url": "/ambulance",
+            "data": payload or {},
+            "confirmation_endpoint": "/api/v1/agent/transport/confirm",
+        }]
 
     elif intent == "model_improvement":
         message = (
