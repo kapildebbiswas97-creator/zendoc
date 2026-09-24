@@ -47,13 +47,11 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          if (response.ok) {
-            const copy = response.clone();
-            event.waitUntil(
-              caches.open(STATIC_CACHE).then((cache) => cache.put(request, copy))
-            );
-          }
-          return response;
+          if (!response.ok) return response;
+          const copy = response.clone();
+          return caches.open(STATIC_CACHE)
+            .then((cache) => cache.put(request, copy))
+            .then(() => response);
         })
         .catch(() => caches.match(request))
     );
