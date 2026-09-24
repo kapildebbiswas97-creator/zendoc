@@ -1,4 +1,6 @@
 from zendoc.agent_planner import AgentPlan, PlanStep
+from zendoc.agent_fleet import list_fleet_agents
+from zendoc.agent_registry import list_agents
 from zendoc.agentic_decision_layer import (
     ASK_HUMAN,
     HUMAN_GATE,
@@ -190,9 +192,14 @@ def test_system_one_rejects_answer_outside_declared_choice(monkeypatch):
         raise AssertionError("Invalid Jev choice must fail closed.")
 
 
-def test_decision_manifest_covers_every_fleet_agent(monkeypatch):
+def test_decision_manifest_covers_every_registered_agent(monkeypatch):
     monkeypatch.delenv("ZENDOC_JEV_ENABLED", raising=False)
+    registered = {agent["identifier"] for agent in list_agents()}
+    fleet = {agent["agent_id"] for agent in list_fleet_agents()}
+    assert registered == fleet
+
     manifest = decision_layer_manifest()
-    assert manifest["agents"]
+    profiled = {agent["agent_id"] for agent in manifest["agents"]}
+    assert profiled == registered
     assert all(agent["decision_engine"] == "jev_system_one_optional" for agent in manifest["agents"])
     assert all(agent["mission"] for agent in manifest["agents"])
