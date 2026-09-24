@@ -12,6 +12,7 @@ from .payments import payment_gateway_status
 from .community_media import get_community_media_storage
 from .record_storage import get_record_storage
 from .jev_system_one import jev_runtime_status
+from .agentic_integration_mesh import integration_ownership
 
 
 def _present(*keys):
@@ -19,6 +20,7 @@ def _present(*keys):
 
 
 def _item(key,label,status,software_ready,external_required,required_config,notes,href=None):
+    ownership = integration_ownership(key)
     return {
         "key":key,
         "label":label,
@@ -29,6 +31,7 @@ def _item(key,label,status,software_ready,external_required,required_config,note
         "configuration_present":all(_present(name) for name in required_config) if required_config else True,
         "notes":notes,
         "href":href,
+        **ownership,
     }
 
 
