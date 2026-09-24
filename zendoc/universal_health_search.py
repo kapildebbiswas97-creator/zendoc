@@ -394,7 +394,8 @@ def _osm_poi_results(location, category, latitude, longitude, radius_km):
         return [], None
     try:
         from .osm_healthcare import OverpassHealthcareProvider
-        result = OverpassHealthcareProvider().search({
+        timeout = os.environ.get("ZENDOC_OVERPASS_TIMEOUT_SECONDS", "4")
+        result = OverpassHealthcareProvider(timeout_seconds=timeout).search({
             "category": category,
             "location": location,
             "latitude": latitude,
