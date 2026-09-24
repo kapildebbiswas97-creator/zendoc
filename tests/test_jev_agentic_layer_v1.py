@@ -4,6 +4,7 @@ from zendoc.agent_planner import AgentPlan, PlanStep
 from zendoc.agent_fleet import list_fleet_agents
 from zendoc.agent_registry import list_agents
 from zendoc.agent_executor import TOOL_HANDLERS, execute_plan
+from zendoc.agentic_integration_mesh import INTEGRATION_POLICIES
 from zendoc.agentic_decision_layer import (
     ASK_HUMAN,
     HUMAN_GATE,
@@ -278,3 +279,27 @@ def test_consequential_service_intake_cannot_run_inside_autonomous_plan(agent_id
     actor = {"id": 501, "role": "patient", "active": 1}
     with pytest.raises(PermissionError, match="explicit human authorization workflow"):
         execute_plan(plan, actor)
+
+
+def test_external_integration_mesh_has_registered_agent_owners():
+    registered = {agent["identifier"] for agent in list_agents()}
+    expected = {
+        "jev_decisions",
+        "payments",
+        "external_ekyc",
+        "carefin_partner",
+        "durable_media",
+        "webrtc",
+        "affiliate",
+        "maps",
+        "video_search",
+        "external_notifications",
+        "database",
+    }
+    assert set(INTEGRATION_POLICIES) == expected
+    for policy in INTEGRATION_POLICIES.values():
+        assert policy["owner_agents"]
+        assert set(policy["owner_agents"]) <= registered
+        assert policy["autonomous_scope"]
+        assert policy["fallback_mode"]
+        assert policy["human_gate"]
