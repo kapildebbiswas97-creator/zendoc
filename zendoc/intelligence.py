@@ -65,7 +65,7 @@ class ZendocIntelligence:
         self.safety_engine = safety_engine or SafetyEngine()
         self._fitness_coach = FitnessCoach()
 
-    def respond(self, message, user=None, conversation=None):
+    def respond(self, message, user=None, conversation=None, *, allow_agent_os=False):
         started = time.perf_counter()
         clean_message = (message or "").strip()
         if not clean_message:
@@ -109,7 +109,83 @@ class ZendocIntelligence:
             return result, self._latency(started)
 
         context = self._context(user, conversation, intent)
-        if intent == "orchestration_request":
+        if intent == "agent_os_request":
+            if allow_agent_os:
+                try:
+                    from .specialist_orchestrator import run_specialist_workflow
+
+                    agent_result = run_specialist_workflow(user, clean_message, {})
+                    task = agent_result.get("workflow_task") or {}
+                    journey = agent_result.get("care_journey") or {}
+                    plan_meta = agent_result.get("plan") or {}
+                    workflow_note = (
+                        f" Agent OS workflow #{task.get('id')} is {str(task.get('status') or '').replace('_', ' ')}."
+                        if task.get("id")
+                        else ""
+                    )
+                    actions = [
+                        {
+                            "type": str(action.get("type") or "agent_os"),
+                            "label": str(action.get("label") or "Continue in Agent OS"),
+                            **({"url": action.get("url")} if action.get("url") else {}),
+                        }
+                        for action in (agent_result.get("actions") or [])
+                        if isinstance(action, dict)
+                    ]
+                    actions.append({"type": "agent_os", "label": "Open Agent OS"})
+                    result = IntelligenceResult(
+                        intent="agent_os_request",
+                        urgency=str(plan_meta.get("urgency") or "routine"),
+                        message=str(agent_result.get("message") or "Agent OS prepared the bounded next step.") + workflow_note,
+                        guidance=str(agent_result.get("message") or ""),
+                        summary=f"{agent_result.get('assigned_agent') or 'Agent OS'} handled the bounded multi-step care goal.",
+                        possible_actions=actions,
+                        recommended_actions=actions,
+                        provider="specialist_agent_os",
+                        success=str(agent_result.get("execution_status") or "") not in {"blocked", "failed"},
+                        next_step=str(agent_result.get("human_gate") or "Continue in Agent OS"),
+                        model_metadata={
+                            "agent_os": {
+                                "assigned_agent": agent_result.get("assigned_agent"),
+                                "intent": agent_result.get("intent"),
+                                "execution_status": agent_result.get("execution_status"),
+                                "workflow_task_id": task.get("id"),
+                                "workflow_task_status": task.get("status"),
+                                "care_journey_id": journey.get("id"),
+                                "care_journey_state": journey.get("state"),
+                                "requires_confirmation": bool(agent_result.get("requires_confirmation")),
+                                "decision_source": (agent_result.get("decision_control") or {}).get("source"),
+                            }
+                        },
+                    )
+                except (LookupError, PermissionError, RuntimeError, ValueError):
+                    result = IntelligenceResult(
+                        intent="agent_os_request",
+                        urgency="routine",
+                        message=(
+                            "I recognized this as a multi-step care goal, but I could not safely start the bounded Agent OS workflow "
+                            "with the currently authorized context. Open Agent OS to review the goal and any missing information."
+                        ),
+                        follow_up_questions=[],
+                        possible_actions=[{"type": "agent_os", "label": "Open Agent OS"}],
+                        provider="agent_os_safe_fallback",
+                        success=False,
+                        safety_notice="No consequential action was executed.",
+                    )
+            else:
+                result = IntelligenceResult(
+                    intent="agent_os_request",
+                    urgency="routine",
+                    message=(
+                        "This is a multi-step care coordination request. Continue in ZENDOC Agent OS, where reversible steps can be "
+                        "planned automatically and consequential actions stay behind explicit human confirmation."
+                    ),
+                    follow_up_questions=[],
+                    possible_actions=[{"type": "agent_os", "label": "Open Agent OS"}],
+                    provider="agent_os_handoff",
+                    safety_notice="No Agent OS tool was executed from this chat mode.",
+                )
+        elif intent == "orchestration_request":
             from .orchestrator import HealthcareOrchestrator
             orch = HealthcareOrchestrator()
             plan = orch.orchestrate(user, clean_message)
