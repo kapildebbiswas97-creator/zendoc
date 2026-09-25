@@ -229,6 +229,7 @@ def build_plan(actor, command_text: str) -> AgentPlan:
 
     if any(text in lower for text in (
         "book appointment", "appointment booking", "doctor appointment", "appointment slot",
+        "request a consultation", "request consultation", "consultation request", "schedule consultation",
         "available appointment", "available slot", "reschedule appointment", "change appointment date",
     )):
         return _plan(
