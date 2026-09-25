@@ -122,6 +122,8 @@ def test_non_owner_cannot_create_provider_invitation(tmp_path):
             "name": "Patient",
             "email": "patient-invite@example.com",
             "password": "StrongPass123",
+            "accept_privacy": "1",
+            "accept_terms": "1",
         },
     )
     login_web(client, "patient", "patient-invite@example.com")
