@@ -335,6 +335,14 @@ def _compose(plan, execution, payload):
         )
         actions = [{"type": "diagnostics", "label": "Review diagnostic options", "data": payload or {}}]
 
+    elif intent == "prescription":
+        message = (
+            "Medication Safety Agent reviewed the latest authorized prescription state. "
+            "It did not change medicines, doses, or clinician instructions. Continue to Pharmacy only if you want "
+            "truthful inventory discovery or a fulfilment request after this safety check."
+        )
+        actions = [{"type": "pharmacy", "label": "Continue to Pharmacy", "url": "/pharmacy", "data": payload or {}}]
+
     elif intent == "pharmacy":
         offers = payload.get("offers", []) if isinstance(payload, dict) else []
         message = (
