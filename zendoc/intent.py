@@ -109,6 +109,7 @@ def is_multi_step_care_goal(message):
         ("diagnostic", "lab", "test"),
         ("mother", "father", "parent", "family", "dependent"),
         ("home health", "home care", "transport", "ambulance"),
+        ("follow up", "follow-up", "care journey", "care plan"),
     )
 
     action_count = sum(1 for family in action_families if any(term in text for term in family))
