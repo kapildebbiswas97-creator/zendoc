@@ -162,3 +162,14 @@ def test_public_release_blocks_government_self_registration(tmp_path):
     )
     assert api.status_code == 403
     assert "controlled onboarding" in api.get_json()["error"]["message"]
+
+
+def test_patient_registration_page_requires_policy_checkboxes_even_without_strict_release_mode(tmp_path):
+    app, client = make_client(tmp_path)
+    app.config["PUBLIC_RELEASE_REQUIRED"] = False
+
+    response = client.get("/register/patient")
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert 'name="accept_privacy" value="1" required' in body
+    assert 'name="accept_terms" value="1" required' in body
