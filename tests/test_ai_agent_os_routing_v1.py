@@ -61,6 +61,8 @@ def test_zendoc_ai_can_start_bounded_agent_os_workflow(monkeypatch):
     assert result.model_metadata["agent_os"]["workflow_task_id"] == 77
     assert result.model_metadata["agent_os"]["requires_confirmation"] is True
     assert "workflow #77" in result.message.lower()
+    assert "care journey #88" in result.message.lower()
+    assert "waiting user selection" in result.message.lower()
 
 
 def test_agent_os_execution_is_opt_in_to_zendoc_ai_mode(monkeypatch):
