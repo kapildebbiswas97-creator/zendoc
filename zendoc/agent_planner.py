@@ -326,17 +326,79 @@ def build_plan(actor, command_text: str) -> AgentPlan:
         )
 
     if any(text in lower for text in ("workout", "fitness", "exercise plan", "exercise instruction", "my progress")):
+        generate_requested = any(
+            phrase in lower
+            for phrase in ("create workout plan", "generate workout plan", "make workout plan", "new workout plan")
+        )
+        steps = [
+            PlanStep(1, "get_fitness_snapshot", {}, "Read the authenticated patient's current fitness profile, plan and recent progress.")
+        ]
+        if generate_requested:
+            steps.append(
+                PlanStep(2, "generate_fitness_plan", {}, "Generate a general-wellness plan only when the saved profile supports safe automatic generation.")
+            )
         return _plan(
             command,
             "fitness",
             "FitnessAgent",
-            "read_only",
-            (),
+            "low_risk" if generate_requested else "read_only",
+            tuple(steps),
             privacy_class="PERSONAL",
             required_context=("fitness_profile_optional", "authenticated_patient"),
             human_gate="clinician_or_fitness_professional_when_medical_restrictions_apply",
-            expected_output="general_wellness_fitness_guidance",
+            expected_output="fitness_snapshot_or_general_wellness_plan",
             fallback_strategy="general_wellness_only",
+        )
+
+    if any(text in lower for text in (
+        "family care", "parent care", "care for my parent", "care for my mother", "care for my father",
+        "family member care", "dependent care", "family care task",
+    )):
+        return _plan(
+            command,
+            "family_care",
+            "FamilyCareAgent",
+            "read_only",
+            (PlanStep(1, "get_family_care_snapshot", {}, "Read only family relationships, scoped care tasks and consent grants visible to this actor."),),
+            privacy_class="HEALTH_SENSITIVE",
+            required_context=("authenticated_actor", "active_family_grants"),
+            human_gate="adult_patient_consent_for_cross_patient_actions",
+            expected_output="authorized_family_care_snapshot",
+            fallback_strategy="self_care_only_without_grant",
+        )
+
+    if any(text in lower for text in (
+        "home health", "home healthcare", "home care nurse", "home nurse", "physiotherapy at home",
+        "physio at home", "elder care at home", "caregiver at home",
+    )):
+        return _plan(
+            command,
+            "home_health",
+            "HomeHealthAgent",
+            "read_only",
+            (PlanStep(1, "get_home_health_options", {}, "List real ZENDOC home-health service categories and existing request truth states."),),
+            privacy_class="HEALTH_SENSITIVE",
+            required_context=("authenticated_actor", "location_optional", "family_grant_if_other_patient"),
+            human_gate="explicit_user_confirmation_before_service_request",
+            expected_output="home_health_options_and_request_truth_state",
+            fallback_strategy="service_intake_only_no_fulfilment_claim",
+        )
+
+    if any(text in lower for text in (
+        "medical transport", "wheelchair van", "patient transport", "ride to hospital",
+        "transport to hospital", "ambulance request", "ambulance option",
+    )):
+        return _plan(
+            command,
+            "medical_transport",
+            "TransportAgent",
+            "read_only",
+            (PlanStep(1, "get_transport_options", {}, "List medical-transport categories and existing request truth states without dispatching anything."),),
+            privacy_class="HEALTH_SENSITIVE",
+            required_context=("authenticated_actor", "pickup_optional", "destination_optional"),
+            human_gate="explicit_user_confirmation_before_transport_request",
+            expected_output="transport_options_without_dispatch_claim",
+            fallback_strategy="no_dispatch_emergency_guidance_if_urgent",
         )
 
     if any(text in lower for text in ("learn about health", "health education", "teach me about", "understand health", "learning journey")):
