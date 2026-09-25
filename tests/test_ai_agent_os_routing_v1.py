@@ -93,3 +93,31 @@ def test_emergency_safety_precedes_multi_step_agent_routing(monkeypatch):
     assert result.emergency is True
     assert result.intent == "emergency"
     assert result.provider == "deterministic_safety"
+
+
+def test_multi_step_consultation_request_uses_booking_agent():
+    from zendoc.agent_planner import build_plan
+
+    plan = build_plan(
+        {"id": 7, "role": "patient", "active": 1},
+        MULTI_STEP_GOALS[1],
+    )
+    assert plan.intent == "appointment_booking"
+    assert plan.assigned_agent == "BookingAgent"
+    assert plan.requires_confirmation is True
+    assert plan.human_gate == "explicit_user_confirmation_before_booking"
+
+
+def test_multi_step_records_goal_starts_with_authorized_health_memory_reads():
+    from zendoc.agent_planner import build_plan
+
+    plan = build_plan(
+        {"id": 7, "role": "patient", "active": 1},
+        MULTI_STEP_GOALS[2],
+    )
+    assert plan.intent == "health_records"
+    assert plan.assigned_agent == "HealthMemoryAgent"
+    assert [step.tool_name for step in plan.steps] == [
+        "get_health_memory_context",
+        "search_health_memory_evidence",
+    ]
