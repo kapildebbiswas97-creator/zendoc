@@ -37,7 +37,7 @@ RETRIABLE_FAILURES = {
 MAX_STEPS = 20
 MAX_RETRIES_DEFAULT = 3
 EXECUTION_TIMEOUT_SECONDS = 30
-TASK_STATUSES = {"queued", "running", "waiting_approval", "waiting_human", "completed", "failed", "cancelled"}
+TASK_STATUSES = {"queued", "running", "waiting_approval", "waiting_human", "waiting_provider", "completed", "failed", "cancelled"}
 TASK_PRIORITIES = {"low", "normal", "high", "critical"}
 
 
@@ -235,8 +235,8 @@ def request_approval_for_task(task_id: int, requested_by_user_id: int, action_ty
 
 
 def set_task_waiting(task_id: int, status: str, summary: str = "") -> dict:
-    if status not in {"waiting_approval", "waiting_human"}:
-        raise ValueError("Task may wait only for approval or human action.")
+    if status not in {"waiting_approval", "waiting_human", "waiting_provider"}:
+        raise ValueError("Task may wait only for approval, human action, or an authoritative provider response.")
     _update_task(task_id, status, result_summary=redact_operational_text(summary, 300))
     return get_agent_task(task_id)
 
