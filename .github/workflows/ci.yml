@@ -265,3 +265,6 @@ jobs:
           --attempts 40
           --interval 15
 
+      - name: Verify public web, PWA, policy and security contracts
+        run: python scripts/verify_public_launch.py "$DEPLOYMENT_URL" --timeout 20
+
