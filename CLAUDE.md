@@ -1,7 +1,7 @@
 # ZENDOC — AgentFoundry / M13 Engineering Context
 
 ## Mission
-Graduate every current BETA or externally blocked ZENDOC capability toward a verified production state while preserving all existing WORKING capabilities.
+Build ZENDOC into a real, production-grade healthcare company and platform. Graduate every current BETA or externally blocked capability toward a verified production state while preserving all existing WORKING capabilities. Entrepreneurship, user value, healthcare safety and long-term product quality are the primary goals; hackathons are only temporary development, tooling and visibility opportunities.
 
 The governing tracker is GitHub issue #114: M13 — Beta Graduation, External Activation & Global Healthcare Coverage.
 
@@ -61,6 +61,14 @@ Each agent must define:
 - eval cases.
 
 No agent may self-grant new tools or permissions.
+
+## Hackathon / AgentFoundry principle
+- Do not reshape ZENDOC merely to fit a hackathon theme.
+- Do not weaken healthcare ethics, truthfulness, safety or product architecture for judging criteria.
+- Use free AgentFoundry access as engineering infrastructure to accelerate the real ZENDOC roadmap.
+- Any hackathon submission must reflect genuine ZENDOC work, not a disposable demo fork.
+- Winning is optional; production improvement is mandatory.
+- Visibility, ecosystem access or funding are possible benefits, never assumptions or reasons to fabricate traction.
 
 ## AgentFoundry workflow
 For every meaningful agent change:
