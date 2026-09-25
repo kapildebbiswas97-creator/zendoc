@@ -16,7 +16,7 @@ PASSWORD = "StrongPass123"
 def _register_api(client, email, role):
     response = client.post(
         "/api/v1/auth/register",
-        json={"name": role.title(), "email": email, "password": PASSWORD, "role": role},
+        json={"name": role.title(), "email": email, "password": PASSWORD, "role": role, "accept_privacy": True, "accept_terms": True},
     )
     assert response.status_code == 201
     login = client.post(
