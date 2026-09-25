@@ -551,10 +551,7 @@ def register(role):
             return render_template("register.html", role=role), 400
         terms_accepted = bool(request.form.get("accept_terms"))
         privacy_accepted = bool(request.form.get("accept_privacy"))
-        if terms_accepted != privacy_accepted or (
-            current_app.config.get("PUBLIC_RELEASE_REQUIRED")
-            and not (terms_accepted and privacy_accepted)
-        ):
+        if not (terms_accepted and privacy_accepted):
             flash("You must accept both the Privacy Policy and Terms of Service to create a public ZENDOC account.", "error")
             return render_template("register.html", role=role), 400
         password = request.form.get("password", "")
@@ -2733,10 +2730,7 @@ def api_register():
         }), 403
     terms_accepted = data.get("accept_terms") is True
     privacy_accepted = data.get("accept_privacy") is True
-    if terms_accepted != privacy_accepted or (
-        current_app.config.get("PUBLIC_RELEASE_REQUIRED")
-        and not (terms_accepted and privacy_accepted)
-    ):
+    if not (terms_accepted and privacy_accepted):
         return jsonify({
             "error": {
                 "code": 400,
