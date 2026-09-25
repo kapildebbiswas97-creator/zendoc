@@ -89,6 +89,54 @@ INTENT_KEYWORDS = {
 }
 
 
+def is_multi_step_care_goal(message):
+    """Detect clearly multi-step care coordination without routing ordinary questions."""
+    text = " ".join(str(message or "").lower().split())
+    if not text:
+        return False
+
+    action_families = (
+        ("find ", "search ", "locate "),
+        ("request ", "book ", "schedule ", "arrange "),
+        ("check ", "review ", "show ", "look at "),
+        ("organize ", "coordinate ", "plan ", "follow up", "follow-up", "next safe action", "next step"),
+    )
+    domain_families = (
+        ("doctor", "specialist", "provider", "hospital", "clinic"),
+        ("appointment", "consultation", "telehealth"),
+        ("record", "report", "health memory", "timeline"),
+        ("prescription", "medicine", "medication", "pharmacy"),
+        ("diagnostic", "lab", "test"),
+        ("mother", "father", "parent", "family", "dependent"),
+        ("home health", "home care", "transport", "ambulance"),
+    )
+
+    action_count = sum(1 for family in action_families if any(term in text for term in family))
+    domain_count = sum(1 for family in domain_families if any(term in text for term in family))
+    explicit_coordination = any(
+        marker in text
+        for marker in (
+            "organize the",
+            "organise the",
+            "coordinate",
+            "next safe action",
+            "next safe step",
+            "help me organize",
+            "help me organise",
+        )
+    )
+    sequential = any(marker in text for marker in (" and ", " then ", ";", " after that ", " also "))
+
+    return (
+        domain_count >= 2
+        and (
+            action_count >= 2
+            or (explicit_coordination and action_count >= 1)
+            or (sequential and action_count >= 2)
+        )
+    )
+
+
 class IntentRouter:
     def detect(self, message):
         text = (message or "").lower()
@@ -102,8 +150,17 @@ class IntentRouter:
             if any(keyword in text for keyword in INTENT_KEYWORDS.get(intent, ())):
                 return intent
 
+        # Preserve the established prescription/fulfilment orchestrator phrases.
+        if any(keyword in text for keyword in INTENT_KEYWORDS.get("orchestration_request", ())):
+            return "orchestration_request"
+
+        # Broader multi-step care goals enter the bounded specialist Agent OS.
+        # Ordinary one-step health questions stay on their normal intent path.
+        if is_multi_step_care_goal(text):
+            return "agent_os_request"
+
         for intent, keywords in INTENT_KEYWORDS.items():
-            if intent in priority_intents:
+            if intent in priority_intents or intent == "orchestration_request":
                 continue
             if any(keyword in text for keyword in keywords):
                 return intent
