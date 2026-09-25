@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from tests.test_milestone1 import make_app
+from zendoc.appointment_continuity import sync_provider_appointment_status
 from tests.test_specialist_agent_os_v1 import _seed_booking_provider
 from zendoc.agent_handoffs import handoff_for_intent
 from zendoc.db import get_db, now_iso
@@ -108,7 +109,7 @@ def test_booking_workflow_persists_and_advances_only_to_human_gate(tmp_path, mon
         assert count == 0
 
 
-def test_confirmed_booking_closes_task_and_waits_for_provider_not_ai(tmp_path):
+def test_confirmed_booking_waits_for_provider_then_closes_from_provider_truth(tmp_path):
     app = make_app(tmp_path)
     actor, profile_id, target = _seed_booking_provider(app)
 
@@ -161,13 +162,33 @@ def test_confirmed_booking_closes_task_and_waits_for_provider_not_ai(tmp_path):
             workflow_task_id=task_id,
         )
 
-        assert persisted["workflow_task"]["status"] == "completed"
+        assert persisted["workflow_task"]["status"] == "waiting_provider"
         assert persisted["care_journey"]["state"] == "WAITING_PROVIDER"
         assert persisted["care_journey"]["required_actor"] == "provider"
         appointment = get_db().execute(
             "SELECT status FROM appointments WHERE id=?", (appointment_id,)
         ).fetchone()
         assert appointment["status"] == "requested"
+
+        provider = get_db().execute(
+            """
+            SELECT u.* FROM users u
+            JOIN provider_profiles p ON p.user_id=u.id
+            WHERE p.id=?
+            """,
+            (profile_id,),
+        ).fetchone()
+        get_db().execute(
+            "UPDATE appointments SET status='confirmed',updated_at=? WHERE id=?",
+            (now_iso(), appointment_id),
+        )
+        get_db().commit()
+        synced = sync_provider_appointment_status(dict(provider), appointment_id)
+        assert synced["workflow_task_id"] == task_id
+        assert synced["workflow_task_status"] == "completed"
+        assert get_db().execute(
+            "SELECT status FROM agent_tasks WHERE id=?", (task_id,)
+        ).fetchone()["status"] == "completed"
 
 
 def test_cross_patient_cannot_reuse_booking_journey_or_task(tmp_path):
