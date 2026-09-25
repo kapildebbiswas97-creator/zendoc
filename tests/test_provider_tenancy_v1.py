@@ -22,7 +22,7 @@ PASSWORD = "StrongPass123"
 def _register(client, email, role):
     r = client.post(
         "/api/v1/auth/register",
-        json={"name": email, "email": email, "password": PASSWORD, "role": role},
+        json={"name": email, "email": email, "password": PASSWORD, "role": role, "accept_privacy": True, "accept_terms": True},
     )
     assert r.status_code == 201
     l = client.post(

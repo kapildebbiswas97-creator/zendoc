@@ -33,7 +33,7 @@ def register_web(client, role, email, name="Test User"):
     token = csrf(page.data.decode())
     return client.post(
         f"/register/{role}",
-        data={"csrf_token": token, "name": name, "email": email, "password": "StrongPass123"},
+        data={"csrf_token": token, "name": name, "email": email, "password": "StrongPass123", "accept_privacy": "1", "accept_terms": "1"},
         follow_redirects=True,
     )
 
@@ -51,7 +51,7 @@ def login_web(client, role, email, password="StrongPass123"):
 def api_token(client, email, role="patient"):
     client.post(
         "/api/v1/auth/register",
-        json={"name": email, "email": email, "password": "StrongPass123", "role": role},
+        json={"name": email, "email": email, "password": "StrongPass123", "role": role, "accept_privacy": True, "accept_terms": True},
     )
     response = client.post(
         "/api/v1/auth/login",

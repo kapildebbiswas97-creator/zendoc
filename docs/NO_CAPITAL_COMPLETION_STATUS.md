@@ -335,38 +335,36 @@ The readiness percentage is computed from a named software checklist. Only **WOR
 
 ---
 
-## 8. Remaining no-capital engineering opportunities
+## 8. Repository-owned software completion checkpoint
 
-Recently completed:
-- deeper HealthMemoryAgent scoped context orchestration with minimum-necessary context and IDOR/consent tests
-- provider-facing pharmacy inventory and diagnostic-offer freshness queues with explicit reconfirmation and branch-tenancy enforcement
-- partner-facing v1 API contract and integration specification
+The named no-capital software checklist in `zendoc/no_capital_status.py` is now designed to report **100% only when every listed capability is `WORKING`**. CI includes an explicit regression for that contract.
 
-The highest-value remaining founder/software work is:
+Current repository-owned completion includes:
+- deterministic emergency-first safety and bounded Agent OS execution
+- specialized agent routing and durable task/care-journey continuity
+- provider-truth separation including `waiting_provider` rather than false completion
+- Health Memory, family consent, messaging, appointments, pharmacy/diagnostic workflow foundations
+- CareFin discovery, nutrition, multilingual foundation, geography/public-data ingestion
+- provider onboarding, pilot UI/analytics, owner observability and capability truth registry
+- public/PWA/security/release verification artifacts
 
-1. richer official-data ingestion connectors for the geographic/benefits graph
-2. local multilingual-model adapter/evaluation when a suitable model can run safely on available hardware
-3. further synthetic adversarial evaluation for every specialist agent
-4. richer reliability/observability dashboards
-5. security hardening, dependency scanning and deployment verification
-6. pilot instrumentation for retention, provider response time, CareFin verified savings and fulfilment outcomes
-7. machine-readable API schema/versioning for future partner SDK generation
+This **does not** convert external integrations into working live services. Credentials, partner acceptance, regulated authorization, real inventory/dispatch/settlement, production TURN, durable object storage, transactional messaging, and similar dependencies remain separately classified.
+
+Optional future engineering can still improve breadth, datasets, observability, evaluation depth and UX. Those improvements are not allowed to reduce the truth standard or to redefine an already complete named software contract merely to inflate scope.
 
 ---
 
 ## 9. Next recommended milestone
 
-**Pilot Readiness & Official Data Ingestion**
+**External Activation & Launch Verification**
 
-Focus on:
-- importing verified official/public geographic and benefits metadata with provenance
-- provider onboarding workflows
-- real Google Places key/runtime verification
-- CareFin UI
-- durable Care Journey UI
-- operational dashboards
-- pilot analytics
-- partner API specifications
-- security/deployment verification
+Repository-owned software completion is not the same as external launch completion. The next work should therefore focus on evidence that code cannot manufacture:
+
+- preserve and verify the production PostgreSQL data during the Render-to-OCI cutover;
+- verify the HTTPS OCI origin, then activate the reviewed Vercel gateway;
+- configure and smoke-test durable object storage, transactional email and production TURN/STUN;
+- activate only genuine payment, affiliate, Places, messaging, eKYC/ABDM and partner integrations for which real credentials/authorization exist;
+- onboard real providers and collect authoritative provider/fulfilment evidence;
+- run physical-phone/laptop end-to-end launch checks and keep synthetic/demo activity out of live metrics.
 
 Do not purchase warehouses, inventory, fleets or large teams before pilot demand proves where physical capital improves the economics.

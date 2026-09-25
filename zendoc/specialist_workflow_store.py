@@ -436,15 +436,15 @@ def mark_booking_requested(
                 "appointment_id": int(appointment_id),
                 "provider_profile_id": int(provider_profile_id),
                 "provider_confirmation_state": "requested",
+                "workflow_task_id": int(task["id"]) if task else None,
             },
         )
 
     if task:
-        task = complete_waiting_specialist_task(
-            actor,
+        task = set_task_waiting(
             int(task["id"]),
-            expected_intent="appointment_booking",
-            summary="Authenticated patient confirmed a connected appointment request.",
+            "waiting_provider",
+            "Authenticated patient created the connected appointment request; provider confirmation is still pending.",
         )
 
     return {

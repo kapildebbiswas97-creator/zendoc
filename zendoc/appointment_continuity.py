@@ -67,6 +67,48 @@ def _find_linked_journey(patient_id: int, appointment_id: int):
     return None, None
 
 
+def _sync_linked_agent_task(provenance: dict, patient_id: int, provider_status: str) -> dict | None:
+    """Resolve the exact persisted booking task from authoritative provider state."""
+    try:
+        task_id = int((provenance or {}).get("workflow_task_id") or 0)
+    except (TypeError, ValueError):
+        task_id = 0
+    if not task_id:
+        return None
+
+    status = str(provider_status or "").strip().lower()
+    if status not in _SYNC_STATUSES:
+        return None
+    target_status = "cancelled" if status == "cancelled" else "completed"
+    summary = {
+        "confirmed": "Authorized provider confirmed the connected appointment request.",
+        "cancelled": "Authorized provider cancelled the connected appointment request.",
+        "completed": "Authorized provider recorded the connected appointment as completed.",
+    }[status]
+    stamp = now_iso()
+    db = get_db()
+    db.execute(
+        """
+        UPDATE agent_tasks
+        SET status=?,result_summary=?,completed_at=?,updated_at=?
+        WHERE id=? AND requested_by=?
+          AND task_type='specialist_workflow:appointment_booking'
+          AND status='waiting_provider'
+        """,
+        (target_status, summary, stamp, stamp, task_id, int(patient_id)),
+    )
+    db.commit()
+    row = db.execute(
+        """
+        SELECT id,status,assigned_agent,task_type
+        FROM agent_tasks
+        WHERE id=? AND requested_by=?
+        """,
+        (task_id, int(patient_id)),
+    ).fetchone()
+    return dict(row) if row else None
+
+
 def _persist_transition(row, provenance: dict, *, target_state: str, reason: str,
                         actor_type: str, actor_id: int, next_safe_action: str,
                         required_actor: str | None = None,
@@ -448,6 +490,12 @@ def sync_provider_appointment_status(actor: Any, appointment_id: int) -> dict:
                 transition_provenance=common,
             )
 
+    workflow_task = _sync_linked_agent_task(
+        provenance,
+        int(appointment["patient_id"]),
+        status,
+    )
+
     return {
         "appointment_id": int(appointment_id),
         "status": status,
@@ -462,6 +510,8 @@ def sync_provider_appointment_status(actor: Any, appointment_id: int) -> dict:
         "provider_authoritative": provider_authoritative,
         "provenance_class": source,
         "follow_up_ready": str(row["state"]) == "FOLLOW_UP",
+        "workflow_task_id": int(workflow_task["id"]) if workflow_task else None,
+        "workflow_task_status": workflow_task["status"] if workflow_task else None,
     }
 
 

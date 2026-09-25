@@ -142,6 +142,17 @@ def test_registration_page_links_public_policy_documents(tmp_path):
     assert "required" in body
 
 
+def test_registration_html_requires_both_policies_even_when_strict_release_flag_is_off(tmp_path):
+    app, client = make_client(tmp_path)
+    app.config["PUBLIC_RELEASE_REQUIRED"] = False
+
+    response = client.get("/register/patient")
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert 'name="accept_privacy" value="1" required' in body
+    assert 'name="accept_terms" value="1" required' in body
+
+
 def test_public_release_blocks_government_self_registration(tmp_path):
     app, client = make_client(tmp_path)
     app.config["PUBLIC_RELEASE_REQUIRED"] = True
