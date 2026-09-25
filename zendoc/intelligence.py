@@ -123,6 +123,11 @@ class ZendocIntelligence:
                         if task.get("id")
                         else ""
                     )
+                    if journey.get("id"):
+                        workflow_note += (
+                            f" Care Journey #{journey.get('id')} is "
+                            f"{str(journey.get('state') or '').replace('_', ' ')}."
+                        )
                     actions = [
                         {
                             "type": str(action.get("type") or "agent_os"),
