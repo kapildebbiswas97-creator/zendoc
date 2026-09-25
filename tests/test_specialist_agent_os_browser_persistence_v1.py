@@ -157,7 +157,7 @@ def test_browser_agent_os_booking_preserves_workflow_and_provider_confirmation_b
         assert persisted_journey["required_actor"] == "provider"
         assert db.execute(
             "SELECT status FROM agent_tasks WHERE id=?", (second_task["id"],)
-        ).fetchone()["status"] == "completed"
+        ).fetchone()["status"] == "waiting_provider"
 
 
 def test_browser_booking_confirmation_requires_persisted_agent_os_refs_before_side_effect(tmp_path):
