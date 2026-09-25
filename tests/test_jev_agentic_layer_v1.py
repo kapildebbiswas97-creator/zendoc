@@ -327,3 +327,38 @@ def test_private_verified_still_withholds_health_text_without_second_opt_in(monk
     )
     assert result["raw_text_sent"] is False
     assert "minimum_user_text" not in captured["state"]
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda response: response["answers"]["control_action"].update({"confidence": 1.5}),
+        lambda response: response["answers"]["control_action"]["probabilities"].update({"proceed": -0.1}),
+        lambda response: response["answers"]["control_action"]["probabilities"].pop("stop"),
+    ],
+)
+def test_system_one_rejects_invalid_choice_probability_data(monkeypatch, mutate):
+    monkeypatch.setenv("ZENDOC_JEV_ENABLED", "true")
+    monkeypatch.setenv("ZENDOC_JEV_API_KEY", "test-key")
+
+    questions = {
+        "control_action": {
+            "type": "choice",
+            "instructions": "Choose bounded control action",
+            "criteria": {
+                "proceed": "Proceed",
+                "ask_human": "Ask a human",
+                "escalate": "Escalate",
+                "stop": "Stop",
+            },
+        },
+        "needs_human": {
+            "type": "noul",
+            "instructions": "Does this need a human?",
+        },
+    }
+
+    response = _jev_response()
+    mutate(response)
+    with pytest.raises(JevProtocolError):
+        system_one("state", questions, transport=lambda *_args: response)
