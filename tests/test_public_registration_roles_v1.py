@@ -42,6 +42,8 @@ def test_non_public_controlled_environment_preserves_provider_registration_flow(
             "email": "pilot-doctor@example.com",
             "password": "StrongPass123",
             "role": "doctor",
+            "accept_privacy": True,
+            "accept_terms": True,
         },
     )
     assert response.status_code == 201
