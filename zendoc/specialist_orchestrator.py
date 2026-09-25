@@ -335,6 +335,14 @@ def _compose(plan, execution, payload):
         )
         actions = [{"type": "diagnostics", "label": "Review diagnostic options", "data": payload or {}}]
 
+    elif intent == "prescription":
+        message = (
+            "Medication Safety Agent reviewed the latest authorized prescription state. "
+            "It did not change medicines, doses, or clinician instructions. Continue to Pharmacy only if you want "
+            "truthful inventory discovery or a fulfilment request after this safety check."
+        )
+        actions = [{"type": "pharmacy", "label": "Continue to Pharmacy", "url": "/pharmacy", "data": payload or {}}]
+
     elif intent == "pharmacy":
         offers = payload.get("offers", []) if isinstance(payload, dict) else []
         message = (
@@ -403,3 +411,41 @@ def orchestrate_specialist(actor, command_text: str, context=None) -> dict:
     result = _compose(plan, execution, payload)
     result["decision_control"] = decision_control
     return result
+
+
+def run_specialist_workflow(
+    actor,
+    command_text: str,
+    context=None,
+    *,
+    input_channel: str = "typed",
+    asr_audit_log_id=None,
+) -> dict:
+    """Run the same bounded, persisted Agent OS lifecycle outside the route layer.
+
+    This helper preserves the existing safety -> minimum context/RAG/local advisory
+    -> deterministic plan/tool policy -> persistent task/journey -> audit chain.
+    It does not execute confirmation-gated consequential actions.
+    """
+    from .agent_handoffs import handoff_for_intent
+    from .care_chain import finalize_care_chain, prepare_care_chain
+    from .specialist_workflow_store import persist_specialist_result
+
+    preview_plan = build_plan(actor, command_text)
+    if preview_plan.authorization_error:
+        raise PermissionError(preview_plan.authorization_error)
+
+    clean_context = context if isinstance(context, dict) else {}
+    prepared_chain = prepare_care_chain(
+        actor,
+        command_text,
+        intent=preview_plan.intent,
+        privacy_class=preview_plan.privacy_class,
+        input_channel=input_channel,
+        asr_audit_log_id=asr_audit_log_id,
+    )
+    result = orchestrate_specialist(actor, command_text, clean_context)
+    result["handoff_chain"] = handoff_for_intent(result.get("intent"))
+    result["care_chain"] = prepared_chain
+    result = persist_specialist_result(actor, result, clean_context)
+    return finalize_care_chain(actor, result, prepared_chain)

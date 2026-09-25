@@ -90,6 +90,11 @@
               <span class="ai-chat-meta">{{ 'Doctor AI' if mode == 'doctor' else 'ZENDOC AI' }} · {{ item.risk_level.replace('_',' ') }}</span>
               {% if item.risk_level in ['emergency','high'] %}<span class="ai-chat-emergency">Emergency guidance — Seek urgent care now</span>{% endif %}
               {{ item.output_text }}
+              {% if mode == 'zendoc' and item.intent == 'agent_os_request' %}
+                <div class="form-actions" style="margin-top:10px;">
+                  <a class="secondary-action" href="{{ url_for('specialist_agents.agent_os_page') }}">Open Agent OS</a>
+                </div>
+              {% endif %}
             </div>
           </article>
         {% endfor %}

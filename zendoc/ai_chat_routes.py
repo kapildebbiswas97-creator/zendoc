@@ -194,7 +194,12 @@ def chat_home():
         if conversation is None:
             conversation = _create_conversation(g.user["id"], message, requested_mode)
 
-        result, latency_ms = ZendocIntelligence().respond(message, user=g.user, conversation=conversation)
+        result, latency_ms = ZendocIntelligence().respond(
+            message,
+            user=g.user,
+            conversation=conversation,
+            allow_agent_os=requested_mode == "zendoc",
+        )
         if requested_mode == "doctor":
             result = _doctor_scope(result, message)
         result.conversation_id = conversation["id"]
