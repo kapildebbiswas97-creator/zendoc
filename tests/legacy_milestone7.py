@@ -11,7 +11,7 @@ def headers(token):
 def register_api(client, email, role="patient", password="StrongPass123"):
     return client.post(
         "/api/v1/auth/register",
-        json={"name": email, "email": email, "password": password, "role": role},
+        json={"name": email, "email": email, "password": password, "role": role, "accept_privacy": True, "accept_terms": True},
     )
 
 
