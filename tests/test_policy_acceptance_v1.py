@@ -104,15 +104,32 @@ def test_public_api_registration_requires_and_records_policy_acceptance(tmp_path
         ]
 
 
-def test_partial_policy_acceptance_is_rejected_even_before_public_release(tmp_path):
+def test_policy_acceptance_is_required_even_before_strict_public_startup_guard(tmp_path):
     app, client = make_client(tmp_path)
     app.config["PUBLIC_RELEASE_REQUIRED"] = False
+
+    missing = client.post(
+        "/register/patient",
+        data=_registration_form(client),
+    )
+    assert missing.status_code == 400
 
     partial = client.post(
         "/register/patient",
         data=_registration_form(client, accept_privacy="1"),
     )
     assert partial.status_code == 400
+
+    api_missing = client.post(
+        "/api/v1/auth/register",
+        json={
+            "name": "Missing Policy API",
+            "email": "missing-policy-api@example.com",
+            "password": "StrongPass123",
+            "role": "patient",
+        },
+    )
+    assert api_missing.status_code == 400
 
     api_partial = client.post(
         "/api/v1/auth/register",
@@ -140,6 +157,17 @@ def test_registration_page_links_public_policy_documents(tmp_path):
     assert 'name="accept_privacy"' in body
     assert 'name="accept_terms"' in body
     assert "required" in body
+
+
+def test_registration_html_requires_both_policies_even_when_strict_release_flag_is_off(tmp_path):
+    app, client = make_client(tmp_path)
+    app.config["PUBLIC_RELEASE_REQUIRED"] = False
+
+    response = client.get("/register/patient")
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert 'name="accept_privacy" value="1" required' in body
+    assert 'name="accept_terms" value="1" required' in body
 
 
 def test_public_release_blocks_government_self_registration(tmp_path):
