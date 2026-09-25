@@ -69,11 +69,11 @@ Milestones 1 through 8.3 are implemented as an advanced MVP foundation. ZENDOC i
 - No real base-model benchmark, automatic model recommendation, training, or fine-tuning has been performed. M8.2 dry/mock results are framework verification only; real-local evaluation remains Integration Required and explicitly owner initiated.
 - No OCR/document extraction provider or clinically validated report interpretation.
 - Consent controls are a technical foundation, not a legal compliance certification.
-- No payment, insurance, medicine delivery, or telemedicine video module.
+- Payment, CareFin/coverage discovery, medicine-fulfilment workflow and browser WebRTC modules exist. Real payment settlement, authoritative coverage approval, pharmacy fulfilment and reliable public-network voice/video remain integration/evidence dependent.
 - No live ambulance dispatch, ETA, or operational home healthcare fulfillment integration.
-- No real pharmacy stock confirmation or delivery partner integration.
+- Real pharmacy stock confirmation, dispensing and delivery still require connected pharmacy/logistics partners; ZENDOC-owned request and truth-state workflows are implemented.
 - No real IoT vendor sync adapter yet; device sync is an internal architecture and provenance path.
-- No production WebRTC signaling/TURN/STUN telemedicine stack yet.
+- Authenticated browser WebRTC signaling/call lifecycle is implemented; reliable production-network calling still requires verified STUN/TURN infrastructure and two-device testing.
 - No MediaPipe or clinical-grade pose estimation yet.
 - No real staff dispatch/mobile workforce system yet.
 - Live managed-PostgreSQL provisioning, existing-data import rehearsal, and production restart/redeploy verification remain Integration Required. The adapter is BETA until that evidence exists.
@@ -82,4 +82,4 @@ Milestones 1 through 8.3 are implemented as an advanced MVP foundation. ZENDOC i
 
 ## Launch Recommendation
 
-**SELECTION BETA READY — PERSISTENCE LIMITATION DISCLOSED.** The platform is hardened and verified for the selection round. 100% of core flows function reliably in local SQLite and test suites. Permanent production persistence is classified as `INTEGRATION REQUIRED` and Render free-tier ephemeral storage is disclosed as a known temporary limitation to external testers. ZENDOC provides healthcare organization and decision support, not final diagnosis, clinical certification, or emergency care.
+**REPOSITORY-OWNED SOFTWARE COMPLETE; EXTERNAL ACTIVATION REMAINS EVIDENCE-BOUND.** The named no-capital software checklist is required by regression to remain 100% `WORKING`, and exact release commits must still pass the Production Gate. The current deployment can be called healthy only when the merged-release verification identifies that exact commit, PostgreSQL engine and persistence state. Render remains a temporary deployment path while the guarded OCI/Vercel cutover, backup evidence, durable object storage, transactional messaging, TURN/STUN, real provider integrations and regulated/partner approvals are completed. ZENDOC provides healthcare organization and decision support, not final diagnosis, clinical certification, autonomous prescribing, or emergency dispatch.
