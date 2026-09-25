@@ -452,6 +452,7 @@ def choose_agent_for_intent(intent: str) -> AgentDefinition | None:
         "family_care":      "FamilyCareAgent",
         "home_health":      "HomeHealthAgent",
         "ambulance":        "TransportAgent",
+        "medical_transport": "TransportAgent",
         "pharmacy":         "PharmacyAgent",
         "iot_hub":          "IoTAgent",
         "iot_status":       "IoTAgent",
