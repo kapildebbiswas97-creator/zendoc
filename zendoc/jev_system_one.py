@@ -157,8 +157,24 @@ def _validate_response(payload: dict, questions: dict) -> dict:
             confidence = answer.get("confidence")
             if choice not in question["criteria"]:
                 raise JevProtocolError(f"Choice answer for {qid} is outside declared criteria.")
-            if not isinstance(probabilities, dict) or not isinstance(confidence, (int, float)):
-                raise JevProtocolError(f"Choice answer for {qid} is missing probabilities/confidence.")
+            if (
+                not isinstance(probabilities, dict)
+                or isinstance(confidence, bool)
+                or not isinstance(confidence, (int, float))
+                or not 0 <= float(confidence) <= 1
+            ):
+                raise JevProtocolError(f"Choice answer for {qid} has invalid probabilities/confidence.")
+            declared = set(question["criteria"])
+            if (
+                set(probabilities) != declared
+                or any(
+                    isinstance(value, bool)
+                    or not isinstance(value, (int, float))
+                    or not 0 <= float(value) <= 1
+                    for value in probabilities.values()
+                )
+            ):
+                raise JevProtocolError(f"Choice probabilities for {qid} must cover declared criteria with values from 0 to 1.")
         elif question["type"] == "score":
             if not isinstance(answer.get("score"), (int, float)):
                 raise JevProtocolError(f"Score answer for {qid} is missing a numeric score.")
