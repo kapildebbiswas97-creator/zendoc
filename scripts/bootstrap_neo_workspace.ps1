@@ -14,8 +14,20 @@ Require-Command "node"
 Require-Command "npm"
 Require-Command "npx"
 
-Write-Host "Node:" (node --version)
+$nodeVersion = (node --version).Trim()
+Write-Host "Node:" $nodeVersion
 Write-Host "npm :" (npm --version)
+
+$nodeMajor = 0
+if ($nodeVersion -match '^v(?<major>\d+)') {
+    $nodeMajor = [int]$Matches['major']
+}
+if ($nodeMajor -gt 0 -and $nodeMajor -lt 24) {
+    Write-Warning "Neo base app creation may work, but the current Neo AI tooling guide recommends Node.js 24+. Upgrade before enabling its full AI/knowledge-base stack."
+}
+if ($env:OS -eq "Windows_NT") {
+    Write-Host "Note: Neo's full ChromaDB-based AI tooling currently expects WSL/Linux on Windows."
+}
 
 $workspace = Join-Path $repoRoot "neo-workspace"
 if (Test-Path $workspace) {
