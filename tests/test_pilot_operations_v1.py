@@ -1,6 +1,12 @@
+import pytest
+
 from flask import abort
 
-from zendoc.db import get_db
+from zendoc.db import get_db, now_iso
+from zendoc.email_delivery import send_transactional_email
+from zendoc.notification_providers import deliver_notification
+from zendoc.payments import create_checkout_order
+from zendoc.record_storage import get_record_storage
 from tests.test_milestone1 import csrf, login_web, make_app, register_web
 
 
@@ -201,3 +207,96 @@ def test_find_care_keeps_permission_denied_fallback_and_universal_feedback_entry
     assert script.status_code == 200
     assert b"Location permission was denied or unavailable" in script.data
     assert b"enter a location manually" in script.data
+
+
+def test_demo_mode_blocks_consequential_live_external_connectors(tmp_path):
+    app = make_app(tmp_path)
+    app.config.update(
+        CONNECTED_CARE_DATA_MODE="DEMO",
+        EMAIL_PROVIDER="smtp",
+        SMTP_HOST="smtp.example.invalid",
+        SMTP_FROM_EMAIL="noreply@example.invalid",
+        STORAGE_PROVIDER="s3",
+        S3_BUCKET="demo-must-not-connect",
+        S3_ACCESS_KEY_ID="configured-for-test",
+        S3_SECRET_ACCESS_KEY="configured-for-test",
+    )
+
+    with app.app_context():
+        with pytest.raises(RuntimeError, match="blocked for demo/synthetic activity"):
+            send_transactional_email(
+                "pilot@example.com",
+                "Demo external boundary",
+                "This must never reach SMTP.",
+            )
+
+        with pytest.raises(RuntimeError, match="blocked for demo/synthetic activity"):
+            create_checkout_order(
+                {"id": 1, "role": "patient", "email": "pilot@example.com"},
+                999999,
+            )
+
+        storage = get_record_storage()
+        with pytest.raises(RuntimeError, match="blocked for demo/synthetic activity"):
+            storage._client()
+
+
+def test_demo_notification_records_blocked_state_without_external_send(tmp_path):
+    app = make_app(tmp_path)
+    app.config.update(
+        CONNECTED_CARE_DATA_MODE="DEMO",
+        EMAIL_PROVIDER="smtp",
+        SMTP_HOST="smtp.example.invalid",
+        SMTP_FROM_EMAIL="noreply@example.invalid",
+    )
+    with app.app_context():
+        db = get_db()
+        now = now_iso()
+        user_id = db.execute(
+            """
+            INSERT INTO users
+            (name,email,email_normalized,password_hash,role,active,created_at,updated_at)
+            VALUES (?,?,?,?, 'patient',1,?,?)
+            """,
+            (
+                "Demo Notification User",
+                "demo-notification@example.com",
+                "demo-notification@example.com",
+                "unused",
+                now,
+                now,
+            ),
+        ).lastrowid
+        db.commit()
+
+        result = deliver_notification(
+            int(user_id),
+            "Pilot notification",
+            "This demo message must stay inside ZENDOC.",
+            channel="email",
+        )
+        assert result.status == "failed"
+        assert result.provider == "demo_external_delivery_blocked"
+        delivery = db.execute(
+            "SELECT status,provider_response FROM notification_deliveries WHERE id=?",
+            (result.delivery_id,),
+        ).fetchone()
+        assert delivery["status"] == "failed"
+        assert delivery["provider_response"] == "demo_external_delivery_blocked"
+
+
+def test_synthetic_demo_recipient_is_blocked_even_in_live_data_mode(tmp_path):
+    app = make_app(tmp_path)
+    app.config.update(
+        CONNECTED_CARE_DATA_MODE="LIVE",
+        EMAIL_PROVIDER="smtp",
+        SMTP_HOST="smtp.example.invalid",
+        SMTP_FROM_EMAIL="noreply@example.invalid",
+    )
+    with app.app_context():
+        with pytest.raises(RuntimeError, match="synthetic_demo_target"):
+            send_transactional_email(
+                "demo-patient@zendoc.local",
+                "Synthetic demo email",
+                "This must not leave ZENDOC.",
+            )
