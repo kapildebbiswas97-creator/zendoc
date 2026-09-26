@@ -54,6 +54,7 @@ from .mental_wellness_routes import bp as mental_wellness_bp
 from .milestone8_routes import bp as milestone8_bp
 from .milestone82_routes import bp as milestone82_bp
 from .nutrition_routes import bp as nutrition_intelligence_bp
+from .neo_analytics_routes import bp as neo_analytics_bp
 from .operational_fulfilment import (
     bp as operational_fulfilment_bp,
     ensure_operational_fulfilment_schema,
@@ -191,6 +192,7 @@ def create_app(test_config=None):
     app.register_blueprint(carefin_bp)
     app.register_blueprint(care_journey_bp)
     app.register_blueprint(nutrition_intelligence_bp)
+    app.register_blueprint(neo_analytics_bp)
     app.register_blueprint(provider_organizations_bp)
     app.register_blueprint(language_bp)
     app.register_blueprint(geography_graph_bp)
