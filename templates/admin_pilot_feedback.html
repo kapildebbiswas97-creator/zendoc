@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Pilot feedback — ZENDOC{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div><p class="eyebrow">Owner operations</p><h1>Pilot feedback</h1><p class="section-copy">Minimum-necessary product feedback only; this view is not a clinical record workspace.</p></div>
+  <div class="form-actions">
+    <a class="secondary-action" href="{{ url_for('pilot_operations.cohort_admin') }}">Pilot cohorts</a>
+    <a class="secondary-action" href="{{ url_for('main.admin') }}">Admin</a>
+  </div>
+</section>
+
+<form class="panel" method="get">
+  <div class="form-grid">
+    <label>Role <input name="role" value="{{ filters.role }}" maxlength="40"></label>
+    <label>Feature <input name="feature" value="{{ filters.feature }}" maxlength="120"></label>
+    <label>Severity
+      <select name="severity">
+        {% for value in severities %}
+        <option value="{{ value }}" {% if filters.severity == value %}selected{% endif %}>{{ value|title if value else 'Any' }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Status
+      <select name="status">
+        {% for value in statuses %}
+        <option value="{{ value }}" {% if filters.status == value %}selected{% endif %}>{{ value|replace('_',' ')|title if value else 'Any' }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>From <input type="date" name="date_from" value="{{ filters.date_from }}"></label>
+    <label>To <input type="date" name="date_to" value="{{ filters.date_to }}"></label>
+  </div>
+  <div class="form-actions"><button type="submit">Filter</button><a class="secondary-action" href="{{ url_for('pilot_operations.feedback_admin') }}">Clear</a></div>
+</form>
+
+<section class="panel spaced-panel">
+  <div class="panel-head"><h2>Reports</h2><span class="status-badge beta">{{ reports|length }} shown</span></div>
+  {% if reports %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Created</th><th>User / role</th><th>Feature</th><th>Category</th><th>Severity</th><th>Message</th><th>Status</th></tr></thead>
+      <tbody>
+      {% for item in reports %}
+      <tr>
+        <td>{{ item.created_at }}</td>
+        <td>{{ item.user_name or 'Unknown' }}<br><small>{{ item.role or '—' }}{% if item.user_email %} · {{ item.user_email }}{% endif %}</small></td>
+        <td><strong>{{ item.feature }}</strong><br><small>{{ item.page_path }}</small></td>
+        <td>{{ item.category }}</td>
+        <td>{{ item.severity }}</td>
+        <td>{{ item.message }}</td>
+        <td>
+          <form method="post" action="{{ url_for('pilot_operations.feedback_status_update', feedback_id=item.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <select name="status">
+              {% for status in ['NEW','INVESTIGATING','PLANNED','FIXED','WONT_FIX'] %}
+              <option value="{{ status }}" {% if item.status == status %}selected{% endif %}>{{ status|replace('_',' ')|title }}</option>
+              {% endfor %}
+            </select>
+            <button type="submit">Save</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="form-note">No feedback reports match these filters.</p>
+  {% endif %}
+</section>
+{% endblock %}

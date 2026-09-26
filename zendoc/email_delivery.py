@@ -12,6 +12,8 @@ from email.message import EmailMessage
 
 from flask import current_app
 
+from .external_execution_guard import require_live_external_connector
+
 
 def email_delivery_status() -> dict:
     provider = str(current_app.config.get("EMAIL_PROVIDER") or "none").strip().lower()
@@ -46,11 +48,15 @@ def email_delivery_status() -> dict:
 
 
 def send_transactional_email(to_email: str, subject: str, text_body: str) -> dict:
+    recipient = str(to_email or "").strip()
+    require_live_external_connector(
+        "transactional_email",
+        target_email=recipient,
+    )
     status = email_delivery_status()
     if not status.get("transactional_email"):
         raise RuntimeError("Transactional email delivery is not configured.")
 
-    recipient = str(to_email or "").strip()
     if not recipient or "@" not in recipient:
         raise ValueError("A valid email recipient is required.")
 
