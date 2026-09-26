@@ -182,3 +182,22 @@ def test_api_502_recovery_preserves_structured_error_semantics(tmp_path):
     payload = response.get_json()
     assert payload["error"]["code"] == 502
     assert "did not confirm the external action" in payload["error"]["message"]
+
+
+def test_find_care_keeps_permission_denied_fallback_and_universal_feedback_entry(tmp_path):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    register_web(client, "patient", "finder-pilot@example.com", "Finder Pilot")
+    login_web(client, "patient", "finder-pilot@example.com")
+
+    finder = client.get("/find-care")
+    if finder.status_code in {301, 302, 307, 308}:
+        finder = client.get(finder.headers["Location"])
+    assert finder.status_code == 200
+    assert b"Report a problem / Give feedback" in finder.data
+    assert b"Use my current location" in finder.data
+
+    script = client.get("/static/finder.js")
+    assert script.status_code == 200
+    assert b"Location permission was denied or unavailable" in script.data
+    assert b"enter a location manually" in script.data
