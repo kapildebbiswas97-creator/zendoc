@@ -36,6 +36,12 @@ Prerequisites:
 3. A clean ZENDOC working tree.
 4. Never put API keys or GitHub tokens into committed files.
 
+For the base Neo app, the official create-app flow supports Windows 10+. For
+Neo's fuller AI/knowledge-base tooling, its current AI quick-start recommends
+Node.js 24+ and WSL on Windows because the ChromaDB-dependent tooling expects a
+Linux environment. The bootstrap helper therefore warns when Node is older than
+24; it does not pretend the full AI stack is ready on native Windows.
+
 From the ZENDOC repository root:
 
 ```powershell
@@ -72,7 +78,9 @@ as `GEMINI_API_KEY` and `GH_TOKEN`. Keep that file local and git-ignored.
 Do not copy production ZENDOC database credentials into the Neo frontend.
 
 Codex should be connected as an engineering agent, not given unrestricted
-production-health-data access.
+production-health-data access. Neo's current repository includes Codex-oriented
+agent configuration and OpenAI/Codex maintainers, so we can use that workflow
+after the local workspace and its security boundary are verified.
 
 ## Plotly phase
 
