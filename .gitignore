@@ -17,3 +17,6 @@ work/
 # outside normal Git history. Commit source manifests/schemas/docs, not bulk raw data.
 data_workspace/
 ZENDOC_DATA/
+
+# Generated local Neo.mjs workspace. Keep isolated until reviewed.
+neo-workspace/
