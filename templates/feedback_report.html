@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Give feedback — ZENDOC{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Controlled pilot feedback</p>
+    <h1>Report a problem / Give feedback</h1>
+    <p class="section-copy">Tell us what stopped you or what could work better. Do not paste medical records, prescriptions, or other unnecessary health information here.</p>
+  </div>
+  <span class="status-badge beta">{{ release.label }}</span>
+</section>
+
+<section class="grid two">
+  <form class="panel" method="post" action="{{ url_for('pilot_operations.feedback_submit') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="page_path" value="{{ page_path }}">
+    <input type="hidden" name="feature" value="{{ feature }}">
+    <input type="hidden" name="source_endpoint" value="{{ request.args.get('endpoint', '') }}">
+
+    <div class="summary-row"><span>Page</span><strong>{{ page_path }}</strong></div>
+    <div class="summary-row"><span>Feature</span><strong>{{ feature }}</strong></div>
+
+    <label>Category
+      <select name="category" required>
+        {% for category in categories %}
+        <option value="{{ category }}">{{ category|replace('_',' ')|title }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label>Severity
+      <select name="severity" required>
+        {% for severity in severities %}
+        <option value="{{ severity }}" {% if severity == 'medium' %}selected{% endif %}>{{ severity|title }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label>What happened?
+      <textarea name="message" maxlength="2000" rows="7" required placeholder="Describe the product/workflow problem without including unnecessary health details."></textarea>
+    </label>
+
+    <button type="submit">Send feedback</button>
+    <p class="form-note">ZenDoc records minimum-necessary product context, your account role, this page/feature, release version when available, and an anonymized browser signature for debugging.</p>
+  </form>
+
+  <article class="panel">
+    <h2>What belongs here?</h2>
+    <ul class="feature-list">
+      <li>A button, form, search, or workflow that did not work.</li>
+      <li>Incorrect or stale product/directory information.</li>
+      <li>A confusing page or mobile-layout problem.</li>
+      <li>An integration that appears unavailable or timed out.</li>
+      <li>An access/authorization problem.</li>
+    </ul>
+    <h3>What should not be copied here?</h3>
+    <p class="form-note">Full medical reports, symptom histories, prescriptions, payment secrets, passwords, government ID images, or other sensitive data that is not necessary to explain the product problem.</p>
+    <p class="form-note">{{ release.truth_notice }}</p>
+  </article>
+</section>
+{% endblock %}
