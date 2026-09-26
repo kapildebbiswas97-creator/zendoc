@@ -29,7 +29,7 @@
         <span>ZENDOC</span>
       </a>
       {% if zendoc_release.is_pilot %}
-        <span class="status-badge beta" title="Controlled release channel">{{ zendoc_release.label }}</span>
+        <span class="status-badge beta" title="{{ zendoc_release.label }}">Pilot</span>
       {% elif zendoc_release.channel == 'development' %}
         <span class="status-badge beta">Development</span>
       {% endif %}
