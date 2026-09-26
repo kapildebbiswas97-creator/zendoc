@@ -64,6 +64,8 @@ from .operational_fulfilment_release import bp as operational_fulfilment_release
 from .operational_fulfilment_ui import bp as operational_fulfilment_ui_bp
 from .organization_routes import bp as provider_organizations_bp
 from .personal_baseline_routes import bp as personal_health_baseline_bp
+from .pilot_operations import ensure_pilot_operations_schema
+from .pilot_operations_routes import bp as pilot_operations_bp
 from .policy_acceptance import ensure_policy_acceptance_schema
 from .payments import ensure_payment_schema
 from .payment_routes import bp as payments_bp
@@ -76,6 +78,7 @@ from .provider_service import PROVIDER_ROLES, get_provider_profile_for_user
 from .provider_invitation import ensure_provider_invitation_schema
 from .public_launch_routes import bp as public_launch_bp
 from .release_health_routes import bp as release_health_bp
+from .release_state import release_state
 from .showcase_routes import bp as showcase_bp
 from .specialist_agent_routes import bp as specialist_agents_bp
 from .system_intelligence_routes import bp as system_intelligence_bp
@@ -156,6 +159,10 @@ def create_app(test_config=None):
             "zendoc_copilot": copilot_context(request.endpoint, role),
         }
 
+    @app.context_processor
+    def inject_release_state():
+        return {"zendoc_release": release_state()}
+
     app.register_blueprint(ai_chat_bp)
     app.register_blueprint(calls_bp)
     app.register_blueprint(bp)
@@ -199,6 +206,7 @@ def create_app(test_config=None):
     app.register_blueprint(public_ingestion_bp)
     app.register_blueprint(dataset_snapshot_ingestion_bp)
     app.register_blueprint(provider_onboarding_bp)
+    app.register_blueprint(pilot_operations_bp)
     app.register_blueprint(public_launch_bp)
     app.register_blueprint(global_data_bp)
     app.register_blueprint(showcase_bp)
@@ -219,6 +227,40 @@ def create_app(test_config=None):
             missing_path=request.path,
         ), 404
 
+    @app.errorhandler(500)
+    def zendoc_internal_error(_error):
+        if request.path.startswith("/api/"):
+            return jsonify({
+                "error": {
+                    "code": 500,
+                    "message": "ZENDOC could not complete this request. Please try again.",
+                }
+            }), 500
+        return render_template(
+            "error.html",
+            status=500,
+            message="Service temporarily unavailable.",
+            recovery_message="Try again, use another supported path, or report this problem if it continues.",
+            retry_path=request.path,
+        ), 500
+
+    @app.errorhandler(502)
+    def zendoc_upstream_error(_error):
+        if request.path.startswith("/api/"):
+            return jsonify({
+                "error": {
+                    "code": 502,
+                    "message": "An upstream service is temporarily unavailable. ZENDOC did not confirm the external action.",
+                }
+            }), 502
+        return render_template(
+            "error.html",
+            status=502,
+            message="A connected service is temporarily unavailable.",
+            recovery_message="Try again or use stored/official ZENDOC results where available.",
+            retry_path=request.path,
+        ), 502
+
     app.after_request(finish_operational_careloop_request)
     app.after_request(finish_careloop_request)
     app.after_request(finish_request_observation)
@@ -236,6 +278,7 @@ def create_app(test_config=None):
             ensure_medical_knowledge_document_schema()
             ensure_medical_rag_schema()
             ensure_provider_invitation_schema()
+            ensure_pilot_operations_schema()
             ensure_preventive_care_schema()
             ensure_policy_acceptance_schema()
             ensure_mental_wellness_schema()
