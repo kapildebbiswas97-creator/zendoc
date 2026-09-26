@@ -17,6 +17,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from .db import get_db, now_iso
+from .external_execution_guard import require_live_external_connector
 
 
 SUPPORTED_GATEWAY = "razorpay"
@@ -364,6 +365,7 @@ def _razorpay_request(path: str, payload: dict) -> dict:
 
 def create_checkout_order(patient, invoice_id: int) -> dict:
     ensure_payment_schema()
+    require_live_external_connector("razorpay_checkout", actor=patient)
     invoice = get_invoice(patient, invoice_id)
     if int(invoice["patient_id"]) != _actor_id(patient):
         raise PermissionError("Only the billed patient can start checkout.")
