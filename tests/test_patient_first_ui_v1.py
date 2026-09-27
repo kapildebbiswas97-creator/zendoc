@@ -9,7 +9,7 @@ def test_base_template_loads_additive_ui_polish_and_truth_strip():
     assert "ui-polish.css" in html
     assert "experience-strip" in html
     assert "Real-world availability shown only when confirmed" in html
-    assert "Public Beta" in html
+    assert "{{ zendoc_release.label }}" in html
 
 
 def test_patient_mobile_dock_keeps_core_workflows_one_tap_away():
