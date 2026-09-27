@@ -5,6 +5,7 @@ from zendoc.diagnostic_service import book_diagnostic_test
 from zendoc.operational_fulfilment import update_diagnostic_booking_status
 from zendoc.pharmacy_order_routes import update_medicine_order_status
 from zendoc.pharmacy_service import create_medicine_order
+from zendoc.provider_service import upsert_provider_profile
 from tests.test_milestone1 import csrf, login_web, make_client, register_web
 
 
@@ -16,6 +17,47 @@ def _future_date(days=5):
     return (datetime.now(timezone.utc) + timedelta(days=days)).date().isoformat()
 
 
+def _create_verified_provider_profile(
+    user,
+    *,
+    provider_type=None,
+    specialty="",
+    organization="",
+    address="",
+    city="",
+    state="",
+    postal_code="",
+):
+    """Create a real provider profile before applying the owner-reviewed verified state."""
+    upsert_provider_profile(
+        user,
+        {
+            "specialty": specialty,
+            "organization": organization,
+            "address": address,
+            "city": city,
+            "state": state,
+            "postal_code": postal_code,
+        },
+    )
+    db = get_db()
+    profile = db.execute(
+        "SELECT id,provider_type FROM provider_profiles WHERE user_id=?",
+        (int(user["id"]),),
+    ).fetchone()
+    assert profile is not None
+    resolved_type = provider_type or str(profile["provider_type"] or "")
+    db.execute(
+        """
+        UPDATE provider_profiles
+        SET provider_type=?, verification_status='verified', updated_at=?
+        WHERE user_id=?
+        """,
+        (resolved_type, now_iso(), int(user["id"])),
+    )
+    db.execute("UPDATE users SET active=1 WHERE id=?", (int(user["id"]),))
+
+
 def test_patient_find_care_request_provider_acknowledgement_and_feedback(tmp_path, monkeypatch):
     monkeypatch.setenv("ZENDOC_PLACES_PROVIDER", "none")
     app, client = make_client(tmp_path)
@@ -25,18 +67,18 @@ def test_patient_find_care_request_provider_acknowledgement_and_feedback(tmp_pat
     with app.app_context():
         db = get_db()
         doctor = db.execute(
-            "SELECT id FROM users WHERE email_normalized='pilot-doctor@example.com'"
+            "SELECT * FROM users WHERE email_normalized='pilot-doctor@example.com'"
         ).fetchone()
-        db.execute(
-            """
-            UPDATE provider_profiles
-            SET provider_type='doctor', specialty='Cardiology',
-                organization='Pilot Clinic', address='Station Road',
-                city='Kalyani', state='West Bengal', postal_code='741235',
-                verification_status='verified', updated_at=?
-            WHERE user_id=?
-            """,
-            (now_iso(), int(doctor["id"])),
+        assert doctor is not None
+        _create_verified_provider_profile(
+            doctor,
+            provider_type="doctor",
+            specialty="Cardiology",
+            organization="Pilot Clinic",
+            address="Station Road",
+            city="Kalyani",
+            state="West Bengal",
+            postal_code="741235",
         )
         db.commit()
 
@@ -149,9 +191,14 @@ def test_pharmacy_request_requires_assigned_provider_acknowledgement(tmp_path):
         patient = db.execute(
             "SELECT * FROM users WHERE email_normalized='pilot-pharmacy-patient@example.com'"
         ).fetchone()
-        db.execute(
-            "UPDATE provider_profiles SET provider_type='pharmacy',verification_status='verified',updated_at=? WHERE user_id=?",
-            (now_iso(), int(pharmacy["id"])),
+        assert pharmacy is not None
+        assert patient is not None
+        _create_verified_provider_profile(
+            pharmacy,
+            provider_type="pharmacy",
+            organization="Pilot Pharmacy",
+            city="Kalyani",
+            state="West Bengal",
         )
         db.commit()
 
@@ -191,14 +238,14 @@ def test_lab_request_stays_unreported_until_provider_workflow_advances(tmp_path)
         patient = db.execute(
             "SELECT * FROM users WHERE email_normalized='pilot-lab-patient@example.com'"
         ).fetchone()
-        db.execute(
-            """
-            UPDATE provider_profiles
-            SET provider_type='lab',verification_status='verified',
-                organization='Pilot Lab',city='Kalyani',updated_at=?
-            WHERE user_id=?
-            """,
-            (now_iso(), int(lab["id"])),
+        assert lab is not None
+        assert patient is not None
+        _create_verified_provider_profile(
+            lab,
+            provider_type="lab",
+            organization="Pilot Lab",
+            city="Kalyani",
+            state="West Bengal",
         )
         test = db.execute(
             "SELECT id FROM diagnostic_catalog ORDER BY id LIMIT 1"
