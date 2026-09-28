@@ -50,6 +50,7 @@
               <a href="{{ url_for('connected_care.diagnostics_page') }}">Diagnostics</a>
               <a href="{{ url_for('main.finder') }}#government-ors-handoff">Government OPD</a>
               <a href="{{ url_for('health_memory.health_summary_page') }}">Health Memory</a>
+        {% if current_user %}<a href="{{ url_for('organization_health.organizations_home') }}">Organizations</a>{% endif %}
             </div>
           </div>
         </form>
