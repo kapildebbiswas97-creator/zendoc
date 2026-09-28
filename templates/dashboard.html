@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Health Command Center — ZENDOC{% endblock %}
 {% block content %}
+{% set workspace_user = preview_user if preview_mode else current_user %}
 {% if preview_mode %}
 <aside class="emergency-strip" aria-label="Owner QA preview">
   <p><strong>Owner QA preview · {{ preview_role|title }}</strong> — You remain authenticated as the ZENDOC owner. There is no role impersonation, no private account takeover, and no hidden write access in this preview.</p>
@@ -9,14 +10,14 @@
 {% endif %}
 <section class="section-head dashboard-hero">
   <div>
-    <p class="eyebrow">{{ 'Health command center' if current_user.role == 'patient' else current_user.role.replace('_',' ').title() + ' workspace' }}</p>
-    <h1>{% if current_user.role == 'admin' %}Admin Dashboard{% else %}Welcome, {{ current_user.name }}{% endif %}</h1>
+    <p class="eyebrow">{{ 'Health command center' if workspace_user.role == 'patient' else workspace_user.role.replace('_',' ').title() + ' workspace' }}</p>
+    <h1>{% if workspace_user.role == 'admin' %}Admin Dashboard{% else %}Welcome, {{ workspace_user.name }}{% endif %}</h1>
     <p class="section-copy">
-      {% if current_user.role == 'patient' %}Here is what is happening with your care and the clearest next step.{% elif current_user.role in ['doctor','hospital'] %}Review appointments, schedule availability, patient messages, and consent-shared information.{% elif current_user.role == 'pharmacy' %}Manage pharmacy workflows, care messages, and provider information.{% else %}Your role-specific ZENDOC workspace.{% endif %}
+      {% if workspace_user.role == 'patient' %}Here is what is happening with your care and the clearest next step.{% elif workspace_user.role in ['doctor','hospital'] %}Review appointments, schedule availability, patient messages, and consent-shared information.{% elif workspace_user.role == 'pharmacy' %}Manage pharmacy workflows, care messages, and provider information.{% else %}Your role-specific ZENDOC workspace.{% endif %}
     </p>
   </div>
   <div class="form-actions">
-    {% if current_user.role == 'patient' %}<a href="{{ url_for('care_os.care_os_home') }}" class="primary-action">Open Care OS</a><a href="{{ url_for('main.ai_center') }}" class="secondary-action">Ask ZENDOC AI</a>{% endif %}
+    {% if workspace_user.role == 'patient' %}<a href="{{ url_for('care_os.care_os_home') }}" class="primary-action">Open Care OS</a><a href="{{ url_for('main.ai_center') }}" class="secondary-action">Ask ZENDOC AI</a>{% endif %}
     <a href="{{ url_for('main.notifications') }}" class="secondary-action">Notifications{% if stats.get('Unread') %} ({{ stats.get('Unread') }}){% endif %}</a>
   </div>
 </section>
@@ -31,7 +32,7 @@
 </section>
 {% else %}
 
-{% if current_user.role == 'patient' %}
+{% if workspace_user.role == 'patient' %}
 <aside class="emergency-strip" aria-label="Emergency guidance">
   <p><strong>Need urgent help?</strong> For chest pain, severe breathing difficulty, stroke signs, or serious injury, contact local emergency services now. ZENDOC cannot dispatch help.</p>
   <a href="{{ url_for('ecosystem.ambulance_page') }}" class="secondary-action">View transport guidance</a>
@@ -153,10 +154,10 @@
   <article class="panel">
     <p class="eyebrow">Workspace shortcuts</p><h2>Continue your work</h2>
     <div class="button-list">
-      {% if current_user.role in ['doctor','hospital'] %}<a href="{{ url_for('milestone7.doctor_availability_page') }}" class="secondary-action">Update schedule availability</a>{% endif %}
-      {% if current_user.role in ['doctor','hospital','pharmacy'] %}<a href="{{ url_for('main.provider_profile') }}" class="secondary-action">Review provider profile</a>{% endif %}
+      {% if workspace_user.role in ['doctor','hospital'] %}<a href="{{ url_for('milestone7.doctor_availability_page') }}" class="secondary-action">Update schedule availability</a>{% endif %}
+      {% if workspace_user.role in ['doctor','hospital','pharmacy'] %}<a href="{{ url_for('main.provider_profile') }}" class="secondary-action">Review provider profile</a>{% endif %}
       <a href="{{ url_for('milestone7.messages_page') }}" class="secondary-action">Open messages</a>
-      {% if current_user.role == 'admin' %}<a href="{{ url_for('milestone7.admin_agent_command_center') }}" class="secondary-action">Open Owner Command Center 2.0</a><a href="{{ url_for('main.admin') }}" class="secondary-action">Review users and providers</a>{% endif %}
+      {% if workspace_user.role == 'admin' %}<a href="{{ url_for('milestone7.admin_agent_command_center') }}" class="secondary-action">Open Owner Command Center 2.0</a><a href="{{ url_for('main.admin') }}" class="secondary-action">Review users and providers</a>{% endif %}
     </div>
   </article>
 </section>
