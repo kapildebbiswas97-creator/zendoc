@@ -7,7 +7,20 @@ from .db import get_db, now_iso
 from .security import is_owner
 
 
-ORG_TYPES = {"hospital", "clinic", "pharmacy_network", "diagnostic_network", "care_provider", "other"}
+ORG_TYPES = {
+    "hospital",
+    "clinic",
+    "pharmacy_network",
+    "diagnostic_network",
+    "care_provider",
+    "employer",
+    "factory",
+    "university",
+    "school",
+    "ngo",
+    "government_department",
+    "other",
+}
 MEMBERSHIP_ROLES = {"owner", "admin", "doctor", "staff", "pharmacy", "lab", "member"}
 
 
