@@ -124,6 +124,8 @@ def list_my_health_organizations(actor: Any) -> list[dict]:
 
 
 def request_health_organization_membership(actor: Any, organization_uid: str) -> dict:
+    if str(_value(actor, "role") or "").strip().lower() != "patient":
+        raise PermissionError("Organization health membership is available to patient/member accounts only.")
     clean_uid = _clean(organization_uid, 80)
     if not clean_uid:
         raise ValueError("Organization code is required.")
@@ -159,7 +161,21 @@ def list_organization_memberships(actor: Any, organization_id: int) -> list[dict
     return [dict(row) for row in rows]
 
 
-def review_organization_membership(actor: Any, membership_id: int, status: str) -> dict:
+def review_organization_membership(
+    actor: Any,
+    organization_id: int,
+    membership_id: int,
+    status: str,
+) -> dict:
+    require_organization_manager(actor, organization_id)
+    row = get_db().execute(
+        "SELECT organization_id FROM organization_memberships WHERE id=?",
+        (int(membership_id),),
+    ).fetchone()
+    if not row:
+        raise LookupError("Organization membership not found.")
+    if int(row["organization_id"]) != int(organization_id):
+        raise PermissionError("Membership does not belong to this organization.")
     return approve_membership(actor, int(membership_id), status)
 
 
@@ -251,9 +267,10 @@ def organization_health_snapshot(actor: Any, organization_id: int, *, days: int 
 
     membership_rows = db.execute(
         """
-        SELECT status,membership_role,user_id
-        FROM organization_memberships
-        WHERE organization_id=?
+        SELECT om.status,om.membership_role,om.user_id,u.role AS account_role,u.active AS account_active
+        FROM organization_memberships om
+        JOIN users u ON u.id=om.user_id
+        WHERE om.organization_id=?
         """,
         (int(organization_id),),
     ).fetchall()
@@ -262,7 +279,12 @@ def organization_health_snapshot(actor: Any, organization_id: int, *, days: int 
     for row in membership_rows:
         status = str(row["status"] or "unknown")
         status_counts[status] = status_counts.get(status, 0) + 1
-        if status == "active":
+        if (
+            status == "active"
+            and str(row["membership_role"] or "") == "member"
+            and str(row["account_role"] or "") == "patient"
+            and bool(row["account_active"])
+        ):
             active_member_ids.append(int(row["user_id"]))
 
     benefit_count = int(db.execute(
@@ -327,6 +349,7 @@ def organization_health_snapshot(actor: Any, organization_id: int, *, days: int 
         "membership": {
             "total": len(membership_rows),
             "active": len(active_member_ids),
+            "eligible_active_members": len(active_member_ids),
             "status_counts": status_counts,
         },
         "active_benefit_plans": benefit_count,
