@@ -164,16 +164,31 @@ class NominatimPlacesProvider(PlacesProvider):
             "emergency": "hospital",
         }.get(category, category.replace("_", " "))
         if search_text:
-            terms = [search_text]
+            query_texts = [search_text]
+            if location:
+                query_texts.append(f"{human_category} in {location}")
         elif location:
-            terms = [term for term in (specialty, human_category, f"in {location}") if term]
+            query_texts = [
+                " ".join(term for term in (specialty, human_category, f"in {location}") if term),
+                f"{human_category} in {location}",
+            ]
         else:
             # Nominatim has no nearby-search endpoint. A bounded coordinate
             # query still lets GPS-only searches resolve a local listing while
             # preserving the provider's external/unverified status.
-            terms = [term for term in (specialty, human_category, f"near {latitude:.6f}, {longitude:.6f}") if term]
-        params = {
-            "q": " ".join(terms),
+            query_texts = [
+                " ".join(
+                    term
+                    for term in (specialty, human_category, f"near {latitude:.6f}, {longitude:.6f}")
+                    if term
+                )
+            ]
+        # Specialty/name phrasing can be too strict for Nominatim POI search.
+        # Retry once with the broader care category + location when the first
+        # truthful external query returns no listings. Never invent results.
+        query_texts = list(dict.fromkeys(text for text in query_texts if text.strip()))
+
+        base_params = {
             "format": "jsonv2",
             "addressdetails": "1",
             "extratags": "1",
@@ -183,27 +198,37 @@ class NominatimPlacesProvider(PlacesProvider):
         }
         country_code = _normalized_country_code(normalized.get("country_code"))
         if country_code:
-            params["countrycodes"] = country_code.lower()
+            base_params["countrycodes"] = country_code.lower()
         if latitude is not None and longitude is not None:
             south, north, west, east = bounding_box(latitude, longitude, _bounded_radius_km(normalized.get("radius_km")))
             # Nominatim viewboxes cannot represent two disjoint dateline
             # intervals. Keep both sides and enforce the circle on results.
             if west > east:
                 west, east = -180.0, 180.0
-            params["viewbox"] = f"{west},{north},{east},{south}"
-            params["bounded"] = "1"
-        url = f"{NOMINATIM_SEARCH_URL}?{urllib.parse.urlencode(params)}"
+            base_params["viewbox"] = f"{west},{north},{east},{south}"
+            base_params["bounded"] = "1"
 
         try:
-            payload = self._get_json(url)
-            results = [
-                _public_nominatim_place(place, normalized)
-                for place in payload
-                if isinstance(place, dict)
-            ]
-            results = [item for item in results if item]
-            if latitude is not None and longitude is not None:
-                results = nearby_records(results, latitude, longitude, _bounded_radius_km(normalized.get("radius_km")))
+            results = []
+            for query_text in query_texts:
+                params = {**base_params, "q": query_text}
+                url = f"{NOMINATIM_SEARCH_URL}?{urllib.parse.urlencode(params)}"
+                payload = self._get_json(url)
+                results = [
+                    _public_nominatim_place(place, normalized)
+                    for place in payload
+                    if isinstance(place, dict)
+                ]
+                results = [item for item in results if item]
+                if latitude is not None and longitude is not None:
+                    results = nearby_records(
+                        results,
+                        latitude,
+                        longitude,
+                        _bounded_radius_km(normalized.get("radius_km")),
+                    )
+                if results:
+                    break
             result = PlacesResult(
                 available=True,
                 results=results,

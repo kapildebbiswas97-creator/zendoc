@@ -12,6 +12,8 @@ from pathlib import Path
 
 from flask import current_app, send_file, send_from_directory
 
+from .external_execution_guard import require_live_external_connector
+
 
 @dataclass(frozen=True)
 class StoredRecord:
@@ -95,6 +97,7 @@ class S3CompatibleRecordStorage:
         }
 
     def _client(self):
+        require_live_external_connector("remote_medical_record_storage")
         settings = self._settings()
         try:
             import boto3

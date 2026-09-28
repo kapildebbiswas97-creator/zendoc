@@ -28,8 +28,14 @@
         <span class="brand-mark" aria-hidden="true">Z</span>
         <span>ZENDOC</span>
       </a>
+      {% if zendoc_release.is_pilot %}
+        <span class="status-badge beta" title="{{ zendoc_release.label }}">Pilot</span>
+      {% elif zendoc_release.channel == 'development' %}
+        <span class="status-badge beta">Development</span>
+      {% endif %}
 
       {% if current_user %}
+        {% if current_user.role == 'patient' %}
         <form action="{{ url_for('ecosystem.search_page') }}" method="get" class="global-search" role="search">
           <label class="sr-only" for="global-search-input">Universal ZENDOC search</label>
           <input id="global-search-input" type="search" name="q" placeholder="Search care, records, messages, benefits…" autocomplete="off" aria-describedby="global-search-help">
@@ -48,6 +54,7 @@
             </div>
           </div>
         </form>
+        {% endif %}
 
         <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="primary-navigation">
           <span class="sr-only">Open navigation</span>
@@ -154,11 +161,11 @@
           <details class="nav-menu nav-menu-more">
             <summary>More</summary>
             <div class="nav-menu-panel nav-menu-panel-right">
-              {% if current_user.role not in ['doctor','hospital','pharmacy'] or provider_operational_access %}<a href="{{ url_for('ecosystem.search_page') }}">Universal search</a>{% endif %}
+              {% if current_user.role == 'patient' or (current_user.role in ['doctor','hospital','pharmacy'] and provider_operational_access) %}<a href="{{ url_for('ecosystem.search_page') }}">Universal search</a>{% endif %}
               <a href="{{ url_for('main.notifications') }}">Notifications</a>
               {% if current_user.role in ['patient','admin'] or (current_user.role in ['doctor','hospital'] and provider_operational_access) %}<a href="{{ url_for('operational_fulfilment_ui.fulfilment_console') }}">Care tracker</a>{% endif %}
-              {% if current_user.role not in ['doctor','hospital','pharmacy'] or provider_operational_access %}<a href="{{ url_for('milestone7.telehealth_page') }}">Telehealth <span class="menu-status">Beta</span></a>{% endif %}
-              {% if current_user.role not in ['doctor','hospital','pharmacy'] or provider_operational_access %}<a href="{{ url_for('ecosystem.marketplace_page') }}">All services</a>{% endif %}
+              {% if current_user.role == 'patient' or (current_user.role in ['doctor','hospital'] and provider_operational_access) %}<a href="{{ url_for('milestone7.telehealth_page') }}">Telehealth <span class="menu-status">Beta</span></a>{% endif %}
+              {% if current_user.role == 'patient' %}<a href="{{ url_for('ecosystem.marketplace_page') }}">All services</a>{% endif %}
               {% if current_user.role == 'patient' %}
                 <a href="{{ url_for('care_os.care_os_home') }}">Care OS</a>
                 <a href="{{ url_for('specialist_agents.agent_os_page') }}">Agent OS</a>
@@ -290,9 +297,10 @@
           <span>ZENDOC</span>
         </a>
         <p class="footer-tagline">Connected healthcare, organized around you.</p>
-        <span class="status-badge beta">Public Beta</span>
+        <span class="status-badge beta">{{ zendoc_release.label }}</span>
       </div>
 
+      {% if not current_user or current_user.role == 'patient' %}
       <div class="footer-col">
         <strong>Platform</strong>
         <a href="{{ url_for('main.ai_center') }}">AI Assistant</a>
@@ -301,16 +309,43 @@
         <a href="{{ url_for('ecosystem.marketplace_page') }}">Diagnostics &amp; Services</a>
         <a href="{{ url_for('health_memory.health_summary_page') }}">Health Memory</a>
       </div>
-
       <div class="footer-col">
         <strong>Care</strong>
-        {% if not current_user or current_user.role == 'patient' or provider_operational_access %}
-          <a href="{{ url_for('main.appointments') }}">Appointments</a>
-        {% endif %}
+        <a href="{{ url_for('main.appointments') }}">Appointments</a>
         <a href="{{ url_for('family.family_page') }}">Family Care</a>
         <a href="{{ url_for('fitness.overview') }}">Fitness &amp; Wellness</a>
         <a href="{{ url_for('main.ai_center') }}">Emergency guidance</a>
       </div>
+      {% elif current_user.role in ['doctor','hospital','pharmacy'] %}
+      <div class="footer-col">
+        <strong>Provider workspace</strong>
+        <a href="{{ url_for('main.provider_profile') }}">Provider Profile</a>
+        {% if provider_operational_access %}
+          {% if current_user.role in ['doctor','hospital'] %}<a href="{{ url_for('main.appointments') }}">Appointments</a>{% endif %}
+          <a href="{{ url_for('milestone7.messages_page') }}">Messages</a>
+          {% if current_user.role in ['doctor','hospital'] %}<a href="{{ url_for('payments.payments_page') }}">Payments</a>{% endif %}
+        {% endif %}
+      </div>
+      <div class="footer-col">
+        <strong>Provider support</strong>
+        <a href="{{ url_for('main.notifications') }}">Notifications</a>
+        <a href="{{ url_for('pilot_operations.feedback_page', page=request.path, feature=(request.endpoint or 'general')) }}">Report a problem</a>
+      </div>
+      {% elif current_user.role == 'admin' %}
+      <div class="footer-col">
+        <strong>Owner workspace</strong>
+        <a href="{{ url_for('main.admin') }}">Admin Command Center</a>
+        <a href="{{ url_for('main.startup_command_center') }}">Startup Operations</a>
+        <a href="{{ url_for('integration_readiness.integration_center') }}">Integration Center</a>
+        <a href="{{ url_for('main.founder_readiness_page') }}">Founder Readiness</a>
+      </div>
+      <div class="footer-col">
+        <strong>Operations</strong>
+        <a href="{{ url_for('milestone7.operations_page') }}">Staff Operations</a>
+        <a href="{{ url_for('pilot_operations.feedback_admin') }}">Pilot Feedback</a>
+        <a href="{{ url_for('main.notifications') }}">Notifications</a>
+      </div>
+      {% endif %}
 
       <div class="footer-col">
         <strong>Providers</strong>
@@ -329,6 +364,9 @@
         <a href="{{ url_for('public_launch.community_guidelines') }}">Community Guidelines</a>
         <a href="{{ url_for('public_launch.medical_disclaimer') }}">Medical Disclaimer</a>
         <a href="{{ url_for('public_launch.account_deletion') }}">Delete Account</a>
+        {% if current_user %}
+          <a href="{{ url_for('pilot_operations.feedback_page', page=request.path, feature=(request.endpoint or 'general')) }}">Report a problem / Give feedback</a>
+        {% endif %}
         <button type="button" class="footer-install-button" data-install-zendoc hidden>Install ZENDOC</button>
       </div>
     </div>

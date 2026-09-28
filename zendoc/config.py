@@ -121,8 +121,24 @@ def load_config(base_dir, overrides=None):
     ).strip().upper()
     if connected_care_data_mode not in {"LIVE", "DEMO"}:
         raise ConfigError("ZENDOC_CONNECTED_CARE_DATA_MODE must be LIVE or DEMO.")
+
+    release_channel = str(
+        (overrides or {}).get("RELEASE_CHANNEL")
+        or os.environ.get("ZENDOC_RELEASE_CHANNEL", "pilot")
+    ).strip().lower()
+    if release_channel not in {"development", "pilot", "production"}:
+        raise ConfigError("ZENDOC_RELEASE_CHANNEL must be development, pilot, or production.")
+
+    app_version = str(
+        (overrides or {}).get("APP_VERSION")
+        or os.environ.get("ZENDOC_APP_VERSION")
+        or os.environ.get("RENDER_GIT_COMMIT", "")
+    ).strip()
+
     config = {
         "ZENDOC_ENV": env,
+        "RELEASE_CHANNEL": release_channel,
+        "APP_VERSION": app_version,
         "SECRET_KEY": secret_key or "development-only-secret-key",
         "UPLOAD_FOLDER": str(base_dir / "uploads"),
         "DATABASE_BACKUP_DIR": str(

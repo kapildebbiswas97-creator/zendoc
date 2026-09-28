@@ -13,6 +13,7 @@ from .community_media import get_community_media_storage
 from .record_storage import get_record_storage
 from .jev_system_one import jev_runtime_status
 from .agentic_integration_mesh import integration_ownership
+from .places_provider import places_configuration_status
 
 
 def _present(*keys):
@@ -45,6 +46,16 @@ def integration_readiness_snapshot():
     records=get_record_storage().status()
     notifications=notification_provider_status()
     jev=jev_runtime_status()
+    places=places_configuration_status()
+    configured_places_provider=str(places.get("configured_provider") or "none").strip().lower()
+    if configured_places_provider=="google":
+        places_required_config=("ZENDOC_PLACES_PROVIDER","ZENDOC_GOOGLE_PLACES_API_KEY")
+    elif configured_places_provider in {"nominatim","openstreetmap","osm"}:
+        places_required_config=("ZENDOC_PLACES_PROVIDER",)
+    elif places.get("production_fallback_active"):
+        places_required_config=()
+    else:
+        places_required_config=("ZENDOC_PLACES_PROVIDER",)
 
     rows=[
         _item(
@@ -99,9 +110,14 @@ def integration_readiness_snapshot():
         ),
         _item(
             "maps","Live map/places discovery",
-            registry["healthcare_finder"]["status"],True,registry["healthcare_finder"]["status"]!="WORKING",
-            ("ZENDOC_PLACES_PROVIDER","ZENDOC_GOOGLE_PLACES_API_KEY"),
-            "Local/official healthcare discovery always remains available. OpenStreetMap/Nominatim can provide external unverified discovery without a Google key; Google Places remains an optional server-side upgrade.",
+            registry["external_places_discovery"]["status"],True,
+            registry["external_places_discovery"]["status"]!="WORKING",
+            places_required_config,
+            (
+                "Local/official healthcare discovery is a separate working software path. "
+                f"External discovery mode={places.get('mode')}; configuration/fallback availability does not prove "
+                "runtime reachability, quota, result availability or ZENDOC booking connectivity."
+            ),
         ),
         _item(
             "video_search","Live YouTube educational discovery",

@@ -203,7 +203,11 @@
           {% for item in result.results %}
             <article class="provider-card">
               <div class="provider-card-head">
-                <div><h3>{{ item.name }}</h3><p>{{ (item.specialty or item.category or 'Healthcare provider').replace('_',' ').title() }}</p></div>
+                <div>
+                  <h3>{{ item.provider_name or item.name }}</h3>
+                  {% if item.provider_name and item.name and item.provider_name != item.name %}<p>{{ item.name }}</p>{% endif %}
+                  <p>{{ (item.specialty or item.category or 'Healthcare provider').replace('_',' ').title() }}</p>
+                </div>
                 {% if item.source == 'zendoc_provider_network' %}
                   <span class="status-badge working">Reviewed profile</span>
                 {% elif item.source == 'official_public_directory' %}

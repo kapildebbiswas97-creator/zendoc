@@ -148,6 +148,52 @@ def test_nominatim_search_returns_external_unverified_non_bookable_results(monke
     assert item["attribution"] == "© OpenStreetMap contributors"
 
 
+def test_nominatim_retries_broader_category_when_specialty_query_is_empty(monkeypatch):
+    provider = NominatimPlacesProvider(timeout_seconds=1)
+    requested = []
+
+    def fake_get_json(url):
+        requested.append(url)
+        if len(requested) == 1:
+            return []
+        return [{
+            "place_id": 301,
+            "osm_type": "node",
+            "osm_id": 302,
+            "display_name": "Kalyani Heart Clinic, Kalyani, West Bengal, India",
+            "lat": "22.9750",
+            "lon": "88.4345",
+            "type": "clinic",
+            "category": "amenity",
+            "address": {
+                "amenity": "Kalyani Heart Clinic",
+                "city": "Kalyani",
+                "state": "West Bengal",
+            },
+            "namedetails": {"name": "Kalyani Heart Clinic"},
+        }]
+
+    monkeypatch.setattr(provider, "_get_json", fake_get_json)
+
+    result = provider.search(
+        {
+            "category": "doctor",
+            "specialty": "Cardiology",
+            "location": "Kalyani",
+            "latitude": None,
+            "longitude": None,
+            "radius_km": 10,
+        }
+    )
+
+    assert result.available is True
+    assert len(result.results) == 1
+    assert result.results[0]["name"] == "Kalyani Heart Clinic"
+    assert len(requested) == 2
+    assert "Cardiology+doctor+in+Kalyani" in requested[0]
+    assert "doctor+in+Kalyani" in requested[1]
+
+
 def test_nominatim_accepts_gps_only_search_for_beta_fallback(monkeypatch):
     provider = NominatimPlacesProvider(timeout_seconds=1)
     requested = []

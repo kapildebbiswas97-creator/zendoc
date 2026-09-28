@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Pilot cohorts — ZENDOC{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div><p class="eyebrow">Owner operations</p><h1>Pilot cohorts</h1><p class="section-copy">Tag real pilot participants without exposing clinical content in cohort administration.</p></div>
+  <div class="form-actions"><a class="secondary-action" href="{{ url_for('pilot_operations.feedback_admin') }}">Pilot feedback</a><a class="secondary-action" href="{{ url_for('main.admin') }}">Admin</a></div>
+</section>
+
+<section class="panel">
+  <div class="panel-head"><h2>Release state</h2><span class="status-badge beta">{{ release.label }}</span></div>
+  <div class="summary-row"><span>Release channel</span><strong>{{ release.channel }}</strong></div>
+  <div class="summary-row"><span>Connected-care data mode</span><strong>{{ release.data_mode }}</strong></div>
+  <p class="form-note">{{ release.truth_notice }}</p>
+</section>
+
+<section class="panel spaced-panel">
+  <h2>Assign a cohort label</h2>
+  <form method="post" action="{{ url_for('pilot_operations.cohort_assign') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="form-grid">
+      <label>Entity type
+        <select name="entity_type" required>
+          <option value="user">User</option>
+          <option value="provider">Provider profile</option>
+          <option value="organization">Organization</option>
+        </select>
+      </label>
+      <label>Entity ID <input name="entity_id" type="number" min="1" required></label>
+      <label>Cohort label <input name="cohort_label" maxlength="80" placeholder="Pilot-Patient-01" required></label>
+    </div>
+    <button type="submit">Assign label</button>
+  </form>
+  <p class="form-note">Common labels: Pilot-Patient-01, Doctor-Pilot, Pharmacy-Pilot, Lab-Pilot, Clinic-Pilot.</p>
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head"><h2>Users</h2><span class="status-badge beta">{{ snapshot.users|length }}</span></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>ID</th><th>Name</th><th>Role</th><th>Account</th><th>Cohorts</th></tr></thead>
+    <tbody>{% for item in snapshot.users %}
+      <tr><td>{{ item.id }}</td><td>{{ item.name }}<br><small>{{ item.email }}</small></td><td>{{ item.role }}</td><td>{{ item.account_state }}</td><td>
+        {% for cohort in item.cohorts %}
+          <form class="inline-form" method="post" action="{{ url_for('pilot_operations.cohort_remove', membership_id=cohort.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><span class="status-badge beta">{{ cohort.cohort_label }}</span><button type="submit">Remove</button>
+          </form>
+        {% else %}—{% endfor %}
+      </td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head"><h2>Providers</h2><span class="status-badge beta">{{ snapshot.providers|length }}</span></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Profile ID</th><th>Provider</th><th>Type</th><th>Verification</th><th>Account</th><th>Cohorts</th></tr></thead>
+    <tbody>{% for item in snapshot.providers %}
+      <tr><td>{{ item.id }}</td><td>{{ item.name }}<br><small>{{ item.email }}</small></td><td>{{ item.provider_type }}</td><td>{{ item.verification_status }}</td><td>{{ 'active' if item.active else 'suspended' }}</td><td>
+        {% for cohort in item.cohorts %}
+          <form class="inline-form" method="post" action="{{ url_for('pilot_operations.cohort_remove', membership_id=cohort.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><span class="status-badge beta">{{ cohort.cohort_label }}</span><button type="submit">Remove</button>
+          </form>
+        {% else %}—{% endfor %}
+      </td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head"><h2>Organizations</h2><span class="status-badge beta">{{ snapshot.organizations|length }}</span></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>ID</th><th>Organization</th><th>Type</th><th>Verification</th><th>Account</th><th>Cohorts</th></tr></thead>
+    <tbody>{% for item in snapshot.organizations %}
+      <tr><td>{{ item.id }}</td><td>{{ item.name }}</td><td>{{ item.organization_type }}</td><td>{{ item.verification_status }}</td><td>{{ 'active' if item.active else 'suspended' }}</td><td>
+        {% for cohort in item.cohorts %}
+          <form class="inline-form" method="post" action="{{ url_for('pilot_operations.cohort_remove', membership_id=cohort.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><span class="status-badge beta">{{ cohort.cohort_label }}</span><button type="submit">Remove</button>
+          </form>
+        {% else %}—{% endfor %}
+      </td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+</section>
+
+<section class="panel spaced-panel">
+  <div class="panel-head"><h2>Provider invitations</h2><span class="status-badge beta">{{ snapshot.provider_invitations|length }}</span></div>
+  {% if snapshot.provider_invitations %}
+  <div class="table-wrap"><table>
+    <thead><tr><th>Created</th><th>Invitee</th><th>Role</th><th>State</th><th>Expires</th></tr></thead>
+    <tbody>{% for item in snapshot.provider_invitations %}
+      <tr><td>{{ item.created_at }}</td><td>{{ item.invited_name or '—' }}<br><small>{{ item.email }}</small></td><td>{{ item.role }}</td><td>{{ item.state }}</td><td>{{ item.expires_at }}</td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+  {% else %}<p class="form-note">No provider invitations recorded.</p>{% endif %}
+</section>
+{% endblock %}

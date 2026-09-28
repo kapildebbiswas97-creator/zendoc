@@ -443,6 +443,7 @@ def book_diagnostic_test(
     if existing:
         return {
             "success": True,
+            "id": int(existing["id"]),
             "booking_id": int(existing["id"]),
             "booking_uid": existing["booking_uid"],
             "test_name": test_row["name"],
@@ -486,6 +487,7 @@ def book_diagnostic_test(
             if existing:
                 return {
                     "success": True,
+                    "id": int(existing["id"]),
                     "booking_id": int(existing["id"]),
                     "booking_uid": existing["booking_uid"],
                     "test_name": test_row["name"],
@@ -529,7 +531,8 @@ def book_diagnostic_test(
 
     return {
         "success": True,
-        "booking_id": booking_id,
+        "id": int(booking_id),
+        "booking_id": int(booking_id),
         "booking_uid": uid,
         "test_name": test_row["name"],
         "lab_id": lab_id,

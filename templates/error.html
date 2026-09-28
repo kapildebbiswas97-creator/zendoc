@@ -5,6 +5,16 @@
   <p class="eyebrow">Request issue</p>
   <h1>{{ status }}</h1>
   <p>{{ message }}</p>
-  <a class="primary-action" href="{{ url_for('main.home') }}">Go Home</a>
+  {% if recovery_message %}<p class="form-note">{{ recovery_message }}</p>{% endif %}
+  <div class="form-actions">
+    {% if retry_path and retry_path.startswith('/') and not retry_path.startswith('//') %}
+      <a class="primary-action" href="{{ retry_path }}">Try again</a>
+    {% endif %}
+    <a class="secondary-action" href="{{ url_for('main.finder') }}">Use Find Care / stored results</a>
+    <a class="secondary-action" href="{{ url_for('main.home') }}">Go Home</a>
+    {% if current_user %}
+      <a class="secondary-action" href="{{ url_for('pilot_operations.feedback_page', page=(retry_path or request.path), feature=(request.endpoint or 'error_recovery')) }}">Report this problem</a>
+    {% endif %}
+  </div>
 </section>
 {% endblock %}

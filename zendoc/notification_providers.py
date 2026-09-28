@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 from .db import get_db, now_iso
 from .email_delivery import email_delivery_status, send_transactional_email
+from .external_execution_guard import external_connector_block_reason
 
 
 SUPPORTED_CHANNELS = {"in_app", "email", "sms", "whatsapp", "push"}
@@ -66,6 +67,11 @@ def deliver_notification(
         provider_response = "local_in_app"
         sent_at = now
         delivered_at = now
+        integration_required = False
+    elif external_connector_block_reason(target_email=user["email"]):
+        status = "failed"
+        provider_response = "demo_external_delivery_blocked"
+        failed_at = now
         integration_required = False
     elif channel == "email":
         email_status = email_delivery_status()
