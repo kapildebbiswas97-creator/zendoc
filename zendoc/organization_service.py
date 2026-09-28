@@ -22,6 +22,14 @@ ORG_TYPES = {
     "other",
 }
 MEMBERSHIP_ROLES = {"owner", "admin", "doctor", "staff", "pharmacy", "lab", "member"}
+INSTITUTIONAL_ORG_TYPES = {
+    "employer",
+    "factory",
+    "university",
+    "school",
+    "ngo",
+    "government_department",
+}
 
 
 def _value(actor, key, default=None):
@@ -58,6 +66,10 @@ def create_organization(actor, data):
     org_type = str(data.get("organization_type") or "other").strip().lower()
     if org_type not in ORG_TYPES:
         raise ValueError("Invalid organization_type.")
+    if org_type in INSTITUTIONAL_ORG_TYPES and _value(actor, "role") != "admin":
+        raise PermissionError(
+            "Employer, education, NGO and government organizations are owner-provisioned in the controlled beta."
+        )
 
     now = now_iso()
     uid = f"org_{uuid.uuid4().hex[:16]}"
