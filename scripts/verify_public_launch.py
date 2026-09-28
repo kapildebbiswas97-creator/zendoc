@@ -37,6 +37,7 @@ PROTECTED_CORE_PATHS = (
     "/mental-wellness",
     "/health-hub",
     "/payments",
+    "/organizations",
 )
 
 
