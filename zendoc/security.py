@@ -143,14 +143,20 @@ def owner_required(view):
 
 
 def role_required(*roles):
+    """Require one of the explicitly declared account roles.
+
+    Owner/admin access is not an implicit bypass for patient/provider routes.
+    Owner QA uses dedicated preview/admin surfaces so role-specific services are
+    never executed with an incompatible admin identity.
+    """
+    allowed_roles = set(roles)
+
     def decorator(view):
         @wraps(view)
         def wrapped(*args, **kwargs):
             if g.user is None:
                 return redirect(url_for("main.login", role=g.get("login_role", "patient")))
-            if g.user["role"] == "admin" and not is_owner(g.user):
-                abort(403)
-            if g.user["role"] not in roles and g.user["role"] != "admin":
+            if g.user["role"] not in allowed_roles:
                 abort(403)
             return view(*args, **kwargs)
 
