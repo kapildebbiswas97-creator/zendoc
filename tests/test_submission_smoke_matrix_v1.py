@@ -107,6 +107,32 @@ def test_public_submission_routes_have_no_404_or_5xx(tmp_path):
     _assert_no_missing_or_server_error(client, PUBLIC_CRITICAL_GETS)
 
 
+
+def test_uncaught_permission_error_is_403_not_500(tmp_path):
+    app, client = make_client(tmp_path)
+
+    @app.get("/_permission-boundary-test")
+    def _permission_boundary_test():
+        raise PermissionError("test-only permission boundary")
+
+    response = client.get("/_permission-boundary-test", follow_redirects=False)
+    assert response.status_code == 403
+    assert b"not available for your current account role" in response.data
+
+
+def test_uncaught_api_permission_error_is_structured_403(tmp_path):
+    app, client = make_client(tmp_path)
+
+    @app.get("/api/_permission-boundary-test")
+    def _api_permission_boundary_test():
+        raise PermissionError("test-only API permission boundary")
+
+    response = client.get("/api/_permission-boundary-test", follow_redirects=False)
+    assert response.status_code == 403
+    payload = response.get_json()
+    assert payload["error"]["code"] == 403
+
+
 def test_patient_submission_routes_have_no_404_or_5xx(tmp_path):
     _app, client = make_client(tmp_path)
     register_web(client, "patient", "submission-smoke@example.com", "Submission Smoke")
