@@ -444,6 +444,14 @@ def get_capability_registry() -> dict:
         },
 
         # External integrations
+        "organization_health": {
+            "status": STATUS_BETA,
+            "label": "ZENDOC Organizations & Member Benefits",
+            "description": (
+                "Verified organization membership, benefit plans and privacy-preserving aggregate operational analytics "
+                "are implemented. Organization benefit records do not prove insurer approval, provider fulfilment or clinical outcomes."
+            ),
+        },
         "healthcare_finder": {
             "status": STATUS_WORKING,
             "label": "Healthcare Finder — ZENDOC / Official Sources",
