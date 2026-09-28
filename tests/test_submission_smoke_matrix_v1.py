@@ -158,3 +158,11 @@ def test_owner_rendered_navigation_has_no_404_or_5xx(tmp_path):
             "/admin/integrations",
         ),
     )
+
+
+
+def test_owner_is_denied_patient_fitness_route_without_server_error(tmp_path):
+    _app, client = make_client(tmp_path)
+    login_web(client, "admin", "admin@example.com", "AdminStrong123")
+    response = client.get("/fitness", follow_redirects=False)
+    assert response.status_code == 403
