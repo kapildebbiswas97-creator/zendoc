@@ -17,7 +17,7 @@
     </p>
   </div>
   <div class="form-actions">
-    {% if workspace_user.role == 'patient' %}<a href="{{ url_for('care_os.care_os_home') }}" class="primary-action">Open Care OS</a><a href="{{ url_for('main.ai_center') }}" class="secondary-action">Ask ZENDOC AI</a>{% endif %}
+    {% if not preview_mode and workspace_user.role == 'patient' %}<a href="{{ url_for('care_os.care_os_home') }}" class="primary-action">Open Care OS</a><a href="{{ url_for('main.ai_center') }}" class="secondary-action">Ask ZENDOC AI</a>{% endif %}
     <a href="{{ url_for('main.notifications') }}" class="secondary-action">Notifications{% if stats.get('Unread') %} ({{ stats.get('Unread') }}){% endif %}</a>
   </div>
 </section>
