@@ -59,6 +59,7 @@ class HealthcareFinder:
         warnings = []
 
         registered = []
+        registered_source_available = not invalid_gps_only
         if not invalid_gps_only:
             try:
                 registered = search_registered_providers(
@@ -70,6 +71,7 @@ class HealthcareFinder:
                     radius_km=normalized["radius_km"],
                 )
             except Exception:
+                registered_source_available = False
                 LOGGER.exception("Registered-provider Finder source failed.")
                 warnings.append(
                     "ZENDOC registered-provider search is temporarily unavailable. "
@@ -77,6 +79,7 @@ class HealthcareFinder:
                 )
 
         public_directory = []
+        public_directory_source_available = not invalid_gps_only
         if not invalid_gps_only:
             try:
                 public_directory = search_public_healthcare_entities(
@@ -89,6 +92,7 @@ class HealthcareFinder:
                     radius_km=normalized["radius_km"],
                 )
             except Exception:
+                public_directory_source_available = False
                 LOGGER.exception("Official public-directory Finder source failed.")
                 warnings.append(
                     "The official/public healthcare directory is temporarily unavailable. "
@@ -156,6 +160,22 @@ class HealthcareFinder:
                 "official_public_directory_not_zendoc_verified": len(public_directory),
                 "approved_public_listings_merged_into_verified": len(claimed_links),
                 "external_unverified": len(external_results),
+            },
+            "source_health": {
+                "zendoc_verified": {
+                    "available": bool(registered_source_available),
+                    "result_count": len(registered),
+                },
+                "official_public_directory": {
+                    "available": bool(public_directory_source_available),
+                    "result_count": len(public_directory),
+                },
+                "external_places": {
+                    "available": bool(places_result.available),
+                    "result_count": len(external_results),
+                    "source": str(places_result.source or "external"),
+                    "message": str(places_result.message or "").strip() or None,
+                },
             },
             "search_status": search_status,
             "warnings": warnings,
