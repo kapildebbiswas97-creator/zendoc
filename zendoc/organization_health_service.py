@@ -261,7 +261,11 @@ def organization_health_snapshot(actor: Any, organization_id: int, *, days: int 
     """
     ensure_organization_health_schema()
     organization = require_organization_manager(actor, organization_id)
-    days = max(1, min(int(days or 30), 365))
+    try:
+        days = int(days or 30)
+    except (TypeError, ValueError):
+        days = 30
+    days = max(1, min(days, 365))
     cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
     db = get_db()
 
