@@ -156,6 +156,10 @@ def test_owner_rendered_navigation_has_no_404_or_5xx(tmp_path):
             "/admin",
             "/admin/startup",
             "/admin/integrations",
+            "/admin/dashboard-preview/patient",
+            "/admin/dashboard-preview/doctor",
+            "/admin/dashboard-preview/hospital",
+            "/admin/dashboard-preview/pharmacy",
         ),
     )
 
