@@ -128,6 +128,7 @@ def test_patient_rendered_navigation_has_no_404_or_5xx(tmp_path):
             "/messages",
             "/mental-wellness",
             "/family",
+            "/organizations",
         ),
     )
 
