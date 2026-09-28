@@ -340,6 +340,32 @@ def test_advanced_finder_external_exception_becomes_degraded_result(tmp_path):
     assert "temporarily unavailable" in " ".join(result["warnings"]).lower()
 
 
+
+def test_advanced_finder_exposes_source_health_without_inventing_results(tmp_path):
+    app = make_app(tmp_path)
+
+    with app.app_context():
+        result = HealthcareFinder(places_provider=EmptyAvailableProvider()).search(
+            {
+                "category": "hospital",
+                "specialty": "",
+                "location": "Kalyani",
+                "latitude": None,
+                "longitude": None,
+                "radius_km": 10,
+            }
+        )
+
+    health = result["source_health"]
+    assert health["zendoc_verified"]["available"] is True
+    assert health["official_public_directory"]["available"] is True
+    assert health["external_places"]["available"] is True
+    assert health["zendoc_verified"]["result_count"] == 0
+    assert health["official_public_directory"]["result_count"] == 0
+    assert health["external_places"]["result_count"] == 0
+    assert result["results"] == []
+
+
 class EmptyAvailableProvider(PlacesProvider):
     source = "empty-available"
 
