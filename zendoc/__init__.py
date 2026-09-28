@@ -213,6 +213,23 @@ def create_app(test_config=None):
     app.register_blueprint(specialist_agents_bp)
     app.register_blueprint(system_intelligence_bp)
 
+    @app.errorhandler(PermissionError)
+    def zendoc_permission_error(_error):
+        if request.path.startswith("/api/"):
+            return jsonify({
+                "error": {
+                    "code": 403,
+                    "message": "You do not have permission to use this ZENDOC capability.",
+                }
+            }), 403
+        return render_template(
+            "error.html",
+            status=403,
+            message="This capability is not available for your current account role.",
+            recovery_message="Use your role-specific workspace or return to your dashboard.",
+            retry_path=url_for("main.dashboard") if g.get("user") is not None else url_for("main.login"),
+        ), 403
+
     @app.errorhandler(404)
     def zendoc_not_found(_error):
         if request.path.startswith("/api/"):
