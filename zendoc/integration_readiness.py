@@ -99,9 +99,14 @@ def integration_readiness_snapshot():
         ),
         _item(
             "maps","Live map/places discovery",
-            registry["healthcare_finder"]["status"],True,registry["healthcare_finder"]["status"]!="WORKING",
+            registry["external_places_discovery"]["status"],True,
+            registry["external_places_discovery"]["status"]!="WORKING",
             ("ZENDOC_PLACES_PROVIDER","ZENDOC_GOOGLE_PLACES_API_KEY"),
-            "Local/official healthcare discovery always remains available. OpenStreetMap/Nominatim can provide external unverified discovery without a Google key; Google Places remains an optional server-side upgrade.",
+            (
+                "Local/official healthcare discovery is a separate working software path. "
+                "External OpenStreetMap/Google listings remain runtime-dependent: configured credentials or fallback mode "
+                "do not prove reachability, quota, result availability or ZENDOC booking connectivity."
+            ),
         ),
         _item(
             "video_search","Live YouTube educational discovery",
