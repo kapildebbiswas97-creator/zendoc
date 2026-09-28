@@ -167,6 +167,7 @@ def review_membership(organization_id, membership_id):
     try:
         review_organization_membership(
             g.user,
+            organization_id,
             membership_id,
             request.form.get("status", "active"),
         )
