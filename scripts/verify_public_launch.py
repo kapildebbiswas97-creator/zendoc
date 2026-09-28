@@ -25,6 +25,21 @@ REQUIRED_PATHS = {
 }
 
 
+PROTECTED_CORE_PATHS = (
+    "/dashboard",
+    "/finder",
+    "/appointments",
+    "/records",
+    "/health-summary",
+    "/timeline",
+    "/messages",
+    "/family",
+    "/mental-wellness",
+    "/health-hub",
+    "/payments",
+)
+
+
 def fetch(url: str, timeout: int = 15):
     request = urllib.request.Request(
         url,
@@ -134,6 +149,31 @@ def main() -> int:
                 failures.append(detail)
         except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError) as exc:
             detail = {"path": path, "error": str(exc)}
+            failures.append(detail)
+            results.append(detail)
+
+    for path in PROTECTED_CORE_PATHS:
+        url = f"{base}{path}"
+        try:
+            status, _headers, _body = fetch(url, timeout=args.timeout)
+            detail = {"path": path, "status": status, "protected_route": True}
+            # These are authenticated product surfaces. A healthy public deployment
+            # should prove the route exists without exposing the page anonymously.
+            if status not in {302, 401, 403}:
+                detail["error"] = (
+                    "protected product route should redirect or deny anonymous access; "
+                    f"got HTTP {status}"
+                )
+                failures.append(detail)
+            results.append(detail)
+        except urllib.error.HTTPError as exc:
+            detail = {"path": path, "status": int(exc.code), "protected_route": True}
+            if int(exc.code) not in {401, 403}:
+                detail["error"] = f"protected route failed with HTTP {exc.code}"
+                failures.append(detail)
+            results.append(detail)
+        except (urllib.error.URLError, TimeoutError) as exc:
+            detail = {"path": path, "error": str(exc), "protected_route": True}
             failures.append(detail)
             results.append(detail)
 
