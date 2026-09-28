@@ -14,7 +14,7 @@ from .organization_health_service import (
     review_organization_membership,
     set_benefit_plan_active,
 )
-from .organization_service import ORG_TYPES, create_organization
+from .organization_service import ORG_TYPES, create_organization, verify_organization
 from .routes import login_required, require_api_user
 from .security import is_owner
 
@@ -113,7 +113,25 @@ def organization_page(organization_id):
         snapshot=snapshot,
         memberships=memberships,
         benefit_types=sorted(BENEFIT_TYPES),
+        owner_mode=is_owner(g.user),
     )
+
+
+@bp.post("/organizations/<int:organization_id>/verify")
+@login_required
+def verify_health_organization(organization_id):
+    if not is_owner(g.user):
+        abort(403)
+    try:
+        verify_organization(
+            g.user,
+            organization_id,
+            request.form.get("status", "verified"),
+        )
+        flash("Organization verification state updated.", "success")
+    except (PermissionError, LookupError, ValueError) as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("organization_health.organization_page", organization_id=organization_id))
 
 
 @bp.post("/organizations/<int:organization_id>/benefits")
