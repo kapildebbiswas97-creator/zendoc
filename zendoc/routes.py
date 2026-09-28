@@ -1002,7 +1002,7 @@ def admin_dashboard_preview(role):
     get_db().commit()
     return render_template(
         "dashboard.html",
-        current_user=preview_user,
+        preview_user=preview_user,
         stats=preview_stats,
         appointments=[],
         next_appointment=None,
