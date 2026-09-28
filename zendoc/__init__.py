@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-from flask import Flask, g, jsonify, render_template, request
+from flask import Flask, g, jsonify, render_template, request, url_for
 
 from .config import load_config, validate_startup_config
 from .copilot import copilot_context
