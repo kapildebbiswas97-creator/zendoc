@@ -1,5 +1,5 @@
 from zendoc.integration_readiness import integration_readiness_snapshot
-from tests.test_milestone1 import make_client
+from tests.test_milestone1 import login_web, make_client
 
 
 def test_integration_center_never_exposes_secret_values(monkeypatch,tmp_path):
@@ -33,3 +33,19 @@ def test_production_openstreetmap_fallback_is_configured_but_runtime_bounded(mon
         assert maps["configuration_present"] is True
         assert maps["required_config"] == []
         assert "production_openstreetmap_fallback" in maps["notes"]
+
+
+
+def test_integration_center_explains_configuration_vs_runtime_dependency(monkeypatch,tmp_path):
+    monkeypatch.setenv("ZENDOC_ENV","production")
+    monkeypatch.setenv("ZENDOC_PLACES_PROVIDER","none")
+    monkeypatch.delenv("ZENDOC_GOOGLE_PLACES_API_KEY", raising=False)
+    _app,client=make_client(tmp_path)
+    login_web(client, "admin", "admin@example.com", "AdminStrong123")
+    response=client.get("/admin/integrations")
+    assert response.status_code==200
+    body=response.data
+    assert b"Configuration detected" in body
+    assert b"External/runtime dependency" in body
+    assert b"No additional credential is required" in body
+    assert b"production_openstreetmap_fallback" in body
