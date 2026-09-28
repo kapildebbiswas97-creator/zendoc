@@ -96,7 +96,13 @@ def test_finder_empty_state_explains_external_provider_unavailable(tmp_path, mon
     )
 
     assert response.status_code == 200
-    assert b"No matching care options yet" in response.data
+    assert b"No matching care options from the current sources" in response.data
+    assert b"ZENDOC verified network" in response.data
+    assert b"Official/public directory" in response.data
+    assert b"External map discovery" in response.data
+    assert b"Zero results means ZENDOC did not find a match" in response.data
+    assert b"Broaden search" in response.data
+    assert b"Report search problem" in response.data
     assert b"no maps/places provider is configured" in response.data
 
 
