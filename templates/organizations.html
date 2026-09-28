@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Organizations — ZENDOC{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Organization health</p>
+    <h1>Organizations and member benefits</h1>
+    <p class="section-copy">Join a verified employer, institution or care organization without giving the organization access to your private Health Memory.</p>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Join a verified organization</h2>
+  <form method="post" action="{{ url_for('organization_health.join_organization') }}" class="filter-bar">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Organization code
+      <input name="organization_uid" required maxlength="80" placeholder="org_...">
+    </label>
+    <button type="submit">Request membership</button>
+  </form>
+  <p class="form-note">Joining creates a membership request only. Organization managers cannot read your records, diagnoses, journal, messages or report contents through this feature.</p>
+</section>
+
+{% if owner_mode %}
+<section class="panel spaced-panel">
+  <h2>Create organization</h2>
+  <p class="form-note">Controlled-beta provisioning. New organizations remain pending until ZENDOC owner verification.</p>
+  <form method="post" class="form-grid">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Name <input name="name" required maxlength="200"></label>
+    <label>Type
+      <select name="organization_type">{% for item in organization_types %}<option value="{{ item }}">{{ item.replace('_',' ').title() }}</option>{% endfor %}</select>
+    </label>
+    <label>Address <input name="address" maxlength="300"></label>
+    <label>City <input name="city" maxlength="120"></label>
+    <label>State <input name="state" maxlength="120"></label>
+    <label>PIN / postal code <input name="postal_code" maxlength="20"></label>
+    <button type="submit">Create organization</button>
+  </form>
+</section>
+{% endif %}
+
+<section class="panel spaced-panel">
+  <div class="panel-head"><div><p class="eyebrow">Memberships</p><h2>My organizations</h2></div><span class="status-badge beta">{{ organizations|length }}</span></div>
+  {% if organizations %}
+    <div class="provider-results">
+      {% for item in organizations %}
+      <article class="provider-card">
+        <div class="provider-card-head">
+          <div><h3>{{ item.name }}</h3><p>{{ item.organization_type.replace('_',' ').title() }}</p></div>
+          <span class="status-badge {{ 'working' if item.verification_status == 'verified' else 'beta' }}">{{ item.verification_status|title }}</span>
+        </div>
+        <div class="provider-facts">
+          <span>Membership: {{ item.membership_status|replace('_',' ')|title }}</span>
+          <span>Role: {{ item.membership_role|replace('_',' ')|title }}</span>
+          {% if item.city or item.state %}<span>{{ item.city or '' }}{% if item.city and item.state %}, {% endif %}{{ item.state or '' }}</span>{% endif %}
+        </div>
+        {% if item.membership_status == 'active' or owner_mode %}
+          <a class="primary-action" href="{{ url_for('organization_health.organization_page', organization_id=item.id) }}">Open organization</a>
+        {% else %}
+          <p class="form-note">Benefits appear after the organization approves your membership.</p>
+        {% endif %}
+      </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state"><h3>No organization memberships yet</h3><p>Use a verified organization code to request membership.</p></div>
+  {% endif %}
+</section>
+{% endblock %}
