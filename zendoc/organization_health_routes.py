@@ -93,6 +93,8 @@ def organization_page(organization_id):
     try:
         snapshot = organization_health_snapshot(g.user, organization_id, days=request.args.get("days", 30))
         memberships = list_organization_memberships(g.user, organization_id)
+    except LookupError:
+        abort(404)
     except PermissionError:
         pass
     try:
@@ -101,6 +103,8 @@ def organization_page(organization_id):
             organization_id,
             include_inactive=bool(snapshot),
         )
+    except LookupError:
+        abort(404)
     except PermissionError:
         if is_owner(g.user):
             plans = []
