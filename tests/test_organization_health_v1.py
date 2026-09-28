@@ -3,6 +3,7 @@ from zendoc.organization_health_service import (
     create_benefit_plan,
     organization_health_snapshot,
     request_health_organization_membership,
+    review_organization_membership,
 )
 from zendoc.organization_service import create_organization, verify_organization
 from tests.test_milestone1 import login_web, make_app, make_client, register_web
@@ -146,3 +147,85 @@ def test_organization_web_home_allows_join_request_but_not_unverified_org(tmp_pa
     )
     assert response.status_code == 200
     assert b"not verified for member enrollment" in response.data
+
+
+
+def test_provider_account_cannot_join_as_employee_health_member(tmp_path):
+    app, client = make_client(tmp_path)
+    with app.app_context():
+        org = _create_verified_employer()
+
+    register_web(client, "doctor", "org-doctor@example.com", "Org Doctor")
+    with app.app_context():
+        db = get_db()
+        doctor = _user(db, "org-doctor@example.com")
+        try:
+            request_health_organization_membership(doctor, org["organization_uid"])
+            assert False, "Provider account must not become an employee/member health account."
+        except PermissionError:
+            pass
+
+
+def test_privacy_threshold_counts_patient_members_not_managers(tmp_path):
+    app, client = make_client(tmp_path)
+    with app.app_context():
+        org = _create_verified_employer()
+
+    patient_ids = []
+    for index in range(4):
+        email = f"privacy-member-{index}@example.com"
+        register_web(client, "patient", email, f"Privacy Member {index}")
+        client.get("/logout")
+        with app.app_context():
+            db = get_db()
+            user = _user(db, email)
+            patient_ids.append(int(user["id"]))
+            db.execute(
+                """
+                INSERT INTO organization_memberships
+                (organization_id,user_id,membership_role,status,requested_by,approved_by,created_at,updated_at)
+                VALUES (?,?,'member','active',1,1,?,?)
+                """,
+                (org["id"], user["id"], now_iso(), now_iso()),
+            )
+            db.commit()
+
+    with app.app_context():
+        # The owner membership exists too, but must not make four patient members
+        # satisfy the five-member privacy threshold.
+        snapshot = organization_health_snapshot(owner_actor(), org["id"], days=30)
+        assert snapshot["membership"]["eligible_active_members"] == 4
+        assert snapshot["privacy"]["suppressed"] is True
+        assert snapshot["usage"] is None
+
+
+def test_membership_review_rejects_cross_organization_route_mismatch(tmp_path):
+    app, client = make_client(tmp_path)
+    with app.app_context():
+        org_a = _create_verified_employer()
+        org_b = create_organization(
+            owner_actor(),
+            {"name": "Second Employer", "organization_type": "employer"},
+        )
+        org_b = verify_organization(owner_actor(), org_b["id"], "verified")
+
+    register_web(client, "patient", "cross-org-member@example.com", "Cross Org Member")
+    with app.app_context():
+        db = get_db()
+        patient = _user(db, "cross-org-member@example.com")
+        membership = request_health_organization_membership(patient, org_a["organization_uid"])
+        try:
+            review_organization_membership(
+                owner_actor(),
+                org_b["id"],
+                membership["id"],
+                "active",
+            )
+            assert False, "Cross-organization membership review must fail closed."
+        except PermissionError:
+            pass
+        stored = db.execute(
+            "SELECT status FROM organization_memberships WHERE id=?",
+            (membership["id"],),
+        ).fetchone()
+        assert stored["status"] == "pending"
