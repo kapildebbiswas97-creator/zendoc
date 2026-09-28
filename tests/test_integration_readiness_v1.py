@@ -20,7 +20,7 @@ def test_integration_center_never_exposes_secret_values(monkeypatch,tmp_path):
 
 
 
-def test_production_openstreetmap_fallback_is_not_reported_as_missing_maps(monkeypatch,tmp_path):
+def test_production_openstreetmap_fallback_is_configured_but_runtime_bounded(monkeypatch,tmp_path):
     monkeypatch.setenv("ZENDOC_ENV","production")
     monkeypatch.setenv("ZENDOC_PLACES_PROVIDER","none")
     monkeypatch.delenv("ZENDOC_GOOGLE_PLACES_API_KEY", raising=False)
@@ -28,5 +28,8 @@ def test_production_openstreetmap_fallback_is_not_reported_as_missing_maps(monke
     with app.app_context():
         snapshot=integration_readiness_snapshot()
         maps=next(item for item in snapshot["integrations"] if item["key"]=="maps")
-        assert maps["status"]=="WORKING"
-        assert maps["external_required"] is False
+        assert maps["status"]=="BETA"
+        assert maps["external_required"] is True
+        assert maps["configuration_present"] is True
+        assert maps["required_config"] == []
+        assert "production_openstreetmap_fallback" in maps["notes"]
