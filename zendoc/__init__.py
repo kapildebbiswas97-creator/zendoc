@@ -63,6 +63,8 @@ from .operational_fulfilment import (
 from .operational_fulfilment_release import bp as operational_fulfilment_release_bp
 from .operational_fulfilment_ui import bp as operational_fulfilment_ui_bp
 from .organization_routes import bp as provider_organizations_bp
+from .organization_health_routes import bp as organization_health_bp
+from .organization_health_service import ensure_organization_health_schema
 from .personal_baseline_routes import bp as personal_health_baseline_bp
 from .pilot_operations import ensure_pilot_operations_schema
 from .pilot_operations_routes import bp as pilot_operations_bp
@@ -201,6 +203,7 @@ def create_app(test_config=None):
     app.register_blueprint(nutrition_intelligence_bp)
     app.register_blueprint(neo_analytics_bp)
     app.register_blueprint(provider_organizations_bp)
+    app.register_blueprint(organization_health_bp)
     app.register_blueprint(language_bp)
     app.register_blueprint(geography_graph_bp)
     app.register_blueprint(public_ingestion_bp)
@@ -286,6 +289,7 @@ def create_app(test_config=None):
             ensure_identity_verification_schema()
             ensure_health_social_schema()
             ensure_payment_schema()
+            ensure_organization_health_schema()
             ensure_care_action_ledger_schema()
             ensure_operational_fulfilment_schema()
             get_db().commit()
