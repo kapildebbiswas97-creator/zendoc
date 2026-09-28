@@ -9,6 +9,7 @@
   </div>
 </section>
 
+{% if current_user.role == 'patient' %}
 <section class="panel">
   <h2>Join a verified organization</h2>
   <form method="post" action="{{ url_for('organization_health.join_organization') }}" class="filter-bar">
@@ -20,6 +21,12 @@
   </form>
   <p class="form-note">Joining creates a membership request only. Organization managers cannot read your records, diagnoses, journal, messages or report contents through this feature.</p>
 </section>
+{% else %}
+<section class="panel">
+  <h2>Organization workspace</h2>
+  <p class="form-note">Employee/member health enrollment is available only to patient/member accounts. Provider and owner accounts use this page only for organizations they are authorized to manage.</p>
+</section>
+{% endif %}
 
 {% if owner_mode %}
 <section class="panel spaced-panel">
