@@ -97,7 +97,7 @@ def _assert_rendered_navigation_is_live(client, entry_paths):
                 continue
             checked.add(target)
             response = client.get(target, follow_redirects=False)
-            if response.status_code == 404 or response.status_code >= 500:
+            if response.status_code in {403, 404} or response.status_code >= 500:
                 failures.append((target, response.status_code, f"linked from {entry}"))
     assert not failures, f"Rendered ZENDOC navigation contains broken local links: {failures}"
 
