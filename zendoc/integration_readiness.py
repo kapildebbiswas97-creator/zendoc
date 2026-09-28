@@ -13,6 +13,7 @@ from .community_media import get_community_media_storage
 from .record_storage import get_record_storage
 from .jev_system_one import jev_runtime_status
 from .agentic_integration_mesh import integration_ownership
+from .places_provider import places_configuration_status
 
 
 def _present(*keys):
@@ -45,6 +46,16 @@ def integration_readiness_snapshot():
     records=get_record_storage().status()
     notifications=notification_provider_status()
     jev=jev_runtime_status()
+    places=places_configuration_status()
+    configured_places_provider=str(places.get("configured_provider") or "none").strip().lower()
+    if configured_places_provider=="google":
+        places_required_config=("ZENDOC_PLACES_PROVIDER","ZENDOC_GOOGLE_PLACES_API_KEY")
+    elif configured_places_provider in {"nominatim","openstreetmap","osm"}:
+        places_required_config=("ZENDOC_PLACES_PROVIDER",)
+    elif places.get("production_fallback_active"):
+        places_required_config=()
+    else:
+        places_required_config=("ZENDOC_PLACES_PROVIDER",)
 
     rows=[
         _item(
@@ -101,11 +112,11 @@ def integration_readiness_snapshot():
             "maps","Live map/places discovery",
             registry["external_places_discovery"]["status"],True,
             registry["external_places_discovery"]["status"]!="WORKING",
-            ("ZENDOC_PLACES_PROVIDER","ZENDOC_GOOGLE_PLACES_API_KEY"),
+            places_required_config,
             (
                 "Local/official healthcare discovery is a separate working software path. "
-                "External OpenStreetMap/Google listings remain runtime-dependent: configured credentials or fallback mode "
-                "do not prove reachability, quota, result availability or ZENDOC booking connectivity."
+                f"External discovery mode={places.get('mode')}; configuration/fallback availability does not prove "
+                "runtime reachability, quota, result availability or ZENDOC booking connectivity."
             ),
         ),
         _item(
