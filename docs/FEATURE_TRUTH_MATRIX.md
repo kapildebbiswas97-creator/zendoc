@@ -70,6 +70,8 @@ ZENDOC uses exactly these runtime statuses:
 | Storage | Secure local record storage | `WORKING` for its deployment boundary | Production object storage is separately configuration/integration dependent. |
 | Operations | Pilot analytics, observability and safe operations automation | `WORKING` | Metrics are derived from stored ZENDOC events; no invented traction, savings, uptime or provider performance. |
 | Partner API | Business/partner API v1 | `WORKING` for ZENDOC-owned API boundary | API keys, rate limits, audit events and handoffs are implemented; partner-side execution remains external. |
+| Organizations | Membership and benefit plans | `BETA` | Verified organizations can accept membership requests and publish recorded benefit plans; benefit records do not prove insurer approval, payment or provider fulfilment. |
+| Organizations | Health Command Center aggregate analytics | `BETA` | Manager-only aggregate ZENDOC product activity with small-group suppression below 5 active members; individual clinical records, diagnoses, symptoms, messages, journals and report content are excluded. |
 
 ## Non-negotiable truth boundaries
 
