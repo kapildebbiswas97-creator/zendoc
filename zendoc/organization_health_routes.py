@@ -79,7 +79,7 @@ def join_organization():
             "Membership request submitted. An organization owner/admin must approve it before organization benefits become available.",
             "success",
         )
-        return redirect(url_for("organization_health.organization_page", organization_id=membership["organization_id"]))
+        return redirect(url_for("organization_health.organizations_home"))
     except (PermissionError, LookupError, ValueError) as exc:
         flash(str(exc), "error")
         return redirect(url_for("organization_health.organizations_home"))
@@ -88,13 +88,6 @@ def join_organization():
 @bp.get("/organizations/<int:organization_id>")
 @login_required
 def organization_page(organization_id):
-    try:
-        plans = list_benefit_plans(g.user, organization_id)
-    except PermissionError:
-        if is_owner(g.user):
-            plans = []
-        else:
-            abort(403)
     snapshot = None
     memberships = []
     try:
@@ -102,6 +95,17 @@ def organization_page(organization_id):
         memberships = list_organization_memberships(g.user, organization_id)
     except PermissionError:
         pass
+    try:
+        plans = list_benefit_plans(
+            g.user,
+            organization_id,
+            include_inactive=bool(snapshot),
+        )
+    except PermissionError:
+        if is_owner(g.user):
+            plans = []
+        else:
+            abort(403)
     return render_template(
         "organization_health.html",
         organization_id=organization_id,
