@@ -229,3 +229,30 @@ def test_membership_review_rejects_cross_organization_route_mismatch(tmp_path):
             (membership["id"],),
         ).fetchone()
         assert stored["status"] == "pending"
+
+
+
+def test_non_patient_organization_home_does_not_offer_member_join_form(tmp_path):
+    _app, client = make_client(tmp_path)
+    register_web(client, "doctor", "org-home-doctor@example.com", "Org Home Doctor")
+    login_web(client, "doctor", "org-home-doctor@example.com")
+    response = client.get("/organizations")
+    assert response.status_code == 200
+    assert b"Request membership" not in response.data
+    assert b"Employee/member health enrollment is available only to patient/member accounts" in response.data
+
+
+def test_missing_organization_page_is_clean_404(tmp_path):
+    _app, client = make_client(tmp_path)
+    register_web(client, "patient", "missing-org@example.com", "Missing Org")
+    login_web(client, "patient", "missing-org@example.com")
+    response = client.get("/organizations/999999", follow_redirects=False)
+    assert response.status_code == 404
+
+
+def test_invalid_analytics_window_falls_back_without_500(tmp_path):
+    app = make_app(tmp_path)
+    with app.app_context():
+        org = _create_verified_employer()
+        snapshot = organization_health_snapshot(owner_actor(), org["id"], days="not-a-number")
+        assert snapshot["window_days"] == 30
