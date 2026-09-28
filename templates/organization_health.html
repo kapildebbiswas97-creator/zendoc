@@ -12,6 +12,23 @@
 
 {% if snapshot %}
 <section class="panel">
+  <div class="summary-row"><span>Organization code</span><strong>{{ snapshot.organization.organization_uid }}</strong></div>
+  <p class="form-note">Share this code only with people who should request membership. Requests still require organization approval.</p>
+  {% if owner_mode %}
+  <form method="post" action="{{ url_for('organization_health.verify_health_organization', organization_id=organization_id) }}" class="inline-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    {% if snapshot.organization.verification_status != 'verified' %}
+      <button type="submit" name="status" value="verified">Verify organization</button>
+    {% else %}
+      <button type="submit" name="status" value="suspended" class="secondary-action">Suspend organization</button>
+    {% endif %}
+  </form>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if snapshot %}
+<section class="panel">
   <div class="panel-head">
     <div><p class="eyebrow">Health Command Center</p><h2>Aggregate organization activity</h2></div>
     <span class="status-badge working">{{ snapshot.organization.verification_status|title }}</span>
