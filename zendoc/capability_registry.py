@@ -445,14 +445,22 @@ def get_capability_registry() -> dict:
 
         # External integrations
         "healthcare_finder": {
-            "status": STATUS_WORKING if places_external_available else STATUS_BETA,
-            "label": "Healthcare Finder",
+            "status": STATUS_WORKING,
+            "label": "Healthcare Finder — ZENDOC / Official Sources",
             "description": (
-                "Google Places is configured with OpenStreetMap fallback; runtime calls remain subject to provider health/quota."
+                "Local verified-provider and ingested official/public-directory discovery are implemented. "
+                "External map discovery is tracked separately because configuration does not prove provider reachability."
+            ),
+        },
+        "external_places_discovery": {
+            "status": STATUS_BETA if places_external_available else STATUS_INTEGRATION_REQUIRED,
+            "label": "External Places Discovery",
+            "description": (
+                "Google Places is configured with OpenStreetMap fallback, but runtime reachability, quota and result availability must still be verified."
                 if places else
-                "OpenStreetMap/Nominatim external discovery is available as a truthful unverified discovery layer."
+                "OpenStreetMap/Nominatim discovery is available as an external unverified fallback, but live reachability and result availability are runtime-dependent."
                 if places_external_available else
-                "Local/official provider discovery works; external map discovery activates with OpenStreetMap/Nominatim or Google Places configuration."
+                "External map discovery requires OpenStreetMap/Nominatim or a configured Google Places provider. Local/official Finder results remain separate."
             ),
         },
         "video_intelligence": {
