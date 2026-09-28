@@ -54,6 +54,33 @@ def fetch(url: str, timeout: int = 15):
         return response.status, response.headers, body
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def fetch_without_redirect(url: str, timeout: int = 15):
+    request = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": "ZENDOC-Public-Launch-Verifier/1.0",
+            "Accept": "*/*",
+        },
+    )
+    context = ssl.create_default_context()
+    opener = urllib.request.build_opener(
+        urllib.request.HTTPSHandler(context=context),
+        _NoRedirect(),
+    )
+    try:
+        with opener.open(request, timeout=timeout) as response:
+            body = response.read(1_000_000)
+            return int(response.status), response.headers, body
+    except urllib.error.HTTPError as exc:
+        body = exc.read(1_000_000)
+        return int(exc.code), exc.headers, body
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("base_url", help="Deployed HTTPS ZENDOC base URL, e.g. https://zendoc.example")
@@ -155,7 +182,7 @@ def main() -> int:
     for path in PROTECTED_CORE_PATHS:
         url = f"{base}{path}"
         try:
-            status, _headers, _body = fetch(url, timeout=args.timeout)
+            status, _headers, _body = fetch_without_redirect(url, timeout=args.timeout)
             detail = {"path": path, "status": status, "protected_route": True}
             # These are authenticated product surfaces. A healthy public deployment
             # should prove the route exists without exposing the page anonymously.
@@ -164,12 +191,6 @@ def main() -> int:
                     "protected product route should redirect or deny anonymous access; "
                     f"got HTTP {status}"
                 )
-                failures.append(detail)
-            results.append(detail)
-        except urllib.error.HTTPError as exc:
-            detail = {"path": path, "status": int(exc.code), "protected_route": True}
-            if int(exc.code) not in {401, 403}:
-                detail["error"] = f"protected route failed with HTTP {exc.code}"
                 failures.append(detail)
             results.append(detail)
         except (urllib.error.URLError, TimeoutError) as exc:
