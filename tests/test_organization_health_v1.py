@@ -256,3 +256,24 @@ def test_invalid_analytics_window_falls_back_without_500(tmp_path):
         org = _create_verified_employer()
         snapshot = organization_health_snapshot(owner_actor(), org["id"], days="not-a-number")
         assert snapshot["window_days"] == 30
+
+
+
+def test_provider_cannot_self_provision_institutional_organization_type(tmp_path):
+    app, client = make_client(tmp_path)
+    register_web(client, "doctor", "institution-provision-doctor@example.com", "Institution Doctor")
+    with app.app_context():
+        db = get_db()
+        doctor = _user(db, "institution-provision-doctor@example.com")
+        try:
+            create_organization(
+                doctor,
+                {"name": "Fake Employer", "organization_type": "employer"},
+            )
+            assert False, "Provider accounts must not self-provision employer identities."
+        except PermissionError:
+            pass
+        existing = db.execute(
+            "SELECT id FROM provider_organizations WHERE name='Fake Employer'"
+        ).fetchone()
+        assert existing is None
