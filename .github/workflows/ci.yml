@@ -213,6 +213,15 @@ jobs:
         run: python -m pip install "pytest>=8,<10"
       - name: Run Vercel/OCI topology regressions
         run: python -m pytest -q tests/test_vercel_oci_gateway_v2.py
+      - name: Validate OCI Caddy gateway configuration
+        run: >
+          docker run --rm
+          -e ZENDOC_DOMAIN=origin.example.invalid
+          -e ZENDOC_TLS_EMAIL=ops@example.invalid
+          -e ZENDOC_GATEWAY_TOKEN=ci-gateway-token-placeholder
+          -v "$PWD/deploy/oci/Caddyfile:/etc/caddy/Caddyfile:ro"
+          caddy:2.9-alpine
+          caddy validate --config /etc/caddy/Caddyfile
 
   release-readiness:
     name: Release Gate
