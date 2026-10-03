@@ -16,6 +16,7 @@ from .call_signaling import (
     list_incoming_calls,
 )
 from .security import login_required
+from .turn_credentials import dynamic_turn_ice_servers
 
 bp = Blueprint("calls", __name__)
 
@@ -30,7 +31,7 @@ def _error(exc):
     return jsonify({"error": {"code": code, "message": str(exc)}}), code
 
 
-def _ice_servers():
+def _ice_servers(actor=None):
     raw = str(os.environ.get("ZENDOC_WEBRTC_ICE_SERVERS_JSON") or "").strip()
     if not raw:
         return []
@@ -55,6 +56,13 @@ def _ice_servers():
         if item.get("credential"):
             clean["credential"] = str(item["credential"])[:500]
         safe.append(clean)
+    dynamic = dynamic_turn_ice_servers(actor)
+    seen = {json.dumps(item, sort_keys=True) for item in safe}
+    for item in dynamic:
+        marker = json.dumps(item, sort_keys=True)
+        if marker not in seen:
+            safe.append(item)
+            seen.add(marker)
     return safe
 
 
@@ -74,7 +82,7 @@ def call_start_page(conversation_id, call_type):
         call_type=permission["call_type"],
         other_name=permission["other_name"],
         initiator=True,
-        ice_servers=_ice_servers(),
+        ice_servers=_ice_servers(g.user),
     )
 
 
@@ -93,7 +101,7 @@ def call_page(call_id):
         call_type=state["call_type"],
         other_name=other_name,
         initiator=int(state["actor_id"]) == int(state["initiator_id"]),
-        ice_servers=_ice_servers(),
+        ice_servers=_ice_servers(g.user),
     )
 
 
