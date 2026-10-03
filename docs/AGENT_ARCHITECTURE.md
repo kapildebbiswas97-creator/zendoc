@@ -168,6 +168,21 @@ Jev complements rather than replaces the LLM/SLM layer. Jev is used for
 bounded routing/control judgments; LLM/SLM models remain appropriate for
 language generation, explanation and open-ended reasoning.
 
+## Runtime resilience and observability
+
+The bounded executor now gives idempotent **READ_ONLY** tools one additional
+attempt for transient timeout/provider-connectivity failures. Non-idempotent
+writes, consent-required actions, clinician-gated actions and other consequential
+operations are never automatically retried by this path.
+
+Each specialist execution receives a correlation/run id and emits privacy-safe
+plan/tool events on a best-effort basis. Raw provider exceptions, credentials,
+prompts and health content are not returned as orchestration diagnostics.
+When an authorized read source remains temporarily unavailable after the bounded
+retry, the specialist workflow returns a truthful `degraded` state plus its
+configured fallback strategy instead of inventing data or silently completing.
+Authorization and human gates still fail closed.
+
 ## Model Router
 
 Emergency safety and deterministic-only tasks run before model selection. For allowed low-risk tasks, configured local inference is preferred before explicitly approved cloud inference; deterministic fallback is always available. `HEALTH_SENSITIVE` and `HIGH_RISK` content is never sent to cloud, while `PERSONAL` cloud routing requires consent. Provider configuration never grants permissions and model output never exposes or invokes agent tools directly. Strict structured output is validated before any later planning, permission, approval or execution stage. Routing logs contain metadata only, not prompts, responses, credentials or hidden reasoning.
