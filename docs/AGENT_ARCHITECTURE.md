@@ -12,6 +12,12 @@ Every authenticated ZENDOC account now has a deterministic personal coordinator 
 
 The personal agent is deliberately a **coordinator, not a superuser**. It cannot widen the account's permissions. It routes work to the existing specialist fleet and every candidate tool is checked again by the Tool Registry, domain authorization, consent and approval layers. Personal context remains actor-owned or explicitly granted, minimum-necessary and provenance-preserving.
 
+## Global Health Intelligence Fabric
+
+ZENDOC's governed data plane represents 195 country jurisdictions without pretending every jurisdiction already has a live national feed. The source registry distinguishes country support from source maturity, and source-gap reporting tells the Research/Data workforce where authoritative discovery is still needed.
+
+Organization intelligence begins with authoritative legal-entity/filing registries (GLEIF globally, SEC EDGAR for U.S. public filers, Companies House for the UK, and MCA official company/LLP services for India). A discovered company's official newsroom, investor-relations feed, regulatory filing stream, healthcare regulator record or authorized partner API is attached as evidence only after HTTPS, usage/terms and schema review. Company announcements never become clinical or regulatory truth merely because they are official corporate speech.
+
 ## Agent OS Coverage Contract
 
 The product capability registry and Agent OS are now linked by an explicit coverage contract. Every declared capability must map to a registered specialist owner and may also name an internal AI-workforce owner. CI fails if a capability is added without an Agent OS mapping, if a mapping points to an unknown specialist/workforce agent, or if a stale mapping survives after a capability is removed.

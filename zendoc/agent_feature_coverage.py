@@ -141,6 +141,8 @@ FEATURE_AGENT_COVERAGE: dict[str, FeatureAgentCoverage] = {
     "geographic_healthcare_graph": _c("geographic_healthcare_graph", "ProviderDiscoveryAgent", SPECIALIST_COORDINATION, workforce="DataAgent"),
     "official_public_data_ingestion": _c("official_public_data_ingestion", "OperationsAgent", SPECIALIST_EXECUTABLE, workforce="DataAgent"),
     "official_live_connectors": _c("official_live_connectors", "OperationsAgent", INTEGRATION_COORDINATION, workforce="ResearchAgent"),
+    "global_health_intelligence_fabric": _c("global_health_intelligence_fabric", "OperationsAgent", SPECIALIST_COORDINATION, workforce="ResearchAgent"),
+    "organization_intelligence": _c("organization_intelligence", "OperationsAgent", SPECIALIST_COORDINATION, workforce="ResearchAgent"),
 
     # Pilot / operations
     "carefin_pilot_ui": _c("carefin_pilot_ui", "CareFinAgent", SPECIALIST_EXECUTABLE, workforce="QAAgent"),

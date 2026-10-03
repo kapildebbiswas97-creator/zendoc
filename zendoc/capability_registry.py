@@ -335,6 +335,16 @@ def get_capability_registry() -> dict:
             "label": "Live Official Dataset Connectors",
             "description": "LGD/OGD/ABDM live retrieval requires dataset-specific downloads/APIs or authorized onboarding; ZENDOC does not claim live access by default.",
         },
+        "global_health_intelligence_fabric": {
+            "status": STATUS_WORKING,
+            "label": "Global Health Intelligence Fabric",
+            "description": "Country-aware data model covers 195 operational jurisdictions with governed source discovery, provenance, organization intelligence and truthful source-gap reporting; actual country datasets remain source-specific.",
+        },
+        "organization_intelligence": {
+            "status": STATUS_WORKING,
+            "label": "Global Organization Intelligence",
+            "description": "Governed legal-entity, filing and official-source discovery plans for companies/organizations with licensing, provenance and no-private-data boundaries.",
+        },
         "identity_evidence_review": {
             "status": STATUS_WORKING,
             "label": "Privacy-first Identity Evidence Review",

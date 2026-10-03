@@ -1,6 +1,7 @@
 from zendoc.db import get_db
 from zendoc.global_public_data import ingest_global_public_healthcare
 from zendoc.global_source_registry import INDIA_ADMIN1, country_coverage_manifest
+from zendoc.organization_intelligence_registry import organization_discovery_plan, organization_intelligence_manifest, validate_dynamic_organization_source
 from zendoc.medical_knowledge_registry import get_medical_knowledge_source
 from zendoc.public_source_registry import get_public_ingestion_source
 from tests.test_milestone1 import login_web, make_app
@@ -84,3 +85,48 @@ def test_global_coverage_endpoint_is_owner_only(tmp_path):
     assert countries["IN"]["admin1_count"] == 36
     assert "US" in countries
     assert "BD" in countries
+    assert payload["jurisdiction_summary"]["country_count"] == 195
+    assert payload["organization_intelligence"]["source_count"] >= 4
+
+
+def test_global_jurisdiction_catalog_represents_195_countries():
+    coverage = country_coverage_manifest()
+    codes = {item["country_code"] for item in coverage}
+    assert len(coverage) == 195
+    assert len(codes) == 195
+    for code in ("IN", "US", "GB", "BR", "ZA", "NG", "CA", "MX", "AR", "JP", "AU", "NZ"):
+        assert code in codes
+
+
+def test_company_discovery_uses_global_identity_plus_jurisdiction_registry():
+    india = organization_discovery_plan("Tata example entity", country_code="IN")
+    india_ids = {item["source_id"] for item in india["identity_sources"]}
+    assert {"gleif_lei", "india_mca_master_data"} <= india_ids
+    assert india["automatic_private_data_collection"] is False
+
+    us = organization_discovery_plan("Example US public company", country_code="US")
+    assert "us_sec_edgar" in {item["source_id"] for item in us["identity_sources"]}
+
+    uk = organization_discovery_plan("Example UK company", country_code="GB")
+    assert "uk_companies_house" in {item["source_id"] for item in uk["identity_sources"]}
+
+
+def test_dynamic_company_source_requires_https_usage_basis_and_no_personal_data():
+    candidate = validate_dynamic_organization_source({
+        "organization_name": "Example Healthcare Company",
+        "country_code": "IN",
+        "official_url": "https://example.com/newsroom",
+        "source_kind": "official_company_newsroom",
+        "usage_basis": "Public official newsroom; review terms before ingestion.",
+        "personal_data_allowed": False,
+    })
+    assert candidate["status"] == "REVIEWABLE"
+    assert candidate["ingestion_allowed"] is False
+    assert candidate["next_gate"] == "SOURCE_TERMS_AND_SCHEMA_REVIEW"
+
+
+def test_organization_intelligence_manifest_is_governed():
+    manifest = organization_intelligence_manifest()
+    ids = {item["source_id"] for item in manifest["sources"]}
+    assert {"gleif_lei", "us_sec_edgar", "uk_companies_house", "india_mca_master_data"} <= ids
+    assert "no_auth_captcha_paywall_or_access_control_bypass" in manifest["principles"]
