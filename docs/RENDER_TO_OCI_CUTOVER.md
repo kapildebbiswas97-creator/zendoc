@@ -1,6 +1,8 @@
 # Render PostgreSQL -> OCI PostgreSQL cutover
 
-Render's current notice says the free `zendoc-db` becomes inaccessible on 2026-09-30. This runbook preserves the existing PostgreSQL engine and moves the data to the self-managed PostgreSQL 16 service in `deploy/oci/compose.yaml`.
+Render's free `zendoc-db` cutoff date was 2026-09-30. This runbook preserves the existing PostgreSQL engine and moves recoverable data to the self-managed PostgreSQL 16 service in `deploy/oci/compose.yaml`.
+
+As of 2026-10-03, do not assume the expired Render source is still reachable. If the final Render export was completed, restore only from the verified archive and sidecars. If no verified export exists and the source is inaccessible, stop and recover access/data through the provider rather than inventing or silently replacing production records.
 
 This is a data-preservation procedure. It does not by itself prove a public production launch.
 
@@ -164,6 +166,6 @@ Keep the Render database untouched until this public-path verification and data 
 
 ## 10. Rollback rule
 
-If OCI or the Vercel gateway fails before final cutover, route users back to the still-valid Render deployment and do not write to both databases.
+If OCI or the Vercel gateway fails before final cutover, route users only to a source that is still known reachable and authoritative. The expired Render free deployment must not be assumed to be a valid fallback. Do not write to two production databases.
 
-If data has already begun changing on OCI after cutover, do not blindly restore the old Render snapshot over it. Stop writes, preserve both states, and reconcile before any rollback.
+If data has already begun changing on OCI after cutover, do not blindly restore an older snapshot over it. Stop writes, preserve every recoverable state, and reconcile before any rollback.
