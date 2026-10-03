@@ -66,6 +66,25 @@ def test_exhausted_read_only_transient_failure_degrades_without_raw_error(monkey
     assert "do-not-leak" not in str(result)
 
 
+def test_read_only_permission_denial_is_never_retried_or_degraded(monkeypatch):
+    calls = {"count": 0}
+
+    def denied(_actor, _arguments):
+        calls["count"] += 1
+        raise PermissionError("patient target access denied")
+
+    monkeypatch.setitem(agent_executor.TOOL_HANDLERS, "search_healthcare_providers", denied)
+    with pytest.raises(PermissionError, match="patient target access denied"):
+        agent_executor.execute_plan(
+            _plan("ProviderDiscoveryAgent", "search_healthcare_providers", intent="provider_discovery"),
+            {"id": 11, "role": "patient"},
+            retry_read_only=True,
+            degrade_on_transient=True,
+        )
+
+    assert calls["count"] == 1
+
+
 def test_non_idempotent_write_is_never_retried_or_silently_degraded(monkeypatch):
     calls = {"count": 0}
 
