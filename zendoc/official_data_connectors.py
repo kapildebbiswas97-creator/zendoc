@@ -21,6 +21,7 @@ from .public_data_ingestion import ingest_public_records
 DATA_GOV_API_BASE = "https://api.data.gov.in/resource"
 DATA_GOV_HOSPITAL_RESOURCE_ID = "98fa254e-c5f8-4910-a19b-4828939b477d"
 DATA_GOV_HOSPITAL_SOURCE_ID = "data_gov_hospitals"
+DATA_GOV_HOSPITAL_CATALOG_UPDATED_ON = "2018-01-12"
 USER_AGENT = "ZENDOC-OfficialDataConnector/1.0 (+https://github.com/kapildebbiswas97-creator/zendoc)"
 
 
@@ -82,6 +83,7 @@ def normalize_data_gov_hospital(record: dict[str, Any]) -> dict[str, Any] | None
         key: value
         for key, value in {
             "resource_id": DATA_GOV_HOSPITAL_RESOURCE_ID,
+            "source_catalog_updated_on": DATA_GOV_HOSPITAL_CATALOG_UPDATED_ON,
             "hospital_category": _clean(record.get("hospital_category")),
             "hospital_care_type": _clean(record.get("hospital_care_type")),
             "systems_of_medicine": _clean(record.get("discipline_systems_of_medicine")),
@@ -197,6 +199,7 @@ def fetch_data_gov_hospitals(
     return {
         "source_id": DATA_GOV_HOSPITAL_SOURCE_ID,
         "resource_id": DATA_GOV_HOSPITAL_RESOURCE_ID,
+        "source_catalog_updated_on": DATA_GOV_HOSPITAL_CATALOG_UPDATED_ON,
         "records": normalized,
         "record_count": len(normalized),
         "upstream_count": len(rows),
