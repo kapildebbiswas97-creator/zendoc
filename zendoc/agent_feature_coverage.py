@@ -84,6 +84,14 @@ FEATURE_AGENT_COVERAGE: dict[str, FeatureAgentCoverage] = {
     "proactive_alerts": _c("proactive_alerts", "OperationsAgent", SPECIALIST_EXECUTABLE, workforce="IncidentAgent"),
     "capability_registry": _c("capability_registry", "OperationsAgent", OPERATIONS_MONITORED, workforce="ProductAgent"),
     "specialized_agent_routing": _c("specialized_agent_routing", "OperationsAgent", SPECIALIST_COORDINATION, workforce="ManagerAgent"),
+    "ai_workforce_incident_runtime": _c(
+        "ai_workforce_incident_runtime",
+        "OperationsAgent",
+        SPECIALIST_COORDINATION,
+        workforce="IncidentAgent",
+        safety="SafetyAgent",
+        note="Automatic classification is allowed; each downstream stage is evidence-gated and production promotion remains owner-controlled outside the runtime.",
+    ),
     "safe_operations_automation": _c("safe_operations_automation", "OperationsAgent", SPECIALIST_EXECUTABLE, workforce="IncidentAgent"),
 
     # Communication / community / commerce
