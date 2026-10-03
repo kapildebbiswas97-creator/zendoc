@@ -66,6 +66,7 @@ services:
     environment:
       ZENDOC_DOMAIN: ${ZENDOC_DOMAIN:?set ZENDOC_DOMAIN in deploy/oci/.env}
       ZENDOC_TLS_EMAIL: ${ZENDOC_TLS_EMAIL:?set ZENDOC_TLS_EMAIL in deploy/oci/.env}
+      ZENDOC_GATEWAY_TOKEN: ${ZENDOC_GATEWAY_TOKEN:?set ZENDOC_GATEWAY_TOKEN in deploy/oci/.env}
     ports:
       - "80:80"
       - "443:443"
