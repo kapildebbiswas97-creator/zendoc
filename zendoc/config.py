@@ -177,6 +177,14 @@ def load_config(base_dir, overrides=None):
             "ZENDOC_OBSERVABILITY_RETENTION_DAYS", 30, minimum=1, maximum=365
         ),
         "PLACES_PROVIDER": os.environ.get("ZENDOC_PLACES_PROVIDER", "none"),
+        "MAP_TILE_URL": os.environ.get(
+            "ZENDOC_MAP_TILE_URL",
+            "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+        ).strip(),
+        "MAP_TILE_ATTRIBUTION": os.environ.get(
+            "ZENDOC_MAP_TILE_ATTRIBUTION",
+            "© OpenStreetMap contributors",
+        ).strip(),
         "VIDEO_PROVIDER": os.environ.get("ZENDOC_VIDEO_PROVIDER", "none"),
         "YOUTUBE_API_KEY": os.environ.get("ZENDOC_YOUTUBE_API_KEY", ""),
         "REQUIRE_DURABLE_DATABASE": env_bool("ZENDOC_REQUIRE_DURABLE_DATABASE", False),
