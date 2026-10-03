@@ -30,6 +30,7 @@ def test_vercel_config_is_single_source_and_dependency_is_pinned():
 
     package = PACKAGE.read_text(encoding="utf-8")
     assert '"@vercel/config": "0.7.2"' in package
+    assert '"node": "24.x"' in package
 
 
 def test_postgres_is_not_published_from_oci_compose():
