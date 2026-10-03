@@ -234,6 +234,7 @@ def _auxiliary_model_profiles(*, check_health: bool = False) -> list[dict]:
             "priority": priority,
             "timeout": timeout,
             "max_output_tokens": max_output_tokens,
+            "allow_private_network": allow_private,
             "enabled": enabled,
             "status": "configured" if enabled else "disabled",
             "tool_authority": False,
@@ -282,7 +283,18 @@ def _auxiliary_model_profiles(*, check_health: bool = False) -> list[dict]:
     return profiles
 
 
-def _model_role_for_intent(intent: str) -> str | None:
+def _model_role_for_command(intent: str, command: str) -> str | None:
+    text = str(command or "").lower()
+    explicit_roles = (
+        (("translate", "translation"), "translation"),
+        (("extract document", "document extraction", "extract text"), "document_extraction"),
+        (("classify", "classification"), "classification"),
+        (("summarize", "summary"), "summarization"),
+        (("rewrite", "language assistance"), "language"),
+    )
+    for markers, role in explicit_roles:
+        if any(marker in text for marker in markers):
+            return role
     return {
         "global_source_research": "research_synthesis",
         "official_public_data_refresh": "operations_analysis",
@@ -295,7 +307,7 @@ def _model_role_for_intent(intent: str) -> str | None:
 
 
 def _route_local_fleet_advisory(command: str, intent: str) -> dict:
-    role = _model_role_for_intent(intent)
+    role = _model_role_for_command(intent, command)
     profiles = _auxiliary_model_profiles(check_health=False)
     candidates = sorted(
         (
@@ -315,16 +327,7 @@ def _route_local_fleet_advisory(command: str, intent: str) -> dict:
             base_url=profile["base_url"],
             model=profile["model"],
             timeout=profile["timeout"],
-            allow_private_network=bool(
-                next(
-                    (
-                        item.get("allow_private_network", False)
-                        for item in json.loads(str(os.environ.get("ZENDOC_LOCAL_MODEL_FLEET_JSON") or "[]"))
-                        if isinstance(item, dict) and str(item.get("id") or "").strip() == profile["id"]
-                    ),
-                    False,
-                )
-            ),
+            allow_private_network=profile["allow_private_network"],
         )
         try:
             result = create_local_ai_provider(settings).infer(
