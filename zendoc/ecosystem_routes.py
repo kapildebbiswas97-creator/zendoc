@@ -34,6 +34,7 @@ from .medical_transport import (
     list_transport_requests,
     list_transport_types,
 )
+from .operational_fulfilment import list_home_health_providers
 from .pharmacy_service import (
     create_medicine_order,
     create_medicine_reminder,
@@ -87,7 +88,22 @@ def home_health_page():
 
     services = list_home_health_services()
     requests = list_home_health_requests(g.user)
-    return render_template("home_health.html", services=services, requests=requests)
+    connected_provider_ids = set()
+    for service in services:
+        try:
+            for provider in list_home_health_providers(
+                service["id"],
+                city=str(g.user["city"] or "").strip() or None,
+            ):
+                connected_provider_ids.add(int(provider["provider_id"]))
+        except (LookupError, PermissionError, ValueError):
+            continue
+    return render_template(
+        "home_health.html",
+        services=services,
+        requests=requests,
+        connected_provider_count=len(connected_provider_ids),
+    )
 
 
 @bp.route("/ambulance", methods=("GET", "POST"))
