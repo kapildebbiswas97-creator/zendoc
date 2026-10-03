@@ -36,6 +36,7 @@ from .payments import payment_gateway_status
 from .places_provider import configured_places_provider, places_configuration_status
 from .record_storage import S3CompatibleRecordStorage, get_record_storage
 from .security import assert_owner
+from .turn_credentials import dynamic_turn_ice_servers
 
 
 PROBE_DEFINITIONS = {
@@ -314,14 +315,20 @@ def _parse_turn_endpoint(raw_url: str) -> tuple[str, str, int, str]:
 def _probe_turn(actor: Any) -> dict:
     require_live_external_connector("turn_runtime_probe", actor=actor)
     raw = str(os.environ.get("ZENDOC_WEBRTC_ICE_SERVERS_JSON") or "").strip()
-    if not raw:
-        return _result("integration_required", "turn_not_configured")
-    try:
-        servers = json.loads(raw)
-    except json.JSONDecodeError:
-        return _result("failed", "turn_configuration_invalid_json")
-    if not isinstance(servers, list):
-        return _result("failed", "turn_configuration_invalid")
+    if raw:
+        try:
+            servers = json.loads(raw)
+        except json.JSONDecodeError:
+            return _result("failed", "turn_configuration_invalid_json")
+        if not isinstance(servers, list):
+            return _result("failed", "turn_configuration_invalid")
+    else:
+        try:
+            servers = dynamic_turn_ice_servers(actor)
+        except ValueError:
+            return _result("failed", "turn_dynamic_configuration_invalid")
+        if not servers:
+            return _result("integration_required", "turn_not_configured")
 
     turn_urls = []
     has_username = False
