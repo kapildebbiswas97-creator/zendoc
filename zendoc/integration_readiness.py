@@ -15,6 +15,7 @@ from .jev_system_one import jev_runtime_status
 from .agentic_integration_mesh import integration_ownership
 from .places_provider import places_configuration_status
 from .official_connectors import connector_readiness
+from .turn_credentials import dynamic_turn_status
 from .db import get_db
 from .operational_fulfilment import ensure_operational_fulfilment_schema
 
@@ -78,6 +79,7 @@ def integration_readiness_snapshot():
     notifications=notification_provider_status()
     jev=jev_runtime_status()
     places=places_configuration_status()
+    turn=dynamic_turn_status()
     care_runtime=_care_provider_runtime()
     official_data=connector_readiness("data_gov_hospitals")
     configured_places_provider=str(places.get("configured_provider") or "none").strip().lower()
@@ -141,9 +143,15 @@ def integration_readiness_snapshot():
         ),
         _item(
             "webrtc","Voice/video call network reachability",
-            registry["voice_video_calling"]["status"],True,not _present("ZENDOC_WEBRTC_ICE_SERVERS_JSON"),
-            ("ZENDOC_WEBRTC_ICE_SERVERS_JSON",),
-            "Authenticated WebRTC signaling and browser media controls are implemented. TURN/STUN configuration plus two-device testing is needed for reliable public-network calls.",
+            registry["voice_video_calling"]["status"],True,
+            not bool(_present("ZENDOC_WEBRTC_ICE_SERVERS_JSON") or turn["configured"]),
+            () if _present("ZENDOC_WEBRTC_ICE_SERVERS_JSON") else (
+                "ZENDOC_TURN_PUBLIC_HOST","ZENDOC_TURN_SHARED_SECRET",
+            ),
+            (
+                "Authenticated WebRTC signaling, browser media controls and short-lived Coturn REST credentials are implemented. "
+                "The OCI realtime profile can self-host Coturn; runtime reachability plus a two-device relay test remains the proof of reliable public-network calling."
+            ),
             "/messages",
         ),
         _item(
