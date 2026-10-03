@@ -58,13 +58,15 @@ def get_capability_registry() -> dict:
     )
     places_provider = _env("ZENDOC_PLACES_PROVIDER", "none").lower()
     places = places_provider == "google" and bool(_env("ZENDOC_GOOGLE_PLACES_API_KEY"))
+    healthsites_configured = bool(_env("ZENDOC_HEALTHSITES_API_KEY"))
     production_places_fallback = (
         _env("ZENDOC_ENV", "development").lower() == "production"
         and places_provider in {"", "none"}
     )
     places_external_available = bool(
         places
-        or places_provider in {"nominatim", "openstreetmap", "osm"}
+        or healthsites_configured
+        or places_provider in {"healthsites", "healthsites_api", "nominatim", "openstreetmap", "osm"}
         or production_places_fallback
     )
     video_provider = _env("ZENDOC_VIDEO_PROVIDER", "none") not in {"", "none"}
@@ -104,6 +106,10 @@ def get_capability_registry() -> dict:
         )
     )
     webrtc_ice_configured = bool(_env("ZENDOC_WEBRTC_ICE_SERVERS_JSON"))
+    dynamic_turn_configured = bool(
+        _env("ZENDOC_TURN_PUBLIC_HOST")
+        and len(_env("ZENDOC_TURN_SHARED_SECRET")) >= 32
+    )
     external_ekyc_provider = _env("ZENDOC_EKYC_PROVIDER", "none").lower()
     external_ekyc_configured = (
         external_ekyc_provider not in {"", "none", "manual"}
@@ -183,9 +189,11 @@ def get_capability_registry() -> dict:
             "status": STATUS_BETA,
             "label": "Voice / Video Calling",
             "description": (
+                "Authenticated browser WebRTC signaling, call lifecycle, media controls and short-lived TURN credentials are implemented; live relay reachability still requires a real two-device network test."
+                if dynamic_turn_configured else
                 "Authenticated browser WebRTC signaling, call lifecycle and media controls are implemented; configured ICE servers improve network reachability, but TURN reliability still requires real end-to-end verification."
                 if webrtc_ice_configured else
-                "Authenticated browser WebRTC signaling, call lifecycle and media controls are implemented. No ICE server configuration is present, so many public/NAT networks may require TURN before calls are reliable."
+                "Authenticated browser WebRTC signaling, call lifecycle and media controls are implemented. Enable the OCI Coturn realtime profile or configure external ICE servers for reliable public/NAT networks."
             ),
         },
         "deterministic_safety_engine": {
@@ -438,9 +446,12 @@ def get_capability_registry() -> dict:
             "description": "Transport request intake. Live dispatch requires provider integration.",
         },
         "iot_hub": {
-            "status": STATUS_BETA,
+            "status": STATUS_WORKING,
             "label": "IoT Hub",
-            "description": "Manual device registration and measurement logging. Live sync requires device SDK.",
+            "description": (
+                "Device registration plus a revocable, hashed, per-device ingestion bridge are implemented. "
+                "Manufacturer-specific Apple/Google/Samsung/Fitbit SDK or OAuth adapters remain external vendor integrations."
+            ),
         },
 
         # External integrations
@@ -464,8 +475,10 @@ def get_capability_registry() -> dict:
             "status": STATUS_BETA if places_external_available else STATUS_INTEGRATION_REQUIRED,
             "label": "External Places Discovery",
             "description": (
-                "Google Places is configured with OpenStreetMap fallback, but runtime reachability, quota and result availability must still be verified."
+                "Google Places is configured with Healthsites/OpenStreetMap fallback where available, but runtime reachability, quota and result availability must still be verified."
                 if places else
+                "Healthsites/OpenStreetMap discovery is available as external unverified fallback data where configured; live reachability and result availability are runtime-dependent."
+                if healthsites_configured else
                 "OpenStreetMap/Nominatim discovery is available as an external unverified fallback, but live reachability and result availability are runtime-dependent."
                 if places_external_available else
                 "External map discovery requires OpenStreetMap/Nominatim or a configured Google Places provider. Local/official Finder results remain separate."
