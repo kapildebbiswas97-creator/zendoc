@@ -94,6 +94,24 @@ services:
       db:
         condition: service_healthy
 
+  turn:
+    image: coturn/coturn:4.18.0-r0
+    restart: unless-stopped
+    profiles: ["realtime"]
+    network_mode: host
+    env_file:
+      - .env
+    environment:
+      ZENDOC_TURN_SHARED_SECRET: ${ZENDOC_TURN_SHARED_SECRET:?set ZENDOC_TURN_SHARED_SECRET in deploy/oci/.env}
+      ZENDOC_TURN_EXTERNAL_IP: ${ZENDOC_TURN_EXTERNAL_IP:?set ZENDOC_TURN_EXTERNAL_IP in deploy/oci/.env}
+      ZENDOC_TURN_REALM: ${ZENDOC_TURN_REALM:-zendoc}
+      ZENDOC_TURN_PORT: ${ZENDOC_TURN_PORT:-3478}
+      ZENDOC_TURN_MIN_RELAY_PORT: ${ZENDOC_TURN_MIN_RELAY_PORT:-49160}
+      ZENDOC_TURN_MAX_RELAY_PORT: ${ZENDOC_TURN_MAX_RELAY_PORT:-49200}
+    volumes:
+      - ./turn-entrypoint.sh:/zendoc/turn-entrypoint.sh:ro
+    entrypoint: ["/bin/sh", "/zendoc/turn-entrypoint.sh"]
+
   caddy:
     image: caddy:2.9-alpine
     restart: unless-stopped
