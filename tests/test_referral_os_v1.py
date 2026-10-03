@@ -2,8 +2,8 @@ from zendoc.care_journey_store import create_persisted_journey
 from zendoc.context_engine import create_or_update_consent_grant
 from zendoc.db import get_db, now_iso
 from zendoc.personal_agents import route_personal_agent
-from zendoc.referral_service import create_referral, transition_referral
-from tests.test_milestone1 import make_client, register_web
+from zendoc.referral_service import create_referral, get_referral_record, transition_referral
+from tests.test_milestone1 import csrf, login_web, make_client, register_web
 
 
 def _verified_provider(db, email, *, specialty, organization):
@@ -160,6 +160,83 @@ def test_referral_packet_record_refs_require_reports_scope(tmp_path):
         )
         assert referral["packet"]["record_ids"] == [int(record_id)]
         assert referral["packet"]["attachment_count"] == 1
+
+        denied = False
+        try:
+            get_referral_record(dict(destination), int(referral["id"]), int(record_id))
+        except PermissionError:
+            denied = True
+        assert denied is True
+
+        referral = transition_referral(dict(referrer), int(referral["id"]), "PACKET_PREPARED")
+        referral = transition_referral(dict(patient), int(referral["id"]), "CONSENTED")
+        referral = transition_referral(dict(referrer), int(referral["id"]), "SENT")
+        scoped = get_referral_record(dict(destination), int(referral["id"]), int(record_id))
+        assert scoped["id"] == int(record_id)
+        assert scoped["access_scope"] == "referral_packet_only"
+
+
+def test_referral_center_web_ui_supports_provider_create_and_patient_view(tmp_path):
+    app, client = make_client(tmp_path)
+    register_web(client, "patient", "ui-ref-patient@example.com", "UI Referral Patient")
+    client.get("/logout")
+    register_web(client, "doctor", "ui-ref-gp@example.com", "UI Referral GP")
+    client.get("/logout")
+    register_web(client, "doctor", "ui-ref-specialist@example.com", "UI Referral Specialist")
+
+    with app.app_context():
+        db = get_db()
+        patient = db.execute("SELECT * FROM users WHERE email_normalized='ui-ref-patient@example.com'").fetchone()
+        referrer = _verified_provider(db, "ui-ref-gp@example.com", specialty="General Medicine", organization="UI GP Clinic")
+        destination = _verified_provider(db, "ui-ref-specialist@example.com", specialty="Cardiology", organization="UI Heart Centre")
+        journey = create_persisted_journey(dict(patient), provenance={"source": "referral_ui_test"})
+        create_or_update_consent_grant(
+            int(patient["id"]), int(referrer["id"]), "referral", ["timeline"], actor=dict(patient)
+        )
+        patient_id = int(patient["id"])
+        referrer_id = int(referrer["id"])
+        destination_id = int(destination["id"])
+        journey_id = int(journey["id"])
+
+    client.get("/logout")
+    login_web(client, "doctor", "ui-ref-gp@example.com")
+    page = client.get("/referrals")
+    assert page.status_code == 200
+    html = page.data.decode()
+    assert "UI Referral Patient" in html
+    assert "UI Heart Centre" in html
+    token = csrf(html)
+    created = client.post(
+        "/referrals",
+        data={
+            "csrf_token": token,
+            "patient_journey": f"{patient_id}:{journey_id}",
+            "destination_provider_id": str(destination_id),
+            "reason": "UI referral reason",
+            "specialty": "Cardiology",
+            "priority": "routine",
+            "packet_summary": "Minimum necessary referral summary.",
+        },
+        follow_redirects=True,
+    )
+    assert created.status_code == 200
+    assert b"UI referral reason" in created.data
+
+    client.get("/logout")
+    login_web(client, "patient", "ui-ref-patient@example.com")
+    patient_page = client.get("/referrals")
+    assert patient_page.status_code == 200
+    assert b"UI referral reason" in patient_page.data
+    assert b"Referral OS" in patient_page.data
+
+    with app.app_context():
+        row = get_db().execute(
+            "SELECT patient_id,referring_provider_id,destination_provider_id,status FROM referrals ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        assert int(row["patient_id"]) == patient_id
+        assert int(row["referring_provider_id"]) == referrer_id
+        assert int(row["destination_provider_id"]) == destination_id
+        assert row["status"] == "CREATED"
 
 
 def test_personal_agent_routes_referral_read_to_referral_agent():
