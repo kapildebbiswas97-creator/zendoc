@@ -406,6 +406,7 @@ AGENT_REGISTRY: dict[str, AgentDefinition] = {
             "escalate_task",
             "request_owner_approval",
             "run_proactive_alert_check",
+            "get_workforce_incident_status",
             "run_safe_operations_automation",
         ],
         allowed_actor_roles=["admin"],
