@@ -12,6 +12,12 @@ Every authenticated ZENDOC account now has a deterministic personal coordinator 
 
 The personal agent is deliberately a **coordinator, not a superuser**. It cannot widen the account's permissions. It routes work to the existing specialist fleet and every candidate tool is checked again by the Tool Registry, domain authorization, consent and approval layers. Personal context remains actor-owned or explicitly granted, minimum-necessary and provenance-preserving.
 
+## Agent OS Coverage Contract
+
+The product capability registry and Agent OS are now linked by an explicit coverage contract. Every declared capability must map to a registered specialist owner and may also name an internal AI-workforce owner. CI fails if a capability is added without an Agent OS mapping, if a mapping points to an unknown specialist/workforce agent, or if a stale mapping survives after a capability is removed.
+
+Coverage modes distinguish executable specialist tools from coordination-only, integration-dependent, operations-monitored, safety-guarded and future-blocked capabilities. This prevents "Agent OS everywhere" from becoming a false claim that every feature has autonomous write authority: responsibility is universal, while execution remains permissioned and risk-bounded.
+
 ## AI Company / Backend Workforce
 
 ZENDOC also defines an internal AI workforce: Incident, Engineering, Root Cause, Repair, Security, Test, QA, Infrastructure, Data, Integration, Product, Support, Communications, Research, Manager, Release and Knowledge agents.

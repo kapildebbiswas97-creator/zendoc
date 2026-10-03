@@ -19,6 +19,7 @@
   <div class="grid two">
     <div><strong>Personal agent ID</strong><p class="form-note">{{ personal_agent.personal_agent_id }}</p></div>
     <div><strong>Available specialist delegates</strong><p class="form-note">{{ personal_agent.available_delegates|length }} role-permitted agents</p></div>
+    <div><strong>Agent-owned platform capabilities</strong><p class="form-note">{{ agent_coverage.covered_count }}/{{ agent_coverage.capability_count }} mapped · {{ "complete" if agent_coverage.complete else "coverage gap detected" }}</p></div>
   </div>
   <p class="form-note"><strong>Memory boundary:</strong> {{ personal_agent.memory_scope|join(' · ') }}</p>
   <p class="form-note">Your personal coordinator never expands permissions. Every specialist and tool call is re-authorized server-side, and consequential actions still stop at consent, clinician or owner gates.</p>
