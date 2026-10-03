@@ -264,7 +264,7 @@ jobs:
           test "$VERCEL_GATEWAY" = "success"
       - name: Publish exact-head Production Gate status
         if: always()
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const passed = '${{ steps.enforce.outcome }}' === 'success';
