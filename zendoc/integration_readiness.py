@@ -14,6 +14,7 @@ from .record_storage import get_record_storage
 from .jev_system_one import jev_runtime_status
 from .agentic_integration_mesh import integration_ownership
 from .places_provider import places_configuration_status
+from .official_connectors import connector_readiness
 from .db import get_db
 from .operational_fulfilment import ensure_operational_fulfilment_schema
 
@@ -78,6 +79,7 @@ def integration_readiness_snapshot():
     jev=jev_runtime_status()
     places=places_configuration_status()
     care_runtime=_care_provider_runtime()
+    official_data=connector_readiness("data_gov_hospitals")
     configured_places_provider=str(places.get("configured_provider") or "none").strip().lower()
     if configured_places_provider=="google":
         places_required_config=("ZENDOC_PLACES_PROVIDER","ZENDOC_GOOGLE_PLACES_API_KEY")
@@ -89,6 +91,18 @@ def integration_readiness_snapshot():
         places_required_config=("ZENDOC_PLACES_PROVIDER",)
 
     rows=[
+        _item(
+            "official_public_data","Official/public healthcare directory connector",
+            "BETA" if official_data.get("ready_for_fetch") else "INTEGRATION_REQUIRED",
+            True,not bool(official_data.get("ready_for_fetch")),
+            tuple(official_data.get("missing_config") or ()),
+            (
+                "The provenance-aware ingestion/mapping/freshness pipeline and bounded data.gov.in fetch path are implemented. "
+                "Configuration enables server-side fetch but does not prove source freshness, runtime uptime, provider verification, "
+                "live availability or booking connectivity."
+            ),
+            "/api/v1/admin/ingestion/connectors",
+        ),
         _item(
             "jev_decisions","Jev / System One agent decisions",
             jev["status"].upper(),True,not bool(jev["configured"]),
