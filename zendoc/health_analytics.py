@@ -55,7 +55,7 @@ def _recorded_at(value):
     return parsed.astimezone(timezone.utc).isoformat(timespec="seconds")
 
 
-def create_measurement(actor, data, patient_id=None, trusted_source=False):
+def create_measurement(actor, data, patient_id=None, trusted_source=False, commit=True):
     target_id = authorize_patient(actor, patient_id, "measurements")
     metric_type = normalize_metric_type(data.get("metric_type"))
     primary = data.get("value", data.get("metric_value"))
@@ -95,7 +95,8 @@ def create_measurement(actor, data, patient_id=None, trusted_source=False):
             numeric_value, secondary_value, source, str(data.get("notes") or "").strip()[:500] or None,
         ),
     )
-    get_db().commit()
+    if commit:
+        get_db().commit()
     return cursor.lastrowid
 
 
