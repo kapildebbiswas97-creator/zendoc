@@ -15,6 +15,7 @@ from typing import Any
 
 from .agent_task_engine import create_agent_task
 from .continental_coverage import install_continental_coverage
+from .db import get_db
 from .global_source_registry import country_coverage_manifest
 from .security import assert_owner
 
@@ -96,6 +97,21 @@ def enqueue_source_research_batch(actor: Any, *, max_countries: int = 12) -> dic
             "automatic_ingestion_before_source_review",
         ],
     }
+    existing = get_db().execute(
+        "SELECT * FROM agent_tasks WHERE idempotency_key=?",
+        (key,),
+    ).fetchone()
+    if existing:
+        return {
+            "created": False,
+            "task": dict(existing),
+            "source_gap_count": report["source_gap_count"],
+            "selected_countries": selected,
+            "idempotency_key": key,
+            "production_changes_executed": 0,
+            "notice": "Existing bounded ResearchAgent source-gap batch reused; no duplicate task created.",
+        }
+
     task = create_agent_task(
         task_type="global_source_research",
         requested_by=_owner_id(actor),
