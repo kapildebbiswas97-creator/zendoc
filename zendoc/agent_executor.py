@@ -280,6 +280,17 @@ def _alert_check(actor, arguments):
     return {"created_alerts": run_proactive_alert_check()}
 
 
+def _workforce_incident_status(actor, arguments):
+    from .incident_runtime import incident_runtime_snapshot, list_incident_runtimes
+    from .security import assert_owner
+
+    assert_owner(actor)
+    task_id = arguments.get("task_id")
+    if task_id not in (None, ""):
+        return incident_runtime_snapshot(actor, int(task_id))
+    return {"incidents": list_incident_runtimes(actor, limit=int(arguments.get("limit") or 25))}
+
+
 def _safe_operations_automation(actor, arguments):
     from .operations_automation import run_safe_operations_automation
     return run_safe_operations_automation(
@@ -1065,6 +1076,7 @@ TOOL_HANDLERS = {
     "search_educational_video": _educational_video,
     "get_iot_devices": _iot_devices,
     "run_proactive_alert_check": _alert_check,
+    "get_workforce_incident_status": _workforce_incident_status,
     "run_safe_operations_automation": _safe_operations_automation,
     "search_healthcare_providers": _provider_discovery,
     "get_provider_booking_options": _provider_booking_options,
