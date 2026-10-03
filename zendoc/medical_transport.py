@@ -61,6 +61,31 @@ def _user_id(user):
     return int(uid or 0)
 
 
+
+def _apply_partner_state(item):
+    result = dict(item)
+    try:
+        from .transport_partner import patient_transport_partner_state
+        partner = patient_transport_partner_state(int(result["id"]))
+    except Exception:
+        partner = None
+    if partner:
+        result["provider_confirmed"] = bool(partner.get("provider_confirmed"))
+        result["dispatch_confirmed"] = bool(partner.get("dispatch_confirmed"))
+        result["partner_status"] = partner.get("status")
+        result["partner_name"] = partner.get("partner_name")
+        result["vehicle_reference"] = partner.get("vehicle_reference")
+        result["eta_minutes"] = partner.get("eta_minutes")
+        result["fulfilment_status"] = f"partner_{partner.get('status')}"
+        result["truth_notice"] = partner.get("truth_notice")
+    else:
+        result["dispatch_confirmed"] = False
+        result["provider_confirmed"] = False
+        result["partner_status"] = None
+        result["fulfilment_status"] = "request_recorded_unconfirmed"
+    return result
+
+
 def list_transport_types():
     """Return medical transport types."""
     return TRANSPORT_TYPES
@@ -115,11 +140,9 @@ def create_transport_request(user, data):
     else:
         safety_warning = None
     result["safety_warning"] = safety_warning
-    result["dispatch_confirmed"] = False
-    result["provider_confirmed"] = False
-    result["fulfilment_status"] = "request_recorded_unconfirmed"
     result["truth_notice"] = (
-        "This ZENDOC request record does not confirm dispatch, a vehicle, equipment, price, ETA or provider acceptance."
+        "This ZENDOC request record does not confirm dispatch, a vehicle, equipment, price, ETA or provider acceptance "
+        "unless an authenticated assigned transport partner subsequently acknowledges the request."
     )
     return result
 
@@ -135,14 +158,7 @@ def list_transport_requests(user):
            ORDER BY ar.created_at DESC""",
         (uid, uid),
     ).fetchall()
-    result = []
-    for row in rows:
-        item = dict(row)
-        item["dispatch_confirmed"] = False
-        item["provider_confirmed"] = False
-        item["fulfilment_status"] = "request_recorded_unconfirmed"
-        result.append(item)
-    return result
+    return [_apply_partner_state(row) for row in rows]
 
 
 def get_transport_request(user, request_id):
@@ -157,4 +173,4 @@ def get_transport_request(user, request_id):
     ).fetchone()
     if not row:
         raise LookupError("Transport request not found.")
-    return dict(row)
+    return _apply_partner_state(row)
