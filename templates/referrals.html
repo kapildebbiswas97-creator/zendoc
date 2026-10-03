@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% block title %}Referrals & Waiting Lists — ZENDOC{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">CareLoop · Referral OS</p>
+    <h1>Referrals & waiting lists</h1>
+    <p class="section-copy">Track one consent-bound specialist referral from packet preparation to return-to-primary care. ZENDOC never treats an internal state as proof of external EHR/network delivery.</p>
+  </div>
+  {% if current_user.role == 'patient' %}
+    <a class="secondary-action" href="{{ url_for('care_os.care_os_home') }}">Back to Care OS</a>
+  {% else %}
+    <a class="secondary-action" href="{{ url_for('main.appointments') }}">Appointments</a>
+  {% endif %}
+</section>
+
+{% if current_user.role in ['doctor','hospital'] %}
+<section class="panel spaced-panel">
+  <div class="panel-head">
+    <div><p class="eyebrow">New formal referral</p><h2>Create from an authorized care relationship</h2></div>
+    <span class="status-badge integration">Patient consent required before send</span>
+  </div>
+  {% if creation and creation.patients and creation.destinations %}
+    <form method="post" action="{{ url_for('referrals.referral_create_web') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="grid two">
+        <label>Patient & active CareLoop journey
+          <select name="patient_journey" required>
+            <option value="">Choose patient and journey</option>
+            {% for patient in creation.patients %}
+              {% for journey in patient.journeys %}
+                <option value="{{ patient.id }}:{{ journey.id }}">{{ patient.name }} · Journey #{{ journey.id }} · {{ journey.state|replace('_',' ')|title }}</option>
+              {% endfor %}
+            {% endfor %}
+          </select>
+        </label>
+        <label>Destination specialist/provider
+          <select name="destination_provider_id" required>
+            <option value="">Choose verified destination</option>
+            {% for destination in creation.destinations %}
+              <option value="{{ destination.id }}">{{ destination.organization or destination.name }}{% if destination.specialty %} · {{ destination.specialty }}{% endif %}{% if destination.city %} · {{ destination.city }}{% endif %}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Specialty <input name="specialty" maxlength="160" placeholder="e.g. Cardiology"></label>
+        <label>Priority
+          <select name="priority"><option value="routine">Routine</option><option value="urgent">Urgent</option></select>
+        </label>
+      </div>
+      <label>Referral reason <textarea name="reason" rows="3" maxlength="1000" required></textarea></label>
+      <label>Secure packet summary <textarea name="packet_summary" rows="4" maxlength="2000" placeholder="Minimum-necessary clinical context for this referral"></textarea></label>
+      <details class="progressive-fields">
+        <summary>Attach specific Health Memory record references</summary>
+        <div>
+          <label>Medical record IDs <input name="record_ids" placeholder="e.g. 12, 14"></label>
+          <p class="form-note">Only explicitly referenced records are available through the referral packet. The provider must already have referral consent with reports scope; this does not grant blanket record access.</p>
+        </div>
+      </details>
+      <button type="submit" data-submitting-label="Creating referral…">Create referral</button>
+      <p class="form-note">{{ creation.truth_notice }}</p>
+    </form>
+  {% elif creation and not creation.patients %}
+    <div class="empty-state"><h3>No patient has granted referral coordination yet</h3><p>A patient must grant the referral purpose with minimum-necessary timeline scope before a provider can create a formal referral.</p></div>
+  {% else %}
+    <div class="empty-state"><h3>No eligible referral destination is available</h3><p>A destination must be an active ZENDOC-verified doctor or hospital.</p></div>
+  {% endif %}
+</section>
+{% endif %}
+
+<section class="panel spaced-panel">
+  <div class="panel-head">
+    <div><p class="eyebrow">Referral lifecycle</p><h2>{{ referrals|length }} visible referral{% if referrals|length != 1 %}s{% endif %}</h2></div>
+  </div>
+  {% if referrals %}
+    <div class="grid two">
+      {% for item in referrals %}
+      <article class="panel">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Referral #{{ item.id }} · {{ item.priority|title }}</p>
+            <h3>{{ item.specialty or 'Specialist referral' }}</h3>
+          </div>
+          <span class="status-badge {{ 'working' if item.status == 'RETURNED_TO_PRIMARY' else 'inactive' if item.status == 'REJECTED' else 'integration' }}">{{ item.status|replace('_',' ')|title }}</span>
+        </div>
+        <p><strong>Reason:</strong> {{ item.reason }}</p>
+        {% if item.packet.summary %}<p><strong>Packet:</strong> {{ item.packet.summary }}</p>{% endif %}
+        <div class="summary-row"><span>CareLoop journey</span><strong>#{{ item.journey_id }}</strong></div>
+        {% if item.waiting_since %}<div class="summary-row"><span>Waiting since</span><strong>{{ item.waiting_since }}</strong></div>{% endif %}
+        {% if item.scheduled_for %}<div class="summary-row"><span>Scheduled</span><strong>{{ item.scheduled_for }}</strong></div>{% endif %}
+        {% if item.specialist_opinion %}<p><strong>Specialist report:</strong> {{ item.specialist_opinion }}</p>{% endif %}
+        {% if item.outcome %}<p><strong>Outcome:</strong> {{ item.outcome }}</p>{% endif %}
+
+        {% if item.packet.record_ids %}
+          <div class="spaced-panel">
+            <strong>Referral-scoped records</strong>
+            {% for record_id in item.packet.record_ids %}
+              <a class="secondary-action" href="{{ url_for('referrals.referral_record_download', referral_id=item.id, record_id=record_id) }}">Record #{{ record_id }}</a>
+            {% endfor %}
+            <p class="form-note">These links authorize only records explicitly included in this patient-consented referral packet.</p>
+          </div>
+        {% endif %}
+
+        <p class="form-note">{{ item.truth_notice }}</p>
+
+        {% if current_user.id == item.patient_id and item.status == 'PACKET_PREPARED' %}
+          <form method="post" action="{{ url_for('referrals.referral_transition_web', referral_id=item.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="target_status" value="CONSENTED">
+            <button type="submit" data-submitting-label="Recording consent…">Consent to send referral</button>
+            <p class="form-note">Consent applies to this referral packet; it does not give the destination blanket access to your Health Memory.</p>
+          </form>
+        {% endif %}
+
+        {% if current_user.id == item.referring_provider_id %}
+          {% if item.status == 'CREATED' %}
+          <form method="post" action="{{ url_for('referrals.referral_transition_web', referral_id=item.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="target_status" value="PACKET_PREPARED">
+            <button type="submit" class="secondary-action">Mark packet prepared</button>
+          </form>
+          {% elif item.status == 'CONSENTED' %}
+          <form method="post" action="{{ url_for('referrals.referral_transition_web', referral_id=item.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="target_status" value="SENT">
+            <button type="submit">Send within ZENDOC</button>
+            <p class="form-note">This records delivery to the connected ZENDOC destination account only; it does not claim external EHR delivery.</p>
+          </form>
+          {% endif %}
+        {% endif %}
+
+        {% if current_user.id == item.destination_provider_id %}
+          {% if item.status == 'SENT' %}
+          <form method="post" action="{{ url_for('referrals.referral_transition_web', referral_id=item.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="target_status" value="RECEIVED"><button type="submit">Acknowledge receipt</button></form>
+          {% elif item.status == 'RECEIVED' %}
+          <form method="post" action="{{ url_for('referrals.referral_transition_web', referral_id=item.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="target_status" value="TRIAGED"><label>Triage note <textarea name="note" required maxlength="1000"></textarea></label><button type="submit">Complete triage</button></form>
+          {% elif item.status == 'TRIAGED' %}
+          <div class="grid two">
+            <form method="post" action="{{ url_for('referrals.referral_transition_web', referral_id=item.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="target_status" value="ACCEPTED"><button type="submit">Accept referral</button></form>
+            <form method="post" action="{{ url_for('referrals.referral_transition_web', referral_id=item.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="target_status" value="REJECTED"><label>Reason <textarea name="note" required maxlength="1000"></textarea></label><button type="submit" class="secondary-action">Reject with reason</button></form>
+          </div>
+          {% elif item.status == 'ACCEPTED' %}
+          <div class="grid two">
+            <form method="post" action="{{ url_for('referrals.referral_transition_web', referral_id=item.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="target_status" value="WAITING_LIST"><button type="submit" class="secondary-action">Place on waiting list</button></form>
+            <form method="post" action="{{ url_for('referrals.referral_transition_web', referral_id=item.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="target_status" value="SCHEDULED"><label>Appointment time <input type="datetime-local" name="scheduled_for" required></label><button type="submit">Schedule</button></form>
+          </div>
+          {% elif item.status == 'WAITING_LIST' %}
+          <form method="post" action="{{ url_for('referrals.referral_transition_web', referral_id=item.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="target_status" value="SCHEDULED"><label>Appointment time <input type="datetime-local" name="scheduled_for" required></label><button type="submit">Schedule from waiting list</button></form>
+          {% elif item.status == 'SCHEDULED' %}
+          <form method="post" action="{{ url_for('referrals.referral_transition_web', referral_id=item.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="target_status" value="CONSULTATION"><button type="submit">Record consultation started/completed</button></form>
+          {% elif item.status == 'CONSULTATION' %}
+          <form method="post" action="{{ url_for('referrals.referral_transition_web', referral_id=item.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="target_status" value="REPORT_RECEIVED"><label>Specialist report/opinion <textarea name="specialist_opinion" required maxlength="4000"></textarea></label><button type="submit">Attach specialist outcome</button></form>
+          {% elif item.status == 'REPORT_RECEIVED' %}
+          <form method="post" action="{{ url_for('referrals.referral_transition_web', referral_id=item.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="target_status" value="FOLLOW_UP"><button type="submit">Move to follow-up</button></form>
+          {% elif item.status == 'FOLLOW_UP' %}
+          <form method="post" action="{{ url_for('referrals.referral_transition_web', referral_id=item.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="target_status" value="RETURNED_TO_PRIMARY"><label>Return-to-primary outcome <textarea name="outcome" required maxlength="4000"></textarea></label><button type="submit">Return to primary provider</button></form>
+          {% endif %}
+        {% endif %}
+      </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state"><h3>No referrals visible yet</h3><p>{% if current_user.role == 'patient' %}Formal referrals from connected providers will appear here after creation.{% else %}Create a referral only for patients who explicitly granted referral coordination.{% endif %}</p></div>
+  {% endif %}
+</section>
+{% endblock %}
