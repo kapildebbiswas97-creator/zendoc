@@ -3,5 +3,8 @@
   "private": true,
   "devDependencies": {
     "@vercel/config": "0.7.2"
+  },
+  "engines": {
+    "node": "24.x"
   }
 }
