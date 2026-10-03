@@ -261,6 +261,16 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
         allowed_roles=ADMIN_ONLY,
         risk_class=LOW_RISK,
     ),
+    "get_workforce_incident_status": ToolDefinition(
+        name="get_workforce_incident_status",
+        description=(
+            "Read evidence-gated AI workforce incident runtime state. "
+            "This tool cannot submit evidence, approve production, deploy code, or close an incident."
+        ),
+        allowed_agents=["OperationsAgent"],
+        allowed_roles=ADMIN_ONLY,
+        risk_class=READ_ONLY,
+    ),
     "run_safe_operations_automation": ToolDefinition(
         name="run_safe_operations_automation",
         description="Owner-only bounded automation: re-queue retriable failures and create deterministic operational alerts without executing arbitrary tasks.",
