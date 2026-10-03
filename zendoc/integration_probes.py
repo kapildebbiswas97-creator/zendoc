@@ -16,6 +16,7 @@ import ssl
 import time
 import urllib.error
 import urllib.request
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from flask import current_app
@@ -540,12 +541,27 @@ def integration_probe_snapshot() -> dict:
     }
 
 
-def run_automatic_safe_probes(actor: Any) -> list[dict]:
-    """Run only non-billable, non-mutating probes; opt-in at the worker boundary."""
+def run_automatic_safe_probes(actor: Any, *, stale_after_hours: int = 20) -> list[dict]:
+    """Run only stale non-billable/non-mutating probes; opt-in at the worker boundary."""
     assert_owner(actor)
+    latest = latest_probe_results()
+    cutoff = datetime.now(timezone.utc) - timedelta(
+        hours=max(1, min(int(stale_after_hours or 20), 168))
+    )
     results = []
     for key, definition in PROBE_DEFINITIONS.items():
         if not definition["automatic_safe"]:
             continue
+        previous = latest.get(key)
+        if previous:
+            raw_checked_at = str(previous.get("checked_at") or "").strip()
+            try:
+                checked_at = datetime.fromisoformat(raw_checked_at.replace("Z", "+00:00"))
+                if checked_at.tzinfo is None:
+                    checked_at = checked_at.replace(tzinfo=timezone.utc)
+                if checked_at >= cutoff:
+                    continue
+            except ValueError:
+                pass
         results.append(run_integration_probe(actor, key))
     return results
