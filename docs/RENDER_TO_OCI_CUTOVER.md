@@ -148,11 +148,12 @@ Backup verification remains separate: make an off-instance copy of an OCI backup
 
 ## 9. Switch Vercel only after OCI passes
 
-The Vercel gateway must not receive `DATABASE_URL`. It receives only:
+The Vercel gateway must not receive `DATABASE_URL`, admin credentials, application secrets, or provider credentials. It receives only the OCI origin plus a dedicated gateway-only secret:
 
     ZENDOC_ORIGIN_URL=https://YOUR_OCI_ORIGIN
+    ZENDOC_GATEWAY_TOKEN=<same-long-random-gateway-only-secret-used-by-caddy>
 
-After the OCI origin is verified, configure that variable in the ZENDOC Vercel project and deploy the reviewed gateway commit. Test the browser-facing Vercel URL for:
+After the OCI origin is verified, configure those two gateway-scoped values in the ZENDOC Vercel project and deploy the reviewed gateway commit. Test the browser-facing Vercel URL for:
 
 - login/logout and session continuity;
 - redirects and generated links;
