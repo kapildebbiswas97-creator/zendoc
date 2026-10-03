@@ -60,7 +60,7 @@ def main() -> int:
                 except Exception:
                     pass
                 # Keep operational logs free of potentially sensitive exception text.
-                app.logger.exception(
+                app.logger.error(
                     "Operations cycle failed (%s).",
                     type(exc).__name__,
                 )
