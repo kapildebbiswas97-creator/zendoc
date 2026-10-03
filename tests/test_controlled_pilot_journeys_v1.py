@@ -274,6 +274,7 @@ def test_lab_request_stays_unreported_until_provider_workflow_advances(tmp_path)
             data_mode="LIVE",
         )
         assert booking["status"] == "requested"
+        assert booking["booking_id"] == booking["id"]
         assert booking.get("report_record_id") is None
 
         accepted = update_diagnostic_booking_status(
