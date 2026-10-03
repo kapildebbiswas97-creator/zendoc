@@ -162,7 +162,7 @@ def integration_readiness_snapshot():
                 "Home-health request intake works, but no active verified ZENDOC provider currently publishes a home-health capability. "
                 "A request remains unconfirmed until a real provider is assigned and accepts it."
             ),
-            "/home-health",
+            "/operations/fulfilment",
         ),
         _item(
             "pharmacy_fulfilment","Pharmacy provider fulfilment",
