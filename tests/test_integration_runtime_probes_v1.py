@@ -216,3 +216,15 @@ def test_integration_probe_post_is_csrf_protected_and_owner_only(tmp_path):
         assert get_db().execute(
             "SELECT COUNT(*) AS c FROM integration_probe_runs WHERE integration_key='database'"
         ).fetchone()["c"] == 1
+
+
+def test_turn_endpoint_parser_respects_udp_tcp_and_tls_defaults():
+    assert integration_probes._parse_turn_endpoint(
+        "turn:turn.example.test:3478?transport=udp"
+    ) == ("turn", "turn.example.test", 3478, "udp")
+    assert integration_probes._parse_turn_endpoint(
+        "turn:turn.example.test:3478?transport=tcp"
+    ) == ("turn", "turn.example.test", 3478, "tcp")
+    assert integration_probes._parse_turn_endpoint(
+        "turns:turn.example.test:5349"
+    ) == ("turns", "turn.example.test", 5349, "tcp")
