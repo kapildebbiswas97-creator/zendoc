@@ -17,6 +17,7 @@ from .data_freshness import ingestion_freshness_report
 from .database_reliability import readiness_report
 from .db import get_db, now_iso
 from .integration_readiness import integration_readiness_snapshot
+from .integration_probes import integration_probe_snapshot, run_automatic_safe_probes
 from .notification_providers import deliver_notification
 from .operations_automation import run_safe_operations_automation
 from .security import assert_owner
@@ -44,6 +45,7 @@ def _digest_text(snapshot: dict) -> str:
     freshness = snapshot["freshness"]
     database = snapshot["database"]
     active_alerts = snapshot["active_alerts"]
+    probe_status = snapshot.get("probe_status") or {}
 
     urgent_sources = [
         source for source in freshness.get("sources", [])
@@ -72,6 +74,10 @@ def _digest_text(snapshot: dict) -> str:
         "Official/public data",
         f"- Registered sources: {freshness.get('source_count', 0)}",
         f"- P0/P1 refresh sources: {len(urgent_sources)}",
+        "",
+        "Runtime integration evidence",
+        f"- Latest bounded probes passed: {probe_status.get('verified_count', 0)}/{probe_status.get('total_count', 0)}",
+        f"- Latest failing probes: {probe_status.get('failing_count', 0)}",
     ]
     if urgent_sources:
         lines.append(
@@ -101,6 +107,10 @@ def run_owner_operations_cycle(
     freshness = ingestion_freshness_report(actor, recent_batch_limit=20)
     database = readiness_report()
     active_alerts = list_alerts("active", limit=100)
+    automatic_probes = []
+    if bool(current_app.config.get("OPS_EXTERNAL_PROBES")):
+        automatic_probes = run_automatic_safe_probes(actor, stale_after_hours=20)
+    probe_status = integration_probe_snapshot()
 
     snapshot = {
         "generated_at": now_iso(),
@@ -109,6 +119,8 @@ def run_owner_operations_cycle(
         "freshness": freshness,
         "database": database,
         "active_alerts": active_alerts,
+        "probe_status": probe_status,
+        "automatic_probes": automatic_probes,
     }
 
     digest_sent = False
@@ -148,6 +160,9 @@ def run_owner_operations_cycle(
         "database_status": database.get("status"),
         "active_alert_count": len(active_alerts),
         "integration_blocker_count": integrations.get("external_blocker_count", 0),
+        "runtime_probe_verified_count": probe_status.get("verified_count", 0),
+        "runtime_probe_failing_count": probe_status.get("failing_count", 0),
+        "automatic_probe_count": len(automatic_probes),
         "urgent_data_source_count": sum(
             1 for source in freshness.get("sources", [])
             if source.get("refresh_priority") in {"P0", "P1"}
