@@ -18,6 +18,7 @@ from .official_connectors import connector_readiness
 from .turn_credentials import dynamic_turn_status
 from .db import get_db
 from .operational_fulfilment import ensure_operational_fulfilment_schema
+from .interoperability_gateway import interoperability_readiness_snapshot
 
 
 def _present(*keys):
@@ -82,6 +83,7 @@ def integration_readiness_snapshot():
     turn=dynamic_turn_status()
     care_runtime=_care_provider_runtime()
     official_data=connector_readiness("data_gov_hospitals")
+    interop=interoperability_readiness_snapshot()
     configured_places_provider=str(places.get("configured_provider") or "none").strip().lower()
     if configured_places_provider=="google":
         places_required_config=("ZENDOC_PLACES_PROVIDER","ZENDOC_GOOGLE_PLACES_API_KEY")
@@ -95,6 +97,18 @@ def integration_readiness_snapshot():
         places_required_config=("ZENDOC_PLACES_PROVIDER",)
 
     rows=[
+        _item(
+            "healthcare_interoperability","FHIR / SMART healthcare interoperability",
+            "WORKING" if interop["verified_adapter_count"] else "BETA",
+            True,not bool(interop["verified_adapter_count"]),(),
+            (
+                f"Provider-neutral R4/R5 exchange planning is implemented across {interop['adapter_count']} adapter contract(s); "
+                f"{interop['configured_adapter_count']} have activation configuration/partner identifiers and "
+                f"{interop['verified_adapter_count']} are explicitly live-verified. "
+                "No configuration value alone proves connectivity, consent, legal authority or record exchange."
+            ),
+            "/api/v1/interoperability",
+        ),
         _item(
             "official_public_data","Official/public healthcare directory connector",
             "BETA" if official_data.get("ready_for_fetch") else "INTEGRATION_REQUIRED",
@@ -239,4 +253,5 @@ def integration_readiness_snapshot():
         "total_count":len(rows),
         "truth_notice":"A green software boundary does not prove a third-party account, credential, partnership, network, quota, settlement, or real-world fulfilment is active.",
         "notification_status":notifications,
+        "interoperability":interop,
     }
