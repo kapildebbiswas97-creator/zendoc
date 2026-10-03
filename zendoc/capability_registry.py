@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import os
 
+from .interoperability_gateway import interoperability_readiness_snapshot
+
 
 STATUS_WORKING              = "WORKING"
 STATUS_BETA                 = "BETA"
@@ -45,6 +47,7 @@ def get_capability_registry() -> dict:
     Returns the complete truthful capability matrix.
     Used by the Command Center, API, and capability status endpoint.
     """
+    interop = interoperability_readiness_snapshot()
     local_ai_provider = _local_ai_env("ZENDOC_LOCAL_AI_PROVIDER", "ZENDOC_SLM_PROVIDER", "ollama").lower()
     local_ai_configured = (
         _local_ai_enabled()
@@ -334,6 +337,26 @@ def get_capability_registry() -> dict:
             "status": STATUS_INTEGRATION_REQUIRED,
             "label": "Live Official Dataset Connectors",
             "description": "LGD/OGD/ABDM live retrieval requires dataset-specific downloads/APIs or authorized onboarding; ZENDOC does not claim live access by default.",
+        },
+        "universal_healthcare_interoperability_gateway": {
+            "status": STATUS_BETA,
+            "label": "Universal Healthcare Interoperability Gateway",
+            "description": (
+                "Provider-neutral FHIR R4/R5 and SMART-on-FHIR-compatible adapter contracts, resource normalization, "
+                "truth-state reporting and plan-only exchange orchestration are implemented. External exchange remains gated."
+            ),
+        },
+        "live_external_fhir_exchange": {
+            "status": STATUS_WORKING if interop["verified_adapter_count"] else STATUS_INTEGRATION_REQUIRED,
+            "label": "Live External EHR / HIE Exchange",
+            "description": (
+                f"{interop['verified_adapter_count']} interoperability adapter(s) are explicitly marked live-verified; "
+                "each exchange still re-checks authorization, consent, scope, provenance and audit."
+                if interop["verified_adapter_count"]
+                else
+                "No external EHR/HIE adapter is live-verified. ZENDOC's software boundary is present, but external activation "
+                "requires the relevant endpoint/credential, authorization or partner agreement, plus bounded live verification."
+            ),
         },
         "global_health_intelligence_fabric": {
             "status": STATUS_WORKING,
