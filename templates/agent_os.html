@@ -25,6 +25,34 @@
   <p class="form-note">Your personal coordinator never expands permissions. Every specialist and tool call is re-authorized server-side, and consequential actions still stop at consent, clinician or owner gates.</p>
 </section>
 
+{% if current_user.role == 'admin' %}
+<section class="panel subtle-panel" aria-label="AI workforce incident runtime">
+  <div class="panel-head">
+    <div><p class="eyebrow">AI-operated backend · evidence-gated self-healing</p><h2>Workforce incident runtime</h2></div>
+    <span class="status-badge {{ 'active' if not workforce_incidents else 'beta' }}">{{ workforce_incidents|length }} tracked</span>
+  </div>
+  <p>IncidentAgent → Engineering → RootCause → Repair → Security → Test → QA → Release → owner approval → live verification → Knowledge. Missing evidence stops the case; no stage is marked successful from model text alone.</p>
+  {% if workforce_incidents %}
+    <div class="appointment-list">
+      {% for incident in workforce_incidents %}
+      <article class="appointment-card">
+        <div>
+          <p class="eyebrow">Incident task #{{ incident.task_id }} · {{ incident.runtime.severity|title }}</p>
+          <h3>{{ (incident.runtime.current_stage or 'closed')|replace('_',' ')|title }}</h3>
+          <p>Task state: {{ incident.task_status|replace('_',' ')|title }}{% if incident.runtime.blocker %} · Blocker: {{ incident.runtime.blocker|replace('_',' ')|title }}{% endif %}</p>
+          <p class="form-note">Owner approval recorded: {{ 'Yes' if incident.runtime.owner_approval_recorded else 'No' }} · Production promotion executed by runtime: No · Post-release verified: {{ 'Yes' if incident.runtime.post_release_verified else 'No' }}</p>
+        </div>
+        <span class="status-badge {{ 'active' if incident.task_status == 'completed' else 'beta' }}">{{ incident.task_status|replace('_',' ')|title }}</span>
+      </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state"><h3>No workforce incident cases</h3><p>Operational failures will be deduplicated into persistent cases and automatically classified before evidence gates.</p></div>
+  {% endif %}
+  <p class="form-note">Evidence submission and production approval use the owner-only authenticated API. The runtime itself cannot write production code, deploy, read secrets, expand permissions, prescribe, move money or dispatch emergencies.</p>
+</section>
+
+{% endif %}
 <section class="panel">
   <div class="panel-head"><div><p class="eyebrow">One request → personal coordinator → specialist fleet</p><h2>Give Agent OS a task</h2></div><span class="status-badge beta">Production-safe automation</span></div>
   <form method="post">
