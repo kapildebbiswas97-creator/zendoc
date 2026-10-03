@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 import time
+import uuid
 
 from .agent_registry import get_agent
 from .agent_task_engine import EXECUTION_TIMEOUT_SECONDS, MAX_STEPS
-from .tool_registry import check_tool_access, get_tool
+from .tool_registry import READ_ONLY, check_tool_access, get_tool
 
 
 def _value(actor, key, default=None):
@@ -16,7 +17,65 @@ def _value(actor, key, default=None):
     return actor.get(key, default) if isinstance(actor, dict) else default
 
 
-def execute_plan(plan, actor) -> dict:
+def _transient_failure_category(error: Exception) -> str | None:
+    """Classify only failures that are safe candidates for bounded read retries."""
+    message = str(error or "").lower()
+    if isinstance(error, TimeoutError) or "timeout" in message or "timed out" in message:
+        return "timeout"
+    if isinstance(error, (ConnectionError, OSError)) or any(
+        marker in message
+        for marker in (
+            "temporarily unavailable",
+            "provider unavailable",
+            "connection refused",
+            "connection reset",
+            "connection aborted",
+            "name or service not known",
+            "temporary failure in name resolution",
+            "http 502",
+            "http 503",
+            "http 504",
+        )
+    ):
+        return "provider_unavailable"
+    return None
+
+
+def _publish_plan_event(event_type, *, actor, plan, run_id, status, payload=None, duration_ms=None):
+    """Best-effort privacy-safe orchestration observability; telemetry never gains authority."""
+    try:
+        from .event_bus import publish_event
+
+        publish_event(
+            event_type,
+            actor=actor,
+            entity_type="agent_plan",
+            entity_id=str(plan.plan_id),
+            status=status,
+            agent_name=plan.assigned_agent,
+            payload={"run_id": run_id, "intent": plan.intent, **(payload or {})},
+            duration_ms=duration_ms,
+            correlation_id=run_id,
+        )
+    except Exception:
+        # Observability must never make an otherwise-authorized read workflow fail.
+        pass
+
+
+def execute_plan(
+    plan,
+    actor,
+    *,
+    retry_read_only: bool = True,
+    degrade_on_transient: bool = False,
+) -> dict:
+    """Execute one bounded plan with retries only for idempotent READ_ONLY tools.
+
+    Consequential/non-idempotent tools are never retried here. When requested by
+    the specialist orchestrator, an exhausted transient read failure degrades to
+    a truthful unavailable result instead of turning the whole user request into
+    a 500. Authorization, consent and clinical gates still fail closed.
+    """
     if plan.authorization_error:
         raise PermissionError(plan.authorization_error)
     agent = get_agent(plan.assigned_agent)
@@ -28,8 +87,19 @@ def execute_plan(plan, actor) -> dict:
     if len(plan.steps) > MAX_STEPS:
         raise ValueError(f"Plan exceeds the {MAX_STEPS}-step execution limit.")
 
+    run_id = uuid.uuid4().hex
     started = time.perf_counter()
     results = []
+    total_retries = 0
+    _publish_plan_event(
+        "agent.plan.started",
+        actor=actor,
+        plan=plan,
+        run_id=run_id,
+        status="running",
+        payload={"step_count": len(plan.steps), "risk_level": plan.risk_level},
+    )
+
     for step in plan.steps:
         if time.perf_counter() - started > EXECUTION_TIMEOUT_SECONDS:
             raise TimeoutError("Plan execution exceeded the bounded request timeout.")
@@ -44,23 +114,122 @@ def execute_plan(plan, actor) -> dict:
         handler = TOOL_HANDLERS.get(step.tool_name)
         if not handler:
             raise LookupError(f"Tool '{step.tool_name}' has no bounded server-side handler.")
+
+        safe_retry = bool(retry_read_only and tool.risk_class == READ_ONLY and tool.idempotent)
+        max_attempts = 2 if safe_retry else 1
+        attempts = 0
         tool_started = time.perf_counter()
-        output = handler(actor, dict(step.arguments or {}))
-        results.append(
-            {
-                "sequence": step.sequence,
-                "tool_name": step.tool_name,
-                "status": "completed",
-                "duration_ms": int((time.perf_counter() - tool_started) * 1000),
-                "output": output,
-            }
-        )
+        while True:
+            attempts += 1
+            try:
+                output = handler(actor, dict(step.arguments or {}))
+                duration_ms = int((time.perf_counter() - tool_started) * 1000)
+                results.append(
+                    {
+                        "sequence": step.sequence,
+                        "tool_name": step.tool_name,
+                        "status": "completed",
+                        "attempts": attempts,
+                        "duration_ms": duration_ms,
+                        "output": output,
+                    }
+                )
+                _publish_plan_event(
+                    "agent.tool.completed",
+                    actor=actor,
+                    plan=plan,
+                    run_id=run_id,
+                    status="completed",
+                    payload={
+                        "sequence": step.sequence,
+                        "tool_name": step.tool_name,
+                        "attempts": attempts,
+                    },
+                    duration_ms=duration_ms,
+                )
+                break
+            except Exception as error:
+                category = _transient_failure_category(error)
+                if category and safe_retry and attempts < max_attempts:
+                    total_retries += 1
+                    _publish_plan_event(
+                        "agent.tool.retry",
+                        actor=actor,
+                        plan=plan,
+                        run_id=run_id,
+                        status="retrying",
+                        payload={
+                            "sequence": step.sequence,
+                            "tool_name": step.tool_name,
+                            "attempt": attempts,
+                            "failure_category": category,
+                        },
+                    )
+                    continue
+
+                if category and safe_retry and degrade_on_transient:
+                    duration_ms = int((time.perf_counter() - tool_started) * 1000)
+                    results.append(
+                        {
+                            "sequence": step.sequence,
+                            "tool_name": step.tool_name,
+                            "status": "unavailable",
+                            "attempts": attempts,
+                            "duration_ms": duration_ms,
+                            "error_category": category,
+                            "output": None,
+                        }
+                    )
+                    elapsed = int((time.perf_counter() - started) * 1000)
+                    _publish_plan_event(
+                        "agent.plan.degraded",
+                        actor=actor,
+                        plan=plan,
+                        run_id=run_id,
+                        status="degraded",
+                        payload={
+                            "failed_tool": step.tool_name,
+                            "failure_category": category,
+                            "attempts": attempts,
+                            "fallback_strategy": plan.fallback_strategy,
+                        },
+                        duration_ms=elapsed,
+                    )
+                    return {
+                        "run_id": run_id,
+                        "plan_id": plan.plan_id,
+                        "intent": plan.intent,
+                        "assigned_agent": plan.assigned_agent,
+                        "status": "degraded",
+                        "degraded": True,
+                        "failure_category": category,
+                        "fallback_strategy": plan.fallback_strategy,
+                        "retry_count": total_retries,
+                        "duration_ms": elapsed,
+                        "tool_results": results,
+                    }
+                raise
+
+    elapsed = int((time.perf_counter() - started) * 1000)
+    final_status = "completed" if not plan.requires_confirmation else "waiting_human"
+    _publish_plan_event(
+        "agent.plan.completed",
+        actor=actor,
+        plan=plan,
+        run_id=run_id,
+        status=final_status,
+        payload={"step_count": len(results), "retry_count": total_retries},
+        duration_ms=elapsed,
+    )
     return {
+        "run_id": run_id,
         "plan_id": plan.plan_id,
         "intent": plan.intent,
         "assigned_agent": plan.assigned_agent,
-        "status": "completed" if not plan.requires_confirmation else "waiting_human",
-        "duration_ms": int((time.perf_counter() - started) * 1000),
+        "status": final_status,
+        "degraded": False,
+        "retry_count": total_retries,
+        "duration_ms": elapsed,
         "tool_results": results,
     }
 
