@@ -1,15 +1,23 @@
-from zendoc.continental_coverage import ASIA, EUROPE, OCEANIA, AFRICA_FIRST_WAVE, continent_coverage_summary
+from zendoc.continental_coverage import ASIA, EUROPE, OCEANIA, AFRICA, NORTH_AMERICA, SOUTH_AMERICA, continent_coverage_summary
 from zendoc.global_source_registry import country_coverage_manifest, get_global_public_ingestion_source
 from zendoc.medical_knowledge_registry import get_medical_knowledge_source
 from zendoc.public_source_registry import get_public_ingestion_source
 from tests.test_milestone1 import login_web, make_app
 
 
-def test_continent_catalog_has_requested_full_regions():
+def test_continent_catalog_has_full_195_country_operational_regions():
     assert len(ASIA) == 48
     assert len(EUROPE) == 44
     assert len(OCEANIA) == 14
-    assert len(AFRICA_FIRST_WAVE) >= 10
+    assert len(AFRICA) == 54
+    assert len(NORTH_AMERICA) == 23
+    assert len(SOUTH_AMERICA) == 12
+    all_codes = {
+        code
+        for region in (ASIA, EUROPE, OCEANIA, AFRICA, NORTH_AMERICA, SOUTH_AMERICA)
+        for code, _name in region
+    }
+    assert len(all_codes) == 195
 
 
 def test_named_expansion_countries_are_registered_after_app_start(tmp_path):
@@ -68,5 +76,8 @@ def test_owner_global_coverage_exposes_continent_summary(tmp_path):
     assert payload["continents"]["Asia"]["jurisdiction_count"] == 48
     assert payload["continents"]["Europe"]["jurisdiction_count"] == 44
     assert payload["continents"]["Oceania"]["jurisdiction_count"] == 14
-    assert payload["continents"]["Africa"]["jurisdiction_count"] >= 10
+    assert payload["continents"]["Africa"]["jurisdiction_count"] == 54
+    assert payload["continents"]["North America"]["jurisdiction_count"] == 23
+    assert payload["continents"]["South America"]["jurisdiction_count"] == 12
+    assert payload["jurisdiction_summary"]["country_count"] == 195
     assert continent_coverage_summary()["Asia"]["jurisdiction_count"] == 48

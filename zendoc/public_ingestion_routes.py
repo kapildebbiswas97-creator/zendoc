@@ -31,7 +31,12 @@ from .trusted_contact_import import (
     preview_trusted_provider_contacts,
 )
 from .public_source_registry import list_public_ingestion_sources, public_data_coverage_matrix
-from .official_connectors import connector_readiness, infer_mapping, list_connector_profiles
+from .official_connectors import (
+    connector_readiness,
+    fetch_and_ingest_data_gov_resource,
+    infer_mapping,
+    list_connector_profiles,
+)
 from .geography_region_registry import import_lgd_state_registry, list_import_regions
 from .state_source_priorities import state_source_priority
 from .india_regions import india_region_catalog
@@ -177,6 +182,41 @@ def api_ingestion_connector_readiness(source_id):
         return jsonify({"connector": connector_readiness(source_id)})
     except LookupError as exc:
         return jsonify({"error": {"code": 404, "message": str(exc)}}), 404
+
+
+@bp.post("/api/v1/admin/ingestion/connectors/<source_id>/fetch")
+def api_ingestion_connector_fetch(source_id):
+    """Fetch a bounded allowlisted official resource; dry-run unless apply=true."""
+    user, error = _owner()
+    if error:
+        return error
+    data = request.get_json(silent=True) or {}
+    filters = data.get("filters") if isinstance(data.get("filters"), dict) else {}
+    try:
+        result = fetch_and_ingest_data_gov_resource(
+            user,
+            source_id,
+            filters=filters,
+            limit=data.get("limit", 100),
+            offset=data.get("offset", 0),
+            dry_run=data.get("apply") is not True,
+        )
+    except LookupError as exc:
+        return jsonify({"error": {"code": 404, "message": str(exc)}}), 404
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+    except RuntimeError as exc:
+        return jsonify({"error": {"code": 503, "message": str(exc)}}), 503
+
+    applied = data.get("apply") is True
+    return jsonify({
+        "status": "applied" if applied else "previewed",
+        "result": result,
+        "truth_notice": (
+            "A successful public-data import updates discovery evidence only. "
+            "It does not verify a provider, create live availability, or authorize a booking."
+        ),
+    }), 201 if applied else 200
 
 
 @bp.post("/api/v1/admin/ingestion/connectors/<source_id>/map")

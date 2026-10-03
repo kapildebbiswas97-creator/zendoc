@@ -1,5 +1,9 @@
+import json
+from urllib.parse import parse_qs, urlparse
+
 from zendoc.data_gap_registry import build_collection_plan, get_data_gap
-from zendoc.official_connectors import connector_readiness, infer_mapping, list_connector_profiles
+from zendoc import official_connectors
+from zendoc.official_connectors import connector_readiness, fetch_data_gov_resource, infer_mapping, list_connector_profiles
 from tests.test_milestone1 import api_token, make_app
 
 
@@ -140,3 +144,82 @@ def test_connector_mapping_preserves_canonical_geography_fields():
     assert record["geography_source_record_id"] == "district:320"
     assert result["mapping_template"]["mapping"]["geography_source"] == "geography_source"
     assert result["mapping_template"]["mapping"]["geography_source_record_id"] == "geography_source_record_id"
+
+
+class _FakeDataGovResponse:
+    def __init__(self, payload):
+        self._raw = json.dumps(payload).encode("utf-8")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+    def read(self, _size=-1):
+        return self._raw
+
+
+def test_data_gov_live_fetch_is_bounded_mapped_and_secret_safe(monkeypatch):
+    monkeypatch.setenv("ZENDOC_DATA_GOV_API_KEY", "test-secret")
+    monkeypatch.setenv("ZENDOC_DATA_GOV_HOSPITAL_RESOURCE_ID", "test-resource-id")
+    captured = {}
+
+    def fake_urlopen(request, timeout):
+        captured["url"] = request.full_url
+        captured["timeout"] = timeout
+        return _FakeDataGovResponse({
+            "total": 1,
+            "records": [{
+                "hospital_code": "WB-OGD-1",
+                "hospital_name": "Official Test Hospital",
+                "district": "Nadia",
+                "state": "West Bengal",
+                "location_coordinates": "23.0,88.5",
+            }],
+        })
+
+    monkeypatch.setattr(official_connectors.urllib.request, "urlopen", fake_urlopen)
+    result = fetch_data_gov_resource(
+        "data_gov_hospitals",
+        filters={"state": "West Bengal", "district": "Nadia"},
+        limit=5000,
+        offset=-2,
+        timeout_seconds=99,
+    )
+
+    parsed = urlparse(captured["url"])
+    query = parse_qs(parsed.query)
+    assert parsed.path.endswith("/test-resource-id")
+    assert query["api-key"] == ["test-secret"]
+    assert query["filters[state]"] == ["West Bengal"]
+    assert query["filters[district]"] == ["Nadia"]
+    assert query["limit"] == ["500"]
+    assert query["offset"] == ["0"]
+    assert captured["timeout"] == 30
+    assert result["record_count"] == 1
+    assert result["records"][0]["name"] == "Official Test Hospital"
+    assert result["records"][0]["latitude"] == 23.0
+    assert result["records"][0]["longitude"] == 88.5
+    assert "test-secret" not in repr(result)
+
+
+def test_owner_connector_fetch_api_fails_closed_when_config_missing(tmp_path, monkeypatch):
+    monkeypatch.delenv("ZENDOC_DATA_GOV_API_KEY", raising=False)
+    monkeypatch.delenv("ZENDOC_DATA_GOV_HOSPITAL_RESOURCE_ID", raising=False)
+    app = make_app(tmp_path)
+    client = app.test_client()
+
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"email": "admin@example.com", "password": "AdminStrong123"},
+    )
+    owner_token = login.get_json()["token"]
+    response = client.post(
+        "/api/v1/admin/ingestion/connectors/data_gov_hospitals/fetch",
+        headers={"Authorization": f"Bearer {owner_token}"},
+        json={"filters": {"state": "West Bengal"}},
+    )
+
+    assert response.status_code == 503
+    assert "configuration is incomplete" in response.get_json()["error"]["message"].lower()

@@ -14,6 +14,11 @@ from .record_storage import get_record_storage
 from .jev_system_one import jev_runtime_status
 from .agentic_integration_mesh import integration_ownership
 from .places_provider import places_configuration_status
+from .official_connectors import connector_readiness
+from .turn_credentials import dynamic_turn_status
+from .db import get_db
+from .operational_fulfilment import ensure_operational_fulfilment_schema
+from .interoperability_gateway import interoperability_readiness_snapshot
 
 
 def _present(*keys):
@@ -36,6 +41,34 @@ def _item(key,label,status,software_ready,external_required,required_config,note
     }
 
 
+def _care_provider_runtime():
+    """Return non-clinical provider-availability counts only."""
+    ensure_operational_fulfilment_schema()
+    db=get_db()
+    home_health=int(db.execute(
+        """
+        SELECT COUNT(DISTINCT s.provider_id) c
+        FROM home_health_provider_services s
+        JOIN users u ON u.id=s.provider_id AND u.active=1
+        JOIN provider_profiles pp ON pp.user_id=u.id
+        WHERE s.active=1 AND LOWER(COALESCE(pp.verification_status,''))='verified'
+        """
+    ).fetchone()["c"] or 0)
+    pharmacies=int(db.execute(
+        """
+        SELECT COUNT(DISTINCT u.id) c
+        FROM users u
+        JOIN provider_profiles pp ON pp.user_id=u.id
+        WHERE u.active=1 AND u.role='pharmacy'
+          AND LOWER(COALESCE(pp.verification_status,''))='verified'
+        """
+    ).fetchone()["c"] or 0)
+    return {
+        "home_health_verified_providers": home_health,
+        "verified_pharmacies": pharmacies,
+    }
+
+
 def integration_readiness_snapshot():
     registry=get_capability_registry()
     gateway=payment_gateway_status()
@@ -47,9 +80,15 @@ def integration_readiness_snapshot():
     notifications=notification_provider_status()
     jev=jev_runtime_status()
     places=places_configuration_status()
+    turn=dynamic_turn_status()
+    care_runtime=_care_provider_runtime()
+    official_data=connector_readiness("data_gov_hospitals")
+    interop=interoperability_readiness_snapshot()
     configured_places_provider=str(places.get("configured_provider") or "none").strip().lower()
     if configured_places_provider=="google":
         places_required_config=("ZENDOC_PLACES_PROVIDER","ZENDOC_GOOGLE_PLACES_API_KEY")
+    elif configured_places_provider in {"healthsites","healthsites_api"}:
+        places_required_config=("ZENDOC_PLACES_PROVIDER","ZENDOC_HEALTHSITES_API_KEY")
     elif configured_places_provider in {"nominatim","openstreetmap","osm"}:
         places_required_config=("ZENDOC_PLACES_PROVIDER",)
     elif places.get("production_fallback_active"):
@@ -58,6 +97,30 @@ def integration_readiness_snapshot():
         places_required_config=("ZENDOC_PLACES_PROVIDER",)
 
     rows=[
+        _item(
+            "healthcare_interoperability","FHIR / SMART healthcare interoperability",
+            "WORKING" if interop["verified_adapter_count"] else "BETA",
+            True,not bool(interop["verified_adapter_count"]),(),
+            (
+                f"Provider-neutral R4/R5 exchange planning is implemented across {interop['adapter_count']} adapter contract(s); "
+                f"{interop['configured_adapter_count']} have activation configuration/partner identifiers and "
+                f"{interop['verified_adapter_count']} are explicitly live-verified. "
+                "No configuration value alone proves connectivity, consent, legal authority or record exchange."
+            ),
+            "/api/v1/interoperability",
+        ),
+        _item(
+            "official_public_data","Official/public healthcare directory connector",
+            "BETA" if official_data.get("ready_for_fetch") else "INTEGRATION_REQUIRED",
+            True,not bool(official_data.get("ready_for_fetch")),
+            tuple(official_data.get("missing_config") or ()),
+            (
+                "The provenance-aware ingestion/mapping/freshness pipeline and bounded data.gov.in fetch path are implemented. "
+                "Configuration enables server-side fetch but does not prove source freshness, runtime uptime, provider verification, "
+                "live availability or booking connectivity."
+            ),
+            "/api/v1/admin/ingestion/connectors",
+        ),
         _item(
             "jev_decisions","Jev / System One agent decisions",
             jev["status"].upper(),True,not bool(jev["configured"]),
@@ -96,9 +159,15 @@ def integration_readiness_snapshot():
         ),
         _item(
             "webrtc","Voice/video call network reachability",
-            registry["voice_video_calling"]["status"],True,not _present("ZENDOC_WEBRTC_ICE_SERVERS_JSON"),
-            ("ZENDOC_WEBRTC_ICE_SERVERS_JSON",),
-            "Authenticated WebRTC signaling and browser media controls are implemented. TURN/STUN configuration plus two-device testing is needed for reliable public-network calls.",
+            registry["voice_video_calling"]["status"],True,
+            not bool(_present("ZENDOC_WEBRTC_ICE_SERVERS_JSON") or turn["configured"]),
+            () if _present("ZENDOC_WEBRTC_ICE_SERVERS_JSON") else (
+                "ZENDOC_TURN_PUBLIC_HOST","ZENDOC_TURN_SHARED_SECRET",
+            ),
+            (
+                "Authenticated WebRTC signaling, browser media controls and short-lived Coturn REST credentials are implemented. "
+                "The OCI realtime profile can self-host Coturn; runtime reachability plus a two-device relay test remains the proof of reliable public-network calling."
+            ),
             "/messages",
         ),
         _item(
@@ -118,6 +187,40 @@ def integration_readiness_snapshot():
                 f"External discovery mode={places.get('mode')}; configuration/fallback availability does not prove "
                 "runtime reachability, quota, result availability or ZENDOC booking connectivity."
             ),
+        ),
+        _item(
+            "home_health_fulfilment","Home-health real provider fulfilment",
+            "BETA" if care_runtime["home_health_verified_providers"] else "INTEGRATION_REQUIRED",
+            True,not bool(care_runtime["home_health_verified_providers"]),(),
+            (
+                f"{care_runtime['home_health_verified_providers']} active verified ZENDOC provider account(s) currently publish at least one home-health capability. "
+                "Assignment and provider-controlled acceptance/progress are implemented; an intake request alone never confirms a visit."
+                if care_runtime["home_health_verified_providers"]
+                else
+                "Home-health request intake works, but no active verified ZENDOC provider currently publishes a home-health capability. "
+                "A request remains unconfirmed until a real provider is assigned and accepts it."
+            ),
+            "/operations/fulfilment",
+        ),
+        _item(
+            "pharmacy_fulfilment","Pharmacy provider fulfilment",
+            "BETA" if care_runtime["verified_pharmacies"] else "INTEGRATION_REQUIRED",
+            True,not bool(care_runtime["verified_pharmacies"]),(),
+            (
+                f"{care_runtime['verified_pharmacies']} active verified ZENDOC pharmacy account(s) are available for provider-side workflows. "
+                "Order acknowledgement and tracking are provider-recorded; stock, dispensing and delivery are never inferred from account verification alone."
+                if care_runtime["verified_pharmacies"]
+                else
+                "Pharmacy request software exists, but no active verified ZENDOC pharmacy account is currently available for provider-side fulfilment."
+            ),
+            "/pharmacy",
+        ),
+        _item(
+            "medical_transport_dispatch","Medical transport live dispatch",
+            "INTEGRATION_REQUIRED",True,True,(),
+            "Medical-transport request intake is implemented, but ZENDOC has no live vehicle/ambulance dispatch provider adapter. "
+            "A recorded request does not confirm dispatch, vehicle, ETA, equipment, price or provider acceptance.",
+            "/ambulance",
         ),
         _item(
             "video_search","Live YouTube educational discovery",
@@ -150,4 +253,5 @@ def integration_readiness_snapshot():
         "total_count":len(rows),
         "truth_notice":"A green software boundary does not prove a third-party account, credential, partnership, network, quota, settlement, or real-world fulfilment is active.",
         "notification_status":notifications,
+        "interoperability":interop,
     }

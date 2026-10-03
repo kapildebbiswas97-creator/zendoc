@@ -3,7 +3,7 @@
 {% block content %}
 <section class="section-head">
   <div><p class="eyebrow">Care coordination</p><h1>Appointments</h1><p class="section-copy">{% if current_user.role == 'patient' %}Review requests, confirmations, and upcoming care in one place.{% else %}Review appointment requests and keep each patient’s status current.{% endif %}</p></div>
-  {% if current_user.role == 'patient' %}<a href="{{ url_for('main.finder') }}" class="primary-action">Find care &amp; book</a>{% endif %}
+  {% if current_user.role == 'patient' %}<a href="{{ url_for('main.finder') }}" class="primary-action">Find care &amp; book</a>{% elif current_user.role in ['doctor','hospital'] %}<a href="{{ url_for('referrals.referral_center') }}" class="primary-action">Referral Center</a>{% endif %}
 </section>
 
 {% if confirmation %}

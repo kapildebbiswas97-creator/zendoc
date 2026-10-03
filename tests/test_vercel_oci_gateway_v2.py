@@ -6,6 +6,7 @@ VERCEL = ROOT / "vercel.ts"
 PACKAGE = ROOT / "package.json"
 COMPOSE = ROOT / "deploy" / "oci" / "compose.yaml"
 OCI_ENV = ROOT / "deploy" / "oci" / ".env.example"
+CADDY = ROOT / "deploy" / "oci" / "Caddyfile"
 
 
 def test_vercel_gateway_requires_https_origin_and_has_no_database_secret():
@@ -18,7 +19,9 @@ def test_vercel_gateway_requires_https_origin_and_has_no_database_secret():
     assert "deploymentEnabled: false" in text
     assert "x-vercel-enable-rewrite-caching" in text
     assert "value: '0'" in text
-    assert "routes.rewrite('/:path*', `${origin}/:path*`)" in text
+    assert "routes.rewrite('/:path*', `${origin}/:path*`" in text
+    assert "deploymentEnv('ZENDOC_GATEWAY_TOKEN')" in text
+    assert "'x-zendoc-gateway-token'" in text
     assert "routes.header('/:path*'" in text
     assert "DATABASE_URL" not in text
     assert "POSTGRES_PASSWORD" not in text
@@ -30,6 +33,7 @@ def test_vercel_config_is_single_source_and_dependency_is_pinned():
 
     package = PACKAGE.read_text(encoding="utf-8")
     assert '"@vercel/config": "0.7.2"' in package
+    assert '"node": "24.x"' in package
 
 
 def test_postgres_is_not_published_from_oci_compose():
@@ -38,6 +42,10 @@ def test_postgres_is_not_published_from_oci_compose():
 
     assert "ports:" not in db_block
     assert "internal: true" in text
+    assert 'DATABASE_URL: "postgresql://db:5432/${POSTGRES_DB:-zendoc}"' in text
+    assert "PGUSER: ${POSTGRES_USER:-zendoc}" in text
+    assert "PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/oci/.env}" in text
+    assert ":${POSTGRES_PASSWORD}@db" not in text
 
 
 def test_public_url_and_oci_origin_are_distinct_and_restore_guard_is_preserved():
@@ -49,3 +57,19 @@ def test_public_url_and_oci_origin_are_distinct_and_restore_guard_is_preserved()
     assert "ZENDOC_POSTGRES_RESTORE_ALLOW_RESET=false" in env
     assert "ZENDOC_PUBLIC_BASE_URL:" not in compose
     assert "ZENDOC_POSTGRES_RESTORE_ALLOW_RESET:" in compose
+
+
+def test_oci_origin_requires_vercel_gateway_token_except_health_probes():
+    caddy = CADDY.read_text(encoding="utf-8")
+    compose = COMPOSE.read_text(encoding="utf-8")
+    env = OCI_ENV.read_text(encoding="utf-8")
+
+    assert "@public_health path /api/v1/health /api/v1/ready" in caddy
+    assert "@vercel_gateway header X-Zendoc-Gateway-Token {$ZENDOC_GATEWAY_TOKEN}" in caddy
+    assert 'header_up X-Zendoc-Gateway-Verified "1"' in caddy
+    assert caddy.count("header_up -X-Zendoc-Gateway-Verified") >= 2
+    assert caddy.count("header_up -X-Zendoc-Gateway-Token") >= 2
+    assert "header_up -X-Vercel-Forwarded-For" in caddy
+    assert 'respond "Forbidden" 403' in caddy
+    assert "ZENDOC_GATEWAY_TOKEN:" in compose
+    assert "ZENDOC_GATEWAY_TOKEN=replace-with-a-long-random-gateway-only-secret" in env

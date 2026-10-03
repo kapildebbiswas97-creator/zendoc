@@ -13,6 +13,9 @@ from __future__ import annotations
 from typing import Any
 
 from .agent_alerts import run_proactive_alert_check
+from .ai_workforce import intake_failed_events
+from .incident_runtime import advance_new_incident_cases
+from .global_source_research import enqueue_source_research_batch
 from .agent_task_engine import RETRIABLE_FAILURES, retry_task
 from .db import get_db
 from .security import assert_owner
@@ -54,6 +57,9 @@ def run_safe_operations_automation(actor: Any, *, retry_limit: int = 10) -> dict
                 "error": str(exc)[:300],
             })
 
+    workforce = intake_failed_events(actor, limit=retry_limit)
+    incident_runtime = advance_new_incident_cases(actor, limit=retry_limit)
+    source_research = enqueue_source_research_batch(actor)
     alerts = run_proactive_alert_check()
 
     waiting_human = db.execute(
@@ -77,6 +83,13 @@ def run_safe_operations_automation(actor: Any, *, retry_limit: int = 10) -> dict
         "waiting_human_or_approval": waiting_human,
         "permanent_or_exhausted_failures": permanent_failed,
         "executed_tasks": 0,
+        "workforce_cases_created": workforce.get("created_count", 0),
+        "workforce_cases_existing": workforce.get("existing_count", 0),
+        "workforce_cases_advanced": incident_runtime.get("advanced_count", 0),
+        "workforce_runtime_errors": incident_runtime.get("errors", []),
+        "global_source_gap_count": source_research.get("source_gap_count", 0),
+        "source_research_task_id": (source_research.get("task") or {}).get("id"),
+        "source_research_batch_created": bool(source_research.get("created")),
         "safety": {
             "moves_money": False,
             "changes_permissions": False,

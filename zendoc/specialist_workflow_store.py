@@ -256,6 +256,17 @@ def _sync_appointment_journey(actor: Any, result: dict, context: dict) -> dict |
     has_options = _appointment_result_has_options(payload)
 
     if journey["state"] == "PROVIDER_SEARCH":
+        if result.get("execution_status") == "degraded":
+            return _advance(
+                journey,
+                actor,
+                "WAITING_INFORMATION",
+                reason="Provider discovery is temporarily unavailable; no zero-result conclusion was inferred.",
+                actor_type="ai",
+                next_safe_action="retry_provider_search",
+                required_actor="patient",
+                provenance={"source": "agent_os", "evidence_state": "source_temporarily_unavailable"},
+            )
         if has_slots or (not has_slots_payload and has_options):
             journey = _advance(
                 journey,
@@ -338,7 +349,13 @@ def persist_specialist_result(actor: Any, result: dict, context: dict | None = N
     )
 
     if task["status"] == "queued":
-        if bool(result.get("requires_confirmation")) or result.get("execution_status") == "waiting_human":
+        if result.get("execution_status") == "degraded":
+            task = set_task_waiting(
+                int(task["id"]),
+                "waiting_human",
+                "A bounded read source is temporarily unavailable; retry or refine the request before continuing.",
+            )
+        elif bool(result.get("requires_confirmation")) or result.get("execution_status") == "waiting_human":
             task = set_task_waiting(
                 int(task["id"]),
                 "waiting_human",

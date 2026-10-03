@@ -270,8 +270,11 @@ def check_rate_limit():
     else:
         return
 
-    remote = request.headers.get("X-Forwarded-For", request.remote_addr or "unknown")
-    remote = str(remote).split(",", 1)[0].strip()
+    if request.headers.get("X-Zendoc-Gateway-Verified") == "1":
+        remote = request.headers.get("X-Vercel-Forwarded-For") or request.headers.get("X-Forwarded-For")
+    else:
+        remote = request.remote_addr or "unknown"
+    remote = str(remote or "unknown").split(",", 1)[0].strip()
     client_hash = hashlib.sha256(remote.encode("utf-8")).hexdigest()[:32]
     bucket_key = f"{client_hash}:{scope}:{path}"
     window = int(time.time()) // 60

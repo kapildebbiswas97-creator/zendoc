@@ -3,15 +3,88 @@
 {% block content %}
 <section class="section-head"><div><p class="eyebrow">Owner-only release control</p><h1>Integration Center</h1><p class="section-copy">One place to see what ZENDOC software already supports and what still depends on a real external account, credential, partner, network or verification step.</p></div><a class="secondary-action" href="{{ url_for('main.admin') }}">Back to Admin</a></section>
 <aside class="trust-note"><strong>Truth rule.</strong><br>{{ snapshot.truth_notice }}</aside>
-<section class="stats spaced-panel"><article><span>Tracked integrations</span><strong>{{ snapshot.total_count }}</strong></article><article><span>No external blocker</span><strong>{{ snapshot.ready_count }}</strong></article><article><span>External activation needed</span><strong>{{ snapshot.external_blocker_count }}</strong></article></section>
+<section class="stats spaced-panel"><article><span>Tracked integrations</span><strong>{{ snapshot.total_count }}</strong></article><article><span>No external blocker</span><strong>{{ snapshot.ready_count }}</strong></article><article><span>External dependency / verification</span><strong>{{ snapshot.external_blocker_count }}</strong></article></section>
+<section class="panel spaced-panel" aria-labelledby="interop-title">
+  <div class="panel-head">
+    <div>
+      <p class="eyebrow">Provider-neutral health exchange</p>
+      <h2 id="interop-title">FHIR interoperability gateway</h2>
+      <p class="form-note">{{ snapshot.interoperability.truth_notice }}</p>
+    </div>
+    <span class="status-badge {{ 'working' if snapshot.interoperability.verified_adapter_count else 'integration' }}">{{ snapshot.interoperability.verified_adapter_count }}/{{ snapshot.interoperability.adapter_count }} live-verified</span>
+  </div>
+  <div class="summary-row"><strong>FHIR abstraction</strong><span>{{ snapshot.interoperability.fhir_versions|join(', ') }}</span></div>
+  <div class="summary-row"><strong>Normalized resource contracts</strong><span>{{ snapshot.interoperability.resource_types|length }}</span></div>
+  <div class="summary-row"><strong>Configured adapter contracts</strong><span>{{ snapshot.interoperability.configured_adapter_count }}</span></div>
+  <div class="grid two spaced-panel">
+    {% for adapter in snapshot.interoperability.adapters %}
+    <article class="panel">
+      <div class="panel-head">
+        <div><p class="eyebrow">{{ adapter.key|replace('_',' ')|title }}</p><h3>{{ adapter.label }}</h3></div>
+        <span class="status-badge {{ 'working' if adapter.verified else 'integration' }}">{{ adapter.truth_state }}</span>
+      </div>
+      <p>{{ adapter.notes }}</p>
+      <div class="summary-row"><strong>Standards</strong><span>{{ adapter.standards|join(', ') }}</span></div>
+      <div class="summary-row"><strong>Authorization</strong><span>{{ adapter.auth_model }}</span></div>
+      <div class="summary-row"><strong>Live exchange</strong><span>{{ 'Verified adapter boundary' if adapter.live_exchange_enabled else 'Disabled until gates pass' }}</span></div>
+      {% if adapter.missing_config %}<p class="form-note">Missing activation config names: {{ adapter.missing_config|join(', ') }}.</p>{% endif %}
+      {% if adapter.missing_partner_config %}<p class="form-note">Partner/network activation names: {{ adapter.missing_partner_config|join(', ') }}.</p>{% endif %}
+      <p class="form-note">Secret values and patient records are never displayed here.</p>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="panel spaced-panel" aria-labelledby="integration-runtime-title">
+  <div class="panel-head">
+    <div>
+      <p class="eyebrow">Runtime proof</p>
+      <h2 id="integration-runtime-title">Runtime verification evidence</h2>
+      <p class="form-note">{{ probes.truth_notice }}</p>
+    </div>
+    <span class="status-badge {{ 'working' if probes.failing_count == 0 and probes.verified_count else 'integration' }}">{{ probes.verified_count }}/{{ probes.total_count }} passed latest bounded check</span>
+  </div>
+  <div class="grid two spaced-panel">
+    {% for probe in probes["items"] %}
+    <article class="panel">
+      <div class="panel-head">
+        <div><p class="eyebrow">{{ probe.key|replace('_',' ')|title }}</p><h3>{{ probe.label }}</h3></div>
+        {% if probe.last %}
+          <span class="status-badge {{ 'working' if probe.last.status == 'working' else 'integration' }}">{{ probe.last.status|replace('_',' ') }}</span>
+        {% else %}
+          <span class="status-badge integration">Not probed</span>
+        {% endif %}
+      </div>
+      {% if probe.last %}
+        <div class="summary-row"><strong>Evidence</strong><span>{{ probe.last.evidence_code|replace('_',' ') }}</span></div>
+        <div class="summary-row"><strong>Checked</strong><span>{{ probe.last.checked_at }}</span></div>
+        <div class="summary-row"><strong>Latency</strong><span>{{ probe.last.latency_ms }} ms</span></div>
+      {% else %}
+        <p class="form-note">No runtime evidence has been recorded for this deployment yet.</p>
+      {% endif %}
+      {% if probe.may_use_billable_api %}
+        <p class="form-note"><strong>Note:</strong> this manual probe can make one bounded request to a configured external API/model and may count toward provider usage.</p>
+      {% elif probe.automatic_safe %}
+        <p class="form-note">This probe is read-only/non-mutating and eligible for the opt-in operations worker.</p>
+      {% endif %}
+      <form method="post" action="{{ url_for('integration_readiness.integration_probe', integration_key=probe.key) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="secondary-action">Run runtime probe</button>
+      </form>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+
 <section class="grid two spaced-panel">
 {% for item in snapshot.integrations %}
 <article class="panel">
   <div class="panel-head"><div><p class="eyebrow">{{ item.key|replace('_',' ')|title }}</p><h2>{{ item.label }}</h2></div><span class="status-badge {{ 'working' if not item.external_required else 'integration' }}">{{ item.status|replace('_',' ') }}</span></div>
   <p>{{ item.notes }}</p>
   <div class="summary-row"><strong>ZENDOC software boundary</strong><span>{{ 'Ready' if item.software_ready else 'Incomplete' }}</span></div>
-  <div class="summary-row"><strong>External activation</strong><span>{{ 'Required' if item.external_required else 'Not blocking' }}</span></div>
-  {% if item.required_config %}<p class="form-note">Required configuration names only: {{ item.required_config|join(', ') }}. Secret values are never shown here.</p>{% endif %}
+  <div class="summary-row"><strong>Configuration detected</strong><span>{{ 'Yes' if item.configuration_present else 'No' }}</span></div>
+  <div class="summary-row"><strong>External/runtime dependency</strong><span>{{ 'Needs verification / activation' if item.external_required else 'Not blocking' }}</span></div>
+  {% if item.required_config %}<p class="form-note">Configuration names only: {{ item.required_config|join(', ') }}. Secret values are never shown here.</p>{% else %}<p class="form-note">No additional credential is required by the current configured/fallback mode; live reachability can still fail and is not inferred from configuration.</p>{% endif %}
   {% if item.href %}<a class="secondary-action" href="{{ item.href }}">Open related workspace</a>{% endif %}
 </article>
 {% endfor %}

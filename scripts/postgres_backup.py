@@ -60,7 +60,10 @@ def connection_environment(database_url: str) -> dict[str, str]:
 def _child_environment(database_url: str) -> dict[str, str]:
     child = {
         key: value
-        for key in ("PATH", "HOME", "LANG", "LC_ALL", "TMPDIR", "TEMP", "TMP")
+        for key in (
+            "PATH", "HOME", "LANG", "LC_ALL", "TMPDIR", "TEMP", "TMP",
+            "PGUSER", "PGPASSWORD", "PGDATABASE", "PGSSLMODE",
+        )
         if (value := os.environ.get(key))
     }
     child.update(connection_environment(database_url))

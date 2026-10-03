@@ -148,6 +148,74 @@
         <p class="form-note">{{ result.truth_notice or 'Verified ZENDOC profiles appear first. Official public records and external map listings are discovery references unless explicitly connected.' }}</p>
       </section>
 
+      <section
+        id="finder-map-panel"
+        class="panel finder-map-panel"
+        aria-labelledby="finder-map-title"
+        data-tile-template="{{ config.get('MAP_TILE_URL') or 'https://tile.openstreetmap.org/{z}/{x}/{y}.png' }}"
+        data-attribution="{{ config.get('MAP_TILE_ATTRIBUTION') or '© OpenStreetMap contributors' }}"
+        data-attribution-url="{{ config.get('MAP_TILE_ATTRIBUTION_URL') or 'https://www.openstreetmap.org/copyright' }}">
+        <div class="panel-head finder-map-head">
+          <div>
+            <p class="eyebrow">Map view</p>
+            <h3 id="finder-map-title">Care options on the map</h3>
+            <p class="form-note">Markers show only results that supplied valid coordinates. Verification and booking status still come from the result card/source label, not from the map.</p>
+          </div>
+          <div class="finder-map-actions" aria-label="Map controls">
+            <button type="button" class="secondary-action" id="finder-map-fit">Fit results</button>
+            <button type="button" class="secondary-action finder-map-zoom" id="finder-map-zoom-out" aria-label="Zoom out">−</button>
+            <button type="button" class="secondary-action finder-map-zoom" id="finder-map-zoom-in" aria-label="Zoom in">+</button>
+          </div>
+        </div>
+        <div id="finder-map" class="finder-map" role="region" aria-label="Interactive map of healthcare search results">
+          <div id="finder-map-tiles" class="finder-map-tiles" aria-hidden="true"></div>
+          <div id="finder-map-markers" class="finder-map-markers"></div>
+          <p id="finder-map-status" class="finder-map-status" role="status" aria-live="polite">Preparing map…</p>
+          <div class="finder-map-attribution">
+            <a id="finder-map-attribution-link" href="{{ config.get('MAP_TILE_ATTRIBUTION_URL') or 'https://www.openstreetmap.org/copyright' }}" target="_blank" rel="noopener noreferrer">{{ config.get('MAP_TILE_ATTRIBUTION') or '© OpenStreetMap contributors' }}</a>
+          </div>
+        </div>
+        <div id="finder-map-selected" class="finder-map-selected" hidden aria-live="polite">
+          <strong id="finder-map-selected-name"></strong>
+          <span id="finder-map-selected-source"></span>
+          <a id="finder-map-selected-link" class="secondary-action" href="#" target="_blank" rel="noopener noreferrer">Open details / directions</a>
+        </div>
+        <div id="finder-map-data" hidden>
+          {% if result.search_origin and result.search_origin.latitude is not none and result.search_origin.longitude is not none %}
+            <span
+              class="finder-map-point"
+              data-lat="{{ result.search_origin.latitude }}"
+              data-lng="{{ result.search_origin.longitude }}"
+              data-name="My search location"
+              data-source="search_origin"
+              data-origin="1"
+              data-href="{{ result.search_origin.google_maps_url or '' }}"></span>
+          {% endif %}
+          {% for item in result.results %}
+            {% if item.latitude is defined and item.longitude is defined and item.latitude is not none and item.longitude is not none %}
+              <span
+                class="finder-map-point"
+                data-lat="{{ item.latitude }}"
+                data-lng="{{ item.longitude }}"
+                data-name="{{ item.provider_name or item.name or 'Healthcare result' }}"
+                data-source="{{ item.source or 'external' }}"
+                data-origin="0"
+                {% if item.id and item.source == 'zendoc_provider_network' %}
+                  data-href="{{ url_for('main.provider_detail', profile_id=item.id) }}"
+                {% elif item.google_directions_url %}
+                  data-href="{{ item.google_directions_url }}"
+                {% elif item.google_maps_url %}
+                  data-href="{{ item.google_maps_url }}"
+                {% elif item.map_url %}
+                  data-href="{{ item.map_url }}"
+                {% else %}
+                  data-href=""
+                {% endif %}></span>
+            {% endif %}
+          {% endfor %}
+        </div>
+      </section>
+
       {% if result.universal and result.grouped_results %}
         <nav class="panel" aria-label="Result categories">
           <p class="eyebrow">Browse by category</p>
@@ -250,7 +318,33 @@
         </div>
       {% endif %}
     {% elif result %}
-      <div class="empty-state panel"><h3>No matching care options yet</h3><p>{{ result.message or 'Try a broader name, specialty, city, area or PIN code.' }}</p><a href="{{ url_for('main.finder') }}" class="secondary-action">Clear search</a></div>
+      <section class="empty-state panel" aria-labelledby="finder-empty-title">
+        <p class="eyebrow">Search completed</p>
+        <h3 id="finder-empty-title">No matching care options from the current sources</h3>
+        <p>{{ result.message or 'Try a broader name, specialty, city, area or PIN code.' }}</p>
+        {% if result.source_health %}
+        <div class="finder-source-summary" aria-label="Source status for this search">
+          <div class="summary-row">
+            <span>ZENDOC verified network</span>
+            <strong>{{ result.source_health.zendoc_verified.result_count }} found · {{ 'checked' if result.source_health.zendoc_verified.available else 'temporarily unavailable' }}</strong>
+          </div>
+          <div class="summary-row">
+            <span>Official/public directory</span>
+            <strong>{{ result.source_health.official_public_directory.result_count }} found · {{ 'checked' if result.source_health.official_public_directory.available else 'temporarily unavailable' }}</strong>
+          </div>
+          <div class="summary-row">
+            <span>External map discovery</span>
+            <strong>{{ result.source_health.external_places.result_count }} found · {{ 'checked' if result.source_health.external_places.available else 'temporarily unavailable' }}</strong>
+          </div>
+        </div>
+        {% endif %}
+        <p class="form-note">Zero results means ZENDOC did not find a match in the sources available for this search. It does not mean no healthcare provider exists in the area.</p>
+        <div class="form-actions">
+          <a href="{{ url_for('universal_search.search_home', q=query.location or query.specialty, category='all', radius_km=query.radius_km) }}" class="primary-action">Broaden search</a>
+          <a href="{{ url_for('main.finder') }}" class="secondary-action">Clear search</a>
+          {% if current_user %}<a href="{{ url_for('pilot_operations.feedback_page', page=request.path, feature='find-care') }}" class="secondary-action">Report search problem</a>{% endif %}
+        </div>
+      </section>
     {% else %}
       <div class="empty-state panel"><h3>Search all available healthcare sources</h3><p>Try a provider name, doctor name, specialty, city, area, PIN code, or a natural phrase such as “cardiologist in Kolkata”.</p></div>
     {% endif %}

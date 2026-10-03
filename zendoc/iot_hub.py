@@ -1,9 +1,10 @@
 """IoT Health Device Hub truth boundary.
 
-This module can store a user's device inventory today. Registering a record is
-not proof that a physical device is paired or that ZENDOC has a manufacturer
-integration. Public/browser/API callers cannot create trusted device provenance
-without a separately verified device-ingestion adapter.
+This module stores the user's device inventory. Registering a record is not
+proof that a physical device is paired or that ZENDOC has a manufacturer
+integration. Trusted automatic measurements now enter through the separately
+authenticated per-device ingestion bridge; registration alone never creates
+trusted device provenance.
 """
 
 from .db import get_db, now_iso
@@ -13,7 +14,8 @@ DEVICE_TYPES = [
     {"type": "blood_pressure_monitor", "name": "Blood Pressure Monitor", "metrics": ["blood_pressure"], "icon": "heartbeat"},
     {"type": "glucometer", "name": "Smart Glucometer", "metrics": ["blood_glucose"], "icon": "tint"},
     {"type": "pulse_oximeter", "name": "Pulse Oximeter", "metrics": ["oxygen_saturation", "heart_rate"], "icon": "wave-square"},
-    {"type": "smartwatch", "name": "Smartwatch / Fitness Band", "metrics": ["heart_rate", "steps", "sleep"], "icon": "stopwatch"},
+    {"type": "smartwatch", "name": "Smartwatch", "metrics": ["heart_rate", "steps", "sleep"], "icon": "stopwatch"},
+    {"type": "fitness_band", "name": "Fitness Band", "metrics": ["heart_rate", "steps", "sleep"], "icon": "stopwatch"},
     {"type": "smart_scale", "name": "Smart Weight Scale", "metrics": ["weight", "bmi"], "icon": "weight"},
     {"type": "thermometer", "name": "Digital Thermometer", "metrics": ["temperature"], "icon": "thermometer-half"},
     {"type": "ecg_monitor", "name": "Portable ECG Device", "metrics": ["ecg_rhythm"], "icon": "microchip"},
@@ -60,10 +62,13 @@ def connect_device(user, data):
     db.commit()
     result = get_device(user, cursor.lastrowid)
     result["live_device_sync"] = False
+    result["ingestion_bridge_available"] = True
     result["integration_status"] = "integration_required"
+    result["bridge_status"] = "bridge_ready_vendor_pairing_required"
     result["truth_notice"] = (
-        "This is a user-registered device record only. It does not prove pairing, "
-        "manufacturer connectivity, or automatic measurement sync."
+        "This is a user-registered device record only. ZENDOC has an authenticated "
+        "device-ingestion bridge, but registration does not prove pairing, manufacturer "
+        "connectivity, calibration, or a successful automatic measurement sync."
     )
     return result
 
@@ -91,15 +96,15 @@ def get_device(user, device_id):
 
 
 def sync_device_measurement(user, device_id, metric_type, metric_value, unit=None, recorded_at=None, notes=None):
-    """Fail closed until a real authenticated device-ingestion adapter exists.
+    """Fail closed for legacy direct calls; use the authenticated device bridge.
 
     Historically this public helper accepted typed values and stamped them as
-    trusted device evidence. That is not truthful device provenance, so public
-    callers are no longer allowed to use this route. Users can enter values
-    through Health Monitoring, where they remain manual/user-reported.
+    trusted device evidence. Trusted automated readings must now use a scoped
+    per-device ingestion key through /api/v1/iot/ingest. Users may still enter
+    values through Health Monitoring, where they remain manual/user-reported.
     """
     get_device(user, device_id)
     raise ValueError(
-        "Automatic device sync is Integration Required. This registered device record is not a live connection. "
-        "Enter measurements through Health Monitoring so they remain manual/user-reported."
+        "Integration Required: legacy direct device sync is disabled. Use the authenticated per-device ingestion bridge "
+        "for trusted automated measurements, or enter the value through Health Monitoring as manual/user-reported."
     )

@@ -46,6 +46,10 @@ REQUIRED_TABLES = (
     "geography_nodes",
     "geography_relationships",
     "geography_import_regions",
+    "care_journeys",
+    "care_actions",
+    "referrals",
+    "referral_events",
 )
 
 

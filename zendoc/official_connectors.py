@@ -10,12 +10,21 @@ beneficiary eligibility, provider verification, or partner connectivity.
 """
 from __future__ import annotations
 
+import json
 import os
+import urllib.error
+import urllib.parse
+import urllib.request
 from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 from typing import Any
 
 from .dataset_adapters import CANONICAL_FIELDS, adapt_records
 from .public_source_registry import get_public_ingestion_source
+
+
+DATA_GOV_API_BASE = "https://api.data.gov.in/resource"
+DATA_GOV_USER_AGENT = "ZENDOC-OfficialDataConnector/1.0 (+https://github.com/kapildebbiswas97-creator/zendoc)"
 
 
 @dataclass(frozen=True)
@@ -611,3 +620,189 @@ def infer_mapping(source_id: str, rows: list[dict[str, Any]]) -> dict:
         "deterministic_alias_match_only": True,
     }
     return result
+
+
+def _data_gov_profile(source_id: str) -> ConnectorProfile:
+    key = str(source_id or "").strip().lower()
+    profile = CONNECTOR_PROFILES.get(key)
+    if not profile or profile.connector_type != "DATA_GOV_RESOURCE_API_OR_DOWNLOAD":
+        raise LookupError(f"Source '{source_id}' does not have a configured data.gov.in resource connector.")
+    if not profile.ingestion_type:
+        raise ValueError("Connector does not declare an ingestion type.")
+    return profile
+
+
+def _bounded_positive_int(value: Any, *, default: int, minimum: int, maximum: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = default
+    return max(minimum, min(parsed, maximum))
+
+
+def _augment_data_gov_rows(source_id: str, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Normalize only source-specific transport quirks before deterministic mapping."""
+    result = []
+    for raw in rows:
+        if not isinstance(raw, dict):
+            continue
+        row = dict(raw)
+        if source_id == "data_gov_hospitals":
+            coordinates = str(row.get("location_coordinates") or "").strip()
+            if coordinates and "," in coordinates and not row.get("latitude") and not row.get("longitude"):
+                left, right = coordinates.split(",", 1)
+                try:
+                    latitude = float(left.strip())
+                    longitude = float(right.strip())
+                except (TypeError, ValueError):
+                    latitude = longitude = None
+                if latitude is not None and -90 <= latitude <= 90 and -180 <= longitude <= 180:
+                    row["latitude"] = latitude
+                    row["longitude"] = longitude
+        result.append(row)
+    return result
+
+
+def fetch_data_gov_resource(
+    source_id: str,
+    *,
+    filters: dict[str, Any] | None = None,
+    limit: int = 100,
+    offset: int = 0,
+    timeout_seconds: int = 15,
+) -> dict[str, Any]:
+    """Fetch one bounded server-side page from an allowlisted data.gov.in resource.
+
+    Resource IDs and API credentials remain environment configuration so source
+    replacements do not require code changes. Returned records are mapped into
+    the existing canonical ingestion contract but are not applied to the
+    database by this function.
+    """
+    profile = _data_gov_profile(source_id)
+    config = connector_readiness(source_id)
+    if not config.get("ready_for_fetch"):
+        missing = ", ".join(config.get("missing_config") or [])
+        raise RuntimeError(
+            f"Connector configuration is incomplete for '{source_id}'"
+            + (f": {missing}" if missing else ".")
+        )
+
+    api_key = str(os.getenv("ZENDOC_DATA_GOV_API_KEY") or "").strip()
+    resource_key = next(
+        (key for key in profile.config_keys if key.endswith("_RESOURCE_ID")),
+        None,
+    )
+    resource_id = str(os.getenv(resource_key or "") or "").strip()
+    if not api_key or not resource_id:
+        raise RuntimeError("Configured data.gov.in connector is missing its server-side API key or resource ID.")
+
+    limit = _bounded_positive_int(limit, default=100, minimum=1, maximum=500)
+    try:
+        offset = max(0, int(offset or 0))
+    except (TypeError, ValueError):
+        offset = 0
+    timeout_seconds = _bounded_positive_int(timeout_seconds, default=15, minimum=2, maximum=30)
+
+    params: dict[str, Any] = {
+        "api-key": api_key,
+        "format": "json",
+        "limit": limit,
+        "offset": offset,
+    }
+    clean_filters = {}
+    for key, value in (filters or {}).items():
+        name = str(key or "").strip()
+        text = str(value or "").strip()
+        if not name or not text:
+            continue
+        if len(name) > 80 or len(text) > 200:
+            raise ValueError("data.gov.in filter name/value exceeds the bounded connector limit.")
+        clean_filters[name] = text
+        params[f"filters[{name}]"] = text
+
+    url = f"{DATA_GOV_API_BASE}/{urllib.parse.quote(resource_id, safe='')}?{urllib.parse.urlencode(params)}"
+    request = urllib.request.Request(
+        url,
+        headers={"Accept": "application/json", "User-Agent": DATA_GOV_USER_AGENT},
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            raw = response.read(4_194_305)
+    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
+        raise RuntimeError(
+            f"Official data connector '{source_id}' is temporarily unavailable ({type(exc).__name__})."
+        ) from exc
+    if len(raw) > 4_194_304:
+        raise RuntimeError("Official data response exceeded the bounded 4 MiB connector limit.")
+
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise RuntimeError("Official data connector returned invalid JSON.") from exc
+    if not isinstance(payload, dict):
+        raise RuntimeError("Official data connector returned an invalid response.")
+
+    upstream_rows = payload.get("records") or []
+    if not isinstance(upstream_rows, list):
+        raise RuntimeError("Official data connector response did not contain a record list.")
+    prepared_rows = _augment_data_gov_rows(str(source_id).strip().lower(), upstream_rows)
+    mapped = infer_mapping(source_id, prepared_rows)
+
+    try:
+        upstream_total = int(payload.get("total")) if payload.get("total") is not None else None
+    except (TypeError, ValueError):
+        upstream_total = None
+
+    return {
+        "source_id": str(source_id).strip().lower(),
+        "resource_id": resource_id,
+        "ingestion_type": profile.ingestion_type,
+        "records": mapped.get("records") or [],
+        "mapping": mapped.get("mapping_template") or {},
+        "record_count": int(mapped.get("canonical_record_count") or 0),
+        "rejected_count": int(mapped.get("rejected_count") or 0),
+        "rejections": mapped.get("rejected") or [],
+        "upstream_count": len(upstream_rows),
+        "upstream_total": upstream_total,
+        "limit": limit,
+        "offset": offset,
+        "filters": clean_filters,
+        "fetched_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "truth_notice": (
+            "Official/public directory rows are discovery/provenance evidence only. "
+            "Fetching does not prove ZENDOC verification, live availability, booking connectivity, "
+            "bed capacity, stock, dispatch, price, or scheme eligibility."
+        ),
+    }
+
+
+def fetch_and_ingest_data_gov_resource(
+    actor: Any,
+    source_id: str,
+    *,
+    filters: dict[str, Any] | None = None,
+    limit: int = 100,
+    offset: int = 0,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """Fetch a bounded official page and pass it through reviewed ingestion."""
+    from .public_data_ingestion import ingest_public_records
+
+    fetched = fetch_data_gov_resource(
+        source_id,
+        filters=filters,
+        limit=limit,
+        offset=offset,
+    )
+    batch = ingest_public_records(
+        actor,
+        source_id=fetched["source_id"],
+        ingestion_type=fetched["ingestion_type"],
+        records=fetched["records"],
+        dry_run=bool(dry_run),
+    )
+    return {
+        "fetch": {key: value for key, value in fetched.items() if key != "records"},
+        "batch": batch,
+    }

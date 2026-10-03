@@ -22,6 +22,7 @@ from .dataset_snapshot_routes import bp as dataset_snapshot_ingestion_bp
 from .db import close_db, get_db, init_db
 from .connected_care_routes import bp as connected_care_bp
 from .document_extraction_routes import bp as document_extraction_bp
+from .device_ingestion import bp as device_ingestion_bp, ensure_device_ingestion_schema
 from .edgecare_routes import bp as edgecare_bp
 from .email_verification import ensure_email_verification_schema
 from .ecosystem_routes import bp as ecosystem_bp
@@ -37,6 +38,7 @@ from .health_hub_routes import bp as health_hub_bp
 from .identity_verification import ensure_identity_verification_schema
 from .identity_verification_routes import bp as identity_verification_bp
 from .integration_routes import bp as integration_readiness_bp
+from .interoperability_routes import bp as interoperability_bp
 from .health_shop import ensure_health_shop_schema
 from .health_shop_routes import bp as health_shop_bp
 from .health_social import ensure_health_social_schema
@@ -80,6 +82,10 @@ from .provider_service import PROVIDER_ROLES, get_provider_profile_for_user
 from .provider_invitation import ensure_provider_invitation_schema
 from .public_launch_routes import bp as public_launch_bp
 from .release_health_routes import bp as release_health_bp
+from .referral_routes import bp as referrals_bp
+from .workforce_incident_routes import bp as workforce_incidents_bp
+from .local_controller_routes import bp as local_controller_bp
+from .referral_service import ensure_referral_schema
 from .release_state import release_state
 from .showcase_routes import bp as showcase_bp
 from .specialist_agent_routes import bp as specialist_agents_bp
@@ -88,6 +94,7 @@ from .universal_search_routes import bp as universal_search_bp
 from .database_reliability import readiness_report
 from .observability import finish_request_observation, start_request_observation
 from .routes import bp
+from .transport_partner import bp as transport_partner_bp, ensure_transport_partner_schema
 from .security_headers import apply_security_headers
 
 
@@ -168,7 +175,11 @@ def create_app(test_config=None):
     app.register_blueprint(ai_chat_bp)
     app.register_blueprint(calls_bp)
     app.register_blueprint(bp)
+    app.register_blueprint(transport_partner_bp)
     app.register_blueprint(release_health_bp)
+    app.register_blueprint(referrals_bp)
+    app.register_blueprint(workforce_incidents_bp)
+    app.register_blueprint(local_controller_bp)
     app.register_blueprint(health_memory_bp)
     app.register_blueprint(care_continuity_bp)
     app.register_blueprint(business_bp)
@@ -176,12 +187,14 @@ def create_app(test_config=None):
     app.register_blueprint(personal_health_baseline_bp)
     app.register_blueprint(preventive_care_bp)
     app.register_blueprint(document_extraction_bp)
+    app.register_blueprint(device_ingestion_bp)
     app.register_blueprint(fitness_bp)
     app.register_blueprint(family_bp)
     app.register_blueprint(ecosystem_bp)
     app.register_blueprint(health_hub_bp)
     app.register_blueprint(identity_verification_bp)
     app.register_blueprint(integration_readiness_bp)
+    app.register_blueprint(interoperability_bp)
     app.register_blueprint(health_shop_bp)
     app.register_blueprint(health_social_bp)
     app.register_blueprint(mental_wellness_bp)
@@ -295,6 +308,8 @@ def create_app(test_config=None):
             ensure_carefin_case_schema()
             ensure_consent_schema()
             ensure_email_verification_schema()
+            ensure_device_ingestion_schema()
+            ensure_transport_partner_schema()
             ensure_medical_knowledge_document_schema()
             ensure_medical_rag_schema()
             ensure_provider_invitation_schema()
@@ -308,6 +323,7 @@ def create_app(test_config=None):
             ensure_payment_schema()
             ensure_organization_health_schema()
             ensure_care_action_ledger_schema()
+            ensure_referral_schema()
             ensure_operational_fulfilment_schema()
             get_db().commit()
             report = readiness_report()

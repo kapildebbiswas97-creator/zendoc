@@ -40,6 +40,13 @@ def _safe(label, loader, default):
         return loader()
     except Exception as error:  # The overview must not fail because an optional panel is unavailable.
         current_app.logger.warning("Care OS panel %s unavailable: %s", label, error)
+        # PostgreSQL marks the whole transaction aborted after a statement
+        # error. Roll back before loading another optional panel so one
+        # degraded query cannot poison the rest of the read-only Care OS page.
+        try:
+            get_db().rollback()
+        except Exception:
+            current_app.logger.exception("Care OS rollback failed after panel %s error.", label)
         return default
 
 

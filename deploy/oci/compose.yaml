@@ -27,7 +27,12 @@ services:
       - .env
     environment:
       PORT: "8000"
-      DATABASE_URL: "postgresql://${POSTGRES_USER:-zendoc}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-zendoc}"
+      # Keep credentials out of the URI so reserved password characters cannot break parsing.
+      # psycopg/libpq reads PGUSER/PGPASSWORD/PGDATABASE for omitted fields.
+      DATABASE_URL: "postgresql://db:5432/${POSTGRES_DB:-zendoc}"
+      PGUSER: ${POSTGRES_USER:-zendoc}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/oci/.env}
+      PGDATABASE: ${POSTGRES_DB:-zendoc}
       ZENDOC_ENV: production
       ZENDOC_DEPLOYMENT_PLATFORM: oci
       ZENDOC_SERVICE_NAME: zendoc
@@ -60,12 +65,64 @@ services:
       retries: 5
       start_period: 45s
 
+  ops-worker:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["python", "scripts/run_operations_worker.py"]
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: "postgresql://db:5432/${POSTGRES_DB:-zendoc}"
+      PGUSER: ${POSTGRES_USER:-zendoc}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/oci/.env}
+      PGDATABASE: ${POSTGRES_DB:-zendoc}
+      ZENDOC_ENV: production
+      ZENDOC_DEPLOYMENT_PLATFORM: oci
+      ZENDOC_SERVICE_NAME: zendoc-ops-worker
+      ZENDOC_GIT_COMMIT: ${ZENDOC_GIT_COMMIT}
+      ZENDOC_REQUIRE_DURABLE_DATABASE: "true"
+      ZENDOC_PERSISTENCE_VERIFIED: ${ZENDOC_PERSISTENCE_VERIFIED:-false}
+      ZENDOC_BACKUP_VERIFIED: ${ZENDOC_BACKUP_VERIFIED:-false}
+      ZENDOC_PUBLIC_RELEASE_REQUIRED: ${ZENDOC_PUBLIC_RELEASE_REQUIRED:-false}
+      ZENDOC_OPS_CYCLE_SECONDS: ${ZENDOC_OPS_CYCLE_SECONDS:-3600}
+      ZENDOC_OPS_DIGEST_EMAIL: ${ZENDOC_OPS_DIGEST_EMAIL:-true}
+    # backend is the private PostgreSQL network; edge provides outbound DNS/HTTPS
+    # for read-only integration probes, SMTP delivery and official-data refresh.
+    # No worker ports are published, so adding edge does not expose the worker.
+    networks:
+      - backend
+      - edge
+    depends_on:
+      db:
+        condition: service_healthy
+
+  turn:
+    image: coturn/coturn:4.18.0-r0
+    restart: unless-stopped
+    profiles: ["realtime"]
+    network_mode: host
+    env_file:
+      - .env
+    environment:
+      ZENDOC_TURN_SHARED_SECRET: ${ZENDOC_TURN_SHARED_SECRET:?set ZENDOC_TURN_SHARED_SECRET in deploy/oci/.env}
+      ZENDOC_TURN_EXTERNAL_IP: ${ZENDOC_TURN_EXTERNAL_IP:?set ZENDOC_TURN_EXTERNAL_IP in deploy/oci/.env}
+      ZENDOC_TURN_REALM: ${ZENDOC_TURN_REALM:-zendoc}
+      ZENDOC_TURN_PORT: ${ZENDOC_TURN_PORT:-3478}
+      ZENDOC_TURN_MIN_RELAY_PORT: ${ZENDOC_TURN_MIN_RELAY_PORT:-49160}
+      ZENDOC_TURN_MAX_RELAY_PORT: ${ZENDOC_TURN_MAX_RELAY_PORT:-49200}
+    volumes:
+      - ./turn-entrypoint.sh:/zendoc/turn-entrypoint.sh:ro
+    entrypoint: ["/bin/sh", "/zendoc/turn-entrypoint.sh"]
+
   caddy:
     image: caddy:2.9-alpine
     restart: unless-stopped
     environment:
       ZENDOC_DOMAIN: ${ZENDOC_DOMAIN:?set ZENDOC_DOMAIN in deploy/oci/.env}
       ZENDOC_TLS_EMAIL: ${ZENDOC_TLS_EMAIL:?set ZENDOC_TLS_EMAIL in deploy/oci/.env}
+      ZENDOC_GATEWAY_TOKEN: ${ZENDOC_GATEWAY_TOKEN:?set ZENDOC_GATEWAY_TOKEN in deploy/oci/.env}
     ports:
       - "80:80"
       - "443:443"
@@ -86,9 +143,12 @@ services:
       dockerfile: deploy/oci/backup.Dockerfile
     profiles: ["ops"]
     environment:
-      DATABASE_URL: "postgresql://${POSTGRES_USER:-zendoc}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-zendoc}"
+      DATABASE_URL: "postgresql://db:5432/${POSTGRES_DB:-zendoc}"
+      PGUSER: ${POSTGRES_USER:-zendoc}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/oci/.env}
+      PGDATABASE: ${POSTGRES_DB:-zendoc}
       ZENDOC_POSTGRES_BACKUP_DIR: /backups
-      ZENDOC_POSTGRES_RESTORE_DATABASE_URL: "postgresql://${POSTGRES_USER:-zendoc}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-zendoc}"
+      ZENDOC_POSTGRES_RESTORE_DATABASE_URL: "postgresql://db:5432/${POSTGRES_DB:-zendoc}"
       ZENDOC_POSTGRES_RESTORE_EXPECT_DATABASE: "${POSTGRES_DB:-zendoc}"
       ZENDOC_POSTGRES_RESTORE_ALLOW_RESET: "${ZENDOC_POSTGRES_RESTORE_ALLOW_RESET:-false}"
     volumes:

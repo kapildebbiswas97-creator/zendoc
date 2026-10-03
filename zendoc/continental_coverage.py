@@ -61,15 +61,37 @@ OCEANIA = (
     ("TO", "Tonga"), ("TV", "Tuvalu"), ("VU", "Vanuatu"),
 )
 
-# Deliberately selected first-wave African jurisdictions. More can be added
-# without a schema change.
-AFRICA_FIRST_WAVE = (
-    ("ZA", "South Africa"), ("KE", "Kenya"), ("EG", "Egypt"), ("NG", "Nigeria"),
-    ("GH", "Ghana"), ("ET", "Ethiopia"), ("TZ", "United Republic of Tanzania"),
-    ("UG", "Uganda"), ("RW", "Rwanda"), ("MA", "Morocco"), ("DZ", "Algeria"),
+AFRICA = (
+    ("DZ", "Algeria"), ("AO", "Angola"), ("BJ", "Benin"), ("BW", "Botswana"),
+    ("BF", "Burkina Faso"), ("BI", "Burundi"), ("CV", "Cabo Verde"), ("CM", "Cameroon"),
+    ("CF", "Central African Republic"), ("TD", "Chad"), ("KM", "Comoros"), ("CG", "Congo"),
+    ("CD", "Democratic Republic of the Congo"), ("CI", "Côte d'Ivoire"), ("DJ", "Djibouti"), ("EG", "Egypt"),
+    ("GQ", "Equatorial Guinea"), ("ER", "Eritrea"), ("SZ", "Eswatini"), ("ET", "Ethiopia"),
+    ("GA", "Gabon"), ("GM", "Gambia"), ("GH", "Ghana"), ("GN", "Guinea"),
+    ("GW", "Guinea-Bissau"), ("KE", "Kenya"), ("LS", "Lesotho"), ("LR", "Liberia"),
+    ("LY", "Libya"), ("MG", "Madagascar"), ("MW", "Malawi"), ("ML", "Mali"),
+    ("MR", "Mauritania"), ("MU", "Mauritius"), ("MA", "Morocco"), ("MZ", "Mozambique"),
+    ("NA", "Namibia"), ("NE", "Niger"), ("NG", "Nigeria"), ("RW", "Rwanda"),
+    ("ST", "Sao Tome and Principe"), ("SN", "Senegal"), ("SC", "Seychelles"), ("SL", "Sierra Leone"),
+    ("SO", "Somalia"), ("ZA", "South Africa"), ("SS", "South Sudan"), ("SD", "Sudan"),
+    ("TZ", "United Republic of Tanzania"), ("TG", "Togo"), ("TN", "Tunisia"), ("UG", "Uganda"),
+    ("ZM", "Zambia"), ("ZW", "Zimbabwe"),
 )
 
-ADDITIONAL_AMERICAS = (("BR", "Brazil"),)
+NORTH_AMERICA = (
+    ("AG", "Antigua and Barbuda"), ("BS", "Bahamas"), ("BB", "Barbados"), ("BZ", "Belize"),
+    ("CA", "Canada"), ("CR", "Costa Rica"), ("CU", "Cuba"), ("DM", "Dominica"),
+    ("DO", "Dominican Republic"), ("SV", "El Salvador"), ("GD", "Grenada"), ("GT", "Guatemala"),
+    ("HT", "Haiti"), ("HN", "Honduras"), ("JM", "Jamaica"), ("MX", "Mexico"),
+    ("NI", "Nicaragua"), ("PA", "Panama"), ("KN", "Saint Kitts and Nevis"), ("LC", "Saint Lucia"),
+    ("VC", "Saint Vincent and the Grenadines"), ("TT", "Trinidad and Tobago"), ("US", "United States"),
+)
+
+SOUTH_AMERICA = (
+    ("AR", "Argentina"), ("BO", "Bolivia"), ("BR", "Brazil"), ("CL", "Chile"),
+    ("CO", "Colombia"), ("EC", "Ecuador"), ("GY", "Guyana"), ("PY", "Paraguay"),
+    ("PE", "Peru"), ("SR", "Suriname"), ("UY", "Uruguay"), ("VE", "Venezuela"),
+)
 
 
 EXTENDED_PUBLIC_SOURCES: dict[str, dict] = {
@@ -215,15 +237,21 @@ def install_continental_coverage() -> None:
         merged.update(existing)
         merged["continent"] = "Oceania"
         COUNTRIES[code] = merged
-    for code, name in AFRICA_FIRST_WAVE:
+    for code, name in AFRICA:
         existing = COUNTRIES.get(code, {})
-        merged = _country(code, name, "Africa", "FIRST_WAVE_SOURCE_DISCOVERY")
+        merged = _country(code, name, "Africa")
         merged.update(existing)
         merged["continent"] = "Africa"
         COUNTRIES[code] = merged
-    for code, name in ADDITIONAL_AMERICAS:
+    for code, name in NORTH_AMERICA:
         existing = COUNTRIES.get(code, {})
-        merged = _country(code, name, "South America", "OFFICIAL_SOURCE_REGISTERED")
+        merged = _country(code, name, "North America")
+        merged.update(existing)
+        merged["continent"] = "North America"
+        COUNTRIES[code] = merged
+    for code, name in SOUTH_AMERICA:
+        existing = COUNTRIES.get(code, {})
+        merged = _country(code, name, "South America")
         merged.update(existing)
         merged["continent"] = "South America"
         COUNTRIES[code] = merged
@@ -244,6 +272,6 @@ def continent_coverage_summary() -> dict[str, dict]:
         continent = country.get("continent") or "Other"
         bucket = summary.setdefault(continent, {"jurisdiction_count": 0, "source_registered_count": 0})
         bucket["jurisdiction_count"] += 1
-        if country.get("coverage_status") not in {"SOURCE_DISCOVERY_REQUIRED", "FIRST_WAVE_SOURCE_DISCOVERY"}:
+        if country.get("coverage_status") != "SOURCE_DISCOVERY_REQUIRED":
             bucket["source_registered_count"] += 1
     return summary

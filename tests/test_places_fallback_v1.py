@@ -3,6 +3,7 @@ import os
 from zendoc.places_provider import (
     FallbackPlacesProvider,
     GooglePlacesProvider,
+    HealthsitesPlacesProvider,
     NominatimPlacesProvider,
     PlacesProvider,
     PlacesResult,
@@ -228,3 +229,72 @@ def test_nominatim_accepts_gps_only_search_for_beta_fallback(monkeypatch):
     assert result.results[0]["source"] == "openstreetmap_nominatim"
     assert requested and "near+22.900000%2C+88.400000" in requested[0]
 
+
+
+def test_configured_healthsites_with_key_uses_healthsites_then_nominatim(monkeypatch):
+    monkeypatch.setenv("ZENDOC_PLACES_PROVIDER", "healthsites")
+    monkeypatch.setenv("ZENDOC_HEALTHSITES_API_KEY", "healthsites-test-key")
+
+    provider = configured_places_provider()
+
+    assert isinstance(provider, FallbackPlacesProvider)
+    assert isinstance(provider.primary, HealthsitesPlacesProvider)
+    assert isinstance(provider.fallback, NominatimPlacesProvider)
+
+
+def test_google_chain_uses_healthsites_before_nominatim_when_both_keys_exist(monkeypatch):
+    monkeypatch.setenv("ZENDOC_PLACES_PROVIDER", "google")
+    monkeypatch.setenv("ZENDOC_GOOGLE_PLACES_API_KEY", "google-test-key")
+    monkeypatch.setenv("ZENDOC_HEALTHSITES_API_KEY", "healthsites-test-key")
+
+    provider = configured_places_provider()
+
+    assert isinstance(provider, FallbackPlacesProvider)
+    assert isinstance(provider.primary, GooglePlacesProvider)
+    assert isinstance(provider.fallback, FallbackPlacesProvider)
+    assert isinstance(provider.fallback.primary, HealthsitesPlacesProvider)
+    assert isinstance(provider.fallback.fallback, NominatimPlacesProvider)
+
+
+def test_healthsites_gps_search_is_external_unverified_and_bounded(monkeypatch):
+    provider = HealthsitesPlacesProvider("healthsites-test-key", timeout_seconds=1)
+    seen = []
+
+    def fake_get_json(url):
+        seen.append(url)
+        return {
+            "type": "FeatureCollection",
+            "features": [{
+                "id": "node-123",
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [88.4347, 22.9752]},
+                "properties": {
+                    "name": "Global Test Hospital",
+                    "amenity": "hospital",
+                    "osm_type": "node",
+                    "osm_id": 123,
+                    "addr_city": "Kalyani",
+                    "addr_state": "West Bengal",
+                },
+            }],
+        }
+
+    monkeypatch.setattr(provider, "_get_json", fake_get_json)
+    result = provider.search({
+        "category": "hospital",
+        "location": "",
+        "latitude": 22.975,
+        "longitude": 88.434,
+        "radius_km": 10,
+    })
+
+    assert result.available is True
+    assert len(result.results) == 1
+    item = result.results[0]
+    assert item["name"] == "Global Test Hospital"
+    assert item["source"] == "healthsites_api"
+    assert item["verification_status"] == "external_unverified"
+    assert item["bookable_in_zendoc"] is False
+    assert item["map_url"] == "https://www.openstreetmap.org/node/123"
+    assert seen and "extent=" in seen[0]
+    assert "api-key=healthsites-test-key" in seen[0]

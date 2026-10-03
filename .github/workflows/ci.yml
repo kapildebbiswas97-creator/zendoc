@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       deployment_url:
-        description: "Optional Render base URL for deployment health verification"
+        description: "Optional Vercel public URL for OCI-backed deployment health verification"
         required: false
         type: string
 
@@ -80,6 +80,17 @@ jobs:
           tests/test_pharmacy_truth_v1.py
           tests/test_request_fulfilment_truth_v1.py
           tests/test_public_catalog_truth_v1.py
+          tests/test_controlled_pilot_journeys_v1.py
+          tests/test_agent_orchestration_resilience_v1.py
+          tests/test_jev_agentic_layer_v1.py
+          tests/test_incident_runtime_v1.py
+          tests/test_local_controller_v1.py
+          tests/test_agent_feature_coverage_v1.py
+          tests/test_personal_agents_v1.py
+          tests/test_interoperability_gateway_v1.py
+          tests/test_referral_os_v1.py
+          tests/test_global_data_v1.py
+          tests/test_integration_runtime_probes_v1.py
 
   full-sqlite-tests:
     name: Full SQLite Test Suite
@@ -181,6 +192,46 @@ jobs:
             sleep $((attempt * 5))
           done
 
+  vercel-gateway-config:
+    name: Vercel Gateway Configuration
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ZENDOC_ORIGIN_URL: https://origin.example.invalid
+      ZENDOC_GATEWAY_TOKEN: ci-gateway-token-placeholder
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24.x"
+      - name: Install pinned Vercel config SDK
+        run: npm install --ignore-scripts
+      - name: Validate programmatic Vercel configuration
+        run: |
+          npx @vercel/config validate
+          npx @vercel/config compile > /tmp/zendoc-vercel-config.json
+          grep -q "origin.example.invalid" /tmp/zendoc-vercel-config.json
+          grep -qi "x-zendoc-gateway-token" /tmp/zendoc-vercel-config.json
+      - name: Audit build-only Node dependencies for critical vulnerabilities
+        run: npm audit --audit-level=critical
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install topology test runner
+        run: python -m pip install "pytest>=8,<10"
+      - name: Run Vercel/OCI topology regressions
+        run: python -m pytest -q tests/test_vercel_oci_gateway_v2.py
+      - name: Validate OCI Caddy gateway configuration
+        run: >
+          docker run --rm
+          -e ZENDOC_DOMAIN=origin.example.invalid
+          -e ZENDOC_TLS_EMAIL=ops@example.invalid
+          -e ZENDOC_GATEWAY_TOKEN=ci-gateway-token-placeholder
+          -v "$PWD/deploy/oci/Caddyfile:/etc/caddy/Caddyfile:ro"
+          caddy:2.9-alpine
+          caddy validate --config /etc/caddy/Caddyfile
+
   release-readiness:
     name: Release Gate
     runs-on: ubuntu-latest
@@ -189,6 +240,7 @@ jobs:
       - full-sqlite-tests
       - postgres-production-smoke
       - static-security
+      - vercel-gateway-config
     if: always()
     steps:
       - name: Enforce all blocking jobs
@@ -198,15 +250,18 @@ jobs:
           SQLITE: ${{ needs.full-sqlite-tests.result }}
           POSTGRES: ${{ needs.postgres-production-smoke.result }}
           SECURITY: ${{ needs.static-security.result }}
+          VERCEL_GATEWAY: ${{ needs.vercel-gateway-config.result }}
         run: |
           echo "critical-safety-security=$CRITICAL"
           echo "full-sqlite-tests=$SQLITE"
           echo "postgres-production-smoke=$POSTGRES"
           echo "static-security=$SECURITY"
+          echo "vercel-gateway-config=$VERCEL_GATEWAY"
           test "$CRITICAL" = "success"
           test "$SQLITE" = "success"
           test "$POSTGRES" = "success"
           test "$SECURITY" = "success"
+          test "$VERCEL_GATEWAY" = "success"
       - name: Publish exact-head Production Gate status
         if: always()
         uses: actions/github-script@v8
@@ -240,7 +295,8 @@ jobs:
       (
         (
           github.event_name == 'push' &&
-          github.ref == 'refs/heads/main'
+          github.ref == 'refs/heads/main' &&
+          vars.ZENDOC_DEPLOYMENT_URL != ''
         ) ||
         (
           github.event_name == 'workflow_dispatch' &&
@@ -249,7 +305,7 @@ jobs:
       )
     timeout-minutes: 12
     env:
-      DEPLOYMENT_URL: ${{ inputs.deployment_url || vars.ZENDOC_DEPLOYMENT_URL || 'https://zendoc-ykax.onrender.com' }}
+      DEPLOYMENT_URL: ${{ inputs.deployment_url || vars.ZENDOC_DEPLOYMENT_URL }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -259,7 +315,7 @@ jobs:
         run: >
           python scripts/verify_deployment.py "$DEPLOYMENT_URL"
           --expected-commit "${{ github.sha }}"
-          --require-platform render
+          --require-platform oci
           --require-engine postgresql
           --require-persistence-verified
           --attempts 40

@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import os
 
+from .interoperability_gateway import interoperability_readiness_snapshot
+
 
 STATUS_WORKING              = "WORKING"
 STATUS_BETA                 = "BETA"
@@ -45,6 +47,7 @@ def get_capability_registry() -> dict:
     Returns the complete truthful capability matrix.
     Used by the Command Center, API, and capability status endpoint.
     """
+    interop = interoperability_readiness_snapshot()
     local_ai_provider = _local_ai_env("ZENDOC_LOCAL_AI_PROVIDER", "ZENDOC_SLM_PROVIDER", "ollama").lower()
     local_ai_configured = (
         _local_ai_enabled()
@@ -58,13 +61,15 @@ def get_capability_registry() -> dict:
     )
     places_provider = _env("ZENDOC_PLACES_PROVIDER", "none").lower()
     places = places_provider == "google" and bool(_env("ZENDOC_GOOGLE_PLACES_API_KEY"))
+    healthsites_configured = bool(_env("ZENDOC_HEALTHSITES_API_KEY"))
     production_places_fallback = (
         _env("ZENDOC_ENV", "development").lower() == "production"
         and places_provider in {"", "none"}
     )
     places_external_available = bool(
         places
-        or places_provider in {"nominatim", "openstreetmap", "osm"}
+        or healthsites_configured
+        or places_provider in {"healthsites", "healthsites_api", "nominatim", "openstreetmap", "osm"}
         or production_places_fallback
     )
     video_provider = _env("ZENDOC_VIDEO_PROVIDER", "none") not in {"", "none"}
@@ -104,6 +109,10 @@ def get_capability_registry() -> dict:
         )
     )
     webrtc_ice_configured = bool(_env("ZENDOC_WEBRTC_ICE_SERVERS_JSON"))
+    dynamic_turn_configured = bool(
+        _env("ZENDOC_TURN_PUBLIC_HOST")
+        and len(_env("ZENDOC_TURN_SHARED_SECRET")) >= 32
+    )
     external_ekyc_provider = _env("ZENDOC_EKYC_PROVIDER", "none").lower()
     external_ekyc_configured = (
         external_ekyc_provider not in {"", "none", "manual"}
@@ -183,9 +192,11 @@ def get_capability_registry() -> dict:
             "status": STATUS_BETA,
             "label": "Voice / Video Calling",
             "description": (
+                "Authenticated browser WebRTC signaling, call lifecycle, media controls and short-lived TURN credentials are implemented; live relay reachability still requires a real two-device network test."
+                if dynamic_turn_configured else
                 "Authenticated browser WebRTC signaling, call lifecycle and media controls are implemented; configured ICE servers improve network reachability, but TURN reliability still requires real end-to-end verification."
                 if webrtc_ice_configured else
-                "Authenticated browser WebRTC signaling, call lifecycle and media controls are implemented. No ICE server configuration is present, so many public/NAT networks may require TURN before calls are reliable."
+                "Authenticated browser WebRTC signaling, call lifecycle and media controls are implemented. Enable the OCI Coturn realtime profile or configure external ICE servers for reliable public/NAT networks."
             ),
         },
         "deterministic_safety_engine": {
@@ -199,6 +210,15 @@ def get_capability_registry() -> dict:
             "description": "Local inference is configured; owner runtime health verifies server and model readiness."
                            if local_ai_configured else
                            "Local SLM integration ready — model not configured.",
+        },
+        "local_agent_controller": {
+            "status": STATUS_BETA if local_ai_configured else STATUS_WORKING,
+            "label": "ZENDOC Local Agent Controller",
+            "description": (
+                "Owner-scoped local control plane is working with a configured local model layer; model output remains advisory and all tools stay permission-gated."
+                if local_ai_configured
+                else "Owner-scoped deterministic local control plane is working; configure a local model to add private on-device language/reasoning assistance."
+            ),
         },
         "slm_product_layer": {
             "status": STATUS_WORKING,
@@ -282,10 +302,28 @@ def get_capability_registry() -> dict:
                 "Personal eligibility, insurer/government/CSR approval and payment confirmation require an authoritative partner response; owner evidence review remains available."
             ),
         },
+        "referral_waiting_list_os": {
+            "status": STATUS_WORKING,
+            "label": "Referral & Waiting List OS",
+            "description": (
+                "Consent-bound internal referral lifecycle covers packet preparation, patient consent, send/receive, "
+                "triage, accept/reject, waiting list, scheduling, consultation, report, follow-up and return to primary care. "
+                "External EHR/network delivery is never inferred."
+            ),
+        },
         "automatic_care_journey": {
             "status": STATUS_WORKING,
             "label": "Automatic Care Journey Coordinator",
             "description": "Deterministic care-workflow state machine with human gates, provenance, next-safe-action logic, and no diagnostic authority.",
+        },
+        "ai_workforce_incident_runtime": {
+            "status": STATUS_WORKING,
+            "label": "Evidence-Gated AI Workforce Incident Runtime",
+            "description": (
+                "Persistent incident cases automatically classify privacy-safe failures, require explicit evidence for "
+                "reproduction/root cause/repair/security/tests/preview, stop at owner production approval, require live "
+                "post-release health/readiness evidence, and capture sanitized learning only after verification."
+            ),
         },
         "safe_operations_automation": {
             "status": STATUS_WORKING,
@@ -326,6 +364,41 @@ def get_capability_registry() -> dict:
             "status": STATUS_INTEGRATION_REQUIRED,
             "label": "Live Official Dataset Connectors",
             "description": "LGD/OGD/ABDM live retrieval requires dataset-specific downloads/APIs or authorized onboarding; ZENDOC does not claim live access by default.",
+        },
+        "universal_healthcare_interoperability_gateway": {
+            "status": STATUS_BETA,
+            "label": "Universal Healthcare Interoperability Gateway",
+            "description": (
+                "Provider-neutral FHIR R4/R5 and SMART-on-FHIR-compatible adapter contracts, resource normalization, "
+                "truth-state reporting and plan-only exchange orchestration are implemented. External exchange remains gated."
+            ),
+        },
+        "live_external_fhir_exchange": {
+            "status": STATUS_WORKING if interop["verified_adapter_count"] else STATUS_INTEGRATION_REQUIRED,
+            "label": "Live External EHR / HIE Exchange",
+            "description": (
+                f"{interop['verified_adapter_count']} interoperability adapter(s) are explicitly marked live-verified; "
+                "each exchange still re-checks authorization, consent, scope, provenance and audit."
+                if interop["verified_adapter_count"]
+                else
+                "No external EHR/HIE adapter is live-verified. ZENDOC's software boundary is present, but external activation "
+                "requires the relevant endpoint/credential, authorization or partner agreement, plus bounded live verification."
+            ),
+        },
+        "global_health_intelligence_fabric": {
+            "status": STATUS_WORKING,
+            "label": "Global Health Intelligence Fabric",
+            "description": "Country-aware data model covers 195 operational jurisdictions with governed source discovery, provenance, organization intelligence and truthful source-gap reporting; actual country datasets remain source-specific.",
+        },
+        "organization_intelligence": {
+            "status": STATUS_WORKING,
+            "label": "Global Organization Intelligence",
+            "description": "Governed legal-entity, filing and official-source discovery plans for companies/organizations with licensing, provenance and no-private-data boundaries.",
+        },
+        "global_source_research_automation": {
+            "status": STATUS_WORKING,
+            "label": "ResearchAgent Global Source-Gap Automation",
+            "description": "Operations automation continuously turns missing country-source coverage into a deduplicated, bounded ResearchAgent work batch while known reviewed connectors refresh separately.",
         },
         "identity_evidence_review": {
             "status": STATUS_WORKING,
@@ -438,9 +511,12 @@ def get_capability_registry() -> dict:
             "description": "Transport request intake. Live dispatch requires provider integration.",
         },
         "iot_hub": {
-            "status": STATUS_BETA,
+            "status": STATUS_WORKING,
             "label": "IoT Hub",
-            "description": "Manual device registration and measurement logging. Live sync requires device SDK.",
+            "description": (
+                "Device registration plus a revocable, hashed, per-device ingestion bridge are implemented. "
+                "Manufacturer-specific Apple/Google/Samsung/Fitbit SDK or OAuth adapters remain external vendor integrations."
+            ),
         },
 
         # External integrations
@@ -464,8 +540,10 @@ def get_capability_registry() -> dict:
             "status": STATUS_BETA if places_external_available else STATUS_INTEGRATION_REQUIRED,
             "label": "External Places Discovery",
             "description": (
-                "Google Places is configured with OpenStreetMap fallback, but runtime reachability, quota and result availability must still be verified."
+                "Google Places is configured with Healthsites/OpenStreetMap fallback where available, but runtime reachability, quota and result availability must still be verified."
                 if places else
+                "Healthsites/OpenStreetMap discovery is available as external unverified fallback data where configured; live reachability and result availability are runtime-dependent."
+                if healthsites_configured else
                 "OpenStreetMap/Nominatim discovery is available as an external unverified fallback, but live reachability and result availability are runtime-dependent."
                 if places_external_available else
                 "External map discovery requires OpenStreetMap/Nominatim or a configured Google Places provider. Local/official Finder results remain separate."

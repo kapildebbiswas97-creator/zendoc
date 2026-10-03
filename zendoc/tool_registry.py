@@ -261,6 +261,16 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
         allowed_roles=ADMIN_ONLY,
         risk_class=LOW_RISK,
     ),
+    "get_workforce_incident_status": ToolDefinition(
+        name="get_workforce_incident_status",
+        description=(
+            "Read evidence-gated AI workforce incident runtime state. "
+            "This tool cannot submit evidence, approve production, deploy code, or close an incident."
+        ),
+        allowed_agents=["OperationsAgent"],
+        allowed_roles=ADMIN_ONLY,
+        risk_class=READ_ONLY,
+    ),
     "run_safe_operations_automation": ToolDefinition(
         name="run_safe_operations_automation",
         description="Owner-only bounded automation: re-queue retriable failures and create deterministic operational alerts without executing arbitrary tasks.",
@@ -494,6 +504,36 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
         description="Retrieve the unified healthcare inbox: recent orders, diagnostic bookings, and health memory events.",
         allowed_agents=["CareAgent", "HealthMemoryAgent"],
         allowed_roles=["patient", "doctor", "admin"],
+        risk_class=READ_ONLY,
+    ),
+    "get_referral_summary": ToolDefinition(
+        name="get_referral_summary",
+        description=(
+            "Read referral and waiting-list state visible to the authenticated patient/referring/destination provider. "
+            "The tool cannot create, consent, send, triage, accept, schedule, or complete a referral."
+        ),
+        allowed_agents=["ReferralAgent"],
+        allowed_roles=["patient", "doctor", "hospital"],
+        risk_class=READ_ONLY,
+    ),
+    "get_interoperability_capabilities": ToolDefinition(
+        name="get_interoperability_capabilities",
+        description=(
+            "Read ZENDOC's provider-neutral FHIR/SMART adapter capabilities and truthful activation states. "
+            "Returns configuration names and evidence state only; never secret values or external patient data."
+        ),
+        allowed_agents=["InteroperabilityAgent"],
+        allowed_roles=ALL_ROLES,
+        risk_class=READ_ONLY,
+    ),
+    "prepare_interoperability_exchange_plan": ToolDefinition(
+        name="prepare_interoperability_exchange_plan",
+        description=(
+            "Prepare a minimum-necessary, provenance/audit-bound FHIR exchange plan. "
+            "This tool never contacts an external EHR/HIE and never executes import/export."
+        ),
+        allowed_agents=["InteroperabilityAgent"],
+        allowed_roles=ALL_ROLES,
         risk_class=READ_ONLY,
     ),
     "get_health_memory_context": ToolDefinition(

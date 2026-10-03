@@ -140,6 +140,42 @@ AGENT_REGISTRY: dict[str, AgentDefinition] = {
         description="Uses only authorized patient context and preserves provenance. No cross-user leakage.",
     ),
 
+    "ReferralAgent": AgentDefinition(
+        identifier="ReferralAgent",
+        name="Referral & Waiting List Agent",
+        purpose="Read consent-bound referral, triage, waiting-list and follow-up state without advancing clinical workflow autonomously.",
+        allowed_tools=["get_referral_summary"],
+        allowed_actor_roles=["patient", "doctor", "hospital"],
+        risk_level="READ_ONLY",
+        approval_requirements=[
+            "patient_consent_before_sending",
+            "provider_authority_for_triage_and_specialist_states",
+        ],
+        status="connected",
+        description=(
+            "Read-only Agent OS view over the formal referral lifecycle. State changes remain deterministic "
+            "API/service actions owned by the patient, referring provider or destination provider."
+        ),
+    ),
+
+    "InteroperabilityAgent": AgentDefinition(
+        identifier="InteroperabilityAgent",
+        name="Healthcare Interoperability Agent",
+        purpose="Inspect provider-neutral FHIR exchange capability and prepare non-executing interoperability plans.",
+        allowed_tools=[
+            "get_interoperability_capabilities",
+            "prepare_interoperability_exchange_plan",
+        ],
+        allowed_actor_roles=ALL_ROLES,
+        risk_level="READ_ONLY",
+        approval_requirements=["explicit_authorization_and_consent_before_external_exchange"],
+        status="beta",
+        description=(
+            "Plans only. It cannot contact an external EHR/HIE, grant access, export records, "
+            "or claim Epic/Oracle/ABDM/TEFCA/EHDS connectivity without verified adapter evidence."
+        ),
+    ),
+
     "PreventionAgent": AgentDefinition(
         identifier="PreventionAgent",
         name="Prevention Agent",
@@ -370,6 +406,7 @@ AGENT_REGISTRY: dict[str, AgentDefinition] = {
             "escalate_task",
             "request_owner_approval",
             "run_proactive_alert_check",
+            "get_workforce_incident_status",
             "run_safe_operations_automation",
         ],
         allowed_actor_roles=["admin"],
@@ -433,6 +470,13 @@ def choose_agent_for_intent(intent: str) -> AgentDefinition | None:
         "health_analytics": "CareAgent",
         "health_profile":   "CareAgent",
         "health_records":   "HealthMemoryAgent",
+        "referral": "ReferralAgent",
+        "waiting_list": "ReferralAgent",
+        "specialist_referral": "ReferralAgent",
+        "health_interoperability": "InteroperabilityAgent",
+        "interoperability": "InteroperabilityAgent",
+        "fhir_exchange": "InteroperabilityAgent",
+        "record_exchange": "InteroperabilityAgent",
         "telehealth":       "DoctorAgent",
         "telehealth_request": "DoctorAgent",
         "video_consultation": "DoctorAgent",

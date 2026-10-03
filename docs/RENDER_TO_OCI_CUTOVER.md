@@ -1,6 +1,8 @@
 # Render PostgreSQL -> OCI PostgreSQL cutover
 
-Render's current notice says the free `zendoc-db` becomes inaccessible on 2026-09-30. This runbook preserves the existing PostgreSQL engine and moves the data to the self-managed PostgreSQL 16 service in `deploy/oci/compose.yaml`.
+Render's free `zendoc-db` cutoff date was 2026-09-30. This runbook preserves the existing PostgreSQL engine and moves recoverable data to the self-managed PostgreSQL 16 service in `deploy/oci/compose.yaml`.
+
+As of 2026-10-03, do not assume the expired Render source is still reachable. If the final Render export was completed, restore only from the verified archive and sidecars. If no verified export exists and the source is inaccessible, stop and recover access/data through the provider rather than inventing or silently replacing production records.
 
 This is a data-preservation procedure. It does not by itself prove a public production launch.
 
@@ -146,11 +148,12 @@ Backup verification remains separate: make an off-instance copy of an OCI backup
 
 ## 9. Switch Vercel only after OCI passes
 
-The Vercel gateway must not receive `DATABASE_URL`. It receives only:
+The Vercel gateway must not receive `DATABASE_URL`, admin credentials, application secrets, or provider credentials. It receives only the OCI origin plus a dedicated gateway-only secret:
 
     ZENDOC_ORIGIN_URL=https://YOUR_OCI_ORIGIN
+    ZENDOC_GATEWAY_TOKEN=<same-long-random-gateway-only-secret-used-by-caddy>
 
-After the OCI origin is verified, configure that variable in the ZENDOC Vercel project and deploy the reviewed gateway commit. Test the browser-facing Vercel URL for:
+After the OCI origin is verified, configure those two gateway-scoped values in the ZENDOC Vercel project and deploy the reviewed gateway commit. Test the browser-facing Vercel URL for:
 
 - login/logout and session continuity;
 - redirects and generated links;
@@ -164,6 +167,6 @@ Keep the Render database untouched until this public-path verification and data 
 
 ## 10. Rollback rule
 
-If OCI or the Vercel gateway fails before final cutover, route users back to the still-valid Render deployment and do not write to both databases.
+If OCI or the Vercel gateway fails before final cutover, route users only to a source that is still known reachable and authoritative. The expired Render free deployment must not be assumed to be a valid fallback. Do not write to two production databases.
 
-If data has already begun changing on OCI after cutover, do not blindly restore the old Render snapshot over it. Stop writes, preserve both states, and reconcile before any rollback.
+If data has already begun changing on OCI after cutover, do not blindly restore an older snapshot over it. Stop writes, preserve every recoverable state, and reconcile before any rollback.

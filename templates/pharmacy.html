@@ -4,16 +4,16 @@
 {% block content %}
 <section class="section-head">
   <div>
-    <p class="eyebrow">Medicines &amp; pharmacy · Delivery integration required</p>
+    <p class="eyebrow">Medicines &amp; pharmacy · {{ 'Verified pharmacy workflow available' if pharmacies else 'Provider integration required' }}</p>
     <h1>Pharmacy &amp; medicines</h1>
-    <p class="section-copy">Search medicine reference information, view reviewed pharmacy profiles, record delivery requests, and set personal reminders.</p>
+    <p class="section-copy">Search medicine reference information, view reviewed pharmacy profiles, record requests, and set personal reminders. {% if pharmacies %}A verified pharmacy can acknowledge a request inside ZENDOC; stock, prescription acceptance, price and delivery remain provider-confirmed states.{% else %}No verified ZENDOC pharmacy is currently available for provider-side fulfilment.{% endif %}</p>
   </div>
   <a href="{{ url_for('main.dashboard') }}" class="secondary-action">Dashboard</a>
 </section>
 
 <aside class="trust-note warning">
   <strong>Reference and request workflow only</strong><br>
-  ZENDOC does not prescribe medicine, confirm stock, price, or guarantee delivery. Prescription requirements still apply, and fulfilment needs a connected pharmacy partner.
+  ZENDOC does not prescribe medicine, infer stock or price, or guarantee delivery. Prescription requirements still apply. {% if pharmacies %}Requests can be sent to a verified ZENDOC pharmacy, but only that pharmacy's explicit acknowledgement/tracking confirms provider-side progress.{% else %}Provider-side fulfilment requires a verified pharmacy to join the ZENDOC network.{% endif %}
 </aside>
 
 <form method="get" action="{{ url_for('ecosystem.pharmacy_page') }}" class="filter-bar spaced-panel" role="search">

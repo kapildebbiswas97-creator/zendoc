@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       deployment_url:
-        description: "Optional Render base URL for deployment verification"
+        description: "Optional Vercel public URL for OCI-backed deployment verification"
         required: false
         type: string
       expected_commit:
@@ -26,15 +26,22 @@ env:
   PYTHON_VERSION: "3.11"
 
 jobs:
-  verify-render-release:
-    name: Verify merged release on Render
+  verify-oci-backed-public-release:
+    name: Verify merged release through Vercel → OCI
     if: >-
-      (github.event_name == 'pull_request' && github.event.pull_request.merged == true) ||
-      github.event_name == 'workflow_dispatch'
+      (
+        github.event_name == 'pull_request' &&
+        github.event.pull_request.merged == true &&
+        vars.ZENDOC_DEPLOYMENT_URL != ''
+      ) ||
+      (
+        github.event_name == 'workflow_dispatch' &&
+        inputs.deployment_url != ''
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 12
     env:
-      DEPLOYMENT_URL: ${{ inputs.deployment_url || vars.ZENDOC_DEPLOYMENT_URL || 'https://zendoc-ykax.onrender.com' }}
+      DEPLOYMENT_URL: ${{ inputs.deployment_url || vars.ZENDOC_DEPLOYMENT_URL }}
       EXPECTED_COMMIT: ${{ inputs.expected_commit || github.event.pull_request.merge_commit_sha }}
     steps:
       - uses: actions/checkout@v7
@@ -43,22 +50,14 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - name: Trigger Render deployment hook when configured
-        env:
-          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
-        run: |
-          if [ -n "$RENDER_DEPLOY_HOOK_URL" ]; then
-            echo "Render deploy hook is configured; triggering an explicit deployment."
-            python scripts/trigger_render_deploy.py "$RENDER_DEPLOY_HOOK_URL"
-          else
-            echo "Render deploy hook is not configured; relying on render.yaml autoDeployTrigger=commit."
-          fi
-      - name: Verify exact merged release on Render
+      - name: Verify exact merged release through the public Vercel gateway
         run: >-
           python scripts/verify_deployment.py "$DEPLOYMENT_URL"
           --expected-commit "$EXPECTED_COMMIT"
-          --require-platform render
+          --require-platform oci
           --require-engine postgresql
           --require-persistence-verified
           --attempts 40
           --interval 15
+      - name: Verify public web, PWA, policy and security contracts
+        run: python scripts/verify_public_launch.py "$DEPLOYMENT_URL" --timeout 20

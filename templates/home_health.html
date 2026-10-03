@@ -4,16 +4,23 @@
 {% block content %}
 <section class="section-head">
   <div>
-    <p class="eyebrow">Home healthcare · Integration required</p>
+    <p class="eyebrow">Home healthcare · {{ 'Verified provider workflow available' if connected_provider_count else 'Provider integration required' }}</p>
     <h1>Home Healthcare</h1>
-    <p class="section-copy">Submit a structured request for a home visit, nursing care, physiotherapy, sample collection, or equipment service. A live partner network is not yet connected.</p>
+    <p class="section-copy">
+      {% if connected_provider_count %}
+        {{ connected_provider_count }} verified ZENDOC provider account{% if connected_provider_count != 1 %}s{% endif %} currently publish at least one home-health capability. Record your request first, then use Care Tracker to review matching providers. A request is not confirmed until an assigned provider accepts it.
+      {% else %}
+        Submit a structured request for a home visit, nursing care, physiotherapy, sample collection, or equipment service. No verified ZENDOC provider currently publishes a matching home-health capability, so fulfilment remains unconfirmed.
+      {% endif %}
+    </p>
   </div>
   <a href="{{ url_for('main.dashboard') }}" class="secondary-action">Dashboard</a>
 </section>
 
 <aside class="trust-note warning">
-  <strong>Request intake only</strong><br>
-  ZENDOC records your request, but a live home-care provider network is not connected. Submission does not confirm a booking or a provider.
+  <strong>Request first; provider confirmation is separate</strong><br>
+  ZENDOC records your request. {% if connected_provider_count %}Matching verified providers can be reviewed in Care Tracker, but submission alone does not assign or confirm one.{% else %}No verified provider capability is currently available in ZENDOC, so submission does not confirm a booking or provider.{% endif %}
+  <div class="form-actions"><a class="secondary-action" href="{{ url_for('operational_fulfilment_ui.fulfilment_console') }}">Open Care Tracker</a></div>
 </aside>
 
 <section class="spaced-panel" aria-labelledby="service-types-title">
@@ -52,7 +59,7 @@
       <label>Full address <textarea name="address" rows="2" placeholder="House address with landmark" required></textarea></label>
       <label>Special notes <input type="text" name="notes" placeholder="e.g. Patient recovering from knee surgery (optional)"></label>
       <button type="submit" data-submitting-label="Submitting…">Submit request</button>
-      <p class="form-note">This saves an intake request only. It does not contact or confirm a provider.</p>
+      <p class="form-note">This saves an intake request only. After submission, use Care Tracker to review matching verified providers when available; provider acceptance is still required.</p>
     </form>
   </article>
 

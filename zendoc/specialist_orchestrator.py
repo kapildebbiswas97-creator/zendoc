@@ -396,7 +396,12 @@ def orchestrate_specialist(actor, command_text: str, context=None) -> dict:
     decision_control = evaluate_agent_control(plan, command_text, context)
 
     if plan.steps and decision_control.get("allow_reversible_execution", True):
-        execution = execute_plan(plan, actor)
+        execution = execute_plan(
+            plan,
+            actor,
+            retry_read_only=True,
+            degrade_on_transient=True,
+        )
     elif plan.steps:
         execution = {
             "status": "blocked" if decision_control.get("action") == "STOP" else "waiting_human",
@@ -410,6 +415,22 @@ def orchestrate_specialist(actor, command_text: str, context=None) -> dict:
     payload = _payload_for_plan(plan, execution)
     result = _compose(plan, execution, payload)
     result["decision_control"] = decision_control
+    result["orchestration"] = {
+        "run_id": execution.get("run_id"),
+        "status": execution.get("status"),
+        "degraded": bool(execution.get("degraded")),
+        "retry_count": int(execution.get("retry_count") or 0),
+        "failure_category": execution.get("failure_category"),
+        "fallback_strategy": execution.get("fallback_strategy") or plan.fallback_strategy,
+        "human_gate": plan.human_gate,
+    }
+    if execution.get("status") == "degraded":
+        result["message"] = (
+            "The specialist workflow is temporarily degraded because an authorized read-only source "
+            "did not respond after a bounded retry. No consequential action was taken. "
+            "ZENDOC preserved the configured fallback and human-safety boundaries."
+        )
+        result["execution_status"] = "degraded"
     return result
 
 

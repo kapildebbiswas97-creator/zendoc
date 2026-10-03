@@ -38,6 +38,7 @@ CONTEXT_PURPOSE_ALIASES: dict[str, set[str]] = {
     "care_graph": {"care_graph", "care_graph_view", "timeline", "health_memory"},
     "care_continuity": {"care_continuity", "timeline", "health_memory"},
     "next_safe_action": {"next_safe_action", "timeline", "health_memory"},
+    "referral": {"referral"},
 }
 
 # Fine-grained connected-care scopes.  These are data capabilities, not roles.
@@ -66,6 +67,7 @@ PURPOSE_REQUIRED_SCOPES: dict[str, set[str]] = {
     "care_graph": {"timeline"},
     "care_continuity": {"timeline"},
     "next_safe_action": {"timeline"},
+    "referral": {"timeline"},
 }
 
 FAMILY_SCOPE_BY_PURPOSE = {

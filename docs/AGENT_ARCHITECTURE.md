@@ -6,6 +6,34 @@ The ZENDOC Core Agent coordinates workflows through permissioned tools. It does 
 
 ZENDOC is designed as a **multi-agent health operating ecosystem**, not one unrestricted AI doctor. Every important product domain has an explicit specialist, capability allowlist, provenance requirements and a human/clinical/owner gate where consequences become irreversible.
 
+## Personal Agent Layer
+
+Every authenticated ZENDOC account now has a deterministic personal coordinator identity derived from its account id and role. Patient, doctor, hospital, pharmacy, government and configured-owner accounts receive different missions, memory scopes, proactive capabilities and specialist delegates.
+
+The personal agent is deliberately a **coordinator, not a superuser**. It cannot widen the account's permissions. It routes work to the existing specialist fleet and every candidate tool is checked again by the Tool Registry, domain authorization, consent and approval layers. Personal context remains actor-owned or explicitly granted, minimum-necessary and provenance-preserving.
+
+## Global Health Intelligence Fabric
+
+ZENDOC's governed data plane represents 195 country jurisdictions without pretending every jurisdiction already has a live national feed. The source registry distinguishes country support from source maturity, and source-gap reporting tells the Research/Data workforce where authoritative discovery is still needed.
+
+Organization intelligence begins with authoritative legal-entity/filing registries (GLEIF globally, SEC EDGAR for U.S. public filers, Companies House for the UK, and MCA official company/LLP services for India). A discovered company's official newsroom, investor-relations feed, regulatory filing stream, healthcare regulator record or authorized partner API is attached as evidence only after HTTPS, usage/terms and schema review. Company announcements never become clinical or regulatory truth merely because they are official corporate speech.
+
+The hourly/daily operations layer also computes country source gaps. If gaps remain it maintains one deduplicated bounded `global_source_research` task owned operationally by `OperationsAgent` and assigned conceptually to the AI workforce `ResearchAgent`. The task contains a small country batch and the evidence required for a lawful adapter proposal; it performs no protected-site access and grants no ingestion permission. When a reviewed connector exists, `public_data_refresh` handles bounded scheduled refresh separately.
+
+## Agent OS Coverage Contract
+
+The product capability registry and Agent OS are now linked by an explicit coverage contract. Every declared capability must map to a registered specialist owner and may also name an internal AI-workforce owner. CI fails if a capability is added without an Agent OS mapping, if a mapping points to an unknown specialist/workforce agent, or if a stale mapping survives after a capability is removed.
+
+Coverage modes distinguish executable specialist tools from coordination-only, integration-dependent, operations-monitored, safety-guarded and future-blocked capabilities. This prevents "Agent OS everywhere" from becoming a false claim that every feature has autonomous write authority: responsibility is universal, while execution remains permissioned and risk-bounded.
+
+## AI Company / Backend Workforce
+
+ZENDOC also defines an internal AI workforce: Incident, Engineering, Root Cause, Repair, Security, Test, QA, Infrastructure, Data, Integration, Product, Support, Communications, Research, Manager, Release and Knowledge agents.
+
+The operations worker automatically converts privacy-safe failed/error platform events into deduplicated persistent incident cases. The intended pipeline is detect/classify -> reproduce in sandbox -> root cause -> repair proposal -> security review -> regression tests -> preview QA -> release evidence -> configured-owner production approval -> post-release verification -> sanitized knowledge capture.
+
+Automation is deliberately strongest before the irreversible boundary. The workforce may analyze, retry safe work, refresh approved public data, run probes, prepare repairs/tests and verify previews automatically. It may not silently self-modify production, broaden permissions, read secrets, prescribe, dispatch emergencies, execute payments or bypass the release gate.
+
 ## Safety Order
 
 Authenticated command -> deterministic Safety Agent -> bounded planner -> privacy-aware Model Router -> specialized agent -> permissioned tool registry -> bounded-autonomy policy -> approval gate where required -> deterministic executor -> persistent task/event/audit -> user-facing result.
@@ -167,6 +195,21 @@ executor -> verification -> event/audit -> longitudinal memory.
 Jev complements rather than replaces the LLM/SLM layer. Jev is used for
 bounded routing/control judgments; LLM/SLM models remain appropriate for
 language generation, explanation and open-ended reasoning.
+
+## Runtime resilience and observability
+
+The bounded executor now gives idempotent **READ_ONLY** tools one additional
+attempt for transient timeout/provider-connectivity failures. Non-idempotent
+writes, consent-required actions, clinician-gated actions and other consequential
+operations are never automatically retried by this path.
+
+Each specialist execution receives a correlation/run id and emits privacy-safe
+plan/tool events on a best-effort basis. Raw provider exceptions, credentials,
+prompts and health content are not returned as orchestration diagnostics.
+When an authorized read source remains temporarily unavailable after the bounded
+retry, the specialist workflow returns a truthful `degraded` state plus its
+configured fallback strategy instead of inventing data or silently completing.
+Authorization and human gates still fail closed.
 
 ## Model Router
 
