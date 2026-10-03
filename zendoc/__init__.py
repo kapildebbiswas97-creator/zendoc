@@ -22,6 +22,7 @@ from .dataset_snapshot_routes import bp as dataset_snapshot_ingestion_bp
 from .db import close_db, get_db, init_db
 from .connected_care_routes import bp as connected_care_bp
 from .document_extraction_routes import bp as document_extraction_bp
+from .device_ingestion import bp as device_ingestion_bp, ensure_device_ingestion_schema
 from .edgecare_routes import bp as edgecare_bp
 from .email_verification import ensure_email_verification_schema
 from .ecosystem_routes import bp as ecosystem_bp
@@ -176,6 +177,7 @@ def create_app(test_config=None):
     app.register_blueprint(personal_health_baseline_bp)
     app.register_blueprint(preventive_care_bp)
     app.register_blueprint(document_extraction_bp)
+    app.register_blueprint(device_ingestion_bp)
     app.register_blueprint(fitness_bp)
     app.register_blueprint(family_bp)
     app.register_blueprint(ecosystem_bp)
@@ -295,6 +297,7 @@ def create_app(test_config=None):
             ensure_carefin_case_schema()
             ensure_consent_schema()
             ensure_email_verification_schema()
+            ensure_device_ingestion_schema()
             ensure_medical_knowledge_document_schema()
             ensure_medical_rag_schema()
             ensure_provider_invitation_schema()
