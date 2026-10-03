@@ -24,6 +24,7 @@ ALLOWED_SCOPES = {
     "provider_availability.read",
     "pilot_metrics.read",
     "booking_handoff.write",
+    "transport_fulfilment.write",
 }
 DEFAULT_SCOPES = {"public_directory.read"}
 
@@ -315,6 +316,7 @@ def business_api_integration_status(identity: dict) -> dict:
             "provider_availability": "enabled_by_scope" if "provider_availability.read" in scopes else "disabled",
             "own_pilot_metrics": "enabled_by_scope" if "pilot_metrics.read" in scopes else "disabled",
             "booking_handoff": "enabled_by_scope" if "booking_handoff.write" in scopes else "disabled",
+            "transport_fulfilment": "enabled_by_scope" if "transport_fulfilment.write" in scopes else "disabled",
             "patient_records": "not_available",
             "medical_history": "not_available",
             "prescriptions": "not_available",
