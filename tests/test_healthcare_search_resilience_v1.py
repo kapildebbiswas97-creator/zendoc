@@ -844,3 +844,83 @@ def test_near_me_with_coordinates_uses_coordinates_not_literal_me(tmp_path):
     assert query["latitude"] == 22.975
     assert query["longitude"] == 88.434
     assert query["category"] == "hospital"
+
+
+def test_find_care_results_render_embedded_coordinate_map(tmp_path, monkeypatch):
+    app = make_app(tmp_path)
+    client = app.test_client()
+    register_web(client, "patient", "finder-map@example.com", "Finder Map")
+    login_web(client, "patient", "finder-map@example.com")
+
+    fake_result = {
+        "query": {
+            "category": "hospital",
+            "specialty": "",
+            "location": "Kalyani",
+            "latitude": 22.975,
+            "longitude": 88.434,
+            "radius_km": 10,
+        },
+        "results": [
+            {
+                "id": "map:test:1",
+                "name": "Mapped Test Hospital",
+                "category": "hospital",
+                "address": "Test Road",
+                "city": "Kalyani",
+                "state": "West Bengal",
+                "latitude": 22.9801,
+                "longitude": 88.4402,
+                "source": "openstreetmap_nominatim",
+                "map_url": "https://www.openstreetmap.org/node/1",
+                "verification_status": "external_unverified",
+                "bookable_in_zendoc": False,
+            }
+        ],
+        "source_tiers": {
+            "zendoc_verified": 0,
+            "official_public_directory_not_zendoc_verified": 0,
+            "approved_public_listings_merged_into_verified": 0,
+            "external_unverified": 1,
+        },
+        "search_origin": {
+            "latitude": 22.975,
+            "longitude": 88.434,
+            "google_maps_url": "https://www.google.com/maps/search/?api=1&query=22.975,88.434",
+        },
+        "search_status": "complete",
+        "warnings": [],
+        "message": None,
+        "truth_notice": "Map test truth notice.",
+    }
+    monkeypatch.setattr(HealthcareFinder, "search", lambda _self, _query: fake_result)
+
+    response = client.get(
+        "/finder?category=hospital&location=Kalyani&latitude=22.975&longitude=88.434"
+    )
+
+    assert response.status_code == 200
+    assert b'id="finder-map-panel"' in response.data
+    assert b'id="finder-map"' in response.data
+    assert b"Mapped Test Hospital" in response.data
+    assert b'data-lat="22.9801"' in response.data
+    assert b'data-lng="88.4402"' in response.data
+    assert b"https://tile.openstreetmap.org/{z}/{x}/{y}.png" in response.data
+    assert b"OpenStreetMap contributors" in response.data
+    assert b"finder-map-fit" in response.data
+
+
+def test_find_care_map_script_is_local_resilient_and_does_not_load_map_library():
+    from pathlib import Path
+
+    script = (Path(__file__).resolve().parents[1] / "static" / "finder.js").read_text(
+        encoding="utf-8"
+    )
+
+    assert "worldPixel" in script
+    assert "wrappedDeltaX" in script
+    assert "fitResults" in script
+    assert "Map background is temporarily unavailable" in script
+    assert "new URL(value, window.location.origin)" in script
+    assert "leaflet" not in script.lower()
+    assert "eval(" not in script
