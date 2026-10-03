@@ -83,6 +83,7 @@ jobs:
           tests/test_controlled_pilot_journeys_v1.py
           tests/test_agent_orchestration_resilience_v1.py
           tests/test_jev_agentic_layer_v1.py
+          tests/test_incident_runtime_v1.py
           tests/test_agent_feature_coverage_v1.py
           tests/test_personal_agents_v1.py
           tests/test_interoperability_gateway_v1.py
