@@ -66,6 +66,7 @@ def _digest_text(snapshot: dict) -> str:
         f"- Database: {database.get('status', 'unknown')}",
         f"- Active alerts: {len(active_alerts)} ({', '.join(f'{k}={v}' for k, v in sorted(alert_counts.items())) or 'none'})",
         f"- Safe task retries re-queued: {automation.get('requeued_count', 0)}",
+        f"- AI workforce incident cases queued: {automation.get('workforce_cases_created', 0)}",
         f"- Tasks waiting for human/approval: {automation.get('waiting_human_or_approval', 0)}",
         f"- Permanent/exhausted failures: {automation.get('permanent_or_exhausted_failures', 0)}",
         "",
@@ -189,6 +190,8 @@ def run_owner_operations_cycle(
             "requeued_count": automation.get("requeued_count", 0),
             "waiting_human_or_approval": automation.get("waiting_human_or_approval", 0),
             "permanent_or_exhausted_failures": automation.get("permanent_or_exhausted_failures", 0),
+            "workforce_cases_created": automation.get("workforce_cases_created", 0),
+            "workforce_cases_existing": automation.get("workforce_cases_existing", 0),
         },
         "safety": automation.get("safety", {}),
     }

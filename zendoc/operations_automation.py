@@ -13,6 +13,7 @@ from __future__ import annotations
 from typing import Any
 
 from .agent_alerts import run_proactive_alert_check
+from .ai_workforce import intake_failed_events
 from .agent_task_engine import RETRIABLE_FAILURES, retry_task
 from .db import get_db
 from .security import assert_owner
@@ -54,6 +55,7 @@ def run_safe_operations_automation(actor: Any, *, retry_limit: int = 10) -> dict
                 "error": str(exc)[:300],
             })
 
+    workforce = intake_failed_events(actor, limit=retry_limit)
     alerts = run_proactive_alert_check()
 
     waiting_human = db.execute(
@@ -77,6 +79,8 @@ def run_safe_operations_automation(actor: Any, *, retry_limit: int = 10) -> dict
         "waiting_human_or_approval": waiting_human,
         "permanent_or_exhausted_failures": permanent_failed,
         "executed_tasks": 0,
+        "workforce_cases_created": workforce.get("created_count", 0),
+        "workforce_cases_existing": workforce.get("existing_count", 0),
         "safety": {
             "moves_money": False,
             "changes_permissions": False,

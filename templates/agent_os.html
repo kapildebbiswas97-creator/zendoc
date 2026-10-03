@@ -10,8 +10,22 @@
   <a href="{{ url_for('main.ai_center') }}" class="secondary-action">Open ZENDOC AI</a>
 </section>
 
+<section class="panel subtle-panel" aria-label="Personal AI agent">
+  <div class="panel-head">
+    <div><p class="eyebrow">Personal AI coordinator · {{ personal_agent.role|title }}</p><h2>{{ personal_agent.display_name }}</h2></div>
+    <span class="status-badge active">Agent OS core</span>
+  </div>
+  <p>{{ personal_agent.mission }}</p>
+  <div class="grid two">
+    <div><strong>Personal agent ID</strong><p class="form-note">{{ personal_agent.personal_agent_id }}</p></div>
+    <div><strong>Available specialist delegates</strong><p class="form-note">{{ personal_agent.available_delegates|length }} role-permitted agents</p></div>
+  </div>
+  <p class="form-note"><strong>Memory boundary:</strong> {{ personal_agent.memory_scope|join(' · ') }}</p>
+  <p class="form-note">Your personal coordinator never expands permissions. Every specialist and tool call is re-authorized server-side, and consequential actions still stop at consent, clinician or owner gates.</p>
+</section>
+
 <section class="panel">
-  <div class="panel-head"><div><p class="eyebrow">One request → specialist fleet</p><h2>Give Agent OS a task</h2></div><span class="status-badge beta">Competition Beta</span></div>
+  <div class="panel-head"><div><p class="eyebrow">One request → personal coordinator → specialist fleet</p><h2>Give Agent OS a task</h2></div><span class="status-badge beta">Production-safe automation</span></div>
   <form method="post">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="input_channel" value="typed">

@@ -7,6 +7,8 @@ from .agent_autonomy import bounded_autonomy_manifest
 from .agentic_decision_layer import decision_layer_manifest
 from .agent_fleet import list_fleet_agents
 from .agent_handoffs import handoff_for_intent, handoff_manifest
+from .ai_workforce import workforce_manifest
+from .personal_agents import personal_agent_snapshot
 from .appointment_continuity import complete_follow_up, sync_provider_appointment_status
 from .care_chain import build_persisted_care_chain, finalize_care_chain, prepare_care_chain
 from .care_continuity import get_care_continuity_snapshot
@@ -232,6 +234,7 @@ def agent_os_page():
         fleet=list_fleet_agents(),
         autonomy=bounded_autonomy_manifest(),
         handoffs=handoff_manifest(),
+        personal_agent=personal_agent_snapshot(g.user),
     )
 
 
@@ -411,6 +414,8 @@ def api_agent_autonomy():
         "decision_layer": decision_layer_manifest(),
         "handoffs": handoff_manifest(),
         "fleet": list_fleet_agents(),
+        "personal_agent": personal_agent_snapshot(user),
+        "ai_workforce": workforce_manifest() if str(user["role"] or "") == "admin" else None,
         "actor_role": str(user["role"] or ""),
         "notice": "Fleet and handoff metadata do not grant tool permissions; every execution remains server-side permission checked.",
     })
