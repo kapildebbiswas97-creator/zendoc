@@ -177,6 +177,8 @@ def load_config(base_dir, overrides=None):
             "ZENDOC_OBSERVABILITY_RETENTION_DAYS", 30, minimum=1, maximum=365
         ),
         "OPS_EXTERNAL_PROBES": env_bool("ZENDOC_OPS_EXTERNAL_PROBES", False),
+        "OPS_PUBLIC_DATA_REFRESH": env_bool("ZENDOC_OPS_PUBLIC_DATA_REFRESH", True),
+        "OPS_PUBLIC_DATA_AUTO_APPLY": env_bool("ZENDOC_OPS_PUBLIC_DATA_AUTO_APPLY", False),
         "PLACES_PROVIDER": os.environ.get("ZENDOC_PLACES_PROVIDER", "none"),
         "MAP_TILE_URL": os.environ.get(
             "ZENDOC_MAP_TILE_URL",
