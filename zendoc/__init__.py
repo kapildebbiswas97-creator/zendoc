@@ -84,6 +84,7 @@ from .public_launch_routes import bp as public_launch_bp
 from .release_health_routes import bp as release_health_bp
 from .referral_routes import bp as referrals_bp
 from .workforce_incident_routes import bp as workforce_incidents_bp
+from .local_controller_routes import bp as local_controller_bp
 from .referral_service import ensure_referral_schema
 from .release_state import release_state
 from .showcase_routes import bp as showcase_bp
@@ -178,6 +179,7 @@ def create_app(test_config=None):
     app.register_blueprint(release_health_bp)
     app.register_blueprint(referrals_bp)
     app.register_blueprint(workforce_incidents_bp)
+    app.register_blueprint(local_controller_bp)
     app.register_blueprint(health_memory_bp)
     app.register_blueprint(care_continuity_bp)
     app.register_blueprint(business_bp)
