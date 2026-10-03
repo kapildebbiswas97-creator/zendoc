@@ -136,7 +136,7 @@ def test_deployment_verifier_is_wired_to_optional_main_cd_job():
     assert "vars.ZENDOC_DEPLOYMENT_URL" in workflow
     assert 'python scripts/verify_deployment.py' in workflow
     assert '--expected-commit "${{ github.sha }}"' in workflow
-    assert "--require-platform render" in workflow
+    assert "--require-platform oci" in workflow
     assert "--require-engine postgresql" in workflow
     assert "--require-persistence-verified" in workflow
 
@@ -176,23 +176,23 @@ def test_merged_release_verification_workflow_exists_and_uses_merge_commit():
     assert "types: [closed]" in workflow
     assert "github.event.pull_request.merged == true" in workflow
     assert "github.event.pull_request.merge_commit_sha" in workflow
+    assert "vars.ZENDOC_DEPLOYMENT_URL != ''" in workflow
     assert "scripts/verify_deployment.py" in workflow
-    assert "--require-platform render" in workflow
+    assert "--require-platform oci" in workflow
     assert "--require-engine postgresql" in workflow
     assert "--require-persistence-verified" in workflow
     assert "--attempts 40" in workflow
     assert "--interval 15" in workflow
 
 
-def test_merged_release_workflow_can_trigger_render_deploy_hook():
+def test_merged_release_workflow_no_longer_triggers_expired_render_path():
     root = Path(__file__).resolve().parents[1]
     workflow = (root / ".github/workflows/merged-release-verification.yml").read_text(encoding="utf-8")
-    trigger = (root / "scripts/trigger_render_deploy.py").read_text(encoding="utf-8")
-    assert "RENDER_DEPLOY_HOOK_URL" in workflow
-    assert "scripts/trigger_render_deploy.py" in workflow
-    assert "Trigger Render deployment hook when configured" in workflow
-    assert "Render deploy hook accepted." in trigger
-    assert "render.com" in trigger
+    assert "RENDER_DEPLOY_HOOK_URL" not in workflow
+    assert "scripts/trigger_render_deploy.py" not in workflow
+    assert "onrender.com" not in workflow
+    assert "Vercel" in workflow
+    assert "--require-platform oci" in workflow
 
 
 def test_deployment_verifier_reports_only_safe_health_summary():
@@ -204,11 +204,12 @@ def test_deployment_verifier_reports_only_safe_health_summary():
     assert '"git_commit_short"' in verifier
 
 
-def test_merged_release_verification_uses_auto_deploy_when_hook_is_absent():
+def test_merged_release_verification_is_guarded_until_public_url_is_configured():
     root = Path(__file__).resolve().parents[1]
     workflow = (root / ".github/workflows/merged-release-verification.yml").read_text(encoding="utf-8")
-    assert "Trigger Render deployment hook when configured" in workflow
-    assert "relying on render.yaml autoDeployTrigger=commit" in workflow
+    assert "vars.ZENDOC_DEPLOYMENT_URL != ''" in workflow
+    assert "inputs.deployment_url != ''" in workflow
     assert "scripts/verify_deployment.py" in workflow
     assert "--expected-commit" in workflow
+    assert "--require-platform oci" in workflow
 
