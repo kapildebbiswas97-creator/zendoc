@@ -65,6 +65,35 @@ services:
       retries: 5
       start_period: 45s
 
+  ops-worker:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["python", "scripts/run_operations_worker.py"]
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: "postgresql://db:5432/${POSTGRES_DB:-zendoc}"
+      PGUSER: ${POSTGRES_USER:-zendoc}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/oci/.env}
+      PGDATABASE: ${POSTGRES_DB:-zendoc}
+      ZENDOC_ENV: production
+      ZENDOC_DEPLOYMENT_PLATFORM: oci
+      ZENDOC_SERVICE_NAME: zendoc-ops-worker
+      ZENDOC_GIT_COMMIT: ${ZENDOC_GIT_COMMIT}
+      ZENDOC_REQUIRE_DURABLE_DATABASE: "true"
+      ZENDOC_PERSISTENCE_VERIFIED: ${ZENDOC_PERSISTENCE_VERIFIED:-false}
+      ZENDOC_BACKUP_VERIFIED: ${ZENDOC_BACKUP_VERIFIED:-false}
+      ZENDOC_PUBLIC_RELEASE_REQUIRED: ${ZENDOC_PUBLIC_RELEASE_REQUIRED:-false}
+      ZENDOC_OPS_CYCLE_SECONDS: ${ZENDOC_OPS_CYCLE_SECONDS:-3600}
+      ZENDOC_OPS_DIGEST_EMAIL: ${ZENDOC_OPS_DIGEST_EMAIL:-true}
+    networks:
+      - backend
+    depends_on:
+      db:
+        condition: service_healthy
+
   caddy:
     image: caddy:2.9-alpine
     restart: unless-stopped
