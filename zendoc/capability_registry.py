@@ -307,6 +307,15 @@ def get_capability_registry() -> dict:
             "label": "Automatic Care Journey Coordinator",
             "description": "Deterministic care-workflow state machine with human gates, provenance, next-safe-action logic, and no diagnostic authority.",
         },
+        "ai_workforce_incident_runtime": {
+            "status": STATUS_WORKING,
+            "label": "Evidence-Gated AI Workforce Incident Runtime",
+            "description": (
+                "Persistent incident cases automatically classify privacy-safe failures, require explicit evidence for "
+                "reproduction/root cause/repair/security/tests/preview, stop at owner production approval, require live "
+                "post-release health/readiness evidence, and capture sanitized learning only after verification."
+            ),
+        },
         "safe_operations_automation": {
             "status": STATUS_WORKING,
             "label": "Safe Operations Automation",
