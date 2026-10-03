@@ -42,6 +42,10 @@ def test_postgres_is_not_published_from_oci_compose():
 
     assert "ports:" not in db_block
     assert "internal: true" in text
+    assert 'DATABASE_URL: "postgresql://db:5432/${POSTGRES_DB:-zendoc}"' in text
+    assert "PGUSER: ${POSTGRES_USER:-zendoc}" in text
+    assert "PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/oci/.env}" in text
+    assert ":${POSTGRES_PASSWORD}@db" not in text
 
 
 def test_public_url_and_oci_origin_are_distinct_and_restore_guard_is_preserved():
@@ -63,7 +67,9 @@ def test_oci_origin_requires_vercel_gateway_token_except_health_probes():
     assert "@public_health path /api/v1/health /api/v1/ready" in caddy
     assert "@vercel_gateway header X-Zendoc-Gateway-Token {$ZENDOC_GATEWAY_TOKEN}" in caddy
     assert 'header_up X-Zendoc-Gateway-Verified "1"' in caddy
-    assert "header_up -X-Zendoc-Gateway-Token" in caddy
+    assert caddy.count("header_up -X-Zendoc-Gateway-Verified") >= 2
+    assert caddy.count("header_up -X-Zendoc-Gateway-Token") >= 2
+    assert "header_up -X-Vercel-Forwarded-For" in caddy
     assert 'respond "Forbidden" 403' in caddy
     assert "ZENDOC_GATEWAY_TOKEN:" in compose
     assert "ZENDOC_GATEWAY_TOKEN=replace-with-a-long-random-gateway-only-secret" in env
