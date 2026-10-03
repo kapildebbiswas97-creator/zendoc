@@ -96,7 +96,7 @@ def test_referral_lifecycle_is_consent_and_provider_authority_bound(tmp_path):
 
         assert referral["status"] == "RETURNED_TO_PRIMARY"
         assert referral["terminal"] is True
-        assert len(referral["history"]) == 12
+        assert len(referral["history"]) == 13
         action = db.execute(
             "SELECT status FROM care_actions WHERE service_ref=?",
             (f"zendoc_referral:{referral_id}",),
