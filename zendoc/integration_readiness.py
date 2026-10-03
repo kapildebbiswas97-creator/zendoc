@@ -85,6 +85,8 @@ def integration_readiness_snapshot():
     configured_places_provider=str(places.get("configured_provider") or "none").strip().lower()
     if configured_places_provider=="google":
         places_required_config=("ZENDOC_PLACES_PROVIDER","ZENDOC_GOOGLE_PLACES_API_KEY")
+    elif configured_places_provider in {"healthsites","healthsites_api"}:
+        places_required_config=("ZENDOC_PLACES_PROVIDER","ZENDOC_HEALTHSITES_API_KEY")
     elif configured_places_provider in {"nominatim","openstreetmap","osm"}:
         places_required_config=("ZENDOC_PLACES_PROVIDER",)
     elif places.get("production_fallback_active"):
