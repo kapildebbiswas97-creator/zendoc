@@ -18,6 +18,8 @@ ZENDOC's governed data plane represents 195 country jurisdictions without preten
 
 Organization intelligence begins with authoritative legal-entity/filing registries (GLEIF globally, SEC EDGAR for U.S. public filers, Companies House for the UK, and MCA official company/LLP services for India). A discovered company's official newsroom, investor-relations feed, regulatory filing stream, healthcare regulator record or authorized partner API is attached as evidence only after HTTPS, usage/terms and schema review. Company announcements never become clinical or regulatory truth merely because they are official corporate speech.
 
+The hourly/daily operations layer also computes country source gaps. If gaps remain it maintains one deduplicated bounded `global_source_research` task owned operationally by `OperationsAgent` and assigned conceptually to the AI workforce `ResearchAgent`. The task contains a small country batch and the evidence required for a lawful adapter proposal; it performs no protected-site access and grants no ingestion permission. When a reviewed connector exists, `public_data_refresh` handles bounded scheduled refresh separately.
+
 ## Agent OS Coverage Contract
 
 The product capability registry and Agent OS are now linked by an explicit coverage contract. Every declared capability must map to a registered specialist owner and may also name an internal AI-workforce owner. CI fails if a capability is added without an Agent OS mapping, if a mapping points to an unknown specialist/workforce agent, or if a stale mapping survives after a capability is removed.

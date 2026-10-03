@@ -67,6 +67,8 @@ def _digest_text(snapshot: dict) -> str:
         f"- Active alerts: {len(active_alerts)} ({', '.join(f'{k}={v}' for k, v in sorted(alert_counts.items())) or 'none'})",
         f"- Safe task retries re-queued: {automation.get('requeued_count', 0)}",
         f"- AI workforce incident cases queued: {automation.get('workforce_cases_created', 0)}",
+        f"- Global country source gaps: {automation.get('global_source_gap_count', 0)}",
+        f"- ResearchAgent source batch newly queued: {'yes' if automation.get('source_research_batch_created') else 'no'}",
         f"- Tasks waiting for human/approval: {automation.get('waiting_human_or_approval', 0)}",
         f"- Permanent/exhausted failures: {automation.get('permanent_or_exhausted_failures', 0)}",
         "",
@@ -192,6 +194,9 @@ def run_owner_operations_cycle(
             "permanent_or_exhausted_failures": automation.get("permanent_or_exhausted_failures", 0),
             "workforce_cases_created": automation.get("workforce_cases_created", 0),
             "workforce_cases_existing": automation.get("workforce_cases_existing", 0),
+            "global_source_gap_count": automation.get("global_source_gap_count", 0),
+            "source_research_task_id": automation.get("source_research_task_id"),
+            "source_research_batch_created": bool(automation.get("source_research_batch_created")),
         },
         "safety": automation.get("safety", {}),
     }

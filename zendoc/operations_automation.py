@@ -14,6 +14,7 @@ from typing import Any
 
 from .agent_alerts import run_proactive_alert_check
 from .ai_workforce import intake_failed_events
+from .global_source_research import enqueue_source_research_batch
 from .agent_task_engine import RETRIABLE_FAILURES, retry_task
 from .db import get_db
 from .security import assert_owner
@@ -56,6 +57,7 @@ def run_safe_operations_automation(actor: Any, *, retry_limit: int = 10) -> dict
             })
 
     workforce = intake_failed_events(actor, limit=retry_limit)
+    source_research = enqueue_source_research_batch(actor)
     alerts = run_proactive_alert_check()
 
     waiting_human = db.execute(
@@ -81,6 +83,9 @@ def run_safe_operations_automation(actor: Any, *, retry_limit: int = 10) -> dict
         "executed_tasks": 0,
         "workforce_cases_created": workforce.get("created_count", 0),
         "workforce_cases_existing": workforce.get("existing_count", 0),
+        "global_source_gap_count": source_research.get("source_gap_count", 0),
+        "source_research_task_id": (source_research.get("task") or {}).get("id"),
+        "source_research_batch_created": bool(source_research.get("created")),
         "safety": {
             "moves_money": False,
             "changes_permissions": False,

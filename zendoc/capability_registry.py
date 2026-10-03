@@ -345,6 +345,11 @@ def get_capability_registry() -> dict:
             "label": "Global Organization Intelligence",
             "description": "Governed legal-entity, filing and official-source discovery plans for companies/organizations with licensing, provenance and no-private-data boundaries.",
         },
+        "global_source_research_automation": {
+            "status": STATUS_WORKING,
+            "label": "ResearchAgent Global Source-Gap Automation",
+            "description": "Operations automation continuously turns missing country-source coverage into a deduplicated, bounded ResearchAgent work batch while known reviewed connectors refresh separately.",
+        },
         "identity_evidence_review": {
             "status": STATUS_WORKING,
             "label": "Privacy-first Identity Evidence Review",
