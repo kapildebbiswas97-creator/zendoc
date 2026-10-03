@@ -250,7 +250,33 @@
         </div>
       {% endif %}
     {% elif result %}
-      <div class="empty-state panel"><h3>No matching care options yet</h3><p>{{ result.message or 'Try a broader name, specialty, city, area or PIN code.' }}</p><a href="{{ url_for('main.finder') }}" class="secondary-action">Clear search</a></div>
+      <section class="empty-state panel" aria-labelledby="finder-empty-title">
+        <p class="eyebrow">Search completed</p>
+        <h3 id="finder-empty-title">No matching care options from the current sources</h3>
+        <p>{{ result.message or 'Try a broader name, specialty, city, area or PIN code.' }}</p>
+        {% if result.source_health %}
+        <div class="finder-source-summary" aria-label="Source status for this search">
+          <div class="summary-row">
+            <span>ZENDOC verified network</span>
+            <strong>{{ result.source_health.zendoc_verified.result_count }} found · {{ 'checked' if result.source_health.zendoc_verified.available else 'temporarily unavailable' }}</strong>
+          </div>
+          <div class="summary-row">
+            <span>Official/public directory</span>
+            <strong>{{ result.source_health.official_public_directory.result_count }} found · {{ 'checked' if result.source_health.official_public_directory.available else 'temporarily unavailable' }}</strong>
+          </div>
+          <div class="summary-row">
+            <span>External map discovery</span>
+            <strong>{{ result.source_health.external_places.result_count }} found · {{ 'checked' if result.source_health.external_places.available else 'temporarily unavailable' }}</strong>
+          </div>
+        </div>
+        {% endif %}
+        <p class="form-note">Zero results means ZENDOC did not find a match in the sources available for this search. It does not mean no healthcare provider exists in the area.</p>
+        <div class="form-actions">
+          <a href="{{ url_for('universal_search.search_home', q=query.location or query.specialty, category='all', radius_km=query.radius_km) }}" class="primary-action">Broaden search</a>
+          <a href="{{ url_for('main.finder') }}" class="secondary-action">Clear search</a>
+          {% if current_user %}<a href="{{ url_for('pilot_operations.feedback_page', page=request.path, feature='find-care') }}" class="secondary-action">Report search problem</a>{% endif %}
+        </div>
+      </section>
     {% else %}
       <div class="empty-state panel"><h3>Search all available healthcare sources</h3><p>Try a provider name, doctor name, specialty, city, area, PIN code, or a natural phrase such as “cardiologist in Kolkata”.</p></div>
     {% endif %}
