@@ -9,6 +9,7 @@ from .agent_fleet import list_fleet_agents
 from .agent_handoffs import handoff_for_intent, handoff_manifest
 from .agent_feature_coverage import feature_agent_coverage_snapshot
 from .ai_workforce import workforce_manifest
+from .incident_runtime import list_incident_runtimes
 from .personal_agents import personal_agent_snapshot
 from .appointment_continuity import complete_follow_up, sync_provider_appointment_status
 from .care_chain import build_persisted_care_chain, finalize_care_chain, prepare_care_chain
@@ -225,6 +226,11 @@ def agent_os_page():
             persisted_care_chain = build_persisted_care_chain(g.user, journey_id)
         except (TypeError, ValueError, LookupError, PermissionError) as error:
             flash(str(error), "error")
+    workforce_incidents = (
+        list_incident_runtimes(g.user, limit=25)
+        if str(g.user["role"] or "") == "admin"
+        else []
+    )
     return render_template(
         "agent_os.html",
         result=result,
@@ -237,6 +243,7 @@ def agent_os_page():
         handoffs=handoff_manifest(),
         personal_agent=personal_agent_snapshot(g.user),
         agent_coverage=feature_agent_coverage_snapshot(),
+        workforce_incidents=workforce_incidents,
     )
 
 
