@@ -18,7 +18,20 @@ def _owner():
 
 
 def _patient(db):
-    return db.execute("SELECT * FROM users WHERE role='patient' ORDER BY id LIMIT 1").fetchone()
+    row = db.execute("SELECT * FROM users WHERE role='patient' ORDER BY id LIMIT 1").fetchone()
+    if row:
+        return row
+    now = "2026-10-03T00:00:00+00:00"
+    user_id = db.execute(
+        """
+        INSERT INTO users
+        (name,email,email_normalized,password_hash,role,active,created_at,updated_at)
+        VALUES ('Transport Fixture','transport-fixture@example.com','transport-fixture@example.com','x','patient',1,?,?)
+        """,
+        (now, now),
+    ).lastrowid
+    db.commit()
+    return db.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
 
 
 def _partner():

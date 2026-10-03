@@ -14,7 +14,7 @@
     <span class="status-badge {{ 'working' if probes.failing_count == 0 and probes.verified_count else 'integration' }}">{{ probes.verified_count }}/{{ probes.total_count }} passed latest bounded check</span>
   </div>
   <div class="grid two spaced-panel">
-    {% for probe in probes.items %}
+    {% for probe in probes["items"] %}
     <article class="panel">
       <div class="panel-head">
         <div><p class="eyebrow">{{ probe.key|replace('_',' ')|title }}</p><h3>{{ probe.label }}</h3></div>

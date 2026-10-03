@@ -10,9 +10,22 @@ from tests.test_milestone1 import make_app
 
 
 def _patient(db):
-    return db.execute(
+    row = db.execute(
         "SELECT * FROM users WHERE role='patient' ORDER BY id LIMIT 1"
     ).fetchone()
+    if row:
+        return row
+    now = "2026-10-03T00:00:00+00:00"
+    user_id = db.execute(
+        """
+        INSERT INTO users
+        (name,email,email_normalized,password_hash,role,active,created_at,updated_at)
+        VALUES ('Device Fixture','device-fixture@example.com','device-fixture@example.com','x','patient',1,?,?)
+        """,
+        (now, now),
+    ).lastrowid
+    db.commit()
+    return db.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
 
 
 def test_device_ingestion_key_is_hashed_scoped_and_idempotent(tmp_path):
@@ -63,6 +76,7 @@ def test_device_key_cannot_write_another_patients_data(tmp_path):
     app = make_app(tmp_path)
     with app.app_context():
         db = get_db()
+        _patient(db)
         patients = db.execute(
             "SELECT * FROM users WHERE role='patient' ORDER BY id LIMIT 2"
         ).fetchall()

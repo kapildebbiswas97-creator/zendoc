@@ -14,7 +14,8 @@ DEVICE_TYPES = [
     {"type": "blood_pressure_monitor", "name": "Blood Pressure Monitor", "metrics": ["blood_pressure"], "icon": "heartbeat"},
     {"type": "glucometer", "name": "Smart Glucometer", "metrics": ["blood_glucose"], "icon": "tint"},
     {"type": "pulse_oximeter", "name": "Pulse Oximeter", "metrics": ["oxygen_saturation", "heart_rate"], "icon": "wave-square"},
-    {"type": "smartwatch", "name": "Smartwatch / Fitness Band", "metrics": ["heart_rate", "steps", "sleep"], "icon": "stopwatch"},
+    {"type": "smartwatch", "name": "Smartwatch", "metrics": ["heart_rate", "steps", "sleep"], "icon": "stopwatch"},
+    {"type": "fitness_band", "name": "Fitness Band", "metrics": ["heart_rate", "steps", "sleep"], "icon": "stopwatch"},
     {"type": "smart_scale", "name": "Smart Weight Scale", "metrics": ["weight", "bmi"], "icon": "weight"},
     {"type": "thermometer", "name": "Digital Thermometer", "metrics": ["temperature"], "icon": "thermometer-half"},
     {"type": "ecg_monitor", "name": "Portable ECG Device", "metrics": ["ecg_rhythm"], "icon": "microchip"},
@@ -62,7 +63,8 @@ def connect_device(user, data):
     result = get_device(user, cursor.lastrowid)
     result["live_device_sync"] = False
     result["ingestion_bridge_available"] = True
-    result["integration_status"] = "bridge_ready_vendor_pairing_required"
+    result["integration_status"] = "integration_required"
+    result["bridge_status"] = "bridge_ready_vendor_pairing_required"
     result["truth_notice"] = (
         "This is a user-registered device record only. ZENDOC has an authenticated "
         "device-ingestion bridge, but registration does not prove pairing, manufacturer "
@@ -103,6 +105,6 @@ def sync_device_measurement(user, device_id, metric_type, metric_value, unit=Non
     """
     get_device(user, device_id)
     raise ValueError(
-        "Legacy direct device sync is disabled. Use the authenticated per-device ingestion bridge "
+        "Integration Required: legacy direct device sync is disabled. Use the authenticated per-device ingestion bridge "
         "for trusted automated measurements, or enter the value through Health Monitoring as manual/user-reported."
     )
