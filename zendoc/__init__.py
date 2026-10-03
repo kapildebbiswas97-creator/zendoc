@@ -89,6 +89,7 @@ from .universal_search_routes import bp as universal_search_bp
 from .database_reliability import readiness_report
 from .observability import finish_request_observation, start_request_observation
 from .routes import bp
+from .transport_partner import bp as transport_partner_bp, ensure_transport_partner_schema
 from .security_headers import apply_security_headers
 
 
@@ -169,6 +170,7 @@ def create_app(test_config=None):
     app.register_blueprint(ai_chat_bp)
     app.register_blueprint(calls_bp)
     app.register_blueprint(bp)
+    app.register_blueprint(transport_partner_bp)
     app.register_blueprint(release_health_bp)
     app.register_blueprint(health_memory_bp)
     app.register_blueprint(care_continuity_bp)
@@ -298,6 +300,7 @@ def create_app(test_config=None):
             ensure_consent_schema()
             ensure_email_verification_schema()
             ensure_device_ingestion_schema()
+            ensure_transport_partner_schema()
             ensure_medical_knowledge_document_schema()
             ensure_medical_rag_schema()
             ensure_provider_invitation_schema()
