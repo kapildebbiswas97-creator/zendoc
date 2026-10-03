@@ -38,6 +38,7 @@ from .health_hub_routes import bp as health_hub_bp
 from .identity_verification import ensure_identity_verification_schema
 from .identity_verification_routes import bp as identity_verification_bp
 from .integration_routes import bp as integration_readiness_bp
+from .interoperability_routes import bp as interoperability_bp
 from .health_shop import ensure_health_shop_schema
 from .health_shop_routes import bp as health_shop_bp
 from .health_social import ensure_health_social_schema
@@ -186,6 +187,7 @@ def create_app(test_config=None):
     app.register_blueprint(health_hub_bp)
     app.register_blueprint(identity_verification_bp)
     app.register_blueprint(integration_readiness_bp)
+    app.register_blueprint(interoperability_bp)
     app.register_blueprint(health_shop_bp)
     app.register_blueprint(health_social_bp)
     app.register_blueprint(mental_wellness_bp)
