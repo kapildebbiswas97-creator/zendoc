@@ -99,7 +99,7 @@ def test_fetch_ogd_hospitals_is_bounded_and_does_not_return_api_key(monkeypatch)
     monkeypatch.setattr(connectors.urllib.request, "urlopen", fake_urlopen)
 
     result = connectors.fetch_data_gov_hospitals(
-        api_key="super-secret-test-key",
+        api_key="test-secret",
         state="West Bengal",
         district="Nadia",
         limit=9999,
@@ -110,7 +110,7 @@ def test_fetch_ogd_hospitals_is_bounded_and_does_not_return_api_key(monkeypatch)
     parsed = urlparse(captured["url"])
     query = parse_qs(parsed.query)
     assert parsed.path.endswith(connectors.DATA_GOV_HOSPITAL_RESOURCE_ID)
-    assert query["api-key"] == ["super-secret-test-key"]
+    assert query["api-key"] == ["test-secret"]
     assert query["filters[state]"] == ["West Bengal"]
     assert query["filters[district]"] == ["Nadia"]
     assert query["limit"] == ["500"]
@@ -119,7 +119,7 @@ def test_fetch_ogd_hospitals_is_bounded_and_does_not_return_api_key(monkeypatch)
     assert result["upstream_total"] == 123
     assert result["record_count"] == 1
     assert result["records"][0]["public_phone"] is None
-    assert "super-secret-test-key" not in repr(result)
+    assert "test-secret" not in repr(result)
 
 
 def test_ingest_ogd_hospitals_delegates_to_reviewed_pipeline(monkeypatch):
