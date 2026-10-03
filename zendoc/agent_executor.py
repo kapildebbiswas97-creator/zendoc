@@ -22,7 +22,12 @@ def _transient_failure_category(error: Exception) -> str | None:
     message = str(error or "").lower()
     if isinstance(error, TimeoutError) or "timeout" in message or "timed out" in message:
         return "timeout"
-    if isinstance(error, (ConnectionError, OSError)) or any(
+    # Authorization/consent denials are policy outcomes, never provider outages.
+    # PermissionError inherits from OSError, so it must be excluded before any
+    # network-style classification.
+    if isinstance(error, PermissionError):
+        return None
+    if isinstance(error, ConnectionError) or any(
         marker in message
         for marker in (
             "temporarily unavailable",
