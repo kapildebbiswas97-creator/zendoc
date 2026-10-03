@@ -185,6 +185,10 @@ def load_config(base_dir, overrides=None):
             "ZENDOC_MAP_TILE_ATTRIBUTION",
             "© OpenStreetMap contributors",
         ).strip(),
+        "MAP_TILE_ATTRIBUTION_URL": os.environ.get(
+            "ZENDOC_MAP_TILE_ATTRIBUTION_URL",
+            "https://www.openstreetmap.org/copyright",
+        ).strip(),
         "VIDEO_PROVIDER": os.environ.get("ZENDOC_VIDEO_PROVIDER", "none"),
         "YOUTUBE_API_KEY": os.environ.get("ZENDOC_YOUTUBE_API_KEY", ""),
         "REQUIRE_DURABLE_DATABASE": env_bool("ZENDOC_REQUIRE_DURABLE_DATABASE", False),
