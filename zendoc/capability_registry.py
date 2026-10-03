@@ -293,6 +293,15 @@ def get_capability_registry() -> dict:
                 "Personal eligibility, insurer/government/CSR approval and payment confirmation require an authoritative partner response; owner evidence review remains available."
             ),
         },
+        "referral_waiting_list_os": {
+            "status": STATUS_WORKING,
+            "label": "Referral & Waiting List OS",
+            "description": (
+                "Consent-bound internal referral lifecycle covers packet preparation, patient consent, send/receive, "
+                "triage, accept/reject, waiting list, scheduling, consultation, report, follow-up and return to primary care. "
+                "External EHR/network delivery is never inferred."
+            ),
+        },
         "automatic_care_journey": {
             "status": STATUS_WORKING,
             "label": "Automatic Care Journey Coordinator",
