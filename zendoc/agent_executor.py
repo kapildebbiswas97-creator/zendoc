@@ -1014,6 +1014,24 @@ def _search_health_memory_evidence(actor, arguments):
     )
 
 
+def _interoperability_capabilities(actor, arguments):
+    from .interoperability_gateway import interoperability_manifest
+
+    return interoperability_manifest()
+
+
+def _interoperability_exchange_plan(actor, arguments):
+    from .interoperability_gateway import build_exchange_plan
+
+    return build_exchange_plan(
+        actor,
+        adapter_key=arguments.get("adapter_key"),
+        resource_type=arguments.get("resource_type"),
+        direction=arguments.get("direction"),
+        patient_id=arguments.get("patient_id"),
+    )
+
+
 TOOL_HANDLERS = {
     "get_platform_summary": _platform_summary,
     "get_appointment_summary": _appointment_summary,
@@ -1055,6 +1073,8 @@ TOOL_HANDLERS = {
     "confirm_and_execute_order": _confirm_order,
     "get_diagnostic_options": _diagnostic_options,
     "get_unified_healthcare_inbox": _unified_inbox,
+    "get_interoperability_capabilities": _interoperability_capabilities,
+    "prepare_interoperability_exchange_plan": _interoperability_exchange_plan,
     "get_health_memory_context": _health_memory_context,
     "search_health_memory_evidence": _search_health_memory_evidence,
     "get_fitness_snapshot": _fitness_snapshot,
