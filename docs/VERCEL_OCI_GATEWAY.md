@@ -18,6 +18,16 @@ The repository keeps automatic Vercel Git deployments disabled in `vercel.ts` un
 
 When the real OCI origin is verified and the Vercel project has `ZENDOC_ORIGIN_URL`, remove the `git.deploymentEnabled: false` guard in a reviewed change, run the Production Gate, then deploy/promote the verified build.
 
+## Build/runtime requirements
+
+The gateway build is pinned to Node.js 24 through `package.json`. This avoids
+creating new deployments with Node.js 20 after Vercel disabled Node.js 20 for
+new builds on 2026-10-01.
+
+CI validates `vercel.ts` with the pinned `@vercel/config` SDK using a
+non-secret placeholder HTTPS origin. That proves the repository configuration
+compiles; it does **not** prove the real OCI hostname is reachable.
+
 ## Required Vercel variable
 
 Set only:
@@ -58,4 +68,4 @@ Keep the existing restore safety flag false during normal operation:
 
 ## Release truth
 
-Merging gateway code does not provision Oracle Cloud, create DNS, migrate Render data, or prove live readiness. Keep ZENDOC_PERSISTENCE_VERIFIED, ZENDOC_BACKUP_VERIFIED, and ZENDOC_PUBLIC_RELEASE_REQUIRED false until their real checks pass.
+Merging gateway code does not provision Oracle Cloud, create DNS, restore historical Render data, or prove live readiness. The expired Render free deployment is no longer treated as the production fallback or deployment-verification default. Keep ZENDOC_PERSISTENCE_VERIFIED, ZENDOC_BACKUP_VERIFIED, and ZENDOC_PUBLIC_RELEASE_REQUIRED false until their real checks pass.
