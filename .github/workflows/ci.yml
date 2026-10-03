@@ -194,7 +194,6 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: "24.x"
-          cache: npm
       - name: Install pinned Vercel config SDK
         run: npm install --ignore-scripts
       - name: Validate programmatic Vercel configuration
