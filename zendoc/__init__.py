@@ -82,6 +82,8 @@ from .provider_service import PROVIDER_ROLES, get_provider_profile_for_user
 from .provider_invitation import ensure_provider_invitation_schema
 from .public_launch_routes import bp as public_launch_bp
 from .release_health_routes import bp as release_health_bp
+from .referral_routes import bp as referrals_bp
+from .referral_service import ensure_referral_schema
 from .release_state import release_state
 from .showcase_routes import bp as showcase_bp
 from .specialist_agent_routes import bp as specialist_agents_bp
@@ -173,6 +175,7 @@ def create_app(test_config=None):
     app.register_blueprint(bp)
     app.register_blueprint(transport_partner_bp)
     app.register_blueprint(release_health_bp)
+    app.register_blueprint(referrals_bp)
     app.register_blueprint(health_memory_bp)
     app.register_blueprint(care_continuity_bp)
     app.register_blueprint(business_bp)
@@ -316,6 +319,7 @@ def create_app(test_config=None):
             ensure_payment_schema()
             ensure_organization_health_schema()
             ensure_care_action_ledger_schema()
+            ensure_referral_schema()
             ensure_operational_fulfilment_schema()
             get_db().commit()
             report = readiness_report()
