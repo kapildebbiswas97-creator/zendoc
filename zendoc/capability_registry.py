@@ -211,6 +211,15 @@ def get_capability_registry() -> dict:
                            if local_ai_configured else
                            "Local SLM integration ready — model not configured.",
         },
+        "local_agent_controller": {
+            "status": STATUS_BETA if local_ai_configured else STATUS_WORKING,
+            "label": "ZENDOC Local Agent Controller",
+            "description": (
+                "Owner-scoped local control plane is working with a configured local model layer; model output remains advisory and all tools stay permission-gated."
+                if local_ai_configured
+                else "Owner-scoped deterministic local control plane is working; configure a local model to add private on-device language/reasoning assistance."
+            ),
+        },
         "slm_product_layer": {
             "status": STATUS_WORKING,
             "label": "ZENDOC-SLM v1 Product Layer",
