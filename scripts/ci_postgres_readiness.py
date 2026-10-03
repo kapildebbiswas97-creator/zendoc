@@ -17,6 +17,7 @@ if str(ROOT) not in sys.path:
 from zendoc import create_app
 from zendoc.database_reliability import REQUIRED_MIGRATIONS, REQUIRED_TABLES, readiness_report
 from zendoc.db import get_db, now_iso
+from zendoc.health_memory_continuity import determine_next_safe_actions
 from zendoc.security import hash_token, new_token
 
 
@@ -125,6 +126,21 @@ def check_product_routes(app) -> None:
         owner_token = _issue_api_token(db, owner_id)
         patient_token = _issue_api_token(db, patient_id)
         db.commit()
+
+        # PostgreSQL-specific Care OS regression: this query path used to
+        # compare the TEXT scheduled_for column with date('now'), which
+        # PostgreSQL rejected while the browser route swallowed the error.
+        patient_actor = db.execute(
+            "SELECT * FROM users WHERE id=?",
+            (patient_id,),
+        ).fetchone()
+        try:
+            determine_next_safe_actions(patient_actor, actor=patient_actor)
+            probe = db.execute("SELECT 1 AS ok").fetchone()
+        except Exception as exc:
+            fail(f"Care OS next-safe-action PostgreSQL smoke failed: {exc}")
+        if not probe or int(probe["ok"]) != 1:
+            fail("Database transaction was not usable after Care OS next-safe-action smoke.")
 
     owner_client = app.test_client()
     _set_browser_session(owner_client, owner_id, "admin")
