@@ -11,6 +11,7 @@ INVARIANTS:
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 from .db import get_db, now_iso
@@ -219,10 +220,10 @@ def determine_next_safe_actions(patient_id: int | Any, actor: Any = None) -> lis
         """
         SELECT a.*, d.name doctor_name FROM appointments a
         JOIN users d ON d.id=a.provider_id
-        WHERE a.patient_id=? AND a.status='confirmed' AND a.scheduled_for >= date('now')
+        WHERE a.patient_id=? AND a.status='confirmed' AND a.scheduled_for >= ?
         ORDER BY a.scheduled_for ASC LIMIT 1
         """,
-        (patient_id,),
+        (patient_id, datetime.now(timezone.utc).date().isoformat()),
     ).fetchone()
     if upcoming_appt:
         actions.append({
