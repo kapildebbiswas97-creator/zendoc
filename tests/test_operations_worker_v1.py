@@ -10,18 +10,27 @@ COMPOSE = ROOT / "deploy" / "oci" / "compose.yaml"
 WORKER = ROOT / "scripts" / "run_operations_worker.py"
 
 
-def test_oci_operations_worker_runs_on_private_backend_only():
+def test_oci_operations_worker_has_private_db_access_and_outbound_egress_without_ports():
     text = COMPOSE.read_text(encoding="utf-8")
-    worker = text.split("  ops-worker:", 1)[1].split("\n  caddy:", 1)[0]
+    worker = text.split("  ops-worker:", 1)[1].split("\n  turn:", 1)[0]
 
     assert 'command: ["python", "scripts/run_operations_worker.py"]' in worker
     assert "restart: unless-stopped" in worker
     assert "ZENDOC_OPS_CYCLE_SECONDS" in worker
     assert "ZENDOC_OPS_DIGEST_EMAIL" in worker
     assert "- backend" in worker
-    assert "- edge" not in worker
+    assert "- edge" in worker
     assert "ports:" not in worker
     assert "expose:" not in worker
+
+
+def test_oci_env_example_has_real_lines_not_literal_escape_sequences():
+    env = (ROOT / "deploy" / "oci" / ".env.example").read_text(encoding="utf-8")
+
+    assert "\\n# The OGD connector" not in env
+    assert "\\n# Optional global facility discovery" not in env
+    assert "ZENDOC_DATA_GOV_IN_API_KEY=\n" in env
+    assert "ZENDOC_HEALTHSITES_API_KEY=\n" in env
 
 
 def test_operations_worker_has_no_code_deploy_or_arbitrary_execution_path():

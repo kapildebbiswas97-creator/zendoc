@@ -88,8 +88,12 @@ services:
       ZENDOC_PUBLIC_RELEASE_REQUIRED: ${ZENDOC_PUBLIC_RELEASE_REQUIRED:-false}
       ZENDOC_OPS_CYCLE_SECONDS: ${ZENDOC_OPS_CYCLE_SECONDS:-3600}
       ZENDOC_OPS_DIGEST_EMAIL: ${ZENDOC_OPS_DIGEST_EMAIL:-true}
+    # backend is the private PostgreSQL network; edge provides outbound DNS/HTTPS
+    # for read-only integration probes, SMTP delivery and official-data refresh.
+    # No worker ports are published, so adding edge does not expose the worker.
     networks:
       - backend
+      - edge
     depends_on:
       db:
         condition: service_healthy
