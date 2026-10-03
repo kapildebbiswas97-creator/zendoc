@@ -4,6 +4,47 @@
 <section class="section-head"><div><p class="eyebrow">Owner-only release control</p><h1>Integration Center</h1><p class="section-copy">One place to see what ZENDOC software already supports and what still depends on a real external account, credential, partner, network or verification step.</p></div><a class="secondary-action" href="{{ url_for('main.admin') }}">Back to Admin</a></section>
 <aside class="trust-note"><strong>Truth rule.</strong><br>{{ snapshot.truth_notice }}</aside>
 <section class="stats spaced-panel"><article><span>Tracked integrations</span><strong>{{ snapshot.total_count }}</strong></article><article><span>No external blocker</span><strong>{{ snapshot.ready_count }}</strong></article><article><span>External dependency / verification</span><strong>{{ snapshot.external_blocker_count }}</strong></article></section>
+<section class="panel spaced-panel" aria-labelledby="integration-runtime-title">
+  <div class="panel-head">
+    <div>
+      <p class="eyebrow">Runtime proof</p>
+      <h2 id="integration-runtime-title">Runtime verification evidence</h2>
+      <p class="form-note">{{ probes.truth_notice }}</p>
+    </div>
+    <span class="status-badge {{ 'working' if probes.failing_count == 0 and probes.verified_count else 'integration' }}">{{ probes.verified_count }}/{{ probes.total_count }} passed latest bounded check</span>
+  </div>
+  <div class="grid two spaced-panel">
+    {% for probe in probes.items %}
+    <article class="panel">
+      <div class="panel-head">
+        <div><p class="eyebrow">{{ probe.key|replace('_',' ')|title }}</p><h3>{{ probe.label }}</h3></div>
+        {% if probe.last %}
+          <span class="status-badge {{ 'working' if probe.last.status == 'working' else 'integration' }}">{{ probe.last.status|replace('_',' ') }}</span>
+        {% else %}
+          <span class="status-badge integration">Not probed</span>
+        {% endif %}
+      </div>
+      {% if probe.last %}
+        <div class="summary-row"><strong>Evidence</strong><span>{{ probe.last.evidence_code|replace('_',' ') }}</span></div>
+        <div class="summary-row"><strong>Checked</strong><span>{{ probe.last.checked_at }}</span></div>
+        <div class="summary-row"><strong>Latency</strong><span>{{ probe.last.latency_ms }} ms</span></div>
+      {% else %}
+        <p class="form-note">No runtime evidence has been recorded for this deployment yet.</p>
+      {% endif %}
+      {% if probe.may_use_billable_api %}
+        <p class="form-note"><strong>Note:</strong> this manual probe can make one bounded request to a configured external API/model and may count toward provider usage.</p>
+      {% elif probe.automatic_safe %}
+        <p class="form-note">This probe is read-only/non-mutating and eligible for the opt-in operations worker.</p>
+      {% endif %}
+      <form method="post" action="{{ url_for('integration_readiness.integration_probe', integration_key=probe.key) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="secondary-action">Run runtime probe</button>
+      </form>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+
 <section class="grid two spaced-panel">
 {% for item in snapshot.integrations %}
 <article class="panel">
