@@ -140,6 +140,24 @@ AGENT_REGISTRY: dict[str, AgentDefinition] = {
         description="Uses only authorized patient context and preserves provenance. No cross-user leakage.",
     ),
 
+    "InteroperabilityAgent": AgentDefinition(
+        identifier="InteroperabilityAgent",
+        name="Healthcare Interoperability Agent",
+        purpose="Inspect provider-neutral FHIR exchange capability and prepare non-executing interoperability plans.",
+        allowed_tools=[
+            "get_interoperability_capabilities",
+            "prepare_interoperability_exchange_plan",
+        ],
+        allowed_actor_roles=ALL_ROLES,
+        risk_level="READ_ONLY",
+        approval_requirements=["explicit_authorization_and_consent_before_external_exchange"],
+        status="beta",
+        description=(
+            "Plans only. It cannot contact an external EHR/HIE, grant access, export records, "
+            "or claim Epic/Oracle/ABDM/TEFCA/EHDS connectivity without verified adapter evidence."
+        ),
+    ),
+
     "PreventionAgent": AgentDefinition(
         identifier="PreventionAgent",
         name="Prevention Agent",
@@ -433,6 +451,10 @@ def choose_agent_for_intent(intent: str) -> AgentDefinition | None:
         "health_analytics": "CareAgent",
         "health_profile":   "CareAgent",
         "health_records":   "HealthMemoryAgent",
+        "health_interoperability": "InteroperabilityAgent",
+        "interoperability": "InteroperabilityAgent",
+        "fhir_exchange": "InteroperabilityAgent",
+        "record_exchange": "InteroperabilityAgent",
         "telehealth":       "DoctorAgent",
         "telehealth_request": "DoctorAgent",
         "video_consultation": "DoctorAgent",
