@@ -12,6 +12,7 @@ from .geospatial import bounding_box, nearby_records
 
 GOOGLE_NEARBY_SEARCH_URL = "https://places.googleapis.com/v1/places:searchNearby"
 NOMINATIM_SEARCH_URL = "https://nominatim.openstreetmap.org/search"
+HEALTHSITES_FACILITIES_URL = "https://healthsites.io/api/v3/facilities/"
 NOMINATIM_USER_AGENT = "ZENDOC/1.0 (+https://github.com/kapildebbiswas97-creator/zendoc)"
 _NOMINATIM_REQUEST_LOCK = threading.Lock()
 _NOMINATIM_LAST_REQUEST_AT = 0.0
@@ -284,6 +285,118 @@ class NominatimPlacesProvider(PlacesProvider):
         return payload
 
 
+class HealthsitesPlacesProvider(PlacesProvider):
+    """Read-only global facility discovery through Healthsites API v3.
+
+    Healthsites records are discovery data only. They are never promoted to a
+    verified/bookable ZENDOC provider and are filtered to a bounded geographic
+    result set when coordinates are available.
+    """
+
+    source = "healthsites_api"
+
+    def __init__(self, api_key, timeout_seconds=8):
+        self.api_key = str(api_key or "").strip()
+        self.timeout_seconds = max(1, min(int(timeout_seconds or 8), 20))
+        self.cache = ShortLivedCache(ttl_seconds=1800)
+
+    def search(self, query):
+        normalized = dict(query or {})
+        latitude = _coordinate_number(normalized.get("latitude"), -90, 90)
+        longitude = _coordinate_number(normalized.get("longitude"), -180, 180)
+        country_code = _normalized_country_code(normalized.get("country_code"))
+        if not self.api_key:
+            return PlacesResult(
+                available=False,
+                results=[],
+                message="Healthsites API key is not configured.",
+                source=self.source,
+            )
+        if (latitude is None or longitude is None) and not country_code:
+            return PlacesResult(
+                available=True,
+                results=[],
+                message=(
+                    "Healthsites needs a current location or two-letter country code. "
+                    "OpenStreetMap fallback can still handle a city/area text search."
+                ),
+                source=self.source,
+            )
+
+        cache_key = tuple(sorted(normalized.items()))
+        cached = self.cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        params = {
+            "api-key": self.api_key,
+            "page": "1",
+            "flat-properties": "true",
+            "output": "geojson",
+        }
+        if country_code:
+            params["country"] = country_code
+        radius_km = _bounded_radius_km(normalized.get("radius_km"))
+        if latitude is not None and longitude is not None:
+            south, north, west, east = bounding_box(latitude, longitude, radius_km)
+            if west <= east:
+                params["extent"] = f"{west},{south},{east},{north}"
+
+        url = f"{HEALTHSITES_FACILITIES_URL}?{urllib.parse.urlencode(params)}"
+        try:
+            payload = self._get_json(url)
+            features = []
+            if isinstance(payload, dict):
+                features = payload.get("features") or payload.get("results") or []
+            elif isinstance(payload, list):
+                features = payload
+            results = [
+                _public_healthsites_place(item, normalized)
+                for item in features[:100]
+                if isinstance(item, dict)
+            ]
+            results = [item for item in results if item]
+            if latitude is not None and longitude is not None:
+                results = nearby_records(results, latitude, longitude, radius_km)
+            result = PlacesResult(
+                available=True,
+                results=results[:25],
+                message=None if results else "Healthsites returned no matching healthcare facilities.",
+                source=self.source,
+            )
+        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, ValueError, json.JSONDecodeError):
+            result = PlacesResult(
+                available=False,
+                results=[],
+                message=(
+                    "Healthsites global facility discovery is temporarily unavailable. "
+                    "No provider availability or booking status was fabricated."
+                ),
+                source=self.source,
+            )
+        if result.available:
+            self.cache.set(cache_key, result)
+        return result
+
+    def _get_json(self, url):
+        request = urllib.request.Request(
+            url,
+            headers={
+                "Accept": "application/json",
+                "User-Agent": NOMINATIM_USER_AGENT,
+            },
+            method="GET",
+        )
+        with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
+            raw = response.read(3_145_729)
+        if len(raw) > 3_145_728:
+            raise ValueError("Healthsites response exceeded the safe response limit.")
+        payload = json.loads(raw.decode("utf-8"))
+        if not isinstance(payload, (dict, list)):
+            raise ValueError("Healthsites returned an invalid response.")
+        return payload
+
+
 class FallbackPlacesProvider(PlacesProvider):
     source = "fallback_chain"
 
@@ -474,10 +587,25 @@ def _effective_places_provider():
 def places_configuration_status():
     configured_provider, effective_provider, production_fallback_active = _effective_places_provider()
     has_google_key = bool(os.environ.get("ZENDOC_GOOGLE_PLACES_API_KEY"))
+    has_healthsites_key = bool(os.environ.get("ZENDOC_HEALTHSITES_API_KEY"))
     if effective_provider == "google" and has_google_key:
-        mode = "google_with_openstreetmap_fallback"
+        mode = (
+            "google_with_healthsites_and_openstreetmap_fallback"
+            if has_healthsites_key
+            else "google_with_openstreetmap_fallback"
+        )
     elif effective_provider == "google":
-        mode = "openstreetmap_fallback_google_key_missing"
+        mode = (
+            "healthsites_with_openstreetmap_fallback_google_key_missing"
+            if has_healthsites_key
+            else "openstreetmap_fallback_google_key_missing"
+        )
+    elif effective_provider in {"healthsites", "healthsites_api"}:
+        mode = (
+            "healthsites_with_openstreetmap_fallback"
+            if has_healthsites_key
+            else "openstreetmap_fallback_healthsites_key_missing"
+        )
     elif effective_provider in {"nominatim", "openstreetmap", "osm"}:
         mode = "production_openstreetmap_fallback" if production_fallback_active else "openstreetmap_nominatim"
     else:
@@ -488,6 +616,7 @@ def places_configuration_status():
         "production_fallback_active": production_fallback_active,
         "mode": mode,
         "google_places_key_configured": has_google_key,
+        "healthsites_api_key_configured": has_healthsites_key,
         "external_discovery_available": mode != "unconfigured",
         "truth_notice": (
             "This status exposes provider mode only. It never exposes API credentials and does not imply "
@@ -504,18 +633,33 @@ def configured_places_provider():
     except (TypeError, ValueError):
         timeout = 5
 
+    nominatim = NominatimPlacesProvider(timeout_seconds=timeout)
+    healthsites_key = str(os.environ.get("ZENDOC_HEALTHSITES_API_KEY") or "").strip()
+    healthsites_fallback = (
+        FallbackPlacesProvider(
+            HealthsitesPlacesProvider(healthsites_key, timeout_seconds=timeout),
+            nominatim,
+        )
+        if healthsites_key
+        else nominatim
+    )
+
     if provider == "google":
-        fallback = NominatimPlacesProvider(timeout_seconds=timeout)
         api_key = os.environ.get("ZENDOC_GOOGLE_PLACES_API_KEY")
         if api_key:
             return FallbackPlacesProvider(
                 GooglePlacesProvider(api_key, timeout_seconds=timeout),
-                fallback,
+                healthsites_fallback,
             )
-        return fallback
+        return healthsites_fallback
+
+    if provider in {"healthsites", "healthsites_api"}:
+        if healthsites_key:
+            return healthsites_fallback
+        return nominatim
 
     if provider in {"nominatim", "openstreetmap", "osm"}:
-        return NominatimPlacesProvider(timeout_seconds=timeout)
+        return nominatim
 
     return UnconfiguredPlacesProvider()
 
@@ -562,6 +706,84 @@ def _public_place(place, query):
         "verification_status": "external_unverified",
         "bookable_in_zendoc": False,
         "source": "google_places",
+    }
+
+
+def _public_healthsites_place(feature, query):
+    properties = feature.get("properties") if isinstance(feature.get("properties"), dict) else feature
+    geometry = feature.get("geometry") if isinstance(feature.get("geometry"), dict) else {}
+    coords = geometry.get("coordinates") if isinstance(geometry.get("coordinates"), list) else []
+    longitude = _number(coords[0]) if len(coords) > 1 else _number(properties.get("longitude") or properties.get("lon"))
+    latitude = _number(coords[1]) if len(coords) > 1 else _number(properties.get("latitude") or properties.get("lat"))
+    name = str(
+        properties.get("name")
+        or properties.get("facility_name")
+        or properties.get("operator")
+        or ""
+    ).strip()
+    if not name:
+        return None
+
+    raw_type = str(
+        properties.get("healthcare")
+        or properties.get("amenity")
+        or properties.get("type")
+        or properties.get("facility_type")
+        or ""
+    ).strip().lower()
+    category = NOMINATIM_TYPE_CATEGORY.get(raw_type)
+    requested = str(query.get("category") or "doctor").strip().lower()
+    if requested == "all":
+        if not category:
+            return None
+    else:
+        acceptable = {
+            "diagnostic_centre": {"diagnostic_centre", "laboratory"},
+            "laboratory": {"diagnostic_centre", "laboratory"},
+            "clinic": {"clinic", "doctor", "health_centre"},
+            "doctor": {"doctor", "clinic"},
+            "emergency": {"hospital"},
+        }.get(requested, {requested})
+        if category and category not in acceptable:
+            return None
+        category = category or requested
+
+    osm_type = str(properties.get("osm_type") or "").strip().lower()
+    osm_id = properties.get("osm_id")
+    map_url = (
+        f"https://www.openstreetmap.org/{osm_type}/{osm_id}"
+        if osm_type in {"node", "way", "relation"} and osm_id is not None
+        else None
+    )
+    address = str(
+        properties.get("addr_full")
+        or properties.get("address")
+        or properties.get("addr_street")
+        or ""
+    ).strip()
+    identifier = feature.get("id") or properties.get("uuid") or properties.get("id") or f"{latitude}:{longitude}:{name}"
+    return {
+        "id": f"healthsites:{identifier}",
+        "place_id": identifier,
+        "name": name,
+        "category": category,
+        "provider_type": raw_type or category,
+        "specialty": None,
+        "search_specialty": str(query.get("specialty") or "").strip() or None,
+        "address": address,
+        "city": str(properties.get("addr_city") or properties.get("city") or query.get("location") or "").strip(),
+        "state": str(properties.get("addr_state") or properties.get("state") or "").strip(),
+        "postal_code": properties.get("addr_postcode") or properties.get("postcode"),
+        "phone": properties.get("phone") or properties.get("contact_phone"),
+        "website": properties.get("website") or properties.get("contact_website"),
+        "latitude": latitude,
+        "longitude": longitude,
+        "map_url": map_url,
+        "verification_status": "external_unverified",
+        "bookable_in_zendoc": False,
+        "claimable_public_listing": False,
+        "source": "healthsites_api",
+        "attribution": "Healthsites.io / OpenStreetMap contributors",
     }
 
 
