@@ -1,4 +1,4 @@
-import { routes, type VercelConfig } from '@vercel/config/v1'
+import { deploymentEnv, routes, type VercelConfig } from '@vercel/config/v1'
 
 const rawOrigin = (process.env.ZENDOC_ORIGIN_URL || '').trim()
 
@@ -28,7 +28,13 @@ export const config: VercelConfig = {
   git: {
     deploymentEnabled: false,
   },
-  rewrites: [routes.rewrite('/:path*', `${origin}/:path*`)],
+  rewrites: [
+    routes.rewrite('/:path*', `${origin}/:path*`, {
+      requestHeaders: {
+        'x-zendoc-gateway-token': deploymentEnv('ZENDOC_GATEWAY_TOKEN'),
+      },
+    }),
+  ],
   headers: [
     routes.header('/:path*', [
       {
