@@ -7,13 +7,18 @@
 
   @public_health path /api/v1/health /api/v1/ready
   handle @public_health {
-    reverse_proxy web:8000
+    reverse_proxy web:8000 {
+      header_up -X-Zendoc-Gateway-Token
+      header_up -X-Zendoc-Gateway-Verified
+      header_up -X-Vercel-Forwarded-For
+    }
   }
 
   @vercel_gateway header X-Zendoc-Gateway-Token {$ZENDOC_GATEWAY_TOKEN}
   handle @vercel_gateway {
     reverse_proxy web:8000 {
       header_up -X-Zendoc-Gateway-Token
+      header_up -X-Zendoc-Gateway-Verified
       header_up X-Zendoc-Gateway-Verified "1"
     }
   }
