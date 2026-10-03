@@ -20,6 +20,7 @@ from .integration_readiness import integration_readiness_snapshot
 from .integration_probes import integration_probe_snapshot, run_automatic_safe_probes
 from .notification_providers import deliver_notification
 from .operations_automation import run_safe_operations_automation
+from .public_data_refresh import public_refresh_snapshot, refresh_official_public_data
 from .security import assert_owner
 
 
@@ -46,6 +47,7 @@ def _digest_text(snapshot: dict) -> str:
     database = snapshot["database"]
     active_alerts = snapshot["active_alerts"]
     probe_status = snapshot.get("probe_status") or {}
+    public_refresh_status = snapshot.get("public_refresh_status") or {}
 
     urgent_sources = [
         source for source in freshness.get("sources", [])
@@ -74,6 +76,8 @@ def _digest_text(snapshot: dict) -> str:
         "Official/public data",
         f"- Registered sources: {freshness.get('source_count', 0)}",
         f"- P0/P1 refresh sources: {len(urgent_sources)}",
+        f"- Automated official refresh failures: {public_refresh_status.get('failed_count', 0)}",
+        f"- Automated official refreshes in progress: {public_refresh_status.get('in_progress_count', 0)}",
         "",
         "Runtime integration evidence",
         f"- Latest bounded probes passed: {probe_status.get('verified_count', 0)}/{probe_status.get('total_count', 0)}",
@@ -111,6 +115,15 @@ def run_owner_operations_cycle(
     if bool(current_app.config.get("OPS_EXTERNAL_PROBES")):
         automatic_probes = run_automatic_safe_probes(actor, stale_after_hours=20)
     probe_status = integration_probe_snapshot()
+    public_refresh = None
+    if bool(current_app.config.get("OPS_PUBLIC_DATA_REFRESH")):
+        public_refresh = refresh_official_public_data(
+            actor,
+            apply=bool(current_app.config.get("OPS_PUBLIC_DATA_AUTO_APPLY")),
+            page_limit=200,
+            max_sources=1,
+        )
+    public_refresh_status = public_refresh_snapshot()
 
     snapshot = {
         "generated_at": now_iso(),
@@ -121,6 +134,8 @@ def run_owner_operations_cycle(
         "active_alerts": active_alerts,
         "probe_status": probe_status,
         "automatic_probes": automatic_probes,
+        "public_refresh": public_refresh,
+        "public_refresh_status": public_refresh_status,
     }
 
     digest_sent = False
@@ -163,6 +178,9 @@ def run_owner_operations_cycle(
         "runtime_probe_verified_count": probe_status.get("verified_count", 0),
         "runtime_probe_failing_count": probe_status.get("failing_count", 0),
         "automatic_probe_count": len(automatic_probes),
+        "public_refresh_failed_count": public_refresh_status.get("failed_count", 0),
+        "public_refresh_in_progress_count": public_refresh_status.get("in_progress_count", 0),
+        "public_refresh_processed_count": int((public_refresh or {}).get("processed_count", 0)),
         "urgent_data_source_count": sum(
             1 for source in freshness.get("sources", [])
             if source.get("refresh_priority") in {"P0", "P1"}
