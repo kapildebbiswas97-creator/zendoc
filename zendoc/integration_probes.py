@@ -15,6 +15,7 @@ import socket
 import ssl
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -270,7 +271,7 @@ def _probe_official_public_data(actor: Any) -> dict:
     )
 
 
-def _parse_turn_endpoint(raw_url: str) -> tuple[str, str, int]:
+def _parse_turn_endpoint(raw_url: str) -> tuple[str, str, int, str]:
     value = str(raw_url or "").strip()
     if ":" not in value:
         raise ValueError("Invalid ICE server URL.")
@@ -278,7 +279,9 @@ def _parse_turn_endpoint(raw_url: str) -> tuple[str, str, int]:
     scheme = scheme.lower()
     if scheme not in {"turn", "turns"}:
         raise ValueError("TURN runtime probe requires a turn: or turns: URL.")
-    endpoint = remainder.lstrip("/").split("?", 1)[0]
+
+    endpoint_part, _, query = remainder.lstrip("/").partition("?")
+    endpoint = endpoint_part.strip()
     if not endpoint:
         raise ValueError("TURN server host is missing.")
 
@@ -294,7 +297,18 @@ def _parse_turn_endpoint(raw_url: str) -> tuple[str, str, int]:
         host, port = endpoint, default_port
     if not host or port < 1 or port > 65535:
         raise ValueError("TURN server endpoint is invalid.")
-    return scheme, host, port
+
+    requested_transport = (
+        urllib.parse.parse_qs(query).get("transport", [""])[0].strip().lower()
+        if query
+        else ""
+    )
+    transport = requested_transport or ("tcp" if scheme == "turns" else "udp")
+    if transport not in {"udp", "tcp"}:
+        raise ValueError("TURN transport must be udp or tcp.")
+    if scheme == "turns" and transport != "tcp":
+        raise ValueError("turns: runtime verification requires TLS over TCP.")
+    return scheme, host, port, transport
 
 
 def _probe_turn(actor: Any) -> dict:
@@ -326,12 +340,27 @@ def _probe_turn(actor: Any) -> dict:
     if not turn_urls:
         return _result("integration_required", "turn_relay_url_missing")
 
-    scheme, host, port = _parse_turn_endpoint(turn_urls[0])
-    with socket.create_connection((host, port), timeout=6) as connection:
-        if scheme == "turns":
-            context = ssl.create_default_context()
-            with context.wrap_socket(connection, server_hostname=host):
-                pass
+    scheme, host, port, transport = _parse_turn_endpoint(turn_urls[0])
+    if transport == "udp":
+        transaction_id = os.urandom(12)
+        request = b"\x00\x01\x00\x00\x21\x12\xa4\x42" + transaction_id
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp:
+            udp.settimeout(6)
+            udp.sendto(request, (host, port))
+            response, _address = udp.recvfrom(2048)
+        if (
+            len(response) < 20
+            or response[4:8] != b"\x21\x12\xa4\x42"
+            or response[8:20] != transaction_id
+            or response[0:2] not in {b"\x01\x01", b"\x01\x11"}
+        ):
+            raise RuntimeError("TURN/STUN UDP endpoint returned an invalid binding response.")
+    else:
+        with socket.create_connection((host, port), timeout=6) as connection:
+            if scheme == "turns":
+                context = ssl.create_default_context()
+                with context.wrap_socket(connection, server_hostname=host):
+                    pass
 
     credentials_present = bool(has_username and has_credential)
     return _result(
@@ -339,6 +368,7 @@ def _probe_turn(actor: Any) -> dict:
         "turn_transport_reachable_auth_unverified",
         {
             "scheme": scheme,
+            "transport": transport,
             "host_configured": True,
             "port": port,
             "credentials_present": credentials_present,
