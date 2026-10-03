@@ -27,7 +27,12 @@ services:
       - .env
     environment:
       PORT: "8000"
-      DATABASE_URL: "postgresql://${POSTGRES_USER:-zendoc}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-zendoc}"
+      # Keep credentials out of the URI so reserved password characters cannot break parsing.
+      # psycopg/libpq reads PGUSER/PGPASSWORD/PGDATABASE for omitted fields.
+      DATABASE_URL: "postgresql://db:5432/${POSTGRES_DB:-zendoc}"
+      PGUSER: ${POSTGRES_USER:-zendoc}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/oci/.env}
+      PGDATABASE: ${POSTGRES_DB:-zendoc}
       ZENDOC_ENV: production
       ZENDOC_DEPLOYMENT_PLATFORM: oci
       ZENDOC_SERVICE_NAME: zendoc
@@ -87,9 +92,12 @@ services:
       dockerfile: deploy/oci/backup.Dockerfile
     profiles: ["ops"]
     environment:
-      DATABASE_URL: "postgresql://${POSTGRES_USER:-zendoc}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-zendoc}"
+      DATABASE_URL: "postgresql://db:5432/${POSTGRES_DB:-zendoc}"
+      PGUSER: ${POSTGRES_USER:-zendoc}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/oci/.env}
+      PGDATABASE: ${POSTGRES_DB:-zendoc}
       ZENDOC_POSTGRES_BACKUP_DIR: /backups
-      ZENDOC_POSTGRES_RESTORE_DATABASE_URL: "postgresql://${POSTGRES_USER:-zendoc}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-zendoc}"
+      ZENDOC_POSTGRES_RESTORE_DATABASE_URL: "postgresql://db:5432/${POSTGRES_DB:-zendoc}"
       ZENDOC_POSTGRES_RESTORE_EXPECT_DATABASE: "${POSTGRES_DB:-zendoc}"
       ZENDOC_POSTGRES_RESTORE_ALLOW_RESET: "${ZENDOC_POSTGRES_RESTORE_ALLOW_RESET:-false}"
     volumes:
