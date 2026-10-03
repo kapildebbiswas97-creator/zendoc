@@ -496,6 +496,16 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
         allowed_roles=["patient", "doctor", "admin"],
         risk_class=READ_ONLY,
     ),
+    "get_referral_summary": ToolDefinition(
+        name="get_referral_summary",
+        description=(
+            "Read referral and waiting-list state visible to the authenticated patient/referring/destination provider. "
+            "The tool cannot create, consent, send, triage, accept, schedule, or complete a referral."
+        ),
+        allowed_agents=["ReferralAgent"],
+        allowed_roles=["patient", "doctor", "hospital"],
+        risk_class=READ_ONLY,
+    ),
     "get_interoperability_capabilities": ToolDefinition(
         name="get_interoperability_capabilities",
         description=(
