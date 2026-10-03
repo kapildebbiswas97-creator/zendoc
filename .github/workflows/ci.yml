@@ -189,6 +189,7 @@ jobs:
     timeout-minutes: 10
     env:
       ZENDOC_ORIGIN_URL: https://origin.example.invalid
+      ZENDOC_GATEWAY_TOKEN: ci-gateway-token-placeholder
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
@@ -197,11 +198,19 @@ jobs:
       - name: Install pinned Vercel config SDK
         run: npm install --ignore-scripts
       - name: Validate programmatic Vercel configuration
-        run: npx @vercel/config validate
+        run: |
+          npx @vercel/config validate
+          npx @vercel/config compile > /tmp/zendoc-vercel-config.json
+          grep -q "origin.example.invalid" /tmp/zendoc-vercel-config.json
+          grep -qi "x-zendoc-gateway-token" /tmp/zendoc-vercel-config.json
+      - name: Audit build-only Node dependencies for critical vulnerabilities
+        run: npm audit --audit-level=critical
       - uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
+      - name: Install topology test runner
+        run: python -m pip install "pytest>=8,<10"
       - name: Run Vercel/OCI topology regressions
         run: python -m pytest -q tests/test_vercel_oci_gateway_v2.py
 
