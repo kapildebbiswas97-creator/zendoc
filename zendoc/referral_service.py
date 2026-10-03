@@ -575,6 +575,97 @@ def transition_referral(
     return get_referral(actor, referral_id)
 
 
+
+def referral_creation_options(actor: Any) -> dict:
+    """Return only patients who explicitly granted referral coordination plus verified destinations."""
+    ensure_referral_schema()
+    _require_verified_clinical_provider(actor)
+    actor_id = _actor_id(actor)
+    now = now_iso()
+    db = get_db()
+    grants = db.execute(
+        """
+        SELECT cg.subject_id,cg.scopes_json,u.name,u.email
+        FROM consent_grants cg
+        JOIN users u ON u.id=cg.subject_id
+        WHERE cg.grantee_id=? AND cg.purpose='referral' AND cg.status='active'
+          AND cg.revoked_at IS NULL AND (cg.expires_at IS NULL OR cg.expires_at>?)
+          AND u.role='patient' AND u.active=1
+        ORDER BY u.name,u.id
+        """,
+        (actor_id, now),
+    ).fetchall()
+    patients = []
+    for grant in grants:
+        try:
+            scopes = set(json.loads(grant["scopes_json"] or "[]"))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            scopes = set()
+        if "timeline" not in scopes:
+            continue
+        journeys = db.execute(
+            """
+            SELECT id,state,status,updated_at
+            FROM care_journeys
+            WHERE patient_id=? AND status='active'
+            ORDER BY updated_at DESC,id DESC
+            LIMIT 20
+            """,
+            (int(grant["subject_id"]),),
+        ).fetchall()
+        patients.append({
+            "id": int(grant["subject_id"]),
+            "name": grant["name"],
+            "email": grant["email"],
+            "scopes": sorted(scopes),
+            "can_attach_reports": "reports" in scopes,
+            "journeys": [dict(item) for item in journeys],
+        })
+
+    destinations = db.execute(
+        """
+        SELECT u.id,u.name,p.specialty,p.organization,p.provider_type,p.city,p.state
+        FROM users u
+        JOIN provider_profiles p ON p.user_id=u.id
+        WHERE u.active=1 AND u.role IN ('doctor','hospital')
+          AND p.verification_status='verified' AND u.id<>?
+        ORDER BY COALESCE(p.specialty,''),COALESCE(p.organization,''),u.name
+        LIMIT 250
+        """,
+        (actor_id,),
+    ).fetchall()
+    return {
+        "patients": patients,
+        "destinations": [dict(item) for item in destinations],
+        "truth_notice": (
+            "Only patients with an active referral-purpose consent grant are offered. "
+            "Record references require the separate reports scope."
+        ),
+    }
+
+
+def get_referral_record(actor: Any, referral_id: int, record_id: int) -> dict:
+    """Authorize one referral-scoped record without granting general Health Memory access."""
+    referral = get_referral(actor, referral_id)
+    record_id = int(record_id)
+    allowed_refs = {int(item) for item in referral.get("packet", {}).get("record_ids", [])}
+    if record_id not in allowed_refs:
+        raise PermissionError("This record is not part of the consented referral packet.")
+    if referral["status"] in {"CREATED", "PACKET_PREPARED"} and _actor_id(actor) == int(referral["destination_provider_id"]):
+        raise PermissionError("Destination access begins only after patient consent and referral send.")
+    row = get_db().execute(
+        "SELECT * FROM medical_records WHERE id=? AND owner_id=?",
+        (record_id, int(referral["patient_id"])),
+    ).fetchone()
+    if not row:
+        raise LookupError("Referral record not found.")
+    result = dict(row)
+    result["access_scope"] = "referral_packet_only"
+    result["referral_id"] = int(referral_id)
+    return result
+
+
+
 def referral_summary(actor: Any) -> dict:
     referrals = list_referrals(actor, limit=100)
     counts = {}
