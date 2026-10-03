@@ -1014,6 +1014,12 @@ def _search_health_memory_evidence(actor, arguments):
     )
 
 
+def _referral_summary(actor, arguments):
+    from .referral_service import referral_summary
+
+    return referral_summary(actor)
+
+
 def _interoperability_capabilities(actor, arguments):
     from .interoperability_gateway import interoperability_manifest
 
@@ -1073,6 +1079,7 @@ TOOL_HANDLERS = {
     "confirm_and_execute_order": _confirm_order,
     "get_diagnostic_options": _diagnostic_options,
     "get_unified_healthcare_inbox": _unified_inbox,
+    "get_referral_summary": _referral_summary,
     "get_interoperability_capabilities": _interoperability_capabilities,
     "prepare_interoperability_exchange_plan": _interoperability_exchange_plan,
     "get_health_memory_context": _health_memory_context,
