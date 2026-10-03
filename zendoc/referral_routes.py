@@ -1,11 +1,137 @@
-"""Authenticated referral/waiting-list APIs."""
-from flask import Blueprint, jsonify, request
+"""Authenticated referral/waiting-list API and role-aware product UI."""
+from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, url_for
 
-from .referral_service import create_referral, get_referral, list_referrals, transition_referral
+from .db import get_db, now_iso
+from .record_storage import get_record_storage
+from .referral_service import (
+    create_referral,
+    get_referral,
+    get_referral_record,
+    list_referrals,
+    referral_creation_options,
+    transition_referral,
+)
 from .routes import require_api_user
+from .security import csrf_token, login_required
 
 
 bp = Blueprint("referrals", __name__)
+
+
+def _record_ids_from_form(value):
+    if not str(value or "").strip():
+        return []
+    values = []
+    for item in str(value).split(","):
+        item = item.strip()
+        if not item:
+            continue
+        try:
+            record_id = int(item)
+        except ValueError as exc:
+            raise ValueError("Record IDs must be comma-separated integers.") from exc
+        if record_id not in values:
+            values.append(record_id)
+    return values
+
+
+def _web_actor():
+    user = getattr(g, "user", None)
+    if user is None:
+        abort(401)
+    if str(user["role"]) not in {"patient", "doctor", "hospital"}:
+        abort(403)
+    return user
+
+
+@bp.get("/referrals")
+@login_required
+def referral_center():
+    user = _web_actor()
+    try:
+        referrals = list_referrals(user, limit=100)
+        creation = referral_creation_options(user) if str(user["role"]) in {"doctor", "hospital"} else None
+    except (PermissionError, LookupError, TypeError, ValueError) as exc:
+        flash(str(exc), "error")
+        referrals = []
+        creation = None
+    return render_template(
+        "referrals.html",
+        current_user=user,
+        referrals=referrals,
+        creation=creation,
+        csrf_token=csrf_token(),
+    )
+
+
+@bp.post("/referrals")
+@login_required
+def referral_create_web():
+    user = _web_actor()
+    raw_pair = str(request.form.get("patient_journey") or "")
+    try:
+        patient_text, journey_text = raw_pair.split(":", 1)
+        referral = create_referral(
+            user,
+            patient_id=int(patient_text),
+            destination_provider_id=int(request.form.get("destination_provider_id") or 0),
+            journey_id=int(journey_text),
+            reason=request.form.get("reason"),
+            specialty=request.form.get("specialty"),
+            priority=request.form.get("priority") or "routine",
+            packet_summary=request.form.get("packet_summary"),
+            record_ids=_record_ids_from_form(request.form.get("record_ids")),
+            provenance={"source": "referral_center_web"},
+        )
+    except (PermissionError, LookupError, TypeError, ValueError) as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("referrals.referral_center"))
+    flash(f"Referral #{referral['id']} created. Prepare the packet, then the patient must consent before it can be sent.", "success")
+    return redirect(url_for("referrals.referral_center"))
+
+
+@bp.post("/referrals/<int:referral_id>/transition")
+@login_required
+def referral_transition_web(referral_id):
+    user = _web_actor()
+    try:
+        referral = transition_referral(
+            user,
+            referral_id,
+            request.form.get("target_status"),
+            note=request.form.get("note"),
+            scheduled_for=request.form.get("scheduled_for"),
+            specialist_opinion=request.form.get("specialist_opinion"),
+            outcome=request.form.get("outcome"),
+            provenance={"source": "referral_center_web"},
+        )
+    except (PermissionError, LookupError, TypeError, ValueError) as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("referrals.referral_center"))
+    flash(f"Referral #{referral['id']} updated to {referral['status'].replace('_', ' ').title()}.", "success")
+    return redirect(url_for("referrals.referral_center"))
+
+
+@bp.get("/referrals/<int:referral_id>/records/<int:record_id>/download")
+@login_required
+def referral_record_download(referral_id, record_id):
+    user = _web_actor()
+    try:
+        record = get_referral_record(user, referral_id, record_id)
+    except LookupError:
+        abort(404)
+    except PermissionError:
+        abort(403)
+    get_db().execute(
+        """
+        INSERT INTO audit_logs (actor_id,action,entity_type,entity_id,created_at)
+        VALUES (?, 'referral.record.download', 'medical_record', ?, ?)
+        """,
+        (int(user["id"]), str(record_id), now_iso()),
+    )
+    get_db().commit()
+    return get_record_storage().response(record["stored_filename"], record["original_filename"])
+
 
 
 def _error(exc):
