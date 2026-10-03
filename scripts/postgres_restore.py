@@ -52,7 +52,10 @@ def database_identity(database_url: str) -> tuple[str, int, str]:
 def _child_environment(database_url: str) -> dict[str, str]:
     env = {
         key: value
-        for key in ("PATH", "HOME", "LANG", "LC_ALL", "TMPDIR", "TEMP", "TMP")
+        for key in (
+            "PATH", "HOME", "LANG", "LC_ALL", "TMPDIR", "TEMP", "TMP",
+            "PGUSER", "PGPASSWORD", "PGDATABASE", "PGSSLMODE",
+        )
         if (value := os.environ.get(key))
     }
     env.update(connection_environment(database_url))
