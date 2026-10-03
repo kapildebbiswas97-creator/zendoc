@@ -18,7 +18,9 @@
     }
   }
 
-  respond "Forbidden" 403
+  handle {
+    respond "Forbidden" 403
+  }
 
   header {
     -Server
