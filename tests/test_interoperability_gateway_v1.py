@@ -11,7 +11,7 @@ from zendoc.interoperability_gateway import (
     interoperability_readiness_snapshot,
 )
 from zendoc.personal_agents import route_personal_agent
-from tests.test_milestone1 import login_web, make_client
+from tests.test_milestone1 import api_token, make_client
 
 
 def _clear_interop_env(monkeypatch):
@@ -132,9 +132,10 @@ def test_personal_agent_routes_interoperability_to_specialist():
 def test_authenticated_interoperability_api_is_read_only(monkeypatch, tmp_path):
     _clear_interop_env(monkeypatch)
     _app, client = make_client(tmp_path)
-    login_web(client, "patient", "patient@example.com", "PatientStrong123")
+    token = api_token(client, "interop-patient@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
 
-    response = client.get("/api/v1/interoperability")
+    response = client.get("/api/v1/interoperability", headers=headers)
     assert response.status_code == 200
     data = response.get_json()
     assert data["provider_neutral"] is True
@@ -142,6 +143,7 @@ def test_authenticated_interoperability_api_is_read_only(monkeypatch, tmp_path):
 
     response = client.post(
         "/api/v1/interoperability/plan",
+        headers=headers,
         json={
             "adapter_key": "generic_fhir",
             "resource_type": "referral",
