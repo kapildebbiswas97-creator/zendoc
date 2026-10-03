@@ -140,6 +140,24 @@ AGENT_REGISTRY: dict[str, AgentDefinition] = {
         description="Uses only authorized patient context and preserves provenance. No cross-user leakage.",
     ),
 
+    "ReferralAgent": AgentDefinition(
+        identifier="ReferralAgent",
+        name="Referral & Waiting List Agent",
+        purpose="Read consent-bound referral, triage, waiting-list and follow-up state without advancing clinical workflow autonomously.",
+        allowed_tools=["get_referral_summary"],
+        allowed_actor_roles=["patient", "doctor", "hospital"],
+        risk_level="READ_ONLY",
+        approval_requirements=[
+            "patient_consent_before_sending",
+            "provider_authority_for_triage_and_specialist_states",
+        ],
+        status="connected",
+        description=(
+            "Read-only Agent OS view over the formal referral lifecycle. State changes remain deterministic "
+            "API/service actions owned by the patient, referring provider or destination provider."
+        ),
+    ),
+
     "InteroperabilityAgent": AgentDefinition(
         identifier="InteroperabilityAgent",
         name="Healthcare Interoperability Agent",
@@ -451,6 +469,9 @@ def choose_agent_for_intent(intent: str) -> AgentDefinition | None:
         "health_analytics": "CareAgent",
         "health_profile":   "CareAgent",
         "health_records":   "HealthMemoryAgent",
+        "referral": "ReferralAgent",
+        "waiting_list": "ReferralAgent",
+        "specialist_referral": "ReferralAgent",
         "health_interoperability": "InteroperabilityAgent",
         "interoperability": "InteroperabilityAgent",
         "fhir_exchange": "InteroperabilityAgent",
