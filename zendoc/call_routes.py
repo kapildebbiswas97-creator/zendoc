@@ -33,14 +33,14 @@ def _error(exc):
 
 def _ice_servers(actor=None):
     raw = str(os.environ.get("ZENDOC_WEBRTC_ICE_SERVERS_JSON") or "").strip()
-    if not raw:
-        return []
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError:
-        return []
-    if not isinstance(data, list):
-        return []
+    data = []
+    if raw:
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            parsed = []
+        if isinstance(parsed, list):
+            data = parsed
     safe = []
     for item in data[:8]:
         if not isinstance(item, dict):
