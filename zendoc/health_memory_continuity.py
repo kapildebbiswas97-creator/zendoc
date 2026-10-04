@@ -239,3 +239,143 @@ def determine_next_safe_actions(patient_id: int | Any, actor: Any = None) -> lis
         })
 
     return actions
+
+
+def detect_record_conflicts_and_duplicates(patient_id: int | Any, actor: Any = None) -> dict[str, Any]:
+    """
+    Identifies duplicate entries and potential conflicting records in Health Memory.
+    """
+    if not isinstance(patient_id, (int, float)):
+        if actor is None:
+            actor = patient_id
+        patient_id = _user_id(patient_id)
+    if actor is None:
+        actor = patient_id
+
+    from .context_engine import verify_context_authorization
+    verify_context_authorization(actor, int(patient_id), "health_memory_view")
+
+    db = get_db()
+    duplicates: list[dict[str, Any]] = []
+    conflicts: list[dict[str, Any]] = []
+
+    # 1. Detect duplicate health metrics (same metric_type and recorded_at)
+    metric_rows = db.execute(
+        """
+        SELECT metric_type, metric_value, unit, recorded_at, COUNT(*) as cnt
+        FROM health_metrics
+        WHERE user_id=?
+        GROUP BY metric_type, recorded_at
+        HAVING COUNT(*) > 1
+        """,
+        (patient_id,),
+    ).fetchall()
+    for row in metric_rows:
+        duplicates.append({
+            "record_type": "health_metric",
+            "metric_type": row["metric_type"],
+            "recorded_at": row["recorded_at"],
+            "count": row["cnt"],
+            "resolution_hint": "Multiple readings recorded at exact same timestamp.",
+        })
+
+    # 2. Check for conflicting blood group declarations between profile and clinical reports
+    profile = db.execute(
+        "SELECT blood_group FROM patient_health_profiles WHERE patient_id=?",
+        (patient_id,),
+    ).fetchone()
+    if profile and profile["blood_group"]:
+        prof_bg = str(profile["blood_group"]).strip().upper()
+        report_results = db.execute(
+            """
+            SELECT rr.value_text, rr.measurement_date, mr.id as record_id
+            FROM report_results rr JOIN medical_records mr ON mr.id=rr.record_id
+            WHERE mr.owner_id=? AND LOWER(rr.test_name) LIKE '%blood%group%'
+            """,
+            (patient_id,),
+        ).fetchall()
+        for rr in report_results:
+            rep_bg = str(rr["value_text"]).strip().upper()
+            if rep_bg and prof_bg and rep_bg != prof_bg and rep_bg in {"A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"}:
+                conflicts.append({
+                    "record_type": "blood_group_conflict",
+                    "profile_declared": prof_bg,
+                    "clinical_report_value": rep_bg,
+                    "record_id": rr["record_id"],
+                    "resolution_hint": "Profile blood group differs from lab document. Doctor verification recommended.",
+                })
+
+    integrity_score = 1.0 - (len(duplicates) * 0.05 + len(conflicts) * 0.15)
+    integrity_score = max(0.2, min(1.0, round(integrity_score, 2)))
+
+    return {
+        "patient_id": patient_id,
+        "integrity_score": integrity_score,
+        "duplicates_count": len(duplicates),
+        "conflicts_count": len(conflicts),
+        "duplicates": duplicates,
+        "conflicts": conflicts,
+    }
+
+
+def get_longitudinal_health_summary(actor: Any, patient_id: int | Any = None) -> dict[str, Any]:
+    """
+    Synthesizes the complete longitudinal Health Memory intelligence view.
+    """
+    from .health_access import authorize_patient
+    from .health_timeline import list_timeline
+    from .report_intelligence import get_report_result_trend
+
+    target_id = authorize_patient(actor, patient_id, "timeline")
+    db = get_db()
+
+    # 1. Longitudinal timeline overview
+    timeline_data = list_timeline(actor, target_id, page=1, per_page=15)
+
+    # 2. Provenance summary
+    provenance_data = get_health_memory_provenance_summary(target_id, actor)
+
+    # 3. Next safe actions
+    safe_actions = determine_next_safe_actions(target_id, actor)
+
+    # 4. Record integrity (conflicts & duplicates)
+    integrity_data = detect_record_conflicts_and_duplicates(target_id, actor)
+
+    # 5. Key biomarker trends (glucose, hba1c, cholesterol, bp)
+    biomarkers_to_check = ["glucose", "hba1c", "cholesterol", "creatinine", "hemoglobin"]
+    trends: dict[str, Any] = {}
+    for bm in biomarkers_to_check:
+        try:
+            t = get_report_result_trend(actor, bm, target_id)
+            if t.get("longitudinal_analysis", {}).get("status") == "ANALYZED":
+                trends[bm] = t["longitudinal_analysis"]
+        except Exception:
+            pass
+
+    # 6. Active prescriptions
+    prescriptions = db.execute(
+        """
+        SELECT id, prescription_uid, prescriber_name, issue_date, status, diagnosis_notes
+        FROM prescriptions
+        WHERE patient_id=? AND status='active'
+        ORDER BY issue_date DESC LIMIT 5
+        """,
+        (target_id,),
+    ).fetchall()
+
+    return {
+        "patient_id": target_id,
+        "timeline_overview": {
+            "total_events": timeline_data["total"],
+            "recent_events": timeline_data["events"][:5],
+        },
+        "provenance_summary": provenance_data["by_provenance"],
+        "next_safe_actions": safe_actions,
+        "record_integrity": integrity_data,
+        "biomarker_trends": trends,
+        "active_prescriptions": [dict(p) for p in prescriptions],
+        "disclaimer": (
+            "Educational health intelligence. ZENDOC does not independently diagnose conditions "
+            "or prescribe treatments. Always consult your qualified healthcare professional."
+        ),
+    }
