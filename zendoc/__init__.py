@@ -95,6 +95,7 @@ from .database_reliability import readiness_report
 from .observability import finish_request_observation, start_request_observation
 from .routes import bp
 from .transport_partner import bp as transport_partner_bp, ensure_transport_partner_schema
+from .network_site_routes import bp as network_sites_bp
 from .security_headers import apply_security_headers
 
 
@@ -228,6 +229,7 @@ def create_app(test_config=None):
     app.register_blueprint(showcase_bp)
     app.register_blueprint(specialist_agents_bp)
     app.register_blueprint(system_intelligence_bp)
+    app.register_blueprint(network_sites_bp)
 
     @app.errorhandler(PermissionError)
     def zendoc_permission_error(_error):

@@ -531,6 +531,63 @@ def init_db():
         );
         CREATE INDEX IF NOT EXISTS idx_health_devices_user ON health_devices(user_id);
 
+        CREATE TABLE IF NOT EXISTS network_sites (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            slug TEXT NOT NULL UNIQUE,
+            entity_type TEXT NOT NULL,
+            entity_id INTEGER,
+            title TEXT NOT NULL,
+            tagline TEXT,
+            description TEXT,
+            theme_json TEXT,
+            services_json TEXT,
+            hours_json TEXT,
+            location_json TEXT,
+            contact_json TEXT,
+            emergency_guidance TEXT,
+            provenance TEXT NOT NULL DEFAULT 'PROVIDER_SUPPLIED',
+            trust_tier TEXT NOT NULL DEFAULT 'COMMUNITY',
+            booking_enabled INTEGER NOT NULL DEFAULT 1,
+            status TEXT NOT NULL DEFAULT 'active',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_network_sites_slug ON network_sites(slug);
+        CREATE INDEX IF NOT EXISTS idx_network_sites_type ON network_sites(entity_type, status);
+
+        CREATE TABLE IF NOT EXISTS automation_rules (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            rule_uid TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            trigger_event TEXT NOT NULL,
+            conditions_json TEXT,
+            action_type TEXT NOT NULL,
+            requires_approval INTEGER NOT NULL DEFAULT 0,
+            retry_policy_json TEXT,
+            status TEXT NOT NULL DEFAULT 'active',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_automation_rules_trigger ON automation_rules(trigger_event, status);
+
+        CREATE TABLE IF NOT EXISTS automation_action_ledger (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            action_uid TEXT NOT NULL UNIQUE,
+            rule_id INTEGER REFERENCES automation_rules(id) ON DELETE SET NULL,
+            trigger_event_id INTEGER,
+            state TEXT NOT NULL DEFAULT 'PENDING',
+            attempt_count INTEGER NOT NULL DEFAULT 0,
+            max_attempts INTEGER NOT NULL DEFAULT 3,
+            error TEXT,
+            operator_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            approved_at TEXT,
+            payload_json TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_auto_ledger_state ON automation_action_ledger(state);
+
+
         CREATE TABLE IF NOT EXISTS home_health_requests (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             patient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
