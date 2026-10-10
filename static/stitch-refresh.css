@@ -1,0 +1,168 @@
+/*
+ * ZENDOC — Stitch-inspired visual refinement, October 2026.
+ *
+ * Additive styling for the EXISTING Flask/Jinja interface.
+ * No changes to auth, booking, API contracts, health records, or page routing.
+ * Inspired by the supplied Stitch palette, not a pasted Tailwind/React shell.
+ */
+:root {
+  --stitch-navy: #0f2744;
+  --stitch-deep-navy: #001229;
+  --stitch-teal: #006a61;
+  --stitch-mint: #89f5e7;
+  --stitch-canvas: #faf8ff;
+  --stitch-border: #dbe4ee;
+  --stitch-shadow: 0 14px 44px rgba(11, 32, 58, .075);
+}
+
+/* Navigation retains all existing Flask url_for destinations and role menus. */
+.topbar {
+  background: rgba(255,255,255,.97);
+  border-bottom: 1px solid var(--stitch-border);
+  box-shadow: 0 3px 16px rgba(9,31,54,.055);
+  backdrop-filter: blur(18px) saturate(140%);
+}
+.brand { letter-spacing: -.035em; }
+.brand-mark {
+  border-radius: 12px;
+  background: linear-gradient(145deg,var(--stitch-deep-navy),var(--stitch-teal));
+  box-shadow: 0 8px 22px rgba(0,106,97,.17);
+}
+.primary-nav > a, .guest-nav > a, .nav-menu > summary {
+  transition: background-color .18s ease, color .18s ease;
+}
+.primary-nav > a[aria-current="page"], .guest-nav > a[aria-current="page"] {
+  background: #eaf9f6;
+  color: #005c54;
+}
+.topbar a:focus-visible, .topbar button:focus-visible, .topbar summary:focus-visible {
+  outline: 3px solid #51b9ae;
+  outline-offset: 3px;
+}
+
+/* Stitch-inspired landing page: depth, restrained color and legible content. */
+body.landing-page {
+  font-family: Inter, Arial, sans-serif;
+  background: var(--stitch-canvas);
+}
+.landing-page .landing-hero {
+  background:
+    radial-gradient(ellipse at 84% 18%,rgba(67,230,206,.20),transparent 44%),
+    radial-gradient(ellipse at 8% 95%,rgba(93,157,212,.16),transparent 40%),
+    linear-gradient(120deg,var(--stitch-deep-navy),#10344b 52%,#075b57);
+}
+.landing-page .landing-hero__inner {
+  width: min(1240px, calc(100% - 44px));
+  gap: clamp(26px, 4vw, 64px);
+}
+.landing-page .landing-hero__title {
+  letter-spacing: -.045em;
+  line-height: 1.04;
+  text-wrap: balance;
+}
+.landing-page .landing-hero__gradient {
+  background-image: linear-gradient(110deg,#9af1df,#e3fbf3);
+}
+.landing-page .landing-hero__copy { max-width: 61ch; }
+.landing-page .landing-hero__kicker {
+  color: #c9fcf1;
+}
+.landing-page .landing-hero__btn-primary {
+  min-height: 46px;
+  border-radius: 12px;
+  background: var(--stitch-mint);
+  color: var(--stitch-deep-navy);
+  box-shadow: 0 8px 24px rgba(0,0,0,.13);
+}
+.landing-page .landing-hero__btn-primary:hover {
+  background: #c8fff4;
+  color: var(--stitch-deep-navy);
+}
+.landing-page .landing-hero__btn-secondary {
+  min-height: 46px;
+  border-radius: 12px;
+  border-color: rgba(207,252,243,.6);
+}
+.landing-page .landing-hero__card {
+  filter: drop-shadow(0 26px 34px rgba(0,12,30,.13));
+}
+.landing-page .landing-hero__badges {
+  row-gap: 12px;
+}
+.landing-page .landing-hero__badge-item {
+  line-height: 1.4;
+}
+
+/* Polish real search and provider surfaces, preserving their forms and actions. */
+.finder-shell .finder-form {
+  border: 1px solid var(--stitch-border);
+  border-radius: 20px;
+  box-shadow: var(--stitch-shadow);
+}
+.finder-shell .finder-form :is(input,select) {
+  border-radius: 11px;
+}
+.finder-shell .finder-form :is(input,select):focus-visible,
+.booking-card :is(input,textarea,select):focus-visible {
+  outline: 3px solid rgba(0,106,97,.24);
+  outline-offset: 2px;
+  border-color: var(--stitch-teal);
+}
+.finder-source-summary {
+  border-radius: 20px;
+  border-color: var(--stitch-border);
+}
+.finder-source-summary .feedback-actions a {
+  border-radius: 999px;
+  transition: background .2s ease, border-color .2s ease;
+}
+.finder-source-summary .feedback-actions a:hover {
+  background: #eaf9f6;
+  border-color: #7ccac0;
+}
+.provider-identity .provider-avatar {
+  border-radius: 18px;
+  background: linear-gradient(135deg,var(--stitch-deep-navy),var(--stitch-teal));
+  color: white;
+}
+.booking-layout > .panel, .booking-layout .panel, .booking-card {
+  border-radius: 19px;
+  border-color: var(--stitch-border);
+  box-shadow: 0 12px 36px rgba(11,32,58,.055);
+}
+.booking-card { border-top: 3px solid var(--stitch-teal); }
+.booking-card button, .booking-card .primary-action {
+  border-radius: 10px;
+}
+
+/* Keep styles comfortable on phones and for reduced-motion users. */
+@media (max-width: 980px) {
+  .landing-page .landing-hero__inner { gap: 30px; }
+}
+@media (max-width: 680px) {
+  .landing-page .landing-hero__inner {
+    width: calc(100% - 32px);
+    padding: 54px 0 44px;
+  }
+  .landing-page .landing-hero__title {
+    font-size: clamp(2.4rem, 10.7vw, 3.6rem);
+    line-height: 1.08;
+  }
+  .landing-page .landing-hero__ctas a { min-height: 44px; }
+  .finder-shell .finder-form { border-radius: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .primary-nav > a, .guest-nav > a, .nav-menu > summary,
+  .finder-source-summary .feedback-actions a {
+    transition: none;
+  }
+}
+[data-theme="dark"] .topbar {
+  background: rgba(19,31,38,.96);
+  border-color: rgba(255,255,255,.12);
+}
+[data-theme="dark"] .primary-nav > a[aria-current="page"],
+[data-theme="dark"] .guest-nav > a[aria-current="page"] {
+  background: rgba(61,175,161,.18);
+  color: #b6f6e9;
+}
