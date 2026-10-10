@@ -2,12 +2,16 @@
 
 ## Outcome of this PR
 
-This is an **additive, review-only first pass** that applies the visual language of the supplied Google Stitch designs to the existing production-capable **Flask + Jinja** site. It does **not** replace the current application with the AI Studio React prototype. In particular, authentication, appointments, live provider search, privacy protections, Health Memory, roles, URLs, backend, AWS/Vercel infrastructure, and existing JavaScript remain unchanged.
+This is an **additive, reviewed-code frontend integration** that applies the visual language of the supplied Google Stitch designs to the existing production-capable **Flask + Jinja** site. It does **not** replace the current application with the AI Studio React prototype. In particular, authentication, appointments, live provider search, privacy protections, Health Memory, roles, URLs, backend, AWS/Vercel infrastructure, and existing JavaScript remain unchanged.
 
-The only rendered production-facing changes proposed here are:
+The integrated, production-facing changes proposed in this review branch are:
 
 - `static/stitch-refresh.css`: navy/teal/mint refinement, improved landing CTAs and text hierarchy, navigation focus treatment, and restrained finder/provider surface polish.
-- `templates/base.html`: loads the new sheet **after** the existing stylesheets, preserving existing rules and templates.
+- `templates/base.html`: loads the new sheet **after** existing styles, and reorders all six patient mobile dock shortcuts to make Find Care prominent while preserving linked endpoints.
+- `templates/dashboard.html`: patient-only search panel and real care shortcuts; existing dashboard and live patient state remain unchanged.
+- `templates/finder.html`: new discovery introduction, refined existing search form and result card classes. Search sources, map, source health, query, location and advanced filters remain untouched.
+- `templates/provider_detail.html`: conventional branded promotional presentation from existing provider data, with contact/availability links. Existing appointment and schedule forms, CSRF handling and patient access remain intact.
+- `tests/test_stitch_refresh_assets.py`: Jinja parse and static regression checks for role routing, live data, presentation, mobile navigation and accessibility.
 
 ## User-supplied source inventory
 
@@ -39,13 +43,14 @@ The only rendered production-facing changes proposed here are:
 5. Several exported Stitch documents use `href="#"` links and CDN Tailwind. Replace with existing Flask `url_for(...)` routes and audited production styles, not placeholder links.
 6. Avoid adding any real patient data or production secrets to AI Studio, free-tier model prompts, or frontend bundles.
 
-## Next integration stages (separate reviewed PRs)
+## Completed here and remaining release gates
 
-1. Audit live routes and response contracts from existing Flask blueprints and tests before touching React API adapters.
-2. Add provider promotional sections to the current `provider_detail.html` using genuine reviewed profile content. Hospitals, clinics, pharmacies and stores receive **ordinary curated advertising pages**, not AI-generated customer websites.
-3. Selectively migrate design elements such as search cards, doctor cards, empty states and mobile navigation into existing templates. Preserve existing CSRF tokens, POST actions, accessibility labels, role-aware navigation, and verification states.
-4. Validate desktop/mobile screenshots, contrast, keyboard navigation, focus, booking and search flows, and dark mode.
-5. Run the existing backend and deployment gates. Do not merge or deploy until the PR review and tests pass.
+1. **Implemented:** existing-route patient search, patient shortcuts, real-source directory polish, dynamic provider showcase, and six-link mobile dock.
+2. **Implemented:** additive stylesheet, responsive breakpoints, keyboard focus treatment, and reduced-motion rules.
+3. **Still required:** full GitHub Production Gate CI success for the final commit; confirm no backend regression.
+4. **Still required:** real Flask-rendered desktop/mobile screenshots (at 375px, 768px and 1440px), keyboard/focus navigation, color contrast, dark mode, search/map behavior, and appointment requests in authorized staging sessions.
+5. **Still required:** preview deployment health verification. No production rollout or merge until tests and visual approval are complete.
+6. **Future separate scope:** provider-managed advertising content and paid subscriptions, if required, need audited persistence and authorization; this PR only presents already published provider profile data and does not add an editor/billing.
 
 ## Review / rollout notes
 
