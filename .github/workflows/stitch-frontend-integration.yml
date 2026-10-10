@@ -1,0 +1,40 @@
+name: Stitch Frontend Integration
+on:
+  push:
+    branches:
+      - design/stitch-visual-refresh-20261011
+  pull_request:
+    branches:
+      - launch/aws-ec2-vercel-launch-complete-20261010
+      - main
+    paths:
+      - "templates/**"
+      - "static/stitch-refresh.css"
+      - "tests/test_stitch_refresh_assets.py"
+      - ".github/workflows/stitch-frontend-integration.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stitch-frontend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  template-and-navigation-regressions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install standalone template test dependencies
+        run: python -m pip install "pytest>=8,<10" "Jinja2>=3.1.6,<4"
+      - name: Compile frontend regression tests
+        run: python -m compileall -q tests/test_stitch_refresh_assets.py
+      - name: Validate Jinja syntax, live routes, patient navigation and mobile CSS
+        run: python -m pytest tests/test_stitch_refresh_assets.py -q
