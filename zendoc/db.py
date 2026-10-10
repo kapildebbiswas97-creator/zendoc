@@ -587,6 +587,117 @@ def init_db():
         );
         CREATE INDEX IF NOT EXISTS idx_auto_ledger_state ON automation_action_ledger(state);
 
+        -- ── Phase G: Payer & Financial OS ──────────────────────────────────
+        CREATE TABLE IF NOT EXISTS insurance_coverage_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            request_uid TEXT NOT NULL UNIQUE,
+            patient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            insurer_name TEXT NOT NULL,
+            policy_number TEXT,
+            coverage_type TEXT NOT NULL,
+            service_type TEXT NOT NULL,
+            estimated_cost_inr REAL,
+            requested_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            status TEXT NOT NULL DEFAULT 'PENDING_VERIFICATION',
+            verification_notes TEXT,
+            response_json TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_insurance_patient ON insurance_coverage_requests(patient_id, status);
+
+        CREATE TABLE IF NOT EXISTS prior_authorization_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            request_uid TEXT NOT NULL UNIQUE,
+            patient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            insurer_name TEXT NOT NULL,
+            policy_number TEXT,
+            treatment_type TEXT NOT NULL,
+            icd10_codes TEXT,
+            cpt_codes TEXT,
+            requesting_provider TEXT,
+            clinical_notes TEXT,
+            supporting_documents_json TEXT,
+            status TEXT NOT NULL DEFAULT 'SUBMITTED',
+            payer_response TEXT,
+            payer_auth_number TEXT,
+            submitted_at TEXT,
+            decided_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_prior_auth_patient ON prior_authorization_requests(patient_id, status);
+
+        CREATE TABLE IF NOT EXISTS benefit_estimation_records (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            service_type TEXT NOT NULL,
+            estimated_cost_inr REAL,
+            estimated_coverage_pct REAL,
+            estimated_out_of_pocket_inr REAL,
+            calculation_basis TEXT NOT NULL,
+            is_binding INTEGER NOT NULL DEFAULT 0,
+            non_binding_disclaimer TEXT NOT NULL DEFAULT 'This is a non-binding estimate only. Actual amounts depend on insurer verification and policy terms.',
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_benefit_est_patient ON benefit_estimation_records(patient_id);
+
+        -- ── Phase G: Population & Public Health OS ─────────────────────────
+        CREATE TABLE IF NOT EXISTS health_cohorts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cohort_uid TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            description TEXT,
+            inclusion_criteria_json TEXT NOT NULL,
+            created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            status TEXT NOT NULL DEFAULT 'active',
+            member_count INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_cohort_status ON health_cohorts(status);
+
+        CREATE TABLE IF NOT EXISTS health_cohort_members (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cohort_id INTEGER NOT NULL REFERENCES health_cohorts(id) ON DELETE CASCADE,
+            patient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            enrolled_at TEXT NOT NULL,
+            removed_at TEXT,
+            enrollment_reason TEXT,
+            UNIQUE(cohort_id, patient_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_cohort_members ON health_cohort_members(cohort_id, patient_id);
+
+        CREATE TABLE IF NOT EXISTS public_health_campaigns (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            campaign_uid TEXT NOT NULL UNIQUE,
+            title TEXT NOT NULL,
+            campaign_type TEXT NOT NULL,
+            target_condition TEXT,
+            target_population TEXT,
+            geographic_scope TEXT,
+            start_date TEXT NOT NULL,
+            end_date TEXT,
+            status TEXT NOT NULL DEFAULT 'active',
+            content_json TEXT,
+            created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            reach_count INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_campaign_type ON public_health_campaigns(campaign_type, status);
+
+        CREATE TABLE IF NOT EXISTS campaign_enrollments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            campaign_id INTEGER NOT NULL REFERENCES public_health_campaigns(id) ON DELETE CASCADE,
+            patient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            enrolled_at TEXT NOT NULL,
+            opt_out_at TEXT,
+            status TEXT NOT NULL DEFAULT 'enrolled',
+            UNIQUE(campaign_id, patient_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_campaign_enrollments ON campaign_enrollments(campaign_id);
+
 
         CREATE TABLE IF NOT EXISTS home_health_requests (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

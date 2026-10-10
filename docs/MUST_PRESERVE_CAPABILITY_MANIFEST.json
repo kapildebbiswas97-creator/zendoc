@@ -47,13 +47,13 @@
     }
   ],
   "summary_metrics": {
-    "total_database_tables": 157,
+    "total_database_tables": 167,
     "total_database_migrations": 18,
-    "total_flask_blueprints": 56,
-    "total_endpoints": 544,
-    "total_registered_capabilities": 73,
-    "working_capabilities": 50,
-    "beta_capabilities": 7,
+    "total_flask_blueprints": 59,
+    "total_endpoints": 564,
+    "total_registered_capabilities": 76,
+    "working_capabilities": 54,
+    "beta_capabilities": 6,
     "integration_required_capabilities": 14,
     "future_capabilities": 2
   },
@@ -702,6 +702,16 @@
       "workout_session_items",
       "workout_sessions",
       "workout_set_logs",
+      "automation_action_ledger",
+      "automation_rules",
+      "network_sites",
+      "insurance_coverage_requests",
+      "prior_authorization_requests",
+      "benefit_estimation_records",
+      "health_cohorts",
+      "health_cohort_members",
+      "public_health_campaigns",
+      "campaign_enrollments",
       "zendoc_notifications"
     ]
   },
@@ -740,15 +750,18 @@
     "milestone8",
     "milestone82",
     "neo_analytics",
+    "network_sites",
     "nutrition_intelligence",
     "operational_fulfilment",
     "operational_fulfilment_release",
     "operational_fulfilment_ui",
     "organization_health",
     "payments",
+    "payer_financial",
     "personal_health_baseline",
     "pharmacy_order_ops",
     "pilot_operations",
+    "population_health",
     "preventive_care",
     "provider_onboarding",
     "provider_organizations",
@@ -813,8 +826,8 @@
       "description": "CareFin benefit discovery, required documents, missing info analysis, coverage verification"
     },
     "clinician_intelligence_os": {
-      "status": "BETA",
-      "description": "Pre-consultation summary, visit-note drafting support, decision-support retrieval, interaction alerts"
+      "status": "WORKING",
+      "description": "Pre-consultation AI briefing, SOAP draft notes (non-binding), medication safety alerts, appointment finalization with timeline recording, care action automation, human-in-the-loop clinician sign-off required"
     },
     "interoperability_os": {
       "status": "BETA",
