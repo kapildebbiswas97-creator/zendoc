@@ -10,7 +10,15 @@
 </section>
 
 <section class="finder-shell">
-  <form class="filter-bar finder-form" method="get" action="{{ url_for('universal_search.search_home') }}" role="search">
+  <section class="stitch-finder-intro" aria-labelledby="stitch-finder-intro-title">
+  <div>
+    <p class="stitch-provider-kicker">Find Care · ZENDOC</p>
+    <h2 id="stitch-finder-intro-title">Explore care with confidence</h2>
+    <p>Search across currently available sources. Review the source and verification details before contacting a provider.</p>
+  </div>
+  <a href="{{ url_for('main.finder') }}#government-ors-handoff" class="secondary-action">Government OPD guidance</a>
+</section>
+  <form class="filter-bar finder-form stitch-finder-search" method="get" action="{{ url_for('universal_search.search_home') }}" role="search">
     <label class="finder-universal-query">Search anything in healthcare
       <input name="q" value="{{ (universal_query.text if universal_query is defined else '') or '' }}" autocomplete="off" placeholder="e.g. Apollo Hospital, Dr. Sen, cardiologist in Kolkata, pharmacy near Kalyani, 741235">
     </label>
@@ -39,7 +47,7 @@
     </details>
   </form>
 
-  <nav class="panel finder-source-summary" aria-label="Quick healthcare categories">
+  <nav class="panel finder-source-summary stitch-finder-categories" aria-label="Quick healthcare categories">
     <p class="eyebrow">Search exactly what you need</p>
     <div class="feedback-actions">
       {% set uq = universal_query if universal_query is defined else none %}
@@ -228,7 +236,7 @@
             <div class="results-head"><div><p class="eyebrow">{{ group.label }}</p><h2 id="category-{{ key }}-title">{{ group.label }}</h2></div><p>{{ group.count }} found</p></div>
             <div class="provider-results">
               {% for item in group.results %}
-                <article class="provider-card">
+                <article class="provider-card stitch-care-result">
                   <div class="provider-card-head">
                     <div>
                       <h3>{{ item.provider_name or item.name }}</h3>
@@ -269,7 +277,7 @@
       {% else %}
         <div class="provider-results">
           {% for item in result.results %}
-            <article class="provider-card">
+            <article class="provider-card stitch-care-result">
               <div class="provider-card-head">
                 <div>
                   <h3>{{ item.provider_name or item.name }}</h3>
