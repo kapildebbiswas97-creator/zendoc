@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block title %}{{ site.title }} — ZENDOC Network Site{% endblock %}
+
+{% block content %}
+<main class="page-container" id="main-content">
+  <div class="network-site-header" style="background: linear-gradient(135deg, {{ site.theme.primary_color or '#0d9488' }} 0%, {{ site.theme.accent_color or '#0284c7' }} 100%); color: white; padding: 2.5rem 1.5rem; border-radius: 12px; margin-bottom: 2rem;">
+    <div style="max-width: 900px; margin: 0 auto;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem;">
+        <div>
+          <span class="badge" style="background: rgba(255,255,255,0.2); color: white; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem; text-transform: uppercase;">
+            {{ site.entity_type | replace('_', ' ') }}
+          </span>
+          <span class="badge" style="background: {% if site.provenance == 'VERIFIED' %}#10b981{% else %}#f59e0b{% endif %}; color: white; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem; margin-left: 0.5rem;">
+            {{ site.trust_tier | replace('_', ' ') }}
+          </span>
+          <h1 style="font-size: 2.2rem; font-weight: 800; margin: 0.75rem 0 0.5rem 0;">{{ site.title }}</h1>
+          {% if site.tagline %}
+            <p style="font-size: 1.1rem; opacity: 0.95; margin: 0;">{{ site.tagline }}</p>
+          {% endif %}
+        </div>
+        {% if site.booking_enabled %}
+          <div>
+            <a href="/find-care?category={{ site.entity_type }}" class="button primary" style="background: white; color: #0d9488; font-weight: 700; border: none; padding: 0.75rem 1.5rem; border-radius: 8px;">
+              Book Care Appointment
+            </a>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div style="max-width: 900px; margin: 0 auto; display: grid; grid-template-columns: 2fr 1fr; gap: 2rem;">
+    <div>
+      {% if site.description %}
+        <section class="card" style="margin-bottom: 1.5rem; padding: 1.5rem;">
+          <h2 style="font-size: 1.3rem; margin-top: 0;">About</h2>
+          <p>{{ site.description }}</p>
+        </section>
+      {% endif %}
+
+      {% if site.services %}
+        <section class="card" style="margin-bottom: 1.5rem; padding: 1.5rem;">
+          <h2 style="font-size: 1.3rem; margin-top: 0;">Services Offered</h2>
+          <ul style="list-style: none; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+            {% for s in site.services %}
+              <li style="padding: 0.5rem 0.75rem; background: var(--bg-surface, #f8fafc); border-radius: 6px; border-left: 3px solid var(--primary, #0d9488);">
+                {{ s }}
+              </li>
+            {% endfor %}
+          </ul>
+        </section>
+      {% endif %}
+
+      {% if site.emergency_guidance %}
+        <section class="card alert-box" style="margin-bottom: 1.5rem; padding: 1.25rem; border-left: 4px solid #ef4444; background: #fff5f5;">
+          <h3 style="color: #b91c1c; margin-top: 0; font-size: 1.1rem;">Emergency Information</h3>
+          <p style="color: #7f1d1d; margin: 0;">{{ site.emergency_guidance }}</p>
+        </section>
+      {% endif %}
+    </div>
+
+    <div>
+      <section class="card" style="margin-bottom: 1.5rem; padding: 1.5rem;">
+        <h3 style="font-size: 1.1rem; margin-top: 0;">Location & Contact</h3>
+        {% if site.location.address %}
+          <p style="margin: 0.25rem 0;"><strong>Address:</strong><br>{{ site.location.address }}</p>
+        {% endif %}
+        {% if site.location.city %}
+          <p style="margin: 0.25rem 0;">{{ site.location.city }}{% if site.location.state %}, {{ site.location.state }}{% endif %}{% if site.location.postal_code %} - {{ site.location.postal_code }}{% endif %}</p>
+        {% endif %}
+        {% if site.contact.phone %}
+          <p style="margin: 0.75rem 0 0.25rem 0;"><strong>Phone:</strong> {{ site.contact.phone }}</p>
+        {% endif %}
+        {% if site.contact.email %}
+          <p style="margin: 0.25rem 0;"><strong>Email:</strong> {{ site.contact.email }}</p>
+        {% endif %}
+      </section>
+
+      {% if site.hours %}
+        <section class="card" style="margin-bottom: 1.5rem; padding: 1.5rem;">
+          <h3 style="font-size: 1.1rem; margin-top: 0;">Operating Hours</h3>
+          <dl style="margin: 0;">
+            {% for day, hrs in site.hours.items() %}
+              <dt style="font-weight: 600; text-transform: capitalize; margin-top: 0.5rem;">{{ day | replace('_', ' ') }}</dt>
+              <dd style="margin-left: 0; color: #64748b;">{{ hrs }}</dd>
+            {% endfor %}
+          </dl>
+        </section>
+      {% endif %}
+
+      <div style="font-size: 0.8rem; color: #94a3b8; text-align: center; padding: 1rem;">
+        Provenance: {{ site.provenance }} • Verified on ZENDOC Operating Platform
+      </div>
+    </div>
+  </div>
+</main>
+{% endblock %}

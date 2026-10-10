@@ -127,7 +127,7 @@ def search_health_memory_evidence(
     rows = get_db().execute(
         EVENTS_SQL
         + " SELECT * FROM events ORDER BY event_at DESC, source_id DESC LIMIT ?",
-        tuple([target_id] * 5 + [MAX_CANDIDATES]),
+        tuple([target_id] * 6 + [MAX_CANDIDATES]),
     ).fetchall()
 
     candidates: list[dict[str, Any]] = []

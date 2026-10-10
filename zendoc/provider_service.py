@@ -140,14 +140,27 @@ def search_registered_providers(category=None, specialty=None, location=None, la
     params = []
     clauses = ["u.active=1", "p.verification_status='verified'"]
     if category:
-        clauses.append("p.provider_type=?")
-        params.append(category)
+        cat_lower = str(category).strip().lower()
+        if cat_lower in {"doctor", "specialist"}:
+            clauses.append("p.provider_type='doctor'")
+        elif cat_lower in {"hospital", "emergency", "government_facility"}:
+            clauses.append("p.provider_type='hospital'")
+        elif cat_lower == "pharmacy":
+            clauses.append("p.provider_type='pharmacy'")
+        elif cat_lower in {"clinic", "home_health", "physiotherapy", "mental_health"}:
+            clauses.append("p.provider_type IN ('doctor', 'hospital')")
+        else:
+            clauses.append("p.provider_type=?")
+            params.append(category)
     if specialty:
         clauses.append("LOWER(p.specialty)=LOWER(?)")
         params.append(normalize_specialty(specialty))
     if location:
-        clauses.append("(LOWER(p.city) LIKE LOWER(?) OR LOWER(p.address) LIKE LOWER(?))")
-        params.extend([f"%{location}%", f"%{location}%"])
+        clauses.append(
+            "(LOWER(p.city) LIKE LOWER(?) OR LOWER(p.address) LIKE LOWER(?) "
+            "OR LOWER(COALESCE(p.state,'')) LIKE LOWER(?) OR LOWER(COALESCE(p.postal_code,'')) LIKE LOWER(?))"
+        )
+        params.extend([f"%{location}%", f"%{location}%", f"%{location}%", f"%{location}%"])
     nearby = latitude is not None and longitude is not None
     if nearby:
         try:

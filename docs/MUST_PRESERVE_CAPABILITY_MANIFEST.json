@@ -1,0 +1,857 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "manifest_version": "2.0.0",
+  "project": "ZENDOC Unified Global Healthcare Operating Platform",
+  "repository": "kapildebbiswas97-creator/zendoc",
+  "verified_baseline": {
+    "commit": "a2c97383fe95a394bcb64a1ec14e52ba7e262944",
+    "branch": "main",
+    "date": "2026-10-04",
+    "author": "Kapil Deb Biswas <kapildebbiswas97@gmail.com>",
+    "title": "Merge PR #125: stabilize Vercel->OCI launch and Agent OS resilience"
+  },
+  "integrated_prs": [
+    {
+      "pr_number": 116,
+      "title": "Add controlled beta pilot launch and provider materials",
+      "branch": "pilot/beta-launch-materials-20260926",
+      "status": "MERGED_INTO_BASELINE"
+    },
+    {
+      "pr_number": 123,
+      "title": "Harden Find Care zero-result UX and source diagnostics",
+      "branch": "fix/runtime-truth-empty-states-20260928",
+      "status": "MERGED_INTO_BASELINE"
+    }
+  ],
+  "open_prs_tracked": [
+    {
+      "pr_number": 118,
+      "title": "deps: update boto3",
+      "status": "TRACKED_DEPENDABOT"
+    },
+    {
+      "pr_number": 119,
+      "title": "deps: update faster-whisper",
+      "status": "TRACKED_DEPENDABOT"
+    },
+    {
+      "pr_number": 120,
+      "title": "deps: update psycopg",
+      "status": "TRACKED_DEPENDABOT"
+    },
+    {
+      "pr_number": 121,
+      "title": "ci: bump actions/github-script from 8 to 9",
+      "status": "TRACKED_DEPENDABOT"
+    }
+  ],
+  "summary_metrics": {
+    "total_database_tables": 167,
+    "total_database_migrations": 18,
+    "total_flask_blueprints": 59,
+    "total_endpoints": 564,
+    "total_registered_capabilities": 76,
+    "working_capabilities": 54,
+    "beta_capabilities": 6,
+    "integration_required_capabilities": 14,
+    "future_capabilities": 2
+  },
+  "truth_status_model": {
+    "allowed_states": [
+      "WORKING",
+      "BETA",
+      "INTEGRATION_REQUIRED",
+      "BLOCKED_EXTERNAL",
+      "DISABLED",
+      "FUTURE"
+    ],
+    "non_negotiable_safety_boundaries": [
+      "AUTONOMOUS_PRESCRIBING_MUST_REMAIN_DISABLED",
+      "NO_AUTONOMOUS_MEDICAL_DIAGNOSIS_WITHOUT_HUMAN_CLINICIAN",
+      "TRUTHFUL_STATUS_MODEL_MANDATORY_NEVER_CLAIM_WORKING_BECAUSE_CONFIG_EXISTS",
+      "NO_FABRICATED_PRICES_STOCK_AVAILABILITY_SLOTS_OR_VERIFICATION",
+      "NO_FABRICATED_COMMISSIONS_OR_CLAIMS_APPROVALS",
+      "SERVER_SIDE_POLICY_AUTHORITATIVE_MODEL_NEVER_DIRECTLY_EXECUTES_TOOLS",
+      "TENANT_ISOLATION_AND_CONSENT_MANDATORY"
+    ]
+  },
+  "feature_classification": {
+    "merged_current_main_working": [
+      {
+        "key": "zendoc_core_agent",
+        "label": "ZENDOC Core Agent",
+        "status": "WORKING",
+        "description": "Permissioned agent with tool registry, audit trail, safety gate."
+      },
+      {
+        "key": "connect_messaging",
+        "label": "ZENDOC Connect Messaging",
+        "status": "WORKING",
+        "description": "Policy-aware messaging, conversations, read receipts, report/video sharing and participant-protected native image/video attachments."
+      },
+      {
+        "key": "mental_wellness_private",
+        "label": "Mental Wellness & Awareness",
+        "status": "WORKING",
+        "description": "Private self-entered check-ins and journal history with non-diagnostic, emergency-first safety boundaries."
+      },
+      {
+        "key": "health_community",
+        "label": "ZENDOC Health Community",
+        "status": "WORKING",
+        "description": "Health-only posts, stories, comments, reactions, follows, saved posts, reporting, blocking, author deletion and authenticated media access."
+      },
+      {
+        "key": "health_shop_discovery",
+        "label": "Health Shop Discovery",
+        "status": "WORKING",
+        "description": "Health-focused external merchant discovery plus real outbound-click attribution; no stock, price, order or commission is fabricated."
+      },
+      {
+        "key": "deterministic_safety_engine",
+        "label": "Deterministic Safety Engine",
+        "status": "WORKING",
+        "description": "Emergency detection \u2014 always first, never routed to LLM."
+      },
+      {
+        "key": "local_agent_controller",
+        "label": "ZENDOC Local Agent Controller",
+        "status": "WORKING",
+        "description": "Owner-scoped deterministic local control plane is working; configure a local model to add private on-device language/reasoning assistance."
+      },
+      {
+        "key": "slm_product_layer",
+        "label": "ZENDOC-SLM v1 Product Layer",
+        "status": "WORKING",
+        "description": "Language intelligence boundary with deterministic safety, privacy-aware routing, approved context, and validated advisory output."
+      },
+      {
+        "key": "slm_knowledge_layer",
+        "label": "Approved Knowledge Layer",
+        "status": "WORKING",
+        "description": "Repository-owned ZENDOC product facts and approved synthetic safety guidance with provenance; no web retrieval."
+      },
+      {
+        "key": "slm_output_validator",
+        "label": "Structured Output & Safety Validator",
+        "status": "WORKING",
+        "description": "Rejects malformed or action-like model output before it reaches user-facing guidance or workflows."
+      },
+      {
+        "key": "model_router",
+        "label": "Model Router",
+        "status": "WORKING",
+        "description": "Routes tasks by safety, privacy, risk, complexity, and explicit cloud approval; model output cannot invoke tools."
+      },
+      {
+        "key": "model_evaluation_lab",
+        "label": "ZENDOC Model Evaluation Lab",
+        "status": "WORKING",
+        "description": "Owner-only synthetic dataset validation, dry runs, mocked scoring, safety gating, metadata-only results, and comparison reports."
+      },
+      {
+        "key": "agent_task_engine",
+        "label": "Agent Task Engine",
+        "status": "WORKING",
+        "description": "Persistent tasks with retry, idempotency, bounded execution."
+      },
+      {
+        "key": "approval_engine",
+        "label": "Human Approval Engine",
+        "status": "WORKING",
+        "description": "Owner-level and doctor-level human-in-the-loop approvals."
+      },
+      {
+        "key": "proactive_alerts",
+        "label": "Proactive Operational Alerts",
+        "status": "WORKING",
+        "description": "Deterministic monitoring: overdue tasks, high error rates, waiting approvals."
+      },
+      {
+        "key": "capability_registry",
+        "label": "Capability Registry",
+        "status": "WORKING",
+        "description": "Central truthful status for all platform features."
+      },
+      {
+        "key": "specialized_agent_routing",
+        "label": "Specialized Agent Routing v2",
+        "status": "WORKING",
+        "description": "Deterministic routing exposes assigned agent, privacy class, context requirements, human gate, expected output, and fallback strategy."
+      },
+      {
+        "key": "carefin_engine",
+        "label": "CareFin Benefits Discovery",
+        "status": "WORKING",
+        "description": "Deterministic public-source discovery, missing-information analysis, provenance, and coverage truth-state enforcement."
+      },
+      {
+        "key": "referral_waiting_list_os",
+        "label": "Referral & Waiting List OS",
+        "status": "WORKING",
+        "description": "Consent-bound internal referral lifecycle covers packet preparation, patient consent, send/receive, triage, accept/reject, waiting list, scheduling, consultation, report, follow-up and return to primary care. External EHR/network delivery is never inferred."
+      },
+      {
+        "key": "automatic_care_journey",
+        "label": "Automatic Care Journey Coordinator",
+        "status": "WORKING",
+        "description": "Deterministic care-workflow state machine with human gates, provenance, next-safe-action logic, and no diagnostic authority."
+      },
+      {
+        "key": "ai_workforce_incident_runtime",
+        "label": "Evidence-Gated AI Workforce Incident Runtime",
+        "status": "WORKING",
+        "description": "Persistent incident cases automatically classify privacy-safe failures, require explicit evidence for reproduction/root cause/repair/security/tests/preview, stop at owner production approval, require live post-release health/readiness evidence, and capture sanitized learning only after verification."
+      },
+      {
+        "key": "safe_operations_automation",
+        "label": "Safe Operations Automation",
+        "status": "WORKING",
+        "description": "Owner-only re-queue of explicitly retriable failures plus deterministic alerts; never executes arbitrary tasks or consequential clinical/financial actions."
+      },
+      {
+        "key": "diagnostics_freshness_v2",
+        "label": "Diagnostics Freshness & Alias Layer",
+        "status": "WORKING",
+        "description": "Diagnostic aliases, observation timestamps, CONFIRMED/STALE/UNKNOWN semantics, and stale-booking rejection."
+      },
+      {
+        "key": "nutrition_agent",
+        "label": "Nutrition & Hydration Agent Foundation",
+        "status": "WORKING",
+        "description": "General-wellness label and normalized-price comparison with allergy flags, sponsorship separation, and medical-diet escalation."
+      },
+      {
+        "key": "multilingual_foundation",
+        "label": "English/Bengali/Hindi Language Foundation",
+        "status": "WORKING",
+        "description": "Persistent language preference, script detection, and safety templates are working without a translation provider."
+      },
+      {
+        "key": "geographic_healthcare_graph",
+        "label": "Geographic Healthcare Graph v1",
+        "status": "WORKING",
+        "description": "Provenance-aware hierarchy and entity-link ingestion/search architecture is working; production starts empty until verified/official data is ingested."
+      },
+      {
+        "key": "official_public_data_ingestion",
+        "label": "Official/Public Data Ingestion",
+        "status": "WORKING",
+        "description": "Owner-only dry-run/apply ingestion with checksums, explicit schema mapping, row-level rejection reasons, provenance, and idempotent upserts."
+      },
+      {
+        "key": "global_health_intelligence_fabric",
+        "label": "Global Health Intelligence Fabric",
+        "status": "WORKING",
+        "description": "Country-aware data model covers 195 operational jurisdictions with governed source discovery, provenance, organization intelligence and truthful source-gap reporting; actual country datasets remain source-specific."
+      },
+      {
+        "key": "organization_intelligence",
+        "label": "Global Organization Intelligence",
+        "status": "WORKING",
+        "description": "Governed legal-entity, filing and official-source discovery plans for companies/organizations with licensing, provenance and no-private-data boundaries."
+      },
+      {
+        "key": "global_source_research_automation",
+        "label": "ResearchAgent Global Source-Gap Automation",
+        "status": "WORKING",
+        "description": "Operations automation continuously turns missing country-source coverage into a deduplicated, bounded ResearchAgent work batch while known reviewed connectors refresh separately."
+      },
+      {
+        "key": "identity_evidence_review",
+        "label": "Privacy-first Identity Evidence Review",
+        "status": "WORKING",
+        "description": "Consent-based masked identifier workflow stores only last 2\u20134 characters and keeps manual review explicitly separate from external eKYC."
+      },
+      {
+        "key": "provider_onboarding_v1",
+        "label": "Provider Onboarding & Evidence Review",
+        "status": "WORKING",
+        "description": "Provider completeness scoring, evidence submission, owner evidence review, and verification-readiness state are working without auto-verifying providers."
+      },
+      {
+        "key": "carefin_pilot_ui",
+        "label": "CareFin Pilot UI",
+        "status": "WORKING",
+        "description": "Authenticated browser workflow for possible-benefit discovery with explicit unverified/authoritative-verification boundaries."
+      },
+      {
+        "key": "care_journey_pilot_ui",
+        "label": "Care Journey Pilot UI",
+        "status": "WORKING",
+        "description": "Authenticated browser workflow for durable coordination journeys and valid next-state transitions."
+      },
+      {
+        "key": "pilot_analytics",
+        "label": "Pilot Analytics Scorecard",
+        "status": "WORKING",
+        "description": "Owner-only metrics computed from real ZENDOC records for onboarding, care journeys, CareFin discovery, fulfilment, diagnostics, data coverage, and operations."
+      },
+      {
+        "key": "health_memory",
+        "label": "Health Memory & Timeline",
+        "status": "WORKING",
+        "description": "Secure personal health profile, records, timeline, analytics."
+      },
+      {
+        "key": "medical_records",
+        "label": "Medical Records Upload",
+        "status": "WORKING",
+        "description": "Provider-backed storage interface; secure local storage is working for development."
+      },
+      {
+        "key": "appointments",
+        "label": "Appointments",
+        "status": "WORKING",
+        "description": "Provider scheduling, slot booking, provider profiles."
+      },
+      {
+        "key": "fitness_coach",
+        "label": "AI Fitness Coach",
+        "status": "WORKING",
+        "description": "Workout plans, session tracking, exercise library, nutrition/hydration logs."
+      },
+      {
+        "key": "fitness_videos",
+        "label": "Fitness Video Library",
+        "status": "WORKING",
+        "description": "Local exercise library with guidance cards."
+      },
+      {
+        "key": "human_operations",
+        "label": "Human Operations",
+        "status": "WORKING",
+        "description": "Staff task management, status tracking (requested \u2192 completed)."
+      },
+      {
+        "key": "family_care",
+        "label": "Family Care",
+        "status": "WORKING",
+        "description": "Remote parent care, family access grants, care tasks."
+      },
+      {
+        "key": "home_health",
+        "label": "Home Healthcare",
+        "status": "WORKING",
+        "description": "Service intake (actual fulfillment requires provider integration)."
+      },
+      {
+        "key": "pharmacy",
+        "label": "Pharmacy Services",
+        "status": "WORKING",
+        "description": "Medicine search, delivery requests. Live dispensing requires pharmacy integration."
+      },
+      {
+        "key": "medical_transport",
+        "label": "Medical Transport",
+        "status": "WORKING",
+        "description": "Transport request intake. Live dispatch requires provider integration."
+      },
+      {
+        "key": "iot_hub",
+        "label": "IoT Hub",
+        "status": "WORKING",
+        "description": "Device registration plus a revocable, hashed, per-device ingestion bridge are implemented. Manufacturer-specific Apple/Google/Samsung/Fitbit SDK or OAuth adapters remain external vendor integrations."
+      },
+      {
+        "key": "healthcare_finder",
+        "label": "Healthcare Finder \u2014 ZENDOC / Official Sources",
+        "status": "WORKING",
+        "description": "Local verified-provider and ingested official/public-directory discovery are implemented. External map discovery is tracked separately because configuration does not prove provider reachability."
+      },
+      {
+        "key": "in_app_notifications",
+        "label": "In-App Notifications",
+        "status": "WORKING",
+        "description": "Working \u2014 delivered to user notification feed."
+      },
+      {
+        "key": "object_storage",
+        "label": "Object Storage (S3-compatible)",
+        "status": "WORKING",
+        "description": "Local file storage works for development; hosted persistence requires verified durable object storage."
+      },
+      {
+        "key": "realtime",
+        "label": "Real-time Updates",
+        "status": "WORKING",
+        "description": "Authenticated incremental event polling is working. WebSocket/SSE delivery requires an external adapter."
+      }
+    ],
+    "merged_current_main_beta": [
+      {
+        "key": "voice_video_calling",
+        "label": "Voice / Video Calling",
+        "status": "BETA",
+        "description": "Authenticated browser WebRTC signaling, call lifecycle and media controls are implemented. Enable the OCI Coturn realtime profile or configure external ICE servers for reliable public/NAT networks."
+      },
+      {
+        "key": "universal_healthcare_interoperability_gateway",
+        "label": "Universal Healthcare Interoperability Gateway",
+        "status": "BETA",
+        "description": "Provider-neutral FHIR R4/R5 and SMART-on-FHIR-compatible adapter contracts, resource normalization, truth-state reporting and plan-only exchange orchestration are implemented. External exchange remains gated."
+      },
+      {
+        "key": "telehealth",
+        "label": "Telehealth Beta",
+        "status": "BETA",
+        "description": "Consultation requests, provider acceptance, scoped Connect chat and authenticated browser WebRTC voice/video are implemented. Reliable public-network calling still depends on verified STUN/TURN infrastructure and two-device testing."
+      },
+      {
+        "key": "report_intelligence",
+        "label": "Report Intelligence",
+        "status": "BETA",
+        "description": "Deterministic blood test range interpretation. Not a medical diagnosis."
+      },
+      {
+        "key": "pose_coach",
+        "label": "Fitness Camera Preview",
+        "status": "BETA",
+        "description": "Browser-local camera preview and duration capture only. No pose model, form analysis, rep counting, or medical-device claim."
+      },
+      {
+        "key": "organization_health",
+        "label": "ZENDOC Organizations & Member Benefits",
+        "status": "BETA",
+        "description": "Verified organization membership, benefit plans and privacy-preserving aggregate operational analytics are implemented. Organization benefit records do not prove insurer approval, provider fulfilment or clinical outcomes."
+      },
+      {
+        "key": "video_intelligence",
+        "label": "Video Intelligence",
+        "status": "BETA",
+        "description": "General ZENDOC guidance cards \u2014 video provider not configured."
+      }
+    ],
+    "external_integration_required": [
+      {
+        "key": "community_media_public_durability",
+        "label": "Durable Public Community Media",
+        "status": "INTEGRATION_REQUIRED",
+        "description": "Local media works for development; public durable video/image storage requires configured and verified object storage."
+      },
+      {
+        "key": "affiliate_referral_revenue",
+        "label": "Affiliate / Referral Revenue",
+        "status": "INTEGRATION_REQUIRED",
+        "description": "No approved affiliate templates are configured; merchant handoffs remain discovery-only."
+      },
+      {
+        "key": "connected_payments_gateway",
+        "label": "Connected Payments Gateway",
+        "status": "INTEGRATION_REQUIRED",
+        "description": "Real payment execution requires configured Razorpay credentials and signed webhook verification."
+      },
+      {
+        "key": "local_slm",
+        "label": "ZENDOC-SLM v1 \u2014 Local Model Layer",
+        "status": "INTEGRATION_REQUIRED",
+        "description": "Local SLM integration ready \u2014 model not configured."
+      },
+      {
+        "key": "cloud_llm",
+        "label": "Cloud LLM Provider",
+        "status": "INTEGRATION_REQUIRED",
+        "description": "External AI provider (ZENDOC_AI_PROVIDER + ZENDOC_AI_API_KEY)."
+      },
+      {
+        "key": "real_local_model_evaluation",
+        "label": "Real Local Model Evaluation",
+        "status": "INTEGRATION_REQUIRED",
+        "description": "Requires an explicitly enabled evaluation gate plus an already-installed, configured local provider and candidate model."
+      },
+      {
+        "key": "carefin_live_verification",
+        "label": "CareFin Live Coverage Verification",
+        "status": "INTEGRATION_REQUIRED",
+        "description": "Personal eligibility, insurer/government/CSR approval and payment confirmation require an authoritative partner response; owner evidence review remains available."
+      },
+      {
+        "key": "free_form_translation",
+        "label": "Free-form Multilingual Translation",
+        "status": "INTEGRATION_REQUIRED",
+        "description": "Requires a configured local multilingual model or translation provider; no translation capability is fabricated."
+      },
+      {
+        "key": "official_live_connectors",
+        "label": "Live Official Dataset Connectors",
+        "status": "INTEGRATION_REQUIRED",
+        "description": "LGD/OGD/ABDM live retrieval requires dataset-specific downloads/APIs or authorized onboarding; ZENDOC does not claim live access by default."
+      },
+      {
+        "key": "live_external_fhir_exchange",
+        "label": "Live External EHR / HIE Exchange",
+        "status": "INTEGRATION_REQUIRED",
+        "description": "No external EHR/HIE adapter is live-verified. ZENDOC's software boundary is present, but external activation requires the relevant endpoint/credential, authorization or partner agreement, plus bounded live verification."
+      },
+      {
+        "key": "external_ekyc",
+        "label": "External eKYC Provider",
+        "status": "INTEGRATION_REQUIRED",
+        "description": "No authorized eKYC provider is connected. Manual identity evidence review is available but is not eKYC."
+      },
+      {
+        "key": "external_places_discovery",
+        "label": "External Places Discovery",
+        "status": "INTEGRATION_REQUIRED",
+        "description": "External map discovery requires OpenStreetMap/Nominatim or a configured Google Places provider. Local/official Finder results remain separate."
+      },
+      {
+        "key": "external_notifications",
+        "label": "External Notifications (Email/SMS/WhatsApp/Push)",
+        "status": "INTEGRATION_REQUIRED",
+        "description": "In-app delivery works. SMTP email, SMS, WhatsApp and push require their real provider configuration."
+      },
+      {
+        "key": "postgresql",
+        "label": "PostgreSQL Database",
+        "status": "INTEGRATION_REQUIRED",
+        "description": "Configure DATABASE_URL and complete the documented production migration and redeploy verification."
+      }
+    ],
+    "planned_future_features": [
+      {
+        "key": "zendoc_proprietary_slm",
+        "label": "ZENDOC Proprietary SLM (Future)",
+        "status": "FUTURE",
+        "description": "ZENDOC has NOT trained a proprietary medical SLM. M8.2 provides evaluation and dataset-governance foundations only; adaptation remains future work."
+      },
+      {
+        "key": "autonomous_prescribing",
+        "label": "Autonomous Prescribing (Future, Legally Restricted)",
+        "status": "FUTURE",
+        "description": "CRITICAL_BLOCKED \u2014 requires legally valid doctor workflow and regulatory approval."
+      }
+    ]
+  },
+  "database_schema_inventory": {
+    "migrations": [
+      "m8_agent_platform_v1",
+      "m8_1_local_ai_runtime_v1",
+      "m8_2_model_evaluation_lab_v1",
+      "m9_slm_scorecard_v1",
+      "post_submission_provider_tenancy_v1",
+      "post_submission_provider_resource_tenancy_v1",
+      "post_submission_concurrency_v1",
+      "post_submission_request_fingerprints_v1",
+      "post_submission_observability_v1",
+      "post_submission_geography_v1",
+      "post_submission_care_journey_v1",
+      "post_submission_official_ingestion_v1",
+      "post_submission_provider_onboarding_v1",
+      "m8_3_auth_persistence_v1",
+      "m10_connected_care_v1",
+      "post_submission_provider_network_v1",
+      "post_submission_notifications_v1",
+      "global_country_currency_v1"
+    ],
+    "tables": [
+      "agent_actions",
+      "agent_alerts",
+      "agent_approvals",
+      "agent_runs",
+      "agent_task_attempts",
+      "agent_tasks",
+      "agent_tool_calls",
+      "ai_conversations",
+      "ai_interactions",
+      "ambulance_requests",
+      "api_rate_limit_buckets",
+      "api_tokens",
+      "appointment_slot_claims",
+      "appointments",
+      "audit_logs",
+      "business_api_clients",
+      "business_api_keys",
+      "business_api_usage",
+      "care_action_events",
+      "care_actions",
+      "care_invoices",
+      "care_journey_events",
+      "care_journeys",
+      "care_outcomes",
+      "carefin_case_events",
+      "carefin_cases",
+      "carefin_partner_events",
+      "communication_permissions",
+      "connect_call_ice",
+      "connect_calls",
+      "consent_grants",
+      "consultation_messages",
+      "consultation_requests",
+      "consultation_rooms",
+      "conversation_participants",
+      "conversations",
+      "data_ingestion_batches",
+      "data_refresh_tasks",
+      "device_ingestion_keys",
+      "device_ingestion_receipts",
+      "diagnostic_bookings",
+      "diagnostic_catalog",
+      "diagnostic_offers",
+      "doctor_availability",
+      "duplicate_account_groups",
+      "evaluation_case_versions",
+      "exercises",
+      "family_access_grants",
+      "family_care_tasks",
+      "family_members",
+      "fitness_pose_feedback",
+      "fitness_pose_sessions",
+      "fitness_profiles",
+      "fulfilment_plan_items",
+      "fulfilment_plans",
+      "geography_entity_links",
+      "geography_import_regions",
+      "geography_nodes",
+      "geography_relationships",
+      "health_access_grant_context",
+      "health_access_grants",
+      "health_commerce_clicks",
+      "health_devices",
+      "health_metrics",
+      "health_shop_saved_items",
+      "health_social_blocks",
+      "health_social_comments",
+      "health_social_follows",
+      "health_social_likes",
+      "health_social_posts",
+      "health_social_reports",
+      "health_social_saves",
+      "health_social_stories",
+      "health_timeline_events",
+      "home_health_assignments",
+      "home_health_provider_services",
+      "home_health_requests",
+      "hydration_logs",
+      "identity_verification_cases",
+      "identity_verification_events",
+      "institution_pilot_events",
+      "institution_pilot_milestones",
+      "institution_pilot_usage_snapshots",
+      "institution_pilots",
+      "integration_health_checks",
+      "inventory_observations",
+      "medical_knowledge_chunks",
+      "medical_knowledge_documents",
+      "medical_knowledge_ingestions",
+      "medical_records",
+      "medication_skus",
+      "medicine_orders",
+      "medicine_reminders",
+      "mental_wellness_checkins",
+      "mental_wellness_journal",
+      "message_attachments",
+      "message_receipts",
+      "messages",
+      "model_candidates",
+      "model_evaluation_results",
+      "model_evaluation_runs",
+      "model_execution_logs",
+      "notification_deliveries",
+      "notifications",
+      "nutrition_logs",
+      "order_events",
+      "organization_benefit_plans",
+      "organization_locations",
+      "organization_memberships",
+      "partner_api_audit_events",
+      "partner_booking_handoffs",
+      "partner_slot_holds",
+      "patient_health_profiles",
+      "payment_events",
+      "pilot_cohort_memberships",
+      "pilot_feedback_reports",
+      "platform_events",
+      "prescription_items",
+      "prescriptions",
+      "preventive_care_plans",
+      "product_analytics_events",
+      "product_feedback",
+      "provider_invitations",
+      "provider_network_prospects",
+      "provider_onboarding_events",
+      "provider_organizations",
+      "provider_profiles",
+      "provider_prospects",
+      "provider_schedules",
+      "provider_verification_evidence",
+      "public_entity_claims",
+      "public_healthcare_entities",
+      "referral_events",
+      "referrals",
+      "report_metadata",
+      "report_results",
+      "request_observations",
+      "saved_locations",
+      "schema_migrations",
+      "sqlite_sequence",
+      "staff_profiles",
+      "staff_task_events",
+      "staff_tasks",
+      "startup_financial_entries",
+      "startup_financial_snapshots",
+      "transport_partner_assignments",
+      "user_email_verifications",
+      "user_policy_acceptances",
+      "users",
+      "verified_reviews",
+      "video_search_history",
+      "workout_plan_items",
+      "workout_plans",
+      "workout_session_items",
+      "workout_sessions",
+      "workout_set_logs",
+      "automation_action_ledger",
+      "automation_rules",
+      "network_sites",
+      "insurance_coverage_requests",
+      "prior_authorization_requests",
+      "benefit_estimation_records",
+      "health_cohorts",
+      "health_cohort_members",
+      "public_health_campaigns",
+      "campaign_enrollments",
+      "zendoc_notifications"
+    ]
+  },
+  "blueprints_inventory": [
+    "ai_chat",
+    "business",
+    "calls",
+    "care_continuity",
+    "care_journey",
+    "care_os",
+    "carefin",
+    "connected_care",
+    "dataset_snapshot_ingestion",
+    "device_ingestion",
+    "document_extraction",
+    "ecosystem",
+    "edgecare",
+    "family",
+    "fitness",
+    "geography_graph",
+    "global_data",
+    "health_hub",
+    "health_memory",
+    "health_shop",
+    "health_social",
+    "identity_verification",
+    "india_care_rail",
+    "integration_readiness",
+    "interoperability",
+    "language",
+    "local_controller",
+    "main",
+    "medical_knowledge",
+    "mental_wellness",
+    "milestone7",
+    "milestone8",
+    "milestone82",
+    "neo_analytics",
+    "network_sites",
+    "nutrition_intelligence",
+    "operational_fulfilment",
+    "operational_fulfilment_release",
+    "operational_fulfilment_ui",
+    "organization_health",
+    "payments",
+    "payer_financial",
+    "personal_health_baseline",
+    "pharmacy_order_ops",
+    "pilot_operations",
+    "population_health",
+    "preventive_care",
+    "provider_onboarding",
+    "provider_organizations",
+    "public_ingestion",
+    "public_launch",
+    "referrals",
+    "release_health",
+    "showcase",
+    "specialist_agents",
+    "system_intelligence",
+    "transport_partner",
+    "universal_search",
+    "workforce_incidents"
+  ],
+  "platform_layers": {
+    "patient_platform": {
+      "status": "WORKING",
+      "description": "Patient portal, health profile, records, appointments, timeline, access grants, consent, dependents"
+    },
+    "health_memory_2": {
+      "status": "WORKING",
+      "description": "Longitudinal health intelligence, unit normalization, reference ranges, trends, red-flag escalation, RAG"
+    },
+    "find_care_2": {
+      "status": "WORKING",
+      "description": "Universal healthcare search, verified provider index, public directory, GPS/radius, source-health reporting"
+    },
+    "provider_os": {
+      "status": "WORKING",
+      "description": "Provider onboarding, profiles, schedules, verification reviews, multi-tenant isolation, operations console"
+    },
+    "care_os": {
+      "status": "WORKING",
+      "description": "Longitudinal care episodes, care plans, tasks, care goals, referrals, next-safe-action coordinator"
+    },
+    "agent_os": {
+      "status": "WORKING",
+      "description": "Controlled execution engine, tool registry, permission checks, consent verification, audit, specialist routing"
+    },
+    "dasher_slm_model_router": {
+      "status": "WORKING",
+      "description": "Model router, task privacy classification, local Ollama / OpenAI-compatible runtime, safety validator"
+    },
+    "medication_pharmacy_os": {
+      "status": "WORKING",
+      "description": "Medicine catalog, e-prescription adapters, interaction/contraindication checking, pharmacy order lifecycle"
+    },
+    "diagnostics_os": {
+      "status": "WORKING",
+      "description": "Test catalog, lab discovery, sample lifecycle, report linking, observation timestamps, freshness"
+    },
+    "emergency_transport_os": {
+      "status": "WORKING",
+      "description": "Emergency detection, contact alerts, nearest facility routing, ambulance provider directory"
+    },
+    "referral_waiting_list_os": {
+      "status": "WORKING",
+      "description": "Referral packets, triage, accept/reject, waiting list prioritization, consultation follow-up"
+    },
+    "payer_financial_os": {
+      "status": "WORKING",
+      "description": "CareFin benefit discovery, required documents, missing info analysis, coverage verification"
+    },
+    "clinician_intelligence_os": {
+      "status": "WORKING",
+      "description": "Pre-consultation AI briefing, SOAP draft notes (non-binding), medication safety alerts, appointment finalization with timeline recording, care action automation, human-in-the-loop clinician sign-off required"
+    },
+    "interoperability_os": {
+      "status": "BETA",
+      "description": "FHIR R4/R5 gateway, SMART on FHIR abstraction, resource normalization, patient identity matching"
+    },
+    "automation_engine": {
+      "status": "WORKING",
+      "description": "Event bus, workflow automation, consented patient engagement, operational alert rules"
+    },
+    "network_sites": {
+      "status": "WORKING",
+      "description": "Multi-tenant provider digital portals, site provisioning agent, verified branding, public SEO"
+    },
+    "commerce_referral_os": {
+      "status": "WORKING",
+      "description": "Health shop discovery, outbound click tracking, affiliate attribution without fabricated commission"
+    },
+    "population_public_health_os": {
+      "status": "WORKING",
+      "description": "Public health program templates, cohort management, community health campaigns, aggregate analytics"
+    },
+    "health_wallet": {
+      "status": "BETA",
+      "description": "Portable Care Passport, emergency summary, offline QR, selective credential disclosure"
+    }
+  }
+}
