@@ -4,13 +4,28 @@
 
 ## Architecture
 
-Browser → Vercel public gateway → `https://YOUR_AWS_ORIGIN` → EC2 Caddy HTTPS → Flask + operations worker → PostgreSQL 16 (private Docker network).
+Browser → Vercel public gateway → `https://YOUR_AWS_ORIGIN` → EC2 Caddy HTTPS → Flask + operations worker → PostgreSQL 16 (`postgres:16-bookworm` on private Docker network).
 
 Initial AWS backend: one Ubuntu EC2 VM with Docker Compose and persistent gp3 EBS. Optional future upgrade: managed PostgreSQL on AWS RDS and uploaded-file storage on S3. This **single VM is not HA**; maintain encrypted off-instance backups.
 
 ## 1. Create the AWS EC2 instance
 
-In the [EC2 Console](https://console.aws.amazon.com/ec2/), choose an appropriate region and launch an **Ubuntu 24.04 LTS x86-64** AMI. Select sufficient RAM for Flask, the worker and PostgreSQL; 2 GB may be tight for the full system. Start with at least 30 GB encrypted gp3 EBS and enable IMDSv2. Confirm Free Tier eligibility, estimated public IPv4/EBS/compute cost and configure an AWS Budget alert before provisioning.
+In the [EC2 Console](https://console.aws.amazon.com/ec2/), choose an appropriate region and launch an **Ubuntu 24.04 LTS x86-64** AMI.
+
+### Hardware Sizing, AWS Free Tier Realities & Low-Cost Alternatives
+- **AWS Free Tier Reality:** AWS Free Tier includes 750 hours/month of a `t2.micro` or `t3.micro` instance (1 vCPU, 1 GB RAM). Running PostgreSQL 16 (`postgres:16-bookworm`), Flask web backend (Gunicorn), operations worker, and Caddy concurrently within 1 GB RAM creates severe memory pressure.
+  > [!WARNING]
+  > If using a 1 GB Free Tier instance (`t2.micro` / `t3.micro`), you **MUST** configure a 2 GB to 4 GB swapfile to avoid Out-Of-Memory (OOM) killer terminations:
+  > ```bash
+  > sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
+  > echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+  > ```
+  > Set `WEB_CONCURRENCY=1` to limit worker memory usage.
+- **AWS Public IPv4 Cost Notice:** Since February 2024, AWS charges $0.005/hour (~$3.65/month) for all public IPv4 addresses, even on Free Tier instances. An EC2 instance is therefore never $0.00/month unless configured IPv6-only.
+- **Recommended Low-Cost Staging/Production Tiers (Non-Free Tier):**
+  - **`t3.small` (Recommended standard):** 2 vCPU, 2 GB RAM. Compute (~$15.20/mo) + public IPv4 (~$3.65/mo) = **~$18.85/month**. Provides comfortable memory headroom without memory thrashing.
+  - **`t4g.small` (AWS Graviton2 ARM64 alternative):** 2 vCPU, 2 GB RAM. Compute (~$12.30/mo) + public IPv4 (~$3.65/mo) = **~$15.95/month**. Requires ARM-compatible container builds.
+- **Storage:** Start with at least 30 GB encrypted gp3 EBS (30 GB gp3 is included in AWS Free Tier) and enable IMDSv2. Configure an AWS Budget alert ($20/month) before provisioning.
 
 Configure a public subnet with internet access; security group inbound rules:
 - TCP **22** only from your trusted IP for SSH
