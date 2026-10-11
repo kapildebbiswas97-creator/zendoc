@@ -103,10 +103,23 @@ Verify using the actual reviewed source commit, not the historical main SHA:
 
 ```bash
 cd ~/zendoc
-python3 scripts/verify_deployment.py https://YOUR_AWS_ORIGIN --expected-commit YOUR_REVIEWED_40_CHAR_SHA --require-platform aws_ec2 --require-engine postgresql
+python3 scripts/verify_deployment.py https://YOUR_AWS_ORIGIN --expected-commit YOUR_REVIEWED_40_CHAR_SHA --require-platform aws_ec2 --require-engine postgresql --require-persistence-verified
 ```
 
 Direct backend app pages returning HTTP 403 without the gateway token is **expected**. Only `/api/v1/health` and `/api/v1/ready` may be called directly without it.
+
+### GitHub Actions production identity gate
+
+In GitHub repository **Settings → Secrets and variables → Actions → Variables** (repository variables, not secrets), configure `ZENDOC_DEPLOYMENT_PLATFORM=aws_ec2` before enabling automatic AWS production health verification. Once a real, accessible Vercel production URL is tested, configure `ZENDOC_DEPLOYMENT_URL=https://YOUR_VERIFIED_VERCEL_URL` as well.
+
+The Production Gate deployment job requires **the exact deployed Git SHA**, `deployment.platform=aws_ec2`, PostgreSQL readiness/migrations, and `persistence_verified=true`. An outdated OCI-only release verifier previously rejected a valid AWS identity; the revised workflow accepts only an explicitly reviewed `aws_ec2` or `oci` value. For a manually invoked GitHub workflow, select **deployment_platform → aws_ec2** and supply the real `deployment_url`. For automatic main-branch verification, the repository variable selects the platform; without it the legacy `oci` fallback remains fail-closed on AWS.
+
+Never set a verification flag merely to satisfy a check. Confirm the underlying live persistence, backups, DNS/TLS, secure environment and reviewed SHA. A passing GitHub code test is **not** evidence that an AWS instance was launched or that Vercel works publicly.
+
+### Capability evidence review
+
+The targeted **Capability Evidence & Safety Gate** workflow emits `zendoc-capability-evidence` as a non-sensitive JSON artifact. Its 73 registry entries include working software regression references, all seven beta acceptance requirements, fourteen external evidence gates and the two restricted future capabilities. The report cannot authorize payments, prescribing, third-party integrations or production release. Review and record real provider evidence separately.
+
 
 ## 6. Connect to the existing Vercel project
 
