@@ -46,3 +46,19 @@ def test_high_value_product_features_are_agent_owned():
     for capability, agent in expected.items():
         assert by_key[capability]["primary_agent"] == agent
         assert by_key[capability]["agent_status"] != "disabled"
+
+
+def test_hospital_bed_board_is_non_executable_and_human_operated():
+    from zendoc.agent_feature_coverage import OPERATIONS_MONITORED
+
+    snapshot = feature_agent_coverage_snapshot()
+    hospital = next(
+        row for row in snapshot["items"] if row["capability_key"] == "hospital_bed_board"
+    )
+    assert snapshot["complete"] is True
+    assert hospital["capability_status"] == "BETA"
+    assert hospital["primary_agent"] == "OperationsAgent"
+    assert hospital["mode"] == OPERATIONS_MONITORED
+    assert hospital["safety_agent"] == "SafetyAgent"
+    assert hospital["mode"] != "SPECIALIST_EXECUTABLE"
+    assert "No agent may reserve beds" in hospital["note"]
