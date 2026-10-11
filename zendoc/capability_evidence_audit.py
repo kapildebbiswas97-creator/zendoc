@@ -38,6 +38,23 @@ EXTERNAL_EVIDENCE_REQUIREMENTS = {
     "postgresql": ("database", False, "Durable production PostgreSQL readiness and restoration"),
 }
 
+# These beta checks must be observed on real devices/data with the correct
+# consents before any promotion from BETA is proposed to reviewers.
+BETA_ACCEPTANCE_EVIDENCE = {
+    "voice_video_calling": "Two-device real-network TURN/WebRTC and consent review",
+    "universal_healthcare_interoperability_gateway": "Consented partner-backed FHIR exchange, authorization and mapping",
+    "telehealth": "Two real participants, clinician acceptance, media and network loss recovery",
+    "report_intelligence": "Clinician-reviewed reference ranges, units and false-positive controls",
+    "pose_coach": "Permissioned camera handling and validated pose feedback (preview is not analysis)",
+    "organization_health": "Verified membership, tenant isolation and actual authorized benefits",
+    "video_intelligence": "Verified video-provider authorization, provenance and safety boundaries",
+}
+
+FUTURE_BOUNDARIES = {
+    "zendoc_proprietary_slm": "Requires approved datasets, training evidence, evaluation, privacy and external safety review",
+    "autonomous_prescribing": "Must remain disabled: no autonomous prescribing or bypass of licensed clinician approval",
+}
+
 # WORKING is a software claim; it does not by itself certify external/live
 # infrastructure or end-to-end patient journeys.
 EVIDENCE_TTL = timedelta(hours=24)
@@ -144,6 +161,21 @@ def build_capability_evidence_audit(
     for label, real_count in declared.items():
         if summary.get(label) != real_count:
             errors.append(f"manifest {label}: declared {summary.get(label)}, actual {real_count}")
+
+    beta_keys = {key for key, row in catalog.items() if row["baseline_status"] == "BETA"}
+    if beta_keys != set(BETA_ACCEPTANCE_EVIDENCE):
+        errors.append("Beta acceptance inventory mismatch")
+    future_keys = {key for key, row in catalog.items() if row["baseline_status"] == "FUTURE"}
+    if future_keys != set(FUTURE_BOUNDARIES):
+        errors.append("Future safety boundary inventory mismatch")
+    for key, criterion in BETA_ACCEPTANCE_EVIDENCE.items():
+        if key in catalog:
+            catalog[key]["required_review"] = criterion
+            catalog[key]["external_evidence"] = "BETA_REAL_WORLD_VALIDATION_PENDING"
+    for key, criterion in FUTURE_BOUNDARIES.items():
+        if key in catalog:
+            catalog[key]["required_review"] = criterion
+            catalog[key]["external_evidence"] = "FUTURE_RESTRICTED"
 
     required_keys = set(EXTERNAL_EVIDENCE_REQUIREMENTS)
     catalog_external = {key for key, row in catalog.items() if row["baseline_status"] == "INTEGRATION_REQUIRED"}
