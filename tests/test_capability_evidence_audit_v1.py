@@ -11,6 +11,7 @@ from zendoc.capability_evidence_audit import (
     BETA_ACCEPTANCE_EVIDENCE,
     EXTERNAL_EVIDENCE_REQUIREMENTS,
     FUTURE_BOUNDARIES,
+    WORKING_REGRESSION_FILES,
     build_capability_evidence_audit,
 )
 
@@ -38,6 +39,23 @@ def test_73_capabilities_have_exactly_one_classification_and_truthful_summary():
         "future_capabilities": 2,
     }
     assert len({item["key"] for item in report["capabilities"]}) == 73
+    assert report["live_complete"] is False
+
+
+def test_all_50_working_features_have_an_existing_regression_source_reference():
+    report = build_capability_evidence_audit(_manifest(), get_capability_registry())
+    working = {
+        row["key"]: row
+        for row in report["capabilities"]
+        if row["baseline_status"] == "WORKING"
+    }
+    assert len(WORKING_REGRESSION_FILES) == 50
+    assert set(working) == set(WORKING_REGRESSION_FILES)
+    for key, row in working.items():
+        source = WORKING_REGRESSION_FILES[key]
+        assert (MANIFEST.parents[1] / source).is_file(), (key, source)
+        assert row["regression_tests"] == [source]
+        assert row["external_evidence"] == "SOFTWARE_TEST_REFERENCE_ONLY"
     assert report["live_complete"] is False
 
 
