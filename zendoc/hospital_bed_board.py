@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from .db import get_db, now_iso
+from .db import get_db, is_integrity_error, now_iso
 from .provider_service import get_provider_profile_for_user
 
 
@@ -164,14 +164,20 @@ def create_hospital_bed(actor: Any, payload: dict) -> dict:
         raise ValueError("Bed board limit reached; contact operations for review.")
     now = now_iso()
     user_id = int(_value(actor, "id"))
-    cursor = db.execute(
-        """INSERT INTO hospital_beds
-           (provider_profile_id,ward_name,bed_code,occupancy_state,version,
-            created_by,updated_by,created_at,updated_at)
-           VALUES (?,?,?,'available',0,?,?,?,?)""",
-        (profile_id, ward, code, user_id, user_id, now, now),
-    )
-    db.commit()
+    try:
+        cursor = db.execute(
+            """INSERT INTO hospital_beds
+               (provider_profile_id,ward_name,bed_code,occupancy_state,version,
+                created_by,updated_by,created_at,updated_at)
+               VALUES (?,?,?,'available',0,?,?,?,?)""",
+            (profile_id, ward, code, user_id, user_id, now, now),
+        )
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        if is_integrity_error(exc):
+            raise ValueError("This ward and bed code already exist in the hospital.") from exc
+        raise
     row = db.execute(
         "SELECT * FROM hospital_beds WHERE id=? AND provider_profile_id=?",
         (int(cursor.lastrowid), profile_id),
