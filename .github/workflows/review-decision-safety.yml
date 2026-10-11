@@ -11,6 +11,8 @@ on:
     paths:
       - "static/app.js"
       - "zendoc/organization_health_routes.py"
+      - "zendoc/context_engine.py"
+      - "tests/test_family_care_context_isolation_v1.py"
       - "tests/test_submitter_decision_integrity_v1.py"
       - ".github/workflows/review-decision-safety.yml"
   workflow_dispatch:
@@ -40,9 +42,9 @@ jobs:
           node-version: "22"
       - name: Compile and syntax-check the server and the browser code
         run: |
-          python -m compileall -q zendoc/organization_health_routes.py tests/test_submitter_decision_integrity_v1.py
+          python -m compileall -q zendoc/organization_health_routes.py zendoc/context_engine.py tests/test_submitter_decision_integrity_v1.py tests/test_family_care_context_isolation_v1.py
           node --check static/app.js
       - name: Install application requirements
         run: python -m pip install -r requirements.txt
       - name: Reject missing approvals and preserve authorized decisions
-        run: python -m pytest -q tests/test_submitter_decision_integrity_v1.py tests/test_organization_health_v1.py tests/test_provider_tenancy_v1.py
+        run: python -m pytest -q tests/test_submitter_decision_integrity_v1.py tests/test_family_care_context_isolation_v1.py tests/test_organization_health_v1.py tests/test_provider_tenancy_v1.py tests/test_milestone10_connected_care.py tests/test_care_journey_v1.py tests/test_referral_os_v1.py
