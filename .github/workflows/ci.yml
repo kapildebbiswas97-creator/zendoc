@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       deployment_url:
-        description: "Optional Vercel public URL for OCI-backed deployment health verification"
+        description: "Optional public Vercel URL for AWS EC2 or OCI origin health verification"
         required: false
         type: string
       deployment_platform:
