@@ -51,6 +51,8 @@ LASTROWID_TABLES = {
     "health_metrics",
     "health_timeline_events",
     "home_health_requests",
+    "hospital_beds",
+    "hospital_bed_events",
     "institution_pilot_events",
     "institution_pilots",
     "institution_pilot_usage_snapshots",
