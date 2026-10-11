@@ -51,9 +51,9 @@
     "total_database_migrations": 18,
     "total_flask_blueprints": 59,
     "total_endpoints": 564,
-    "total_registered_capabilities": 76,
-    "working_capabilities": 54,
-    "beta_capabilities": 6,
+    "total_registered_capabilities": 73,
+    "working_capabilities": 50,
+    "beta_capabilities": 7,
     "integration_required_capabilities": 14,
     "future_capabilities": 2
   },
@@ -112,7 +112,7 @@
         "key": "deterministic_safety_engine",
         "label": "Deterministic Safety Engine",
         "status": "WORKING",
-        "description": "Emergency detection \u2014 always first, never routed to LLM."
+        "description": "Emergency detection — always first, never routed to LLM."
       },
       {
         "key": "local_agent_controller",
@@ -262,7 +262,7 @@
         "key": "identity_evidence_review",
         "label": "Privacy-first Identity Evidence Review",
         "status": "WORKING",
-        "description": "Consent-based masked identifier workflow stores only last 2\u20134 characters and keeps manual review explicitly separate from external eKYC."
+        "description": "Consent-based masked identifier workflow stores only last 2–4 characters and keeps manual review explicitly separate from external eKYC."
       },
       {
         "key": "provider_onboarding_v1",
@@ -322,7 +322,7 @@
         "key": "human_operations",
         "label": "Human Operations",
         "status": "WORKING",
-        "description": "Staff task management, status tracking (requested \u2192 completed)."
+        "description": "Staff task management, status tracking (requested → completed)."
       },
       {
         "key": "family_care",
@@ -356,7 +356,7 @@
       },
       {
         "key": "healthcare_finder",
-        "label": "Healthcare Finder \u2014 ZENDOC / Official Sources",
+        "label": "Healthcare Finder — ZENDOC / Official Sources",
         "status": "WORKING",
         "description": "Local verified-provider and ingested official/public-directory discovery are implemented. External map discovery is tracked separately because configuration does not prove provider reachability."
       },
@@ -364,7 +364,7 @@
         "key": "in_app_notifications",
         "label": "In-App Notifications",
         "status": "WORKING",
-        "description": "Working \u2014 delivered to user notification feed."
+        "description": "Working — delivered to user notification feed."
       },
       {
         "key": "object_storage",
@@ -420,7 +420,7 @@
         "key": "video_intelligence",
         "label": "Video Intelligence",
         "status": "BETA",
-        "description": "General ZENDOC guidance cards \u2014 video provider not configured."
+        "description": "General ZENDOC guidance cards — video provider not configured."
       }
     ],
     "external_integration_required": [
@@ -444,9 +444,9 @@
       },
       {
         "key": "local_slm",
-        "label": "ZENDOC-SLM v1 \u2014 Local Model Layer",
+        "label": "ZENDOC-SLM v1 — Local Model Layer",
         "status": "INTEGRATION_REQUIRED",
-        "description": "Local SLM integration ready \u2014 model not configured."
+        "description": "Local SLM integration ready — model not configured."
       },
       {
         "key": "cloud_llm",
@@ -520,7 +520,7 @@
         "key": "autonomous_prescribing",
         "label": "Autonomous Prescribing (Future, Legally Restricted)",
         "status": "FUTURE",
-        "description": "CRITICAL_BLOCKED \u2014 requires legally valid doctor workflow and regulatory approval."
+        "description": "CRITICAL_BLOCKED — requires legally valid doctor workflow and regulatory approval."
       }
     ]
   },
@@ -853,5 +853,11 @@
       "status": "BETA",
       "description": "Portable Care Passport, emergency summary, offline QR, selective credential disclosure"
     }
+  },
+  "inventory_accounting": {
+    "basis": "Exactly one entry per capability key from zendoc.capability_registry.get_capability_registry(), reconciled with feature_classification",
+    "reconciled_on": "2026-10-11",
+    "previous_summary_inaccurate": true,
+    "note": "Catalog counts describe software-level status, not verified live provider access or production readiness. The inventory audit must fail on mismatched, missing, or duplicate feature IDs."
   }
 }
