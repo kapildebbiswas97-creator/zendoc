@@ -11,6 +11,14 @@ on:
         description: "Optional Vercel public URL for OCI-backed deployment health verification"
         required: false
         type: string
+      deployment_platform:
+        description: "Expected origin platform for manual deployment verification"
+        required: false
+        type: choice
+        options:
+          - aws_ec2
+          - oci
+        default: aws_ec2
 
 permissions:
   contents: read
@@ -306,20 +314,24 @@ jobs:
     timeout-minutes: 12
     env:
       DEPLOYMENT_URL: ${{ inputs.deployment_url || vars.ZENDOC_DEPLOYMENT_URL }}
+      EXPECTED_PLATFORM: ${{ (github.event_name == 'workflow_dispatch' && inputs.deployment_platform) || vars.ZENDOC_DEPLOYMENT_PLATFORM || 'oci' }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Verify deployed liveness/readiness and exact release identity
-        run: >
-          python scripts/verify_deployment.py "$DEPLOYMENT_URL"
-          --expected-commit "${{ github.sha }}"
-          --require-platform oci
-          --require-engine postgresql
-          --require-persistence-verified
-          --attempts 40
-          --interval 15
+        run: |
+          case "$EXPECTED_PLATFORM" in
+            oci|aws_ec2) ;;
+            *) echo "Unsupported deployment platform" >&2; exit 1 ;;
+          esac
+          python scripts/verify_deployment.py "$DEPLOYMENT_URL" \
+            --expected-commit "${{ github.sha }}" \
+            --require-platform "$EXPECTED_PLATFORM" \
+            --require-engine postgresql \
+            --require-persistence-verified \
+            --attempts 40 --interval 15
 
       - name: Verify public web, PWA, policy and security contracts
         run: python scripts/verify_public_launch.py "$DEPLOYMENT_URL" --timeout 20
