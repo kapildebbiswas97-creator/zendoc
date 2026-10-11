@@ -41,6 +41,11 @@ jobs:
         run: |
           test "$(docker image inspect zendoc:aws-preflight --format '{{.Config.User}}')" = "zendoc:zendoc"
           test "$(docker run --rm --entrypoint id zendoc:aws-preflight -u)" = "10001"
+      - name: Build backup image and require non-root backup process
+        run: |
+          docker build --file deploy/aws/backup.Dockerfile --tag zendoc-backup:aws-preflight .
+          test "$(docker image inspect zendoc-backup:aws-preflight --format '{{.Config.User}}')" = "zendocbackup:zendocbackup"
+          test "$(docker run --rm --entrypoint id zendoc-backup:aws-preflight -u)" = "10001"
       - name: Verify AWS Compose base and optional realtime profile offline
         run: |
           printf 'POSTGRES_PASSWORD=ci_dummy_nonproduction_password\nZENDOC_DOMAIN=origin.example.invalid\nZENDOC_TLS_EMAIL=ci@example.invalid\nZENDOC_GATEWAY_TOKEN=ci_dummy_nonproduction_token\nZENDOC_GIT_COMMIT=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' > deploy/aws/.env
