@@ -47,13 +47,13 @@
     }
   ],
   "summary_metrics": {
-    "total_database_tables": 167,
+    "total_database_tables": 169,
     "total_database_migrations": 18,
-    "total_flask_blueprints": 59,
-    "total_endpoints": 564,
-    "total_registered_capabilities": 73,
+    "total_flask_blueprints": 60,
+    "total_endpoints": 568,
+    "total_registered_capabilities": 74,
     "working_capabilities": 50,
-    "beta_capabilities": 7,
+    "beta_capabilities": 8,
     "integration_required_capabilities": 14,
     "future_capabilities": 2
   },
@@ -421,6 +421,12 @@
         "label": "Video Intelligence",
         "status": "BETA",
         "description": "General ZENDOC guidance cards — video provider not configured."
+      },
+      {
+        "key": "hospital_bed_board",
+        "label": "Hospital IPD Ward & Bed Board (Internal Beta)",
+        "status": "BETA",
+        "description": "Verified-hospital-only private and operator-attested bed occupancy, transitions, audit and optimistic concurrency. No admissions, public bed availability, nursing care or discharge workflow are claimed."
       }
     ],
     "external_integration_required": [
@@ -712,7 +718,9 @@
       "health_cohort_members",
       "public_health_campaigns",
       "campaign_enrollments",
-      "zendoc_notifications"
+      "zendoc_notifications",
+      "hospital_beds",
+      "hospital_bed_events"
     ]
   },
   "blueprints_inventory": [
@@ -774,7 +782,8 @@
     "system_intelligence",
     "transport_partner",
     "universal_search",
-    "workforce_incidents"
+    "workforce_incidents",
+    "hospital_bed_board"
   ],
   "platform_layers": {
     "patient_platform": {
@@ -852,12 +861,16 @@
     "health_wallet": {
       "status": "BETA",
       "description": "Portable Care Passport, emergency summary, offline QR, selective credential disclosure"
+    },
+    "hospital_ipd_foundation": {
+      "status": "BETA",
+      "description": "Private verified-tenant ward bed board with audit; admission/transfer/discharge, nursing, OT, public inventory, RIS/PACS and insurance remain independent backlog work."
     }
   },
   "inventory_accounting": {
     "basis": "Exactly one entry per capability key from zendoc.capability_registry.get_capability_registry(), reconciled with feature_classification",
     "reconciled_on": "2026-10-11",
     "previous_summary_inaccurate": true,
-    "note": "Catalog counts describe software-level status, not verified live provider access or production readiness. The inventory audit must fail on mismatched, missing, or duplicate feature IDs."
+    "note": "Registry and manifest counts describe software-level classification only. Expanded hospital bed board is BETA and operator-attested, not admission or verified public availability."
   }
 }
