@@ -38,6 +38,61 @@ EXTERNAL_EVIDENCE_REQUIREMENTS = {
     "postgresql": ("database", False, "Durable production PostgreSQL readiness and restoration"),
 }
 
+# One existing regression source per repository-labeled WORKING capability.
+# References establish source coverage only, NOT passing CI or live verification.
+WORKING_REGRESSION_FILES = {
+    "zendoc_core_agent": "tests/test_agent_autonomy_v1.py",
+    "connect_messaging": "tests/test_patient_messaging_and_feature_visibility_v1.py",
+    "mental_wellness_private": "tests/test_mental_wellness_voice_v1.py",
+    "health_community": "tests/test_health_social_commerce_payments_v1.py",
+    "health_shop_discovery": "tests/test_health_social_commerce_payments_v1.py",
+    "deterministic_safety_engine": "tests/test_symptom_guidance_boundary_v1.py",
+    "local_agent_controller": "tests/test_local_controller_v1.py",
+    "slm_product_layer": "tests/test_milestone9_slm.py",
+    "slm_knowledge_layer": "tests/test_medical_knowledge_registry_v1.py",
+    "slm_output_validator": "tests/test_milestone9_slm.py",
+    "model_router": "tests/test_model_portfolio.py",
+    "model_evaluation_lab": "tests/test_milestone8_2.py",
+    "agent_task_engine": "tests/test_agent_autonomy_v1.py",
+    "approval_engine": "tests/test_agent_autonomy_v1.py",
+    "proactive_alerts": "tests/test_incident_runtime_v1.py",
+    "capability_registry": "tests/test_must_preserve_capabilities_v1.py",
+    "specialized_agent_routing": "tests/test_agent_specialists_v1.py",
+    "carefin_engine": "tests/test_carefin_v1.py",
+    "referral_waiting_list_os": "tests/test_referral_os_v1.py",
+    "automatic_care_journey": "tests/test_care_journey_v1.py",
+    "ai_workforce_incident_runtime": "tests/test_incident_runtime_v1.py",
+    "safe_operations_automation": "tests/test_operations_worker_v1.py",
+    "diagnostics_freshness_v2": "tests/test_diagnostics_v2.py",
+    "nutrition_agent": "tests/test_nutrition_agent.py",
+    "multilingual_foundation": "tests/test_language_service.py",
+    "geographic_healthcare_graph": "tests/test_geography_graph.py",
+    "official_public_data_ingestion": "tests/test_data_acquisition_v1.py",
+    "global_health_intelligence_fabric": "tests/test_global_data_v1.py",
+    "organization_intelligence": "tests/test_global_data_v1.py",
+    "global_source_research_automation": "tests/test_global_source_research_v1.py",
+    "identity_evidence_review": "tests/test_identity_verification_v1.py",
+    "provider_onboarding_v1": "tests/test_provider_invitation_v1.py",
+    "carefin_pilot_ui": "tests/test_carefin_cases_v1.py",
+    "care_journey_pilot_ui": "tests/test_care_journey_store.py",
+    "pilot_analytics": "tests/test_pilot_analytics_v2.py",
+    "health_memory": "tests/test_health_memory_2_v1.py",
+    "medical_records": "tests/test_milestone2.py",
+    "appointments": "tests/test_milestone3.py",
+    "fitness_coach": "tests/test_milestone6.py",
+    "fitness_videos": "tests/test_discovery_video_v2.py",
+    "human_operations": "tests/test_provider_operations_v1.py",
+    "family_care": "tests/test_family_lifecycle_v1.py",
+    "home_health": "tests/test_careloop_diagnostics_home_health.py",
+    "pharmacy": "tests/test_pharmacy_truth_v1.py",
+    "medical_transport": "tests/test_transport_partner_fulfilment_v1.py",
+    "iot_hub": "tests/test_iot_provenance_truth_v1.py",
+    "healthcare_finder": "tests/test_find_care_2_v1.py",
+    "in_app_notifications": "tests/test_notification_lifecycle_v1.py",
+    "object_storage": "tests/test_storage_capability_truth_v1.py",
+    "realtime": "tests/test_milestone7.py",
+}
+
 # These beta checks must be observed on real devices/data with the correct
 # consents before any promotion from BETA is proposed to reviewers.
 BETA_ACCEPTANCE_EVIDENCE = {
@@ -161,6 +216,14 @@ def build_capability_evidence_audit(
     for label, real_count in declared.items():
         if summary.get(label) != real_count:
             errors.append(f"manifest {label}: declared {summary.get(label)}, actual {real_count}")
+
+    working_keys = {key for key, row in catalog.items() if row["baseline_status"] == "WORKING"}
+    if working_keys != set(WORKING_REGRESSION_FILES):
+        errors.append("Working feature test-reference inventory mismatch")
+    for key, test_path in WORKING_REGRESSION_FILES.items():
+        if key in catalog:
+            catalog[key]["regression_tests"] = [test_path]
+            catalog[key]["external_evidence"] = "SOFTWARE_TEST_REFERENCE_ONLY"
 
     beta_keys = {key for key, row in catalog.items() if row["baseline_status"] == "BETA"}
     if beta_keys != set(BETA_ACCEPTANCE_EVIDENCE):
