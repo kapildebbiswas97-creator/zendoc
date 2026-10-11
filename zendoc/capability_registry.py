@@ -453,6 +453,16 @@ def get_capability_registry() -> dict:
             "label": "Appointments",
             "description": "Provider scheduling, slot booking, provider profiles.",
         },
+        "hospital_bed_board": {
+            "status": STATUS_BETA,
+            "label": "Hospital IPD Ward & Bed Board (Internal Beta)",
+            "description": (
+                "Verified-hospital-only operator-attested ward and bed occupancy states, "
+                "tenant-separated audit history and optimistic concurrency. This does not "
+                "perform patient admissions, nursing care, public live-bed availability, "
+                "insurance claims, clinical decisions or discharge authorization."
+            ),
+        },
         "telehealth": {
             "status": STATUS_BETA,
             "label": "Telehealth Beta",
