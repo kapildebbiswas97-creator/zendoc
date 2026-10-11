@@ -103,6 +103,7 @@ BETA_ACCEPTANCE_EVIDENCE = {
     "pose_coach": "Permissioned camera handling and validated pose feedback (preview is not analysis)",
     "organization_health": "Verified membership, tenant isolation and actual authorized benefits",
     "video_intelligence": "Verified video-provider authorization, provenance and safety boundaries",
+    "hospital_bed_board": "Verified hospital owner, private tenant separation, audit replay, optimistic locking, and real site sign-off before claiming occupancy",
 }
 
 FUTURE_BOUNDARIES = {
