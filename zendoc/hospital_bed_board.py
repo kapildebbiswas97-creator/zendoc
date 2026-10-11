@@ -22,6 +22,18 @@ ALLOWED_TRANSITIONS = {
 }
 MAX_BEDS_PER_HOSPITAL = 10000
 
+# Constrain the audit reason to operational codes. Never accept free-text
+# patient names, medical details or personally identifying incident notes.
+TRANSITION_REASONS = {
+    ("available", "occupied"): "operator_attested_occupancy",
+    ("occupied", "cleaning"): "operator_attested_vacancy",
+    ("cleaning", "available"): "cleaning_completed",
+    ("available", "maintenance"): "maintenance_requested",
+    ("cleaning", "maintenance"): "maintenance_requested",
+    ("maintenance", "cleaning"): "maintenance_completed",
+}
+
+
 
 def ensure_hospital_bed_schema() -> None:
     get_db().executescript(
@@ -176,8 +188,8 @@ def change_hospital_bed_state(actor: Any, bed_id: int, payload: dict) -> dict:
     if target not in VALID_STATES:
         raise ValueError("Unknown bed occupancy state.")
     reason = str(payload.get("reason") or "").strip()
-    if not (3 <= len(reason) <= 200) or any(ord(c) < 32 for c in reason):
-        raise ValueError("A non-sensitive operational reason of 3–200 characters is required.")
+    if reason not in set(TRANSITION_REASONS.values()):
+        raise ValueError("A predefined operational reason code is required; do not enter patient information.")
     version_value = payload.get("expected_version")
     if isinstance(version_value, bool) or not isinstance(version_value, int) or version_value < 0:
         raise ValueError("An integer expected_version is required for concurrency safety.")
@@ -193,6 +205,8 @@ def change_hospital_bed_state(actor: Any, bed_id: int, payload: dict) -> dict:
         raise RuntimeError("Bed board changed. Refresh and retry with the latest version.")
     if target not in ALLOWED_TRANSITIONS.get(before, set()):
         raise ValueError(f"Unsupported bed transition from {before} to {target}.")
+    if reason != TRANSITION_REASONS.get((before, target)):
+        raise ValueError("Operational reason code does not match the requested state transition.")
     now = now_iso()
     user_id = int(_value(actor, "id"))
     result = db.execute(
