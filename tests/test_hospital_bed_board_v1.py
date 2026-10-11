@@ -40,9 +40,16 @@ def _create(client, token, *, ward="General", code="A-1"):
     }, headers=token)
 
 
-def _state(client, token, bed_id, version, state, reason="Manual ward count"):
+def _state(client, token, bed_id, version, state, reason=None):
+    codes = {
+        "occupied": "operator_attested_occupancy",
+        "cleaning": "operator_attested_vacancy",
+        "available": "cleaning_completed",
+        "maintenance": "maintenance_requested",
+    }
     return client.post(f"/api/v1/hospital/beds/{bed_id}/state", json={
-        "expected_version": version, "state": state, "reason": reason,
+        "expected_version": version, "state": state,
+        "reason": reason if reason is not None else codes[state],
     }, headers=token)
 
 
@@ -140,10 +147,16 @@ def test_invalid_fields_or_explicit_patient_notes_are_rejected(tmp_path):
     bed_id = created.get_json()["bed"]["id"]
     assert _state(client, token, bed_id, 0, "occupied", "  ").status_code == 400
     assert client.post(f"/api/v1/hospital/beds/{bed_id}/state", headers=token, json={
-        "state": "occupied", "reason": "Manual ward count",
+        "state": "occupied", "reason": "operator_attested_occupancy",
         "expected_version": 0, "patient_name": "Sensitive",
     }).status_code == 400
     assert client.post(f"/api/v1/hospital/beds/{bed_id}/state", headers=token, json={
-        "state": "occupied", "reason": "Manual ward count",
+        "state": "occupied", "reason": "operator_attested_occupancy",
         "expected_version": True,
     }).status_code == 400
+
+    # Clinical text must not be persisted into non-patient bed event reasons.
+    assert _state(
+        client, token, bed_id, 0, "occupied",
+        reason="Patient Jane Doe was moved to the ward",
+    ).status_code == 400
