@@ -46,6 +46,13 @@ def test_turn_is_off_by_default_and_never_uses_host_network():
     assert 'ZENDOC_TURN_EXTERNAL_IP:?' in script
 
 
+def test_backup_container_is_nonroot_and_requires_owned_host_directory():
+    backup_image = _read("deploy/aws/backup.Dockerfile")
+    assert "useradd --system --uid 10001" in backup_image
+    assert "USER zendocbackup:zendocbackup" in backup_image
+    assert "chown zendocbackup:zendocbackup /backups" in backup_image
+
+
 def test_no_aws_credential_mounts_or_false_backup_upload_claims():
     compose = _read("deploy/aws/compose.yaml")
     backup = compose.split("\n  backup:\n", 1)[1].split("\nvolumes:\n", 1)[0]
