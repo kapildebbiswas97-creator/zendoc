@@ -1,0 +1,47 @@
+name: Startup Funnel Regression
+
+on:
+  push:
+    branches:
+      - launch/aws-ec2-vercel-launch-complete-20261010
+  pull_request:
+    branches:
+      - main
+      - launch/aws-ec2-vercel-launch-complete-20261010
+    paths:
+      - tests/test_startup_funnels_v1.py
+      - zendoc/startup_analytics.py
+      - .github/workflows/startup-funnel-regression.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: startup-funnel-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rolling-funnel-regression:
+    name: Rolling Funnel Regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      ZENDOC_ENV: development
+      ZENDOC_CREATE_DEV_ADMIN: "false"
+      ZENDOC_LOCAL_AI_ENABLED: "false"
+      ZENDOC_MODEL_EVALUATION_REAL_ENABLED: "false"
+      ZENDOC_PLACES_PROVIDER: "none"
+      ZENDOC_VIDEO_PROVIDER: "none"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install project dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Compile funnel module and test
+        run: python -m compileall -q zendoc/startup_analytics.py tests/test_startup_funnels_v1.py
+      - name: Validate current and expired journeys and provider onboarding
+        run: python -m pytest -q tests/test_startup_funnels_v1.py
