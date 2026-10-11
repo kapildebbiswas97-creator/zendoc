@@ -57,3 +57,10 @@ The integrated, production-facing changes proposed in this review branch are:
 - This PR has no new dependencies, external APIs, database migrations, credential changes, or build system changes.
 - It does not establish real ABDM integration or clinical outcomes.
 - The front-end remains Flask/Jinja until a separately tested architectural migration is approved.
+
+
+## Integration with the AWS release branch
+
+This frontend PR now targets `launch/aws-ec2-vercel-launch-complete-20261010` rather than the outdated `main` baseline. The AWS branch's separate rolling-date startup-funnel regression has been corrected in `tests/test_startup_funnels_v1.py` (commit `9836154`). The fix adjusts outdated test timestamps, **not** analytics business logic; a 45-day-old completed journey must remain excluded by the 30-day window.
+
+The dedicated startup funnel check passed with **3 tests** on AWS head `7f82a69`: [run 38155079009](https://github.com/kapildebbiswas97-creator/zendoc/actions/runs/38155079009). The full production gate and end-to-end browser verification still require their own successful reports. Do not merge or deploy this UI PR on the strength of targeted tests alone.
