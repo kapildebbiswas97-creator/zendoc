@@ -1,0 +1,48 @@
+name: Review Decision Safety
+on:
+  push:
+    branches:
+      - fix/form-submit-review-safety-20261011
+  pull_request:
+    branches:
+      - feat/hospital-operations-parity-20261011
+      - hardening/capability-evidence-gates-20261011
+      - main
+    paths:
+      - "static/app.js"
+      - "zendoc/organization_health_routes.py"
+      - "tests/test_submitter_decision_integrity_v1.py"
+      - ".github/workflows/review-decision-safety.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: review-submit-safety-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  safe-submission:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      ZENDOC_ENV: development
+      ZENDOC_LOCAL_AI_ENABLED: "false"
+      ZENDOC_PLACES_PROVIDER: "none"
+      ZENDOC_MODEL_EVALUATION_REAL_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Compile and syntax-check the server and the browser code
+        run: |
+          python -m compileall -q zendoc/organization_health_routes.py tests/test_submitter_decision_integrity_v1.py
+          node --check static/app.js
+      - name: Install application requirements
+        run: python -m pip install -r requirements.txt
+      - name: Reject missing approvals and preserve authorized decisions
+        run: python -m pytest -q tests/test_submitter_decision_integrity_v1.py tests/test_organization_health_v1.py tests/test_provider_tenancy_v1.py
