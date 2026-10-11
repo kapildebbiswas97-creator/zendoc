@@ -43,6 +43,8 @@ from .health_shop import ensure_health_shop_schema
 from .health_shop_routes import bp as health_shop_bp
 from .health_social import ensure_health_social_schema
 from .health_social_routes import bp as health_social_bp
+from .hospital_bed_routes import bp as hospital_bed_bp
+from .hospital_bed_board import ensure_hospital_bed_schema
 from .health_routes import bp as health_memory_bp
 from .india_care_rail import bp as india_care_rail_bp
 from .knowledge_routes import bp as medical_knowledge_bp
@@ -220,6 +222,7 @@ def create_app(test_config=None):
     app.register_blueprint(neo_analytics_bp)
     app.register_blueprint(provider_organizations_bp)
     app.register_blueprint(organization_health_bp)
+    app.register_blueprint(hospital_bed_bp)
     app.register_blueprint(language_bp)
     app.register_blueprint(geography_graph_bp)
     app.register_blueprint(public_ingestion_bp)
@@ -328,6 +331,7 @@ def create_app(test_config=None):
             ensure_health_social_schema()
             ensure_payment_schema()
             ensure_organization_health_schema()
+            ensure_hospital_bed_schema()
             ensure_care_action_ledger_schema()
             ensure_referral_schema()
             ensure_operational_fulfilment_schema()
