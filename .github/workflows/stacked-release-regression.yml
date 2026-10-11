@@ -1,0 +1,88 @@
+name: Stacked Release Full Regression
+on:
+  push:
+    branches:
+      - fix/form-submit-review-safety-20261011
+  pull_request:
+    branches:
+      - feat/hospital-operations-parity-20261011
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: stacked-release-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  complete-sqlite-regression:
+    name: Complete SQLite Regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      ZENDOC_ENV: development
+      ZENDOC_CREATE_DEV_ADMIN: "false"
+      ZENDOC_LOCAL_AI_ENABLED: "false"
+      ZENDOC_MODEL_EVALUATION_REAL_ENABLED: "false"
+      ZENDOC_PLACES_PROVIDER: "none"
+      ZENDOC_VIDEO_PROVIDER: "none"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Compile all source and tests
+        run: python -m compileall -q zendoc tests scripts
+      - name: Run complete regression suite on combined AWS/hospital/security branch
+        run: python -m pytest -q
+  postgres-production-integration:
+    name: PostgreSQL 16 Release Integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: zendoc
+          POSTGRES_PASSWORD: zendoc_ci_password
+          POSTGRES_DB: zendoc_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U zendoc -d zendoc_ci"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      ZENDOC_ENV: production
+      DATABASE_URL: postgresql://zendoc:zendoc_ci_password@127.0.0.1:5432/zendoc_ci
+      ZENDOC_PERSISTENCE_VERIFIED: "true"
+      ZENDOC_SECRET_KEY: ci-only-secret-key-not-used-outside-ci
+      ZENDOC_ADMIN_EMAIL: owner-ci@example.invalid
+      ZENDOC_ADMIN_PASSWORD: CI-Only-Strong-Password-12345
+      ZENDOC_REQUIRE_DURABLE_DATABASE: "true"
+      ZENDOC_CONNECTED_CARE_DATA_MODE: LIVE
+      ZENDOC_CI_FIXTURES: "true"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Verify PostgreSQL migrations, routes and synthetic care workflows
+        run: python scripts/ci_postgres_readiness.py
+      - name: Verify hospital beta tables persist on PostgreSQL
+        run: |
+          python - <<'PY'
+          from zendoc import create_app
+          from zendoc.db import get_db
+          app = create_app()
+          with app.app_context():
+              db = get_db()
+              for table in ('hospital_beds', 'hospital_bed_events'):
+                  db.execute(f'SELECT id FROM {table} WHERE 1=0')
+              print('Hospital PostgreSQL schema verified')
+          PY
