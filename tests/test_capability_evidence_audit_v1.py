@@ -27,18 +27,18 @@ def _now():
     return datetime.now(timezone.utc).replace(microsecond=0)
 
 
-def test_73_capabilities_have_exactly_one_classification_and_truthful_summary():
+def test_74_capabilities_have_exactly_one_classification_and_truthful_summary():
     report = build_capability_evidence_audit(_manifest(), get_capability_registry())
     assert report["status"] == "INVENTORY_VALID", report["inventory_errors"]
     assert report["inventory_errors"] == []
     assert report["counts"] == {
-        "total_registered_capabilities": 73,
+        "total_registered_capabilities": 74,
         "working_capabilities": 50,
-        "beta_capabilities": 7,
+        "beta_capabilities": 8,
         "integration_required_capabilities": 14,
         "future_capabilities": 2,
     }
-    assert len({item["key"] for item in report["capabilities"]}) == 73
+    assert len({item["key"] for item in report["capabilities"]}) == 74
     assert report["live_complete"] is False
 
 
@@ -70,10 +70,10 @@ def test_all_14_external_integrations_need_evidence_not_a_config_flag():
         assert row["external_evidence"] != "RUNTIME_VERIFIED"
 
 
-def test_all_7_beta_features_require_real_world_acceptance_and_two_future_capabilities_remain_restricted():
+def test_all_8_beta_features_require_real_world_acceptance_and_two_future_capabilities_remain_restricted():
     report = build_capability_evidence_audit(_manifest(), get_capability_registry())
     all_caps = {item["key"]: item for item in report["capabilities"]}
-    assert len(BETA_ACCEPTANCE_EVIDENCE) == 7
+    assert len(BETA_ACCEPTANCE_EVIDENCE) == 8
     assert len(FUTURE_BOUNDARIES) == 2
     for key in BETA_ACCEPTANCE_EVIDENCE:
         assert all_caps[key]["baseline_status"] == "BETA"
