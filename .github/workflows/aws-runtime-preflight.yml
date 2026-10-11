@@ -35,6 +35,14 @@ jobs:
           tests/test_family_care_context_isolation_v1.py
           tests/test_agent_feature_coverage_v1.py
           tests/test_release_gate_v1.py
+      - name: Seed synthetic secrets to exercise .dockerignore before build
+        run: |
+          printf 'CI_ONLY_DO_NOT_COPY=synthetic\n' > .env
+          printf 'POSTGRES_PASSWORD=ci_dummy_nonproduction_password\nZENDOC_DOMAIN=origin.example.invalid\nZENDOC_TLS_EMAIL=ci@example.invalid\nZENDOC_GATEWAY_TOKEN=ci_dummy_nonproduction_token\nZENDOC_GIT_COMMIT=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' > deploy/aws/.env
+          mkdir -p .aws uploads
+          printf 'ci-only-cloud-credential-marker\n' > .aws/credentials
+          printf 'ci-only-patient-file-marker\n' > uploads/do-not-copy.txt
+          chmod 600 .env deploy/aws/.env .aws/credentials
       - name: Build application image with private data excluded
         run: docker build --file Dockerfile --tag zendoc:aws-preflight .
       - name: Require unprivileged container user
@@ -48,8 +56,6 @@ jobs:
           test "$(docker run --rm --entrypoint id zendoc-backup:aws-preflight -u)" = "10001"
       - name: Verify AWS Compose base and optional realtime profile offline
         run: |
-          printf 'POSTGRES_PASSWORD=ci_dummy_nonproduction_password\nZENDOC_DOMAIN=origin.example.invalid\nZENDOC_TLS_EMAIL=ci@example.invalid\nZENDOC_GATEWAY_TOKEN=ci_dummy_nonproduction_token\nZENDOC_GIT_COMMIT=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' > deploy/aws/.env
-          chmod 600 deploy/aws/.env
           docker compose -f deploy/aws/compose.yaml config --quiet
           docker compose -f deploy/aws/compose.yaml --profile realtime config --quiet
       - name: Confirm no private env or VCS objects copied into image
@@ -58,6 +64,6 @@ jobs:
             test ! -e /app/.git &&
             test ! -e /app/.env &&
             test ! -e /app/deploy/aws/.env &&
-            test ! -e /app/.aws &&
-            test ! -e /app/uploads/.env
+            test ! -e /app/.aws/credentials &&
+            test ! -e /app/uploads/do-not-copy.txt
           '
