@@ -39,7 +39,7 @@ The separate local directory **C:\zendoc-kiro** did not exist when Kiro IDE trie
 2. New \`.dockerignore\` explicitly excludes source-control history, private \`.env\`, key files, personal upload data, database files, caches and local cloud credentials from Docker **build context**. This is defense-in-depth; still audit source archives for secrets.
 3. Optional TURN profile is moved from \`network_mode: host\` to a Docker bridge, with only configured TCP/UDP 3478 and configured relay UDP range forwarded. TURN secrets are optional for the **default** stack; starting TURN without them is still rejected by \`turn-entrypoint.sh\`.
 4. New offline regression checks verify those invariants and avoid fabricated claims about backups or public TLS.
-5. CI builds an image, checks UID at runtime, checks Compose normal/realtime profiles and ensures no private config is copied into the image. Uses synthetic non-production values; **nothing gets deployed**.
+5. CI builds both app and backup images, checks their unprivileged UIDs at runtime, checks Compose normal/realtime profiles and ensures no private config is copied into the image. Uses synthetic non-production values; **nothing gets deployed**.
 
 ## Tomorrow: owner-driven AWS and Vercel checklist
 
