@@ -102,12 +102,21 @@ services:
     image: coturn/coturn:4.18.0-r0
     restart: unless-stopped
     profiles: ["realtime"]
-    network_mode: host
+    # TURN is optional; no host network, and no database network access.
+    # Ports must match Coturn's advertised listening and UDP relay range.
+    ports:
+      - "${ZENDOC_TURN_PORT:-3478}:${ZENDOC_TURN_PORT:-3478}/udp"
+      - "${ZENDOC_TURN_PORT:-3478}:${ZENDOC_TURN_PORT:-3478}/tcp"
+      - "${ZENDOC_TURN_MIN_RELAY_PORT:-49160}-${ZENDOC_TURN_MAX_RELAY_PORT:-49200}:${ZENDOC_TURN_MIN_RELAY_PORT:-49160}-${ZENDOC_TURN_MAX_RELAY_PORT:-49200}/udp"
+    networks:
+      - edge
     env_file:
       - .env
     environment:
-      ZENDOC_TURN_SHARED_SECRET: ${ZENDOC_TURN_SHARED_SECRET:?set ZENDOC_TURN_SHARED_SECRET in deploy/aws/.env}
-      ZENDOC_TURN_EXTERNAL_IP: ${ZENDOC_TURN_EXTERNAL_IP:?set ZENDOC_TURN_EXTERNAL_IP in deploy/aws/.env}
+      # Leave optional credentials blank until enabling the realtime profile;
+      # turn-entrypoint.sh rejects missing values when the service is started.
+      ZENDOC_TURN_SHARED_SECRET: ${ZENDOC_TURN_SHARED_SECRET:-}
+      ZENDOC_TURN_EXTERNAL_IP: ${ZENDOC_TURN_EXTERNAL_IP:-}
       ZENDOC_TURN_REALM: ${ZENDOC_TURN_REALM:-zendoc}
       ZENDOC_TURN_PORT: ${ZENDOC_TURN_PORT:-3478}
       ZENDOC_TURN_MIN_RELAY_PORT: ${ZENDOC_TURN_MIN_RELAY_PORT:-49160}
