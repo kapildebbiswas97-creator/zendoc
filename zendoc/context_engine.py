@@ -39,6 +39,7 @@ CONTEXT_PURPOSE_ALIASES: dict[str, set[str]] = {
     "care_continuity": {"care_continuity", "timeline", "health_memory"},
     "next_safe_action": {"next_safe_action", "timeline", "health_memory"},
     "referral": {"referral"},
+    "care_journey": {"care_journey"},
 }
 
 # Fine-grained connected-care scopes.  These are data capabilities, not roles.
@@ -67,6 +68,7 @@ PURPOSE_REQUIRED_SCOPES: dict[str, set[str]] = {
     "care_graph": {"timeline"},
     "care_continuity": {"timeline"},
     "next_safe_action": {"timeline"},
+    "care_journey": {"timeline"},
     "referral": {"timeline"},
 }
 
@@ -300,7 +302,10 @@ def verify_context_authorization(actor: Any, patient_id: int, purpose: str) -> s
         except (TypeError, json.JSONDecodeError):
             family_scopes = set()
 
-    if not fam_grant or (family_scope and family_scope not in family_scopes):
+    # An unmapped purpose is *never* authorized by the mere existence of a
+    # family grant. In particular, pharmacy access cannot expose care journeys
+    # or referral records. Those require explicit purpose-scoped consent.
+    if not fam_grant or not family_scope or family_scope not in family_scopes:
         if missing_scope_grant:
             raise PermissionError(
                 f"Access denied: consent does not include the required context scopes for '{purpose}'."
