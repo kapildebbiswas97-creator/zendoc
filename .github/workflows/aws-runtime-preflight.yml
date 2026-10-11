@@ -49,6 +49,15 @@ jobs:
         run: |
           test "$(docker image inspect zendoc:aws-preflight --format '{{.Config.User}}')" = "zendoc:zendoc"
           test "$(docker run --rm --entrypoint id zendoc:aws-preflight -u)" = "10001"
+      - name: Smoke Flask startup under unprivileged user
+        run: |
+          docker run --rm \
+            -e ZENDOC_ENV=development \
+            -e ZENDOC_SECRET_KEY=ci_only_ephemeral_secret_not_production \
+            -e ZENDOC_CREATE_DEV_ADMIN=false \
+            -e ZENDOC_LOCAL_AI_ENABLED=false \
+            --entrypoint python zendoc:aws-preflight \
+            -c 'from zendoc import create_app; app=create_app(); c=app.test_client(); r=c.get("/api/v1/health"); assert r.status_code == 200, r.status_code; print("Non-root Flask startup/health passed")'
       - name: Build backup image and require non-root backup process
         run: |
           docker build --file deploy/aws/backup.Dockerfile --tag zendoc-backup:aws-preflight .
