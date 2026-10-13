@@ -3,14 +3,20 @@ on:
   push:
     branches:
       - design/stitch-visual-refresh-20261011
+      - feat/stitch-frontend-complete-20261013
+      - fix/stitch-release-gates-20261013
   pull_request:
     branches:
       - launch/aws-ec2-vercel-launch-complete-20261010
+      - hardening/aws-runtime-preflight-20261011
+      - feat/stitch-frontend-complete-20261013
       - main
     paths:
       - "templates/**"
-      - "static/stitch-refresh.css"
+      - "static/**"
       - "tests/test_stitch_refresh_assets.py"
+      - "tests/test_frontend_integration_v1.py"
+      - "tests/js/app_behavior.test.cjs"
       - ".github/workflows/stitch-frontend-integration.yml"
   workflow_dispatch:
 
@@ -22,19 +28,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  template-and-navigation-regressions:
+  frontend-integration:
+    name: Flask/Jinja frontend and JavaScript safety
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
+    env:
+      ZENDOC_ENV: development
+      ZENDOC_CREATE_DEV_ADMIN: "false"
+      ZENDOC_LOCAL_AI_ENABLED: "false"
+      ZENDOC_MODEL_EVALUATION_REAL_ENABLED: "false"
+      ZENDOC_PLACES_PROVIDER: "none"
+      ZENDOC_VIDEO_PROVIDER: "none"
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
-          python-version: "3.12"
-      - name: Install standalone template test dependencies
-        run: python -m pip install "pytest>=8,<10" "Jinja2>=3.1.6,<4"
-      - name: Compile frontend regression tests
-        run: python -m compileall -q tests/test_stitch_refresh_assets.py
-      - name: Validate Jinja syntax, live routes, patient navigation and mobile CSS
-        run: python -m pytest tests/test_stitch_refresh_assets.py -q
+          python-version: "3.11"
+          cache: pip
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - name: Install application test dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Compile focused Python test suites
+        run: python -m compileall -q tests/test_stitch_refresh_assets.py tests/test_frontend_integration_v1.py
+      - name: Verify rendered Flask routes, CSRF, tenant-safe booking, nav and design assets
+        run: python -m pytest -q tests/test_stitch_refresh_assets.py tests/test_frontend_integration_v1.py
+      - name: Verify submitter safety and accessible scenario keyboard interactions
+        run: node --test tests/js/app_behavior.test.cjs
