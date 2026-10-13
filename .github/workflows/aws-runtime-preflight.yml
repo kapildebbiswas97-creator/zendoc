@@ -3,9 +3,13 @@ on:
   push:
     branches:
       - hardening/aws-runtime-preflight-20261011
+      - feat/stitch-frontend-complete-20261013
+      - fix/stitch-release-gates-20261013
   pull_request:
     branches:
       - fix/form-submit-review-safety-20261011
+      - hardening/aws-runtime-preflight-20261011
+      - feat/stitch-frontend-complete-20261013
   workflow_dispatch:
 permissions:
   contents: read

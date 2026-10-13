@@ -3,10 +3,14 @@ on:
   push:
     branches:
       - fix/form-submit-review-safety-20261011
+      - feat/stitch-frontend-complete-20261013
+      - fix/stitch-release-gates-20261013
   pull_request:
     branches:
       - feat/hospital-operations-parity-20261011
       - hardening/capability-evidence-gates-20261011
+      - hardening/aws-runtime-preflight-20261011
+      - feat/stitch-frontend-complete-20261013
       - main
     paths:
       - "static/app.js"

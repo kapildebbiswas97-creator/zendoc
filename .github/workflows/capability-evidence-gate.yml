@@ -3,9 +3,13 @@ on:
   push:
     branches:
       - hardening/capability-evidence-gates-20261011
+      - feat/stitch-frontend-complete-20261013
+      - fix/stitch-release-gates-20261013
   pull_request:
     branches:
       - launch/aws-ec2-vercel-launch-complete-20261010
+      - hardening/aws-runtime-preflight-20261011
+      - feat/stitch-frontend-complete-20261013
       - main
     paths:
       - "docs/MUST_PRESERVE_CAPABILITY_MANIFEST.json"
