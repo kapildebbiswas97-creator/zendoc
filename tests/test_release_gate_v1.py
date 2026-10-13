@@ -136,7 +136,12 @@ def test_deployment_verifier_is_wired_to_optional_main_cd_job():
     assert "vars.ZENDOC_DEPLOYMENT_URL" in workflow
     assert 'python scripts/verify_deployment.py' in workflow
     assert '--expected-commit "${{ github.sha }}"' in workflow
-    assert "--require-platform oci" in workflow
+    # The release origin can be the new AWS EC2 deployment or legacy OCI.
+    # Require explicit runtime platform validation rather than hard-coded OCI.
+    assert "ZENDOC_DEPLOYMENT_PLATFORM" in workflow
+    assert 'oci|aws_ec2' in workflow
+    assert '--require-platform "$EXPECTED_PLATFORM"' in workflow
+    assert "--require-platform oci" not in workflow
     assert "--require-engine postgresql" in workflow
     assert "--require-persistence-verified" in workflow
 

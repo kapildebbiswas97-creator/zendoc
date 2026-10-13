@@ -187,3 +187,50 @@ def care_os_home():
         active_provider_grants=active_provider_grants,
         active_family_grants=active_family_grants,
     )
+
+
+@bp.get("/api/v1/provider/patient/<int:patient_id>/briefing")
+def api_clinician_briefing(patient_id: int):
+    from .routes import require_api_user
+    from .clinician_intelligence import build_pre_consultation_briefing
+    from flask import jsonify, request
+
+    user, error = require_api_user()
+    if error:
+        return error
+    if user["role"] not in {"doctor", "admin", "hospital"}:
+        return jsonify({"error": {"code": 403, "message": "Clinician authorization required."}}), 403
+
+    appointment_id = request.args.get("appointment_id")
+    if appointment_id:
+        try:
+            appointment_id = int(appointment_id)
+        except ValueError:
+            appointment_id = None
+
+    try:
+        briefing = build_pre_consultation_briefing(user, patient_id, appointment_id=appointment_id)
+        return jsonify({"briefing": briefing})
+    except (PermissionError, LookupError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+
+
+@bp.post("/api/v1/provider/consultation/<int:appointment_id>/finalize")
+def api_finalize_consultation(appointment_id: int):
+    from .routes import require_api_user
+    from .clinician_intelligence import finalize_clinical_consultation
+    from flask import jsonify, request
+
+    user, error = require_api_user()
+    if error:
+        return error
+    if user["role"] not in {"doctor", "admin", "hospital"}:
+        return jsonify({"error": {"code": 403, "message": "Clinician authorization required."}}), 403
+
+    data = request.get_json(silent=True) or {}
+    try:
+        outcome = finalize_clinical_consultation(user, appointment_id, data)
+        return jsonify({"status": "completed", "outcome": outcome})
+    except (PermissionError, LookupError, ValueError) as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+

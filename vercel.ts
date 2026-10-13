@@ -4,7 +4,7 @@ const rawOrigin = (process.env.ZENDOC_ORIGIN_URL || '').trim()
 
 if (!rawOrigin) {
   throw new Error(
-    'ZENDOC_ORIGIN_URL is required. Set it to the reviewed HTTPS OCI origin before deploying.',
+    'ZENDOC_ORIGIN_URL is required. Set it to the verified HTTPS AWS origin before deploying.',
   )
 }
 

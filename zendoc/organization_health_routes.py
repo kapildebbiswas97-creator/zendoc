@@ -130,7 +130,7 @@ def verify_health_organization(organization_id):
         verify_organization(
             g.user,
             organization_id,
-            request.form.get("status", "verified"),
+            request.form.get("status"),
         )
         flash("Organization verification state updated.", "success")
     except (PermissionError, LookupError, ValueError) as exc:
@@ -173,7 +173,7 @@ def review_membership(organization_id, membership_id):
             g.user,
             organization_id,
             membership_id,
-            request.form.get("status", "active"),
+            request.form.get("status"),
         )
         flash("Membership state updated.", "success")
     except (PermissionError, LookupError, ValueError) as exc:

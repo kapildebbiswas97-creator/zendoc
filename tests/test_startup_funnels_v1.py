@@ -52,7 +52,8 @@ def test_care_journey_funnel_counts_persisted_states_without_calling_staged_comp
     with app.app_context():
         db = get_db()
         patient = create_user(db, "journey@example.com")
-        now = "2026-09-08T00:00:00+00:00"
+        # Rolling-window metrics must use recent data regardless of test run date.
+        now = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat(timespec="seconds")
         cursor = db.execute(
             "INSERT INTO care_journeys (journey_uid,patient_id,created_by,state,next_safe_action,status,created_at,updated_at) VALUES (?,?,?,?,?,'active',?,?)",
             ("journey-test-1", patient, patient, "APPOINTMENT_STAGED", "confirm appointment", now, now),
@@ -65,6 +66,14 @@ def test_care_journey_funnel_counts_persisted_states_without_calling_staged_comp
         db.execute(
             "INSERT INTO care_journey_events (journey_id,previous_state,state,reason,actor_type,actor_id,provenance_json,created_at) VALUES (?,?,?,?,?,?,?,?)",
             (jid, "WAITING_USER_SELECTION", "APPOINTMENT_STAGED", "selected", "patient", patient, "{}", now),
+        )
+
+        # A genuinely old, completed journey must stay OUT of the 30-day
+        # funnel. This tests the reporting window instead of weakening it.
+        stale = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat(timespec="seconds")
+        db.execute(
+            "INSERT INTO care_journeys (journey_uid,patient_id,created_by,state,next_safe_action,status,created_at,updated_at) VALUES (?,?,?,?,?,'completed',?,?)",
+            ("journey-stale-1", patient, patient, "COMPLETED", "none", stale, stale),
         )
         db.commit()
 
@@ -82,7 +91,8 @@ def test_provider_onboarding_funnel_tracks_real_milestones_independently(tmp_pat
     with app.app_context():
         db = get_db()
         provider_user = create_user(db, "provider-funnel@example.com", role="doctor")
-        now = "2026-09-08T00:00:00+00:00"
+        # Rolling-window metrics must use recent data regardless of test run date.
+        now = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat(timespec="seconds")
         cursor = db.execute(
             """
             INSERT INTO provider_profiles

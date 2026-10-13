@@ -1,0 +1,62 @@
+name: Capability Evidence & Safety Gate
+on:
+  push:
+    branches:
+      - hardening/capability-evidence-gates-20261011
+      - feat/stitch-frontend-complete-20261013
+      - fix/stitch-release-gates-20261013
+  pull_request:
+    branches:
+      - launch/aws-ec2-vercel-launch-complete-20261010
+      - hardening/aws-runtime-preflight-20261011
+      - feat/stitch-frontend-complete-20261013
+      - main
+    paths:
+      - "docs/MUST_PRESERVE_CAPABILITY_MANIFEST.json"
+      - "zendoc/capability_registry.py"
+      - "zendoc/capability_evidence_audit.py"
+      - "tests/test_capability_evidence_audit_v1.py"
+      - "tests/test_must_preserve_capabilities_v1.py"
+      - "scripts/capability_evidence_report.py"
+      - "tests/test_aws_deployment_release_gate_v1.py"
+      - ".github/workflows/ci.yml"
+      - ".github/workflows/capability-evidence-gate.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: capability-evidence-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  capability-evidence:
+    name: Capability Truth & Evidence Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      ZENDOC_ENV: development
+      ZENDOC_LOCAL_AI_ENABLED: "false"
+      ZENDOC_MODEL_EVALUATION_REAL_ENABLED: "false"
+      ZENDOC_PLACES_PROVIDER: "none"
+      ZENDOC_VIDEO_PROVIDER: "none"
+    steps:
+      - name: Check out current code
+        uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install application
+        run: python -m pip install -r requirements.txt
+      - name: Compile evidence gate
+        run: python -m compileall -q zendoc/capability_evidence_audit.py scripts/capability_evidence_report.py tests/test_capability_evidence_audit_v1.py
+      - name: Run feature inventory, preserved features and clinical safety tests
+        run: python -m pytest -q tests/test_capability_evidence_audit_v1.py tests/test_must_preserve_capabilities_v1.py tests/test_aws_deployment_release_gate_v1.py
+      - name: Export owner-reviewable evidence report
+        run: python -m scripts.capability_evidence_report --output artifacts/capability-evidence.json
+      - name: Publish non-sensitive evidence report
+        uses: actions/upload-artifact@v4
+        with:
+          name: zendoc-capability-evidence
+          path: artifacts/capability-evidence.json
+          retention-days: 14

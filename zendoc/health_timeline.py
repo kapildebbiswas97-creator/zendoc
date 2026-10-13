@@ -11,8 +11,34 @@ TIMELINE_TYPES = (
     "diagnostic_completed", "diagnostic_cancelled", "diagnostic_declined", "diagnostic_report_linked",
     "home_health_accepted", "home_health_in_progress", "home_health_completed",
     "home_health_cancelled", "home_health_declined",
+    "prescription", "diagnosis", "condition", "care_plan", "symptom", "vital",
+    "allergy", "clinical_note", "patient_note", "family_history", "risk_factor",
+    "device_reading", "lab_result",
 )
-FILTER_ALIASES = {"appointments": "appointment", "reports": "report", "records": "medical_record", "measurements": "measurement", "medications": "medication", "ai": "ai_health_event", "workouts": "fitness", "workout": "fitness"}
+FILTER_ALIASES = {
+    "appointments": "appointment",
+    "reports": "report",
+    "records": "medical_record",
+    "measurements": "measurement",
+    "medications": "medication",
+    "prescriptions": "prescription",
+    "prescription": "prescription",
+    "diagnoses": "diagnosis",
+    "conditions": "condition",
+    "care_plans": "care_plan",
+    "symptoms": "symptom",
+    "vitals": "measurement",
+    "vital": "measurement",
+    "allergies": "allergy",
+    "notes": "clinical_note",
+    "family": "family_history",
+    "risks": "risk_factor",
+    "devices": "device_reading",
+    "labs": "report",
+    "ai": "ai_health_event",
+    "workouts": "fitness",
+    "workout": "fitness",
+}
 
 
 EVENTS_SQL = """
@@ -36,6 +62,12 @@ WITH events AS (
            hm.metric_value || CASE WHEN COALESCE(hm.unit,'')='' THEN '' ELSE ' ' || hm.unit END summary,
            NULL provider_name, 'health_metrics' source, CAST(hm.id AS TEXT) source_id
     FROM health_metrics hm WHERE hm.user_id=?
+    UNION ALL
+    SELECT 'prescription' event_type, p.issue_date event_at,
+           'Prescription from ' || p.prescriber_name title,
+           COALESCE(p.diagnosis_notes, 'Status: ' || p.status) summary,
+           p.prescriber_name provider_name, 'prescriptions' source, CAST(p.id AS TEXT) source_id
+    FROM prescriptions p WHERE p.patient_id=?
     UNION ALL
     SELECT 'ai_health_event' event_type, ai.created_at event_at,
            'ZENDOC AI: ' || REPLACE(COALESCE(ai.intent,ai.feature),'_',' ') title,
@@ -78,6 +110,8 @@ def _where_clause(event_type=None, query=None, start_date=None, end_date=None):
 def _details_path(item):
     if item["source"] == "appointments" or str(item["event_type"]).startswith("appointment_"):
         return "/appointments"
+    if item["source"] == "prescriptions" or item["event_type"] == "prescription":
+        return "/prescriptions"
     if item["source"] == "medical_records":
         return f"/reports/{item['source_id']}" if item["event_type"] == "report" else "/records"
     if item["source"] == "health_metrics":
@@ -94,6 +128,25 @@ def _details_path(item):
     return None
 
 
+def _calculate_freshness(event_at_str):
+    if not event_at_str:
+        return "UNKNOWN"
+    try:
+        from datetime import datetime, timezone
+        clean_str = str(event_at_str)[:19].replace("Z", "")
+        dt = datetime.fromisoformat(clean_str).replace(tzinfo=timezone.utc)
+        diff_days = (datetime.now(timezone.utc) - dt).days
+        if diff_days <= 7:
+            return "LIVE"
+        elif diff_days <= 30:
+            return "RECENT"
+        elif diff_days <= 365:
+            return "HISTORICAL"
+        return "ARCHIVE"
+    except Exception:
+        return "RECORDED"
+
+
 def list_timeline(actor, patient_id=None, event_type=None, query=None, order="desc", page=1, per_page=25, start_date=None, end_date=None):
     target_id = authorize_patient(actor, patient_id, "timeline")
     order = str(order or "desc").lower()
@@ -102,7 +155,7 @@ def list_timeline(actor, patient_id=None, event_type=None, query=None, order="de
     page = max(1, int(page or 1))
     per_page = max(1, min(int(per_page or 25), 100))
     where, filter_params = _where_clause(event_type, query, start_date, end_date)
-    owner_params = [target_id] * 5
+    owner_params = [target_id] * 6
     db = get_db()
     total = db.execute(EVENTS_SQL + "SELECT COUNT(*) count FROM events" + where, tuple(owner_params + filter_params)).fetchone()["count"]
     rows = db.execute(
@@ -114,6 +167,23 @@ def list_timeline(actor, patient_id=None, event_type=None, query=None, order="de
         item = dict(row)
         item["id"] = f"{item['source']}:{item['source_id']}"
         item["details_url"] = _details_path(item)
+        src_upper = str(item.get("source") or "").upper()
+        if src_upper in {"APPOINTMENTS", "PRESCRIPTIONS", "PROVIDER_RECORDED"}:
+            item["provenance"] = "PROVIDER_RECORDED"
+            item["confidence"] = 1.0
+        elif src_upper in {"MEDICAL_RECORDS", "DOCUMENT_EXTRACTED"}:
+            item["provenance"] = "DOCUMENT_EXTRACTED"
+            item["confidence"] = 0.85
+        elif src_upper in {"HEALTH_METRICS", "DEVICE_RECORDED"}:
+            item["provenance"] = "DEVICE_RECORDED"
+            item["confidence"] = 0.90
+        elif src_upper == "AI_INTERACTIONS":
+            item["provenance"] = "AI_INTERACTION"
+            item["confidence"] = 0.75
+        else:
+            item["provenance"] = item.get("source") or "USER_REPORTED"
+            item["confidence"] = 0.70
+        item["data_freshness"] = _calculate_freshness(item.get("event_at"))
         events.append(item)
     return {"events": events, "page": page, "per_page": per_page, "total": total, "order": order}
 

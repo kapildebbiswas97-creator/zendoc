@@ -43,6 +43,8 @@ from .health_shop import ensure_health_shop_schema
 from .health_shop_routes import bp as health_shop_bp
 from .health_social import ensure_health_social_schema
 from .health_social_routes import bp as health_social_bp
+from .hospital_bed_routes import bp as hospital_bed_bp
+from .hospital_bed_board import ensure_hospital_bed_schema
 from .health_routes import bp as health_memory_bp
 from .india_care_rail import bp as india_care_rail_bp
 from .knowledge_routes import bp as medical_knowledge_bp
@@ -95,6 +97,9 @@ from .database_reliability import readiness_report
 from .observability import finish_request_observation, start_request_observation
 from .routes import bp
 from .transport_partner import bp as transport_partner_bp, ensure_transport_partner_schema
+from .network_site_routes import bp as network_sites_bp
+from .payer_financial_routes import bp as payer_financial_bp
+from .population_health_routes import bp as population_health_bp
 from .security_headers import apply_security_headers
 
 
@@ -217,6 +222,7 @@ def create_app(test_config=None):
     app.register_blueprint(neo_analytics_bp)
     app.register_blueprint(provider_organizations_bp)
     app.register_blueprint(organization_health_bp)
+    app.register_blueprint(hospital_bed_bp)
     app.register_blueprint(language_bp)
     app.register_blueprint(geography_graph_bp)
     app.register_blueprint(public_ingestion_bp)
@@ -228,6 +234,9 @@ def create_app(test_config=None):
     app.register_blueprint(showcase_bp)
     app.register_blueprint(specialist_agents_bp)
     app.register_blueprint(system_intelligence_bp)
+    app.register_blueprint(network_sites_bp)
+    app.register_blueprint(payer_financial_bp)
+    app.register_blueprint(population_health_bp)
 
     @app.errorhandler(PermissionError)
     def zendoc_permission_error(_error):
@@ -322,6 +331,7 @@ def create_app(test_config=None):
             ensure_health_social_schema()
             ensure_payment_schema()
             ensure_organization_health_schema()
+            ensure_hospital_bed_schema()
             ensure_care_action_ledger_schema()
             ensure_referral_schema()
             ensure_operational_fulfilment_schema()

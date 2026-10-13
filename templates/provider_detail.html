@@ -13,6 +13,38 @@
   <a href="{{ url_for('main.finder') }}" class="secondary-action">Back to results</a>
 </section>
 
+
+{# Conventional provider advertising/showcase section; all display data comes from the reviewed directory profile. #}
+<section class="stitch-provider-showcase" aria-labelledby="stitch-provider-title">
+  <div class="stitch-provider-showcase__content">
+    <p class="stitch-provider-kicker">ZENDOC provider profile · {{ profile.provider_type.replace('_', ' ').title() }}</p>
+    <h2 id="stitch-provider-title">{{ profile.organization or profile.provider_name }}</h2>
+    <p class="stitch-provider-lede">
+      {% if profile.specialty %}{{ profile.specialty }} care{% else %}Explore provider information{% endif %}
+      {% if profile.city %} in {{ profile.city }}{% endif %}.
+      Review available services, contact information and published visit times.
+    </p>
+    <div class="stitch-provider-actions">
+      <a class="primary-action" href="#booking-title">Check visit availability</a>
+      {% if profile.public_phone %}<a class="secondary-action" href="tel:{{ profile.public_phone|replace(' ', '') }}">Call provider</a>{% endif %}
+      <a class="secondary-action" href="{{ url_for('main.finder') }}">Explore other care</a>
+    </div>
+    <p class="stitch-provider-disclaimer">This is a promotional directory presentation, not a claim of government accreditation, treatment outcomes or a confirmed appointment. Verify important details with the provider.</p>
+  </div>
+  <div class="stitch-provider-showcase__details" aria-label="Published provider details">
+    <div class="stitch-provider-emblem" aria-hidden="true">{{ (profile.organization or profile.provider_name)[:2]|upper }}</div>
+    <div>
+      <strong>At a glance</strong>
+      <p>{{ profile.provider_type.replace('_', ' ').title() }}{% if profile.specialty %} · {{ profile.specialty }}{% endif %}</p>
+    </div>
+    <dl>
+      <div><dt>Location</dt><dd>{{ profile.city or profile.address or 'Not published' }}</dd></div>
+      <div><dt>Contact</dt><dd>{{ profile.public_phone or 'Not published' }}</dd></div>
+      <div><dt>Visit times</dt><dd>See the current schedule below</dd></div>
+    </dl>
+  </div>
+</section>
+
 <section class="booking-layout">
   <div class="grid">
     <article class="panel">

@@ -33,6 +33,24 @@
 {% else %}
 
 {% if workspace_user.role == 'patient' %}
+<section class="stitch-patient-intro" aria-labelledby="stitch-patient-intro-title">
+  <div class="stitch-patient-intro__main">
+    <p class="stitch-provider-kicker">Your connected care</p>
+    <h2 id="stitch-patient-intro-title">What care do you need today?</h2>
+    <p>Search providers, check your visit requests and continue your Health Memory — with your real ZENDOC account.</p>
+    <form role="search" method="get" action="{{ url_for('ecosystem.search_page') }}" class="stitch-patient-search">
+      <label for="stitch-patient-query" class="sr-only">Search doctors, clinics, hospitals or medicines</label>
+      <input id="stitch-patient-query" type="search" name="q" placeholder="Find doctors, hospitals, pharmacies or tests" autocomplete="off">
+      <button type="submit">Find care</button>
+    </form>
+  </div>
+  <nav class="stitch-patient-shortcuts" aria-label="Care shortcuts">
+    <a href="{{ url_for('main.finder') }}"><span aria-hidden="true">⌖</span><strong>Find Care</strong><small>Search current listings</small></a>
+    <a href="{{ url_for('main.appointments') }}"><span aria-hidden="true">▦</span><strong>My Visits</strong><small>See request status</small></a>
+    <a href="{{ url_for('health_memory.health_summary_page') }}"><span aria-hidden="true">▤</span><strong>Health Memory</strong><small>Your health overview</small></a>
+    <a href="{{ url_for('milestone7.messages_page') }}"><span aria-hidden="true">✉</span><strong>Messages</strong><small>Care conversations</small></a>
+  </nav>
+</section>
 <aside class="emergency-strip" aria-label="Emergency guidance">
   <p><strong>Need urgent help?</strong> For chest pain, severe breathing difficulty, stroke signs, or serious injury, contact local emergency services now. ZENDOC cannot dispatch help.</p>
   <a href="{{ url_for('ecosystem.ambulance_page') }}" class="secondary-action">View transport guidance</a>

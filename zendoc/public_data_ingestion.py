@@ -140,8 +140,20 @@ def search_public_healthcare_entities(
     params: list[Any] = []
     if category:
         category = str(category).strip().lower()
-        if category == "diagnostic_centre":
+        if category in {"diagnostic_centre", "laboratory", "diagnostics", "lab"}:
             clauses.append("category IN ('diagnostic_centre','laboratory')")
+        elif category in {"doctor", "specialist"}:
+            clauses.append("category IN ('doctor','specialist','clinic')")
+        elif category in {"government_facility", "government"}:
+            clauses.append("category IN ('government_facility','hospital','clinic','health_centre')")
+        elif category in {"home_health", "nursing"}:
+            clauses.append("category IN ('home_health','clinic','nursing_home')")
+        elif category in {"mental_health", "psychiatry"}:
+            clauses.append("category IN ('mental_health','clinic','doctor')")
+        elif category in {"physiotherapy", "rehab"}:
+            clauses.append("category IN ('physiotherapy','clinic','doctor')")
+        elif category in {"ambulance", "emergency"}:
+            clauses.append("category IN ('ambulance','emergency','hospital')")
         else:
             clauses.append("category=?")
             params.append(category)
@@ -152,9 +164,10 @@ def search_public_healthcare_entities(
         value = f"%{str(location).strip()}%"
         clauses.append(
             "(LOWER(COALESCE(city,'')) LIKE LOWER(?) OR LOWER(COALESCE(district,'')) LIKE LOWER(?) "
-            "OR LOWER(COALESCE(state,'')) LIKE LOWER(?) OR LOWER(COALESCE(address,'')) LIKE LOWER(?))"
+            "OR LOWER(COALESCE(state,'')) LIKE LOWER(?) OR LOWER(COALESCE(address,'')) LIKE LOWER(?) "
+            "OR LOWER(COALESCE(postal_code,'')) LIKE LOWER(?))"
         )
-        params.extend([value, value, value, value])
+        params.extend([value, value, value, value, value])
 
     nearby = latitude is not None and longitude is not None
     if nearby:

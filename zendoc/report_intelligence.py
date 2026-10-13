@@ -263,6 +263,245 @@ def latest_report(actor, patient_id=None, report_type=None):
     return next((item for item in listing["reports"] if item["report_type"] == wanted), None)
 
 
+STANDARD_BIOMARKERS = {
+    "glucose": {
+        "canonical_name": "Fasting Blood Glucose",
+        "standard_unit": "mg/dL",
+        "aliases": ["glucose", "fbs", "fasting blood glucose", "fasting blood sugar", "blood sugar"],
+        "normal_range": (70.0, 99.0),
+        "critical_low": 50.0,
+        "critical_high": 300.0,
+        "conversions": {
+            "mmol/l": lambda val: val * 18.0182,
+        },
+        "description": "Fasting blood sugar measures glucose levels after an overnight fast. Normal fasting levels are typically 70-99 mg/dL.",
+        "clinician_questions": [
+            "Are there dietary or physical activity modifications recommended for this glucose level?",
+            "Would you recommend repeating this test or evaluating an HbA1c to assess longer-term glycemic control?",
+        ],
+    },
+    "hba1c": {
+        "canonical_name": "Hemoglobin A1c (HbA1c)",
+        "standard_unit": "%",
+        "aliases": ["hba1c", "glycated hemoglobin", "a1c"],
+        "normal_range": (4.0, 5.6),
+        "critical_low": 3.5,
+        "critical_high": 12.0,
+        "conversions": {
+            "mmol/mol": lambda val: (val * 0.09148) + 2.152,
+        },
+        "description": "HbA1c reflects average blood sugar levels over the past 2 to 3 months. Guidelines consider values under 5.7% normal.",
+        "clinician_questions": [
+            "What target HbA1c range is most appropriate for my personal profile?",
+            "When should we next monitor my HbA1c?",
+        ],
+    },
+    "cholesterol": {
+        "canonical_name": "Total Cholesterol",
+        "standard_unit": "mg/dL",
+        "aliases": ["cholesterol", "total cholesterol", "serum cholesterol"],
+        "normal_range": (120.0, 199.0),
+        "critical_low": 90.0,
+        "critical_high": 350.0,
+        "conversions": {
+            "mmol/l": lambda val: val * 38.67,
+        },
+        "description": "Total blood cholesterol includes LDL, HDL, and other lipid components. Desirable levels are generally below 200 mg/dL.",
+        "clinician_questions": [
+            "How does my total cholesterol relate to my overall cardiovascular risk score?",
+            "Should we evaluate a complete lipid panel (LDL, HDL, triglycerides)?",
+        ],
+    },
+    "creatinine": {
+        "canonical_name": "Serum Creatinine",
+        "standard_unit": "mg/dL",
+        "aliases": ["creatinine", "serum creatinine", "sr creatinine"],
+        "normal_range": (0.6, 1.2),
+        "critical_low": 0.3,
+        "critical_high": 4.0,
+        "conversions": {
+            "umol/l": lambda val: val / 88.42,
+            "µmol/l": lambda val: val / 88.42,
+        },
+        "description": "Creatinine is a waste product filtered by the kidneys. Reference ranges typically span 0.6 to 1.2 mg/dL.",
+        "clinician_questions": [
+            "Is my estimated glomerular filtration rate (eGFR) in a healthy range?",
+            "Could hydration status or recent exertion have influenced this result?",
+        ],
+    },
+    "hemoglobin": {
+        "canonical_name": "Hemoglobin",
+        "standard_unit": "g/dL",
+        "aliases": ["hemoglobin", "hb", "haemoglobin"],
+        "normal_range": (12.0, 17.5),
+        "critical_low": 7.0,
+        "critical_high": 20.0,
+        "conversions": {
+            "g/l": lambda val: val / 10.0,
+        },
+        "description": "Hemoglobin is the oxygen-carrying protein in red blood cells. Normal adult ranges are generally 12.0-17.5 g/dL.",
+        "clinician_questions": [
+            "Could nutritional factors (such as iron, B12, or folate) be relevant to this hemoglobin level?",
+            "Are follow-up red blood cell indices recommended?",
+        ],
+    },
+    "spo2": {
+        "canonical_name": "Oxygen Saturation (SpO2)",
+        "standard_unit": "%",
+        "aliases": ["spo2", "oxygen saturation", "pulse oximetry"],
+        "normal_range": (95.0, 100.0),
+        "critical_low": 90.0,
+        "critical_high": 100.0,
+        "conversions": {},
+        "description": "Oxygen saturation measures the percentage of oxygen carried in arterial blood. Healthy room-air levels are 95% or higher.",
+        "clinician_questions": [
+            "If SpO2 drops below 95%, what immediate steps or clinical evaluation are recommended?",
+        ],
+    },
+    "blood_pressure_systolic": {
+        "canonical_name": "Systolic Blood Pressure",
+        "standard_unit": "mmHg",
+        "aliases": ["systolic", "systolic bp", "systolic blood pressure", "bpsys"],
+        "normal_range": (90.0, 119.0),
+        "critical_low": 80.0,
+        "critical_high": 180.0,
+        "conversions": {},
+        "description": "Systolic blood pressure measures arterial pressure when the heart beats. Normal adult resting pressure is under 120 mmHg.",
+        "clinician_questions": [
+            "Should I keep an ambulatory home blood pressure log over 7 to 14 days?",
+            "What lifestyle or medication adjustments are recommended?",
+        ],
+    },
+}
+
+
+def lookup_biomarker_definition(test_name: str | None) -> dict | None:
+    if not test_name:
+        return None
+    cleaned = str(test_name).strip().lower()
+    for key, meta in STANDARD_BIOMARKERS.items():
+        if cleaned == key or cleaned in meta["aliases"]:
+            return meta
+        for alias in meta["aliases"]:
+            if alias in cleaned or cleaned in alias:
+                return meta
+    return None
+
+
+def normalize_biomarker_value(test_name: str | None, value: float | int | None, unit: str | None) -> tuple[float | None, str | None, dict | None]:
+    meta = lookup_biomarker_definition(test_name)
+    if value is None or not meta:
+        return value, unit, meta
+    clean_unit = str(unit or "").strip().lower()
+    std_unit = meta["standard_unit"]
+    if clean_unit and clean_unit in meta.get("conversions", {}):
+        converter = meta["conversions"][clean_unit]
+        try:
+            converted = round(converter(float(value)), 2)
+            return converted, std_unit, meta
+        except Exception:
+            pass
+    return value, unit, meta
+
+
+def calculate_biomarker_longitudinal_trend(series_points: list[dict], biomarker_meta: dict | None = None) -> dict:
+    """
+    Computes delta, rate of change, direction, educational non-diagnostic context,
+    red flags, and questions for the clinician.
+    """
+    if not series_points:
+        return {
+            "status": "NO_DATA",
+            "trend_direction": "NONE",
+            "points_count": 0,
+            "disclaimer": "ZENDOC does not independently diagnose conditions or prescribe treatments.",
+        }
+
+    # Sort chronologically
+    sorted_pts = sorted(series_points, key=lambda p: (str(p.get("measurement_date") or ""), p.get("id") or 0))
+    valid_pts = [p for p in sorted_pts if p.get("numeric_value") is not None]
+    if not valid_pts:
+        return {
+            "status": "INSUFFICIENT_NUMERIC_DATA",
+            "trend_direction": "NONE",
+            "points_count": len(series_points),
+            "disclaimer": "ZENDOC does not independently diagnose conditions or prescribe treatments.",
+        }
+
+    latest = valid_pts[-1]
+    latest_val = float(latest["numeric_value"])
+    previous = valid_pts[-2] if len(valid_pts) > 1 else None
+    baseline = valid_pts[0]
+
+    delta = None
+    pct_change = None
+    trend_dir = "STABLE"
+    if previous:
+        prev_val = float(previous["numeric_value"])
+        delta = round(latest_val - prev_val, 2)
+        if prev_val != 0:
+            pct_change = round((delta / prev_val) * 100.0, 1)
+        if delta > 0.05 * prev_val:
+            trend_dir = "RISING"
+        elif delta < -0.05 * prev_val:
+            trend_dir = "FALLING"
+        else:
+            trend_dir = "STABLE"
+
+    red_flag = False
+    red_flag_reason = None
+    if biomarker_meta:
+        crit_low = biomarker_meta.get("critical_low")
+        crit_high = biomarker_meta.get("critical_high")
+        if crit_low is not None and latest_val < crit_low:
+            red_flag = True
+            red_flag_reason = f"Value {latest_val} is below critical threshold ({crit_low}). Urgent medical consultation recommended."
+        elif crit_high is not None and latest_val > crit_high:
+            red_flag = True
+            red_flag_reason = f"Value {latest_val} exceeds critical threshold ({crit_high}). Urgent medical consultation recommended."
+
+    educational_summary = None
+    if biomarker_meta:
+        ref_low, ref_high = biomarker_meta.get("normal_range", (None, None))
+        if ref_low is not None and ref_high is not None:
+            if latest_val < ref_low:
+                status_desc = f"below standard adult reference range ({ref_low} - {ref_high} {latest.get('unit') or ''})"
+            elif latest_val > ref_high:
+                status_desc = f"above standard adult reference range ({ref_low} - {ref_high} {latest.get('unit') or ''})"
+            else:
+                status_desc = f"within standard adult reference range ({ref_low} - {ref_high} {latest.get('unit') or ''})"
+            educational_summary = f"Most recent result ({latest_val}) is {status_desc}."
+
+    return {
+        "status": "ANALYZED",
+        "points_count": len(valid_pts),
+        "latest": {
+            "value": latest_val,
+            "date": latest.get("measurement_date"),
+            "unit": latest.get("unit"),
+            "abnormal_flag": latest.get("abnormal_flag"),
+        },
+        "previous": {
+            "value": float(previous["numeric_value"]) if previous else None,
+            "date": previous.get("measurement_date") if previous else None,
+        } if previous else None,
+        "delta": delta,
+        "percent_change": pct_change,
+        "trend_direction": trend_dir,
+        "red_flag": red_flag,
+        "red_flag_reason": red_flag_reason,
+        "educational_summary": educational_summary,
+        "clinician_questions": biomarker_meta.get("clinician_questions", []) if biomarker_meta else [
+            "Are there factors that explain changes in these lab values?",
+            "What follow-up timeline or re-testing frequency is advised?",
+        ],
+        "non_diagnostic_guarantee": (
+            "Educational health interpretation only. ZENDOC does not independently diagnose "
+            "disease or prescribe medical treatments. Discuss all trends with a licensed physician."
+        ),
+    }
+
+
 def get_report_result_trend(actor, test_name, patient_id=None):
     target_id = authorize_patient(actor, patient_id, "reports")
     clean_name = str(test_name or "").strip()
@@ -271,7 +510,7 @@ def get_report_result_trend(actor, test_name, patient_id=None):
     rows = get_db().execute(
         """
         SELECT rr.test_name, rr.numeric_value, rr.unit, rr.measurement_date, rr.abnormal_flag,
-               mr.id record_id, mr.title report_title
+               mr.id record_id, mr.title report_title, rr.id
         FROM report_results rr JOIN medical_records mr ON mr.id=rr.record_id
         WHERE mr.owner_id=? AND LOWER(rr.test_name)=LOWER(?) AND rr.numeric_value IS NOT NULL
         ORDER BY rr.measurement_date ASC, rr.id ASC LIMIT 1000
@@ -279,12 +518,29 @@ def get_report_result_trend(actor, test_name, patient_id=None):
         (target_id, clean_name),
     ).fetchall()
     grouped = {}
+    all_points = []
     for row in rows:
-        unit = row["unit"] or "unitless"
-        grouped.setdefault(unit, []).append(dict(row))
+        item = dict(row)
+        unit = item.get("unit") or "unitless"
+        grouped.setdefault(unit, []).append(item)
+        all_points.append(item)
+
+    biomarker_meta = lookup_biomarker_definition(clean_name)
+    longitudinal_analysis = calculate_biomarker_longitudinal_trend(all_points, biomarker_meta)
+
     return {
         "test_name": clean_name,
+        "canonical_name": biomarker_meta["canonical_name"] if biomarker_meta else clean_name,
         "series": [{"unit": unit, "points": points} for unit, points in grouped.items()],
         "unit_mismatch": len(grouped) > 1,
         "message": "Results with different units are kept in separate series." if len(grouped) > 1 else None,
+        "longitudinal_analysis": longitudinal_analysis,
+        "biomarker_meta": {
+            "canonical_name": biomarker_meta["canonical_name"],
+            "standard_unit": biomarker_meta["standard_unit"],
+            "normal_range": biomarker_meta["normal_range"],
+            "description": biomarker_meta["description"],
+        } if biomarker_meta else None,
+        "clinical_discussion_prompts": longitudinal_analysis["clinician_questions"],
+        "non_diagnostic_guarantee": longitudinal_analysis["non_diagnostic_guarantee"],
     }

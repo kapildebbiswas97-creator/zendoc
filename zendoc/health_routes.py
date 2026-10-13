@@ -462,3 +462,36 @@ def api_health_export():
         return response
     except PermissionError as service_error:
         return _api_error(service_error)
+
+
+@bp.get("/api/v1/health-memory/longitudinal")
+def api_longitudinal_health_summary():
+    user, error = require_api_user()
+    if error:
+        return error
+    try:
+        from .health_memory_continuity import get_longitudinal_health_summary
+        patient_id = _optional_patient_id(request.args.get("patient_id"))
+        summary = get_longitudinal_health_summary(user, patient_id)
+        audit("view", "longitudinal_health_memory", str(patient_id or user["id"]), actor=user)
+        get_db().commit()
+        return jsonify({"longitudinal_health_memory": summary})
+    except (PermissionError, LookupError, ValueError) as service_error:
+        return _api_error(service_error)
+
+
+@bp.get("/api/v1/health-memory/conflicts")
+def api_health_memory_conflicts():
+    user, error = require_api_user()
+    if error:
+        return error
+    try:
+        from .health_memory_continuity import detect_record_conflicts_and_duplicates
+        patient_id = _optional_patient_id(request.args.get("patient_id")) or user["id"]
+        conflicts = detect_record_conflicts_and_duplicates(patient_id, user)
+        audit("view", "health_memory_conflicts", str(patient_id), actor=user)
+        get_db().commit()
+        return jsonify({"record_integrity": conflicts})
+    except (PermissionError, LookupError, ValueError) as service_error:
+        return _api_error(service_error)
+

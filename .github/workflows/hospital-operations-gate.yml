@@ -1,0 +1,108 @@
+name: Hospital Operations & Parity Gate
+on:
+  push:
+    branches:
+      - feat/hospital-operations-parity-20261011
+  pull_request:
+    branches:
+      - hardening/capability-evidence-gates-20261011
+      - launch/aws-ec2-vercel-launch-complete-20261010
+      - main
+    paths:
+      - "zendoc/hospital_bed_*.py"
+      - "zendoc/__init__.py"
+      - "zendoc/postgres_backend.py"
+      - "zendoc/capability_registry.py"
+      - "zendoc/capability_evidence_audit.py"
+      - "docs/MUST_PRESERVE_CAPABILITY_MANIFEST.json"
+      - "tests/test_hospital_bed_board_v1.py"
+      - "tests/test_capability_evidence_audit_v1.py"
+      - ".github/workflows/hospital-operations-gate.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: hospital-parity-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verified-tenancy-and-feature-preservation:
+    name: Hospital Tenancy & Capability Safety
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      ZENDOC_ENV: development
+      ZENDOC_CREATE_DEV_ADMIN: "false"
+      ZENDOC_LOCAL_AI_ENABLED: "false"
+      ZENDOC_MODEL_EVALUATION_REAL_ENABLED: "false"
+      ZENDOC_PLACES_PROVIDER: "none"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install app requirements
+        run: python -m pip install -r requirements.txt
+      - name: Compile code and tests
+        run: python -m compileall -q zendoc/hospital_bed_board.py zendoc/hospital_bed_routes.py tests/test_hospital_bed_board_v1.py
+      - name: Verify hospital board, cross-tenant isolation, capability classification and critical controls
+        run: >-
+          python -m pytest -q
+          tests/test_hospital_bed_board_v1.py
+          tests/test_capability_evidence_audit_v1.py
+          tests/test_must_preserve_capabilities_v1.py
+          tests/test_provider_tenancy_v1.py
+          tests/test_aws_deploy_topology.py
+
+  postgres-schema-smoke:
+    name: Hospital PostgreSQL Schema & Readiness
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: zendoc
+          POSTGRES_PASSWORD: zendoc_ci_password
+          POSTGRES_DB: zendoc_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U zendoc -d zendoc_ci"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      ZENDOC_ENV: production
+      DATABASE_URL: postgresql://zendoc:zendoc_ci_password@127.0.0.1:5432/zendoc_ci
+      ZENDOC_PERSISTENCE_VERIFIED: "true"
+      ZENDOC_SECRET_KEY: ci-only-secret-key-not-used-outside-ci
+      ZENDOC_ADMIN_EMAIL: owner-ci@example.invalid
+      ZENDOC_ADMIN_PASSWORD: CI-Only-Strong-Password-12345
+      ZENDOC_REQUIRE_DURABLE_DATABASE: "true"
+      ZENDOC_CONNECTED_CARE_DATA_MODE: LIVE
+      ZENDOC_CI_FIXTURES: "true"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install app requirements
+        run: python -m pip install -r requirements.txt
+      - name: Verify live CI PostgreSQL migrations and product routes
+        run: python scripts/ci_postgres_readiness.py
+      - name: Confirm new private ward and immutable event tables exist on PostgreSQL
+        run: |
+          python - <<'PY'
+          from zendoc import create_app
+          from zendoc.db import get_db
+          app = create_app()
+          with app.app_context():
+              db = get_db()
+              for table in ("hospital_beds", "hospital_bed_events"):
+                  db.execute(f"SELECT * FROM {table} WHERE 1=0")
+              from zendoc.postgres_backend import LASTROWID_TABLES
+              assert "hospital_beds" in LASTROWID_TABLES
+              print("hospital PostgreSQL tables and primary key identity passed")
+          PY

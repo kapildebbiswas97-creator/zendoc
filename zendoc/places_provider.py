@@ -38,6 +38,12 @@ GOOGLE_CATEGORY_TYPES = {
     "diagnostic_centre": ("medical_lab",),
     "laboratory": ("medical_lab",),
     "emergency": ("hospital", "general_hospital"),
+    "home_health": ("medical_clinic", "nursing_home"),
+    "mental_health": ("mental_health_clinic", "psychologist", "counseling_center"),
+    "physiotherapy": ("physical_therapy_clinic", "physiotherapist"),
+    "ambulance": ("hospital", "general_hospital"),
+    "government_facility": ("hospital", "medical_clinic", "public_health_clinic"),
+    "specialist": ("doctor", "medical_clinic", "hospital"),
 }
 
 GOOGLE_TEXT_CATEGORY = {
@@ -48,6 +54,12 @@ GOOGLE_TEXT_CATEGORY = {
     "diagnostic_centre": "medical_lab",
     "laboratory": "medical_lab",
     "emergency": "hospital",
+    "home_health": "nursing home home health",
+    "mental_health": "mental health psychologist counseling",
+    "physiotherapy": "physiotherapy physical therapy clinic",
+    "ambulance": "ambulance emergency transport",
+    "government_facility": "government hospital public health centre",
+    "specialist": "specialist medical clinic doctor",
 }
 
 GOOGLE_ALL_TYPES = tuple(
@@ -67,6 +79,10 @@ GOOGLE_TYPE_CATEGORY = {
     "pharmacy": "pharmacy",
     "drugstore": "pharmacy",
     "medical_lab": "diagnostic_centre",
+    "mental_health_clinic": "mental_health",
+    "psychologist": "mental_health",
+    "physical_therapy_clinic": "physiotherapy",
+    "public_health_clinic": "government_facility",
 }
 
 NOMINATIM_TYPE_CATEGORY = {
@@ -80,8 +96,12 @@ NOMINATIM_TYPE_CATEGORY = {
     "laboratory": "laboratory",
     "medical_lab": "laboratory",
     "blood_bank": "blood_bank",
-    "nursing_home": "nursing_home",
-    "health_centre": "health_centre",
+    "nursing_home": "home_health",
+    "health_centre": "government_facility",
+    "mental_health": "mental_health",
+    "physiotherapy": "physiotherapy",
+    "ambulance": "ambulance",
+    "government": "government_facility",
 }
 
 

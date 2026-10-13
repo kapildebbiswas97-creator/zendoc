@@ -51,6 +51,8 @@ LASTROWID_TABLES = {
     "health_metrics",
     "health_timeline_events",
     "home_health_requests",
+    "hospital_beds",
+    "hospital_bed_events",
     "institution_pilot_events",
     "institution_pilots",
     "institution_pilot_usage_snapshots",
@@ -104,6 +106,16 @@ LASTROWID_TABLES = {
     "workout_session_items",
     "workout_sessions",
     "workout_set_logs",
+    "automation_action_ledger",
+    "automation_rules",
+    "network_sites",
+    "insurance_coverage_requests",
+    "prior_authorization_requests",
+    "benefit_estimation_records",
+    "health_cohorts",
+    "health_cohort_members",
+    "public_health_campaigns",
+    "campaign_enrollments",
 }
 
 

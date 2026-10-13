@@ -157,6 +157,20 @@ FEATURE_AGENT_COVERAGE: dict[str, FeatureAgentCoverage] = {
     "external_ekyc": _c("external_ekyc", "OperationsAgent", INTEGRATION_COORDINATION, workforce="IntegrationAgent"),
     "provider_onboarding_v1": _c("provider_onboarding_v1", "OperationsAgent", SPECIALIST_COORDINATION, workforce="SupportAgent"),
     "organization_health": _c("organization_health", "CareFinAgent", SPECIALIST_COORDINATION, workforce="ProductAgent"),
+    "hospital_bed_board": _c(
+        "hospital_bed_board",
+        "OperationsAgent",
+        OPERATIONS_MONITORED,
+        workforce="ManagerAgent",
+        safety="SafetyAgent",
+        note=(
+            "Internal operator-attested bed-board BETA: monitoring and coordination metadata only. "
+            "No agent may reserve beds, admit or discharge patients, change occupancy, or publish "
+            "live availability. Verified-hospital staff authorization and explicit human action "
+            "are always required; this mapping grants no tool execution permission."
+        ),
+    ),
+
     "healthcare_finder": _c("healthcare_finder", "ProviderDiscoveryAgent", SPECIALIST_EXECUTABLE, workforce="DataAgent"),
     "external_places_discovery": _c("external_places_discovery", "ProviderDiscoveryAgent", INTEGRATION_COORDINATION, workforce="IntegrationAgent"),
     "video_intelligence": _c("video_intelligence", "VideoAgent", INTEGRATION_COORDINATION, workforce="ResearchAgent"),

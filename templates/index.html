@@ -48,14 +48,14 @@
         </div>
 
         <div class="scenario-selector" role="tablist" aria-label="Example healthcare scenarios">
-          <button type="button" class="scenario-tab active" role="tab" aria-selected="true" data-scenario="symptoms">Symptoms</button>
-          <button type="button" class="scenario-tab" role="tab" aria-selected="false" data-scenario="specialist">Find Care</button>
-          <button type="button" class="scenario-tab" role="tab" aria-selected="false" data-scenario="report">Reports</button>
-          <button type="button" class="scenario-tab" role="tab" aria-selected="false" data-scenario="family">Family</button>
+          <button type="button" id="scenario-tab-symptoms" class="scenario-tab active" role="tab" aria-controls="scenario-symptoms" aria-selected="true" tabindex="0" data-scenario="symptoms">Symptoms</button>
+          <button type="button" id="scenario-tab-specialist" class="scenario-tab" role="tab" aria-controls="scenario-specialist" aria-selected="false" tabindex="-1" data-scenario="specialist">Find Care</button>
+          <button type="button" id="scenario-tab-report" class="scenario-tab" role="tab" aria-controls="scenario-report" aria-selected="false" tabindex="-1" data-scenario="report">Reports</button>
+          <button type="button" id="scenario-tab-family" class="scenario-tab" role="tab" aria-controls="scenario-family" aria-selected="false" tabindex="-1" data-scenario="family">Family</button>
         </div>
 
         <div class="scenario-content-wrap">
-          <div class="scenario-panel active" id="scenario-symptoms">
+          <div class="scenario-panel active" id="scenario-symptoms" role="tabpanel" aria-labelledby="scenario-tab-symptoms">
             <div class="preview-user-bubble">
               <span class="bubble-sender">You</span>
               <p>“I have had a dry cough and mild fever for 2 days. What should I do?”</p>
@@ -73,7 +73,7 @@
             </div>
           </div>
 
-          <div class="scenario-panel" id="scenario-specialist">
+          <div class="scenario-panel" id="scenario-specialist" role="tabpanel" aria-labelledby="scenario-tab-specialist" hidden>
             <div class="preview-user-bubble">
               <span class="bubble-sender">You</span>
               <p>“Need a cardiologist near Kolkata for a routine heart checkup.”</p>
@@ -90,7 +90,7 @@
             </div>
           </div>
 
-          <div class="scenario-panel" id="scenario-report">
+          <div class="scenario-panel" id="scenario-report" role="tabpanel" aria-labelledby="scenario-tab-report" hidden>
             <div class="preview-user-bubble">
               <span class="bubble-sender">You</span>
               <p>“How do I organize my lipid profile and blood test reports in one place?”</p>
@@ -108,7 +108,7 @@
             </div>
           </div>
 
-          <div class="scenario-panel" id="scenario-family">
+          <div class="scenario-panel" id="scenario-family" role="tabpanel" aria-labelledby="scenario-tab-family" hidden>
             <div class="preview-user-bubble">
               <span class="bubble-sender">You</span>
               <p>“Help me coordinate monthly medication reminders and BP checks for my parents.”</p>

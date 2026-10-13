@@ -1,0 +1,82 @@
+name: AWS Runtime Preflight (No Cloud Deployment)
+on:
+  push:
+    branches:
+      - hardening/aws-runtime-preflight-20261011
+      - feat/stitch-frontend-complete-20261013
+      - fix/stitch-release-gates-20261013
+  pull_request:
+    branches:
+      - fix/form-submit-review-safety-20261011
+      - hardening/aws-runtime-preflight-20261011
+      - feat/stitch-frontend-complete-20261013
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: aws-preflight-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  static-and-runtime:
+    name: Non-root Docker and AWS Compose Safety
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install app dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Verify static topology, deployment contracts, and health safety
+        run: >-
+          python -m pytest -q
+          tests/test_aws_runtime_hardening_v1.py
+          tests/test_aws_deploy_topology.py
+          tests/test_aws_deployment_release_gate_v1.py
+          tests/test_submitter_decision_integrity_v1.py
+          tests/test_family_care_context_isolation_v1.py
+          tests/test_agent_feature_coverage_v1.py
+          tests/test_release_gate_v1.py
+      - name: Seed synthetic secrets to exercise .dockerignore before build
+        run: |
+          printf 'CI_ONLY_DO_NOT_COPY=synthetic\n' > .env
+          printf 'POSTGRES_PASSWORD=ci_dummy_nonproduction_password\nZENDOC_DOMAIN=origin.example.invalid\nZENDOC_TLS_EMAIL=ci@example.invalid\nZENDOC_GATEWAY_TOKEN=ci_dummy_nonproduction_token\nZENDOC_GIT_COMMIT=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' > deploy/aws/.env
+          mkdir -p .aws uploads
+          printf 'ci-only-cloud-credential-marker\n' > .aws/credentials
+          printf 'ci-only-patient-file-marker\n' > uploads/do-not-copy.txt
+          chmod 600 .env deploy/aws/.env .aws/credentials
+      - name: Build application image with private data excluded
+        run: docker build --file Dockerfile --tag zendoc:aws-preflight .
+      - name: Require unprivileged container user
+        run: |
+          test "$(docker image inspect zendoc:aws-preflight --format '{{.Config.User}}')" = "zendoc:zendoc"
+          test "$(docker run --rm --entrypoint id zendoc:aws-preflight -u)" = "10001"
+      - name: Smoke Flask startup under unprivileged user
+        run: |
+          docker run --rm \
+            -e ZENDOC_ENV=development \
+            -e ZENDOC_SECRET_KEY=ci_only_ephemeral_secret_not_production \
+            -e ZENDOC_CREATE_DEV_ADMIN=false \
+            -e ZENDOC_LOCAL_AI_ENABLED=false \
+            --entrypoint python zendoc:aws-preflight \
+            -c 'from zendoc import create_app; app=create_app(); c=app.test_client(); r=c.get("/api/v1/health"); assert r.status_code == 200, r.status_code; print("Non-root Flask startup/health passed")'
+      - name: Build backup image and require non-root backup process
+        run: |
+          docker build --file deploy/aws/backup.Dockerfile --tag zendoc-backup:aws-preflight .
+          test "$(docker image inspect zendoc-backup:aws-preflight --format '{{.Config.User}}')" = "zendocbackup:zendocbackup"
+          test "$(docker run --rm --entrypoint id zendoc-backup:aws-preflight -u)" = "10001"
+      - name: Verify AWS Compose base and optional realtime profile offline
+        run: |
+          docker compose -f deploy/aws/compose.yaml config --quiet
+          docker compose -f deploy/aws/compose.yaml --profile realtime config --quiet
+      - name: Confirm no private env or VCS objects copied into image
+        run: |
+          docker run --rm --entrypoint /bin/sh zendoc:aws-preflight -c '
+            test ! -e /app/.git &&
+            test ! -e /app/.env &&
+            test ! -e /app/deploy/aws/.env &&
+            test ! -e /app/.aws/credentials &&
+            test ! -e /app/uploads/do-not-copy.txt
+          '
