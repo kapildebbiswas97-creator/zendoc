@@ -99,3 +99,61 @@ def test_landing_scenario_tabs_have_matching_accessible_panels(tmp_path):
         panel = next(panel for panel in panels if panel["id"] == tab["aria-controls"])
         assert panel["aria-labelledby"] == tab["id"]
         assert ("hidden" not in panel) == (tab["aria-selected"] == "true")
+
+
+def test_auth_pages_render_accessible_forms_and_panels(tmp_path):
+    _app, client = make_client(tmp_path)
+    login_page = client.get("/login")
+    assert login_page.status_code == 200
+    elements = Elements(login_page.get_data(as_text=True))
+    assert elements.find("section", **{"class": "auth-panel"})
+    assert elements.find("input", name="email", type="email")
+    assert elements.find("input", name="password", type="password")
+    assert elements.find("input", name="csrf_token", type="hidden")
+
+    reg_page = client.get("/register", follow_redirects=True)
+    assert reg_page.status_code == 200
+    reg_elements = Elements(reg_page.get_data(as_text=True))
+    assert reg_elements.find("section", **{"class": "auth-panel"})
+    assert reg_elements.find("input", name="name")
+    assert reg_elements.find("input", name="email", type="email")
+    assert reg_elements.find("input", name="password", type="password")
+
+
+def test_health_memory_and_appointments_views_render_panels(tmp_path):
+    _app, client = make_client(tmp_path)
+    email = "stitch-memory@example.test"
+    register_web(client, "patient", email)
+    login_web(client, "patient", email)
+
+    appts = client.get("/appointments")
+    assert appts.status_code == 200
+    appt_elements = Elements(appts.get_data(as_text=True))
+    assert appt_elements.find("article", **{"class": "panel"})
+    assert appt_elements.find("span", **{"class": "count-pill"})
+
+    recs = client.get("/records")
+    assert recs.status_code == 200
+    rec_elements = Elements(recs.get_data(as_text=True))
+    assert rec_elements.find("form", **{"class": "panel", "method": "post"})
+    assert rec_elements.find("input", name="record_file", type="file")
+
+
+def test_pharmacy_and_agent_os_render_bounded_workflows(tmp_path):
+    _app, client = make_client(tmp_path)
+    email = "stitch-bounded@example.test"
+    register_web(client, "patient", email)
+    login_web(client, "patient", email)
+
+    pharm = client.get("/pharmacy")
+    assert pharm.status_code == 200
+    pharm_elements = Elements(pharm.get_data(as_text=True))
+    assert pharm_elements.find("form", **{"role": "search"})
+    assert pharm_elements.find("aside", **{"class": "trust-note warning"})
+
+    agent = client.get("/agent-os")
+    assert agent.status_code == 200
+    agent_elements = Elements(agent.get_data(as_text=True))
+    assert agent_elements.find("section", **{"aria-label": "Personal AI agent"})
+    assert agent_elements.find("form", method="post")
+
