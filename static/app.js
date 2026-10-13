@@ -249,25 +249,35 @@ document.querySelectorAll("textarea[data-character-count]").forEach((textarea) =
 });
 
 // Interactive Hero AI Scenario Switcher
-document.querySelectorAll(".scenario-tab").forEach((tab) => {
-  tab.addEventListener("click", () => {
-    const scenarioKey = tab.dataset.scenario;
-    if (!scenarioKey) return;
+const scenarioTabs = Array.from(document.querySelectorAll(".scenario-tab"));
+const selectScenario = (tab) => {
+  const targetPanel = document.getElementById(tab.getAttribute("aria-controls"));
+  if (!targetPanel) return;
+  scenarioTabs.forEach((item) => {
+    const selected = item === tab;
+    item.classList.toggle("active", selected);
+    item.setAttribute("aria-selected", String(selected));
+    item.tabIndex = selected ? 0 : -1;
+  });
+  document.querySelectorAll(".scenario-panel").forEach((panel) => {
+    const selected = panel === targetPanel;
+    panel.classList.toggle("active", selected);
+    panel.hidden = !selected;
+  });
+};
 
-    document.querySelectorAll(".scenario-tab").forEach((t) => {
-      t.classList.remove("active");
-      t.setAttribute("aria-selected", "false");
-    });
-    tab.classList.add("active");
-    tab.setAttribute("aria-selected", "true");
-
-    document.querySelectorAll(".scenario-panel").forEach((panel) => {
-      panel.classList.remove("active");
-    });
-    const targetPanel = document.getElementById(`scenario-${scenarioKey}`);
-    if (targetPanel) {
-      targetPanel.classList.add("active");
-    }
+scenarioTabs.forEach((tab, index) => {
+  tab.addEventListener("click", () => selectScenario(tab));
+  tab.addEventListener("keydown", (event) => {
+    let nextIndex;
+    if (event.key === "ArrowRight") nextIndex = (index + 1) % scenarioTabs.length;
+    else if (event.key === "ArrowLeft") nextIndex = (index - 1 + scenarioTabs.length) % scenarioTabs.length;
+    else if (event.key === "Home") nextIndex = 0;
+    else if (event.key === "End") nextIndex = scenarioTabs.length - 1;
+    else return;
+    event.preventDefault();
+    selectScenario(scenarioTabs[nextIndex]);
+    scenarioTabs[nextIndex].focus();
   });
 });
 
