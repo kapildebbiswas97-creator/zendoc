@@ -1,254 +1,114 @@
-# ZENDOC — AWS + Vercel Staging & Production Launch Checklist
+# ZENDOC — AWS EC2 + Vercel Staging / Public Beta Release Checklist
 
-> **Branch:** `feat/stitch-frontend-complete-20261013`  
-> **Based on:** `hardening/aws-runtime-preflight-20261011` (PR #134)  
-> **Author:** Frontend / DevOps Lead — ZENDOC  
-> **Date:** 2026-10-13  
-> **Status:** PRE-LAUNCH — owner approval required before production rollout
+**Status: NOT DEPLOYED OR VERIFIED.** This checklist is for the frontend integration built on the AWS-hardened release candidate. It does not authorize a merge, cloud expenditure or public launch. Read the authoritative `docs/AWS_EC2_VERCEL_LAUNCH.md` and `deploy/aws/README.md` before any operator action.
 
----
+## Verified implementation topology
 
-## 0. Pre-flight Constraints (MANDATORY)
-
-- [ ] Owner has reviewed and approved this PR in GitHub — **DO NOT MERGE WITHOUT APPROVAL**
-- [ ] No AWS resource changes (RDS, EC2, S3, IAM) have been made by this branch — confirm via `git diff origin/main -- terraform/`
-- [ ] No production `DATABASE_URL` or secrets were logged, printed, or committed — confirm via `git log -p | grep -i password`
-
----
-
-## 1. Environment Variables
-
-### 1.1 Required Secrets (all environments)
-| Variable | Description | Set in |
-|---|---|---|
-| `SECRET_KEY` | Flask session key — must be ≥64 random bytes | AWS SSM / Vercel Env |
-| `DATABASE_URL` | PostgreSQL connection string (DSN format) | AWS SSM / Vercel Env |
-| `UPLOAD_FOLDER` | Absolute path for patient file uploads | EC2 env / EFS mount |
-| `FLASK_ENV` | `production` | Vercel / EC2 systemd |
-| `REDIS_URL` | Cache/session backend (if applicable) | AWS SSM |
-| `SENDGRID_API_KEY` | Transactional email | AWS SSM |
-| `AWS_REGION` | e.g., `ap-south-1` | EC2 instance profile |
-
-### 1.2 Rotate Before Launch
-- [ ] `SECRET_KEY` — generate fresh: `python -c "import secrets; print(secrets.token_hex(64))"`
-- [ ] `DATABASE_URL` password — rotate RDS master password, update SSM Parameter Store
-- [ ] Any API keys present in `.env.example` — confirm they are placeholders only
-
-### 1.3 Verify No Secrets in Repo
-```bash
-git log --all -p | grep -Ei "(password|secret_key|api_key|token)\s*=" | grep -v "placeholder\|example\|your_"
-```
-Expected: **zero results**
-
----
-
-## 2. Docker Image (EC2 / ECS)
-
-### 2.1 Non-root UID (already enforced in PR #134)
-- [ ] `Dockerfile` uses `USER 10001` (non-root) — confirmed in PR #134 commit `e839ff4`
-- [ ] Backup image uses `UID 10001` — confirmed in PR #134 commit `f629785`
-
-### 2.2 Secret Exclusion (already tested)
-- [ ] `.dockerignore` excludes `.env`, `*.pem`, `*.key`, `*.p12` — confirmed in PR #134
-- [ ] CI gate `ci(secrets)` passes — test seeds synthetic private files and asserts they are absent from built image
-
-### 2.3 Build & Tag
-```bash
-# Build production image (run on CI or dev machine — NOT production server)
-docker build --no-cache -t zendoc:718532b -f Dockerfile .
-
-# Verify non-root
-docker run --rm --entrypoint id zendoc:718532b
-# Expected: uid=10001
-
-# Verify secrets excluded
-docker run --rm zendoc:718532b ls /app/.env 2>&1
-# Expected: "No such file"
-```
-- [ ] Image passes all assertions above
-- [ ] Image tagged as `zendoc:<commit-sha>` and pushed to ECR:
-  ```bash
-  docker tag zendoc:718532b <ECR_URI>/zendoc:718532b
-  docker push <ECR_URI>/zendoc:718532b
-  ```
-
----
-
-## 3. Database (RDS PostgreSQL)
-
-### 3.1 Migration
-- [ ] **No new database migrations** in this branch — frontend-only change
-- [ ] Confirm with: `git diff origin/hardening/aws-runtime-preflight-20261011 -- migrations/`
-  - Expected: no changes
-
-### 3.2 Backup Verification
-- [ ] RDS automated backups enabled (7-day retention minimum)
-- [ ] Manual snapshot taken immediately before staging deploy:
-  ```bash
-  aws rds create-db-snapshot \
-    --db-instance-identifier zendoc-prod \
-    --db-snapshot-identifier zendoc-pre-stitch-frontend-718532b
-  ```
-- [ ] Snapshot status: `available` before proceeding
-
-### 3.3 Connection
-- [ ] `DATABASE_URL` points to RDS endpoint (not `localhost`)
-- [ ] RDS security group allows inbound from EC2 security group only — **not** `0.0.0.0/0`
-
----
-
-## 4. Vercel Gateway
-
-### 4.1 Environment Variables in Vercel Dashboard
-- [ ] `SECRET_KEY` set in Vercel → Settings → Environment Variables (Production + Preview)
-- [ ] `DATABASE_URL` set (same RDS as EC2, or read replica)
-- [ ] `FLASK_ENV=production` set
-- [ ] `UPLOAD_FOLDER` set to the EFS/S3 path (not `/tmp` for persistent uploads)
-
-### 4.2 Static Asset Delivery
-- [ ] `static/stitch-refresh.css` is served — verify via `curl https://<vercel-domain>/static/stitch-refresh.css`
-  - Expected: HTTP 200, content-type `text/css`
-- [ ] `static/app.js` is served — verify `curl https://<vercel-domain>/static/app.js`
-  - Expected: HTTP 200
-
-### 4.3 Routing
-- [ ] `vercel.json` (or `vercel.ts`) rewrites route all non-static paths to Flask
-- [ ] Health endpoint responds: `curl https://<vercel-domain>/health`
-  - Expected: `{"status": "ok"}` or equivalent
-
----
-
-## 5. Static Assets & CDN
-
-### 5.1 CSS/JS Integrity
-- [ ] `static/stitch-refresh.css` — 992 lines, no build step required (plain CSS)
-- [ ] `static/app.js` — includes WAI-ARIA tab keyboard navigation
-- [ ] Google Fonts load in production (Inter, Plus Jakarta Sans) — verify no CSP blocking:
-  ```
-  Content-Security-Policy: font-src 'self' https://fonts.gstatic.com;
-  style-src 'self' https://fonts.googleapis.com;
-  ```
-
-### 5.2 Cache Headers
-- [ ] Static files have `Cache-Control: public, max-age=31536000, immutable` (via Flask / Vercel config)
-- [ ] Version-busted via cache-buster query string or content hash if needed
-
----
-
-## 6. CI Gates (Must All Pass Before Merge)
-
-| Gate | Command | Expected |
-|---|---|---|
-| Python unit tests | `pytest --tb=short -q` | 0 failures |
-| Asset presence | `pytest tests/test_stitch_refresh_assets.py` | 8 passed |
-| Frontend integration | `pytest tests/test_frontend_integration_v1.py` | 10 passed |
-| JS behavior | `node --test tests/js/app_behavior.test.cjs` | 6 passed |
-| Milestone 1 | `pytest tests/test_milestone1.py` | 11 passed |
-| Docker smoke | CI workflow `stitch-frontend-integration.yml` | pass |
-| Security scan | `bandit -r app.py routes/ -ll` | no HIGH findings |
-| Secrets scan | `trufflehog git file://.` | 0 verified secrets |
-
----
-
-## 7. Post-Deploy Smoke Tests
-
-Run these against the **staging** URL immediately after deploy:
-
-```bash
-STAGING=https://staging.zendoc.in   # replace with actual
-
-# 1. Public homepage loads
-curl -s -o /dev/null -w "%{http_code}" $STAGING/
-# Expected: 200
-
-# 2. Stitch CSS served
-curl -s -o /dev/null -w "%{http_code}" $STAGING/static/stitch-refresh.css
-# Expected: 200
-
-# 3. Find Care page
-curl -s -o /dev/null -w "%{http_code}" $STAGING/find-care
-# Expected: 200
-
-# 4. Auth: register page reachable
-curl -s -o /dev/null -w "%{http_code}" $STAGING/register
-# Expected: 200
-
-# 5. Patient dashboard (must redirect to login — not 500)
-curl -s -o /dev/null -w "%{http_code}" $STAGING/dashboard
-# Expected: 302
-
-# 6. Health check
-curl -s $STAGING/health
-# Expected: {"status":"ok"} or 200
-
-# 7. No ABDM / mock hospital content on public pages
-curl -s $STAGING/ | grep -i "Aster CMI\|NABH Golden\|JCI Accredited"
-# Expected: zero matches
-```
-- [ ] All 7 smoke tests pass on staging
-
----
-
-## 8. Accessibility (a11y) Verification
-
-- [ ] WAVE or axe-core scan on `/` — 0 critical errors
-- [ ] Tab key navigation works through landing page tabs (verified by `tests/js/app_behavior.test.cjs`)
-- [ ] Mobile dock navigation visible and functional on 375px viewport
-- [ ] Skip-to-content link present in `base.html`
-
----
-
-## 9. PR Stacking Reconciliation
-
-| PR | Branch | Target | Status | Action |
-|---|---|---|---|---|
-| #129 | `design/stitch-visual-refresh-20261011` | `launch/aws-ec2-vercel-launch-complete-20261010` | Superseded | **Close** — all changes absorbed into this PR |
-| #130 | AWS launch branch | `main` | Likely merged | Verify closed |
-| #131 | AWS launch branch | `main` | Likely merged | Verify closed |
-| #132 | AWS launch branch | `main` | Likely merged | Verify closed |
-| #133 | AWS hardening | `main` | Likely merged | Verify closed |
-| #134 | `hardening/aws-runtime-preflight-20261011` | `main` | Open — base of this PR | Merge when ready |
-| **This PR** | `feat/stitch-frontend-complete-20261013` | `hardening/aws-runtime-preflight-20261011` | **Draft** | Review → approve → merge |
-
-**Recommended merge order:**
-1. Approve + merge PR #134 (`hardening/aws-runtime-preflight-20261011`) to `main`
-2. Rebase this PR onto `main` (or update base to `main` after #134 merges)
-3. Approve + merge this PR to `main`
-4. Close PR #129 with comment referencing this PR
-
----
-
-## 10. Production Launch Authorization
-
-- [ ] Owner (@kapildebbiswas97-creator) has reviewed this PR and approved
-- [ ] All CI gates pass (see §6)
-- [ ] All staging smoke tests pass (see §7)
-- [ ] RDS snapshot taken (see §3.2)
-- [ ] `SECRET_KEY` rotated (see §1.2)
-- [ ] No mock/prototype hospital data visible on any public page
-- [ ] Team notified of deployment window
-- [ ] Rollback plan: `docker run zendoc:<previous-sha>` or Vercel "Promote" previous deployment
-
----
-
-## 11. Rollback Procedure
-
-If staging smoke tests fail after deploy:
-
-```bash
-# Option A: Vercel — instant rollback via dashboard
-# Vercel Dashboard → Deployments → previous deployment → "Promote to Production"
-
-# Option B: EC2 — revert container
-docker stop zendoc-app
-docker run -d --name zendoc-app <ECR_URI>/zendoc:<previous-sha>
-
-# Option C: Git rollback (do NOT force-push main)
-git revert 718532b -m 1
-git push origin main
+```text
+Browser
+  -> existing Vercel public gateway (vercel.ts)
+  -> ZENDOC_ORIGIN_URL (verified HTTPS AWS EC2 hostname)
+  -> Caddy (valid TLS; gateway token required except public health/readiness)
+  -> Gunicorn / Flask app + separate ops-worker
+  -> PostgreSQL 16 Docker service (internal-only network)
 ```
 
----
+**Do not copy an RDS/ECR/ECS deployment playbook into this release.** The actual `deploy/aws/compose.yaml` includes a private `postgres:16-bookworm` database and Docker named volumes on EC2, not an AWS RDS database. RDS or ECR is an optional future architecture decision that requires a separate design, budget and reviewed change.
 
-*This checklist was generated for commit `718532b` on branch `feat/stitch-frontend-complete-20261013`.*  
-*Owner action required: Review PR → approve → execute launch steps above.*
+## 1. Source code and approval
+
+- [ ] Verify reviewed HEAD and every stacked PR (#130–#134 and frontend PR #136) using GitHub, not old copied commit prefixes.
+- [ ] Review the original AI Studio/Stitch exports and final screenshots using **synthetic accounts only**; account/profile pages and permissions remain real.
+- [ ] Confirm prior PR #129 is fully represented before closing it. Do not separately merge superseded frontend code.
+- [ ] Run final code review and obtain explicit owner approval **before** a merge or live deploy.
+- [ ] Preserve old Render/OCI database backups, Vercel projects and branches until migration/rollback is proven.
+
+## 2. Automated and browser evidence
+
+- [ ] Run the `Stitch Frontend Integration` workflow at the **exact latest integration commit**. It must execute both Python test files and Node tests.
+- [ ] Run the `Stacked Release Full Regression` workflow at the same SHA: all SQLite tests plus PostgreSQL 16 migration/readiness and hospital schema smoke.
+- [ ] Run the AWS Runtime Preflight / production security gates on the final combined revision, including non-root runtime and Docker secret-exclusion checks.
+- [ ] Record passing workflow URLs, test totals and exact SHA; a prior passing parent is not proof that a new child SHA passes.
+- [ ] Inspect actual rendered screenshots at 375, 768 and 1440 pixels, keyboard accessibility, real protected journeys and visual differences from approved designs. Capturing screenshots alone is not visual acceptance.
+- [ ] Test landing page, login, patient dashboard, Find Care, provider detail, appointments, Health Memory, pharmacy, Agent OS, upload/download authorization and role isolation in an **authorized staging session**.
+
+## 3. AWS owner-only prerequisites
+
+- [ ] Review current EC2, gp3 EBS, public IPv4, data transfer, backup and DNS charges in the **actual AWS account and region**; set an AWS Budget alert. Do not assume a $0 bill.
+- [ ] Only after explicit approval, provision a suitably sized Ubuntu EC2 instance with durable encrypted EBS. A 1 GB instance may be inadequate for PostgreSQL + Flask + worker + Caddy; consult the main launch runbook before selecting the instance.
+- [ ] Restrict SSH TCP 22 to a trusted address; expose only necessary Caddy HTTPS/HTTP TCP 443/80. Do **not** open PostgreSQL port 5432 to the Internet. TURN ports only if the optional reviewed realtime profile is enabled.
+- [ ] Configure an origin hostname owned by the user, DNS pointing to the EC2 instance, and valid Caddy-managed TLS.
+- [ ] Install Docker Engine and Compose from reviewed vendor instructions; work from the **exact approved commit**, not a moving development branch.
+
+## 4. Secrets — AWS origin only
+
+Copy `deploy/aws/.env.example` to **private** `deploy/aws/.env` with permissions 0600. Fill the actual documented keys:
+- `ZENDOC_DOMAIN` (EC2 origin hostname), `ZENDOC_TLS_EMAIL`, `ZENDOC_GATEWAY_TOKEN` (unique random gateway-only secret)
+- `ZENDOC_SECRET_KEY`, `ZENDOC_ADMIN_EMAIL`, `ZENDOC_ADMIN_PASSWORD`
+- `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`
+- `ZENDOC_PUBLIC_BASE_URL` (existing Vercel public URL), `ZENDOC_GIT_COMMIT` (full approved SHA)
+
+Generate different random secrets; do not paste, commit, print, or upload them in logs or reports. Avoid dumping repository history or environment contents into CI artifacts. Use least privilege, private SSH keys and approved storage for backup secrets.
+
+Leave `ZENDOC_PERSISTENCE_VERIFIED`, `ZENDOC_BACKUP_VERIFIED`, `ZENDOC_STORAGE_VERIFIED`, `ZENDOC_EMAIL_VERIFIED`, `ZENDOC_PUBLIC_RELEASE_REQUIRED` and `ZENDOC_POSTGRES_RESTORE_ALLOW_RESET` at false until the respective **actual** conditions are demonstrated.
+
+Optional email, maps, S3 and AI providers are not required to be silently enabled merely to make a release look complete.
+
+## 5. PostgreSQL 16, backup and restore
+
+- [ ] Validate the old Render data source and archive with checksums; if records exist, make a reviewed migration plan and verify patient identity and record parity. Do not fabricate source data.
+- [ ] Confirm `postgres_data`, `uploads`, `caddy_data`, `caddy_config` Docker named volumes and encrypted underlying EBS.
+- [ ] Prepare `/var/backups/zendoc` with correct ownership for the **unprivileged backup container UID 10001** and restrictive permissions. Never copy a production backup to GitHub.
+- [ ] Run an actual encrypted **off-instance** PostgreSQL 16 backup and test restore on a disposable target before declaring the backup gate verified.
+- [ ] Confirm transactions/data survive a web process restart and full EC2 compose restart. Do not falsely mark persistence or backup flags true.
+
+## 6. Validate AWS origin before Vercel cutover
+
+From the reviewed project checkout:
+
+```bash
+cd deploy/aws
+sudo docker compose --env-file .env -f compose.yaml config --quiet
+sudo docker compose --env-file .env -f compose.yaml up -d --build db web ops-worker caddy
+sudo docker compose --env-file .env -f compose.yaml ps
+sudo docker compose --env-file .env -f compose.yaml logs --tail=100 web caddy
+```
+
+Check **real** endpoints on the actual origin:
+
+```bash
+curl -fsS https://YOUR_AWS_ORIGIN/api/v1/health
+curl -fsS https://YOUR_AWS_ORIGIN/api/v1/ready
+```
+
+- [ ] Confirm both health responses, deploy SHA, `aws_ec2` platform and PostgreSQL readiness/persistence using `scripts/verify_deployment.py` as directed by the main runbook.
+- [ ] Direct requests to ordinary backend app pages **should return 403 without** `X-Zendoc-Gateway-Token`. Do not weaken Caddy authorization to make an origin browser check pass.
+- [ ] Do not publish internal URLs, infrastructure credentials or the gateway token.
+
+## 7. Existing Vercel gateway (not a Flask runtime)
+
+On the **existing correct Vercel project**, configure in protected project settings for the appropriate environments:
+
+```text
+ZENDOC_ORIGIN_URL=https://YOUR_VERIFIED_AWS_ORIGIN
+ZENDOC_GATEWAY_TOKEN=THE_SAME_PRIVATE_VALUE_CONFIGURED_ON_CADDY
+```
+
+**Do not put `DATABASE_URL`, `POSTGRES_PASSWORD`, `ZENDOC_SECRET_KEY`, patient uploads or admin passwords on Vercel.** The inspected `vercel.ts` is a gateway rewrite only; the actual application and database run on EC2.
+
+- [ ] Preserve `git.deploymentEnabled: false` until reviewed origin, production gates, persistence and credentials are confirmed.
+- [ ] When authorized, update and redeploy the Vercel gateway through a **reviewed change**; setting environment variables alone will not repair an old failed deployment.
+- [ ] Verify public URL and static assets (`/static/stitch-refresh.css`, `/static/app.js`), expected protected routes, cookies, uploads, user permissions and authenticated flows.
+- [ ] Verify public health endpoints `/api/v1/health` and `/api/v1/ready`. Do **not** substitute guessed `/health`, `/find-care`, or `/staging` paths for real routes.
+
+## 8. Release / rollback decision
+
+- [ ] Approved exact release SHA and all current-head CI gates green.
+- [ ] Real staging mobile/desktop and role-specific smoke tests green.
+- [ ] TLS, DNS, database persistence, backups, off-host restore, monitoring and alerts evidenced.
+- [ ] Final approved public beta scope excludes unverified payments, autonomous prescribing, official provider integrations and claimed medical certifications.
+- [ ] Owner explicitly authorizes production release.
+
+**Rollback:** record previous known-good Git SHA, images, Compose configuration, environment, Vercel deployment and a tested database restore plan. Revert or redeploy the prior **reviewed Compose stack and Vercel deployment**, preserving volumes and migrations. Do **not** blindly use standalone `docker stop/run` commands or `git revert -m 1` on an arbitrary commit; do not reset production healthcare data as an emergency shortcut.
+
+Until all applicable gates are proven: **STATUS = REVIEW / STAGING BLOCKED, NOT LIVE VERIFIED**.
