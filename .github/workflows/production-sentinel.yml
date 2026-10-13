@@ -67,7 +67,7 @@ jobs:
 
       - name: Open or update production incident
         if: steps.deployment.outcome != 'success' || steps.public.outcome != 'success'
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           DEPLOYMENT_OUTCOME: ${{ steps.deployment.outcome }}
           PUBLIC_OUTCOME: ${{ steps.public.outcome }}
@@ -115,7 +115,7 @@ jobs:
 
       - name: Close production incident after verified recovery
         if: steps.deployment.outcome == 'success' && steps.public.outcome == 'success'
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const title = 'Production Sentinel: live verification failing';
