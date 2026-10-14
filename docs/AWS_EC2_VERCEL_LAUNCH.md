@@ -78,7 +78,10 @@ If an old Render database holds accounts or healthcare records, it must be migra
 Create a restricted backup staging folder, then start the *empty* AWS target PostgreSQL first:
 
 ```bash
-sudo install -d -m 700 /var/backups/zendoc
+sudo install -d -o 10001 -g 10001 -m 0700 /var/backups/zendoc
+# The non-root backup container runs as UID/GID 10001; verify with:
+stat -c '%u:%g %a' /var/backups/zendoc
+# Expected: 10001:10001 700
 cd deploy/aws
 sudo docker compose --env-file .env -f compose.yaml up -d db
 ```
