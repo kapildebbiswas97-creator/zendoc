@@ -262,7 +262,7 @@ def detect_record_conflicts_and_duplicates(patient_id: int | Any, actor: Any = N
     # 1. Detect duplicate health metrics (same metric_type and recorded_at)
     metric_rows = db.execute(
         """
-        SELECT metric_type, metric_value, unit, recorded_at, COUNT(*) as cnt
+        SELECT metric_type, recorded_at, COUNT(*) as cnt
         FROM health_metrics
         WHERE user_id=?
         GROUP BY metric_type, recorded_at
