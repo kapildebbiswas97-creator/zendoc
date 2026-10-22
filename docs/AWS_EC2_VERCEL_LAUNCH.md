@@ -20,7 +20,7 @@ In the [EC2 Console](https://console.aws.amazon.com/ec2/), choose an appropriate
   > sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
   > echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
   > ```
-  > Set `WEB_CONCURRENCY=1` to limit worker memory usage.
+  > Set `ZENDOC_GUNICORN_WORKERS=1` in `deploy/aws/.env` to limit web worker memory usage. `gunicorn.conf.py` reads this variable, not `WEB_CONCURRENCY`.
 - **AWS Public IPv4 Cost Notice:** Since February 2024, AWS charges $0.005/hour (~$3.65/month) for all public IPv4 addresses, even on Free Tier instances. An EC2 instance is therefore never $0.00/month unless configured IPv6-only.
 - **Recommended Low-Cost Staging/Production Tiers (Non-Free Tier):**
   - **`t3.small` (Recommended standard):** 2 vCPU, 2 GB RAM. Compute (~$15.20/mo) + public IPv4 (~$3.65/mo) = **~$18.85/month**. Provides comfortable memory headroom without memory thrashing.
@@ -78,7 +78,10 @@ If an old Render database holds accounts or healthcare records, it must be migra
 Create a restricted backup staging folder, then start the *empty* AWS target PostgreSQL first:
 
 ```bash
-sudo install -d -m 700 /var/backups/zendoc
+sudo install -d -o 10001 -g 10001 -m 0700 /var/backups/zendoc
+# The non-root backup container runs as UID/GID 10001; verify with:
+stat -c '%u:%g %a' /var/backups/zendoc
+# Expected: 10001:10001 700
 cd deploy/aws
 sudo docker compose --env-file .env -f compose.yaml up -d db
 ```

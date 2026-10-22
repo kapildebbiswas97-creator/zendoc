@@ -25,6 +25,7 @@ LASTROWID_TABLES = {
     "ambulance_requests",
     "api_tokens",
     "appointments",
+    "beta_invitations",
     "business_api_usage",
     "partner_booking_handoffs",
     "partner_slot_holds",
