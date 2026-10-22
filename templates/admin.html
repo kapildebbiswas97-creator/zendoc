@@ -84,6 +84,57 @@
   <p>No provider invitations yet.</p>
   {% endif %}
 </section>
+<section class="panel">
+  <h2>Beta Invitations (Controlled Launch)</h2>
+  <form method="post" action="{{ url_for('main.create_beta_invitation_web') }}" class="grid three">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Email (optional binding)<input name="email" type="email" placeholder="patient@example.com"></label>
+    <label>Role
+      <select name="role">
+        <option value="patient" selected>Patient</option>
+        <option value="doctor">Doctor</option>
+        <option value="hospital">Hospital</option>
+        <option value="pharmacy">Pharmacy</option>
+      </select>
+    </label>
+    <label>Expires (days)<input name="expires_days" type="number" min="1" max="90" value="7"></label>
+    <label style="grid-column: 1 / -1;">Notes (optional)<input name="notes" placeholder="Notes (e.g. Beta Cohort 1)"></label>
+    <div class="form-actions" style="grid-column: 1 / -1;"><button type="submit">Generate Beta Invitation</button></div>
+  </form>
+
+  <h3 style="margin-top:24px;">Recent Beta Invitations</h3>
+  {% if beta_invitations %}
+  <table>
+    <thead><tr><th>ID</th><th>Bound Email</th><th>Role</th><th>Status</th><th>Notes</th><th>Expires</th><th>Actions</th></tr></thead>
+    <tbody>
+      {% for item in beta_invitations %}
+      <tr>
+        <td>#{{ item.id }}</td>
+        <td>{{ item.email or 'Any' }}</td>
+        <td>{{ item.role|title }}</td>
+        <td>
+          {% if item.redeemed_at %}<span class="badge success">Redeemed</span>
+          {% elif item.revoked_at %}<span class="badge danger">Revoked</span>
+          {% else %}<span class="badge warning">Active</span>{% endif %}
+        </td>
+        <td>{{ item.notes or '-' }}</td>
+        <td>{{ item.expires_at }}</td>
+        <td>
+          {% if not item.redeemed_at and not item.revoked_at %}
+          <form method="post" action="{{ url_for('main.revoke_beta_invitation_web', invitation_id=item.id) }}" style="display:inline;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="button-sm danger">Revoke</button>
+          </form>
+          {% else %}-{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>No beta invitations generated yet.</p>
+  {% endif %}
+</section>
 <section class="panel"><h2>Users</h2><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Verified</th><th>Action</th></tr></thead><tbody>{% for user in users %}<tr><td>{{ user.name }}</td><td>{{ user.email }}</td><td>{{ user.role }}</td><td>{{ 'Yes' if user.verified else 'No' }}</td><td>{% if not user.verified %}<form method="post" action="{{ url_for('main.verify_user', user_id=user.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">Verify</button></form>{% endif %}</td></tr>{% endfor %}</tbody></table></section>
 <section class="panel"><h2>Provider Profiles</h2>{% if providers %}<table><thead><tr><th>Name</th><th>Type</th><th>Specialty</th><th>City</th><th>Status</th><th>Action</th></tr></thead><tbody>{% for provider in providers %}<tr><td>{{ provider.organization or provider.name }}</td><td>{{ provider.provider_type }}</td><td>{{ provider.specialty }}</td><td>{{ provider.city }}</td><td>{{ provider.verification_status }}</td><td><form class="inline-form" method="post" action="{{ url_for('main.provider_verification_status', profile_id=provider.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><select name="verification_status">{% for status in ['pending','verified','rejected','suspended'] %}<option value="{{ status }}" {% if provider.verification_status == status %}selected{% endif %}>{{ status }}</option>{% endfor %}</select><button type="submit">Save</button></form></td></tr>{% endfor %}</tbody></table>{% else %}<p>No provider profiles yet.</p>{% endif %}</section>
 <section class="panel">

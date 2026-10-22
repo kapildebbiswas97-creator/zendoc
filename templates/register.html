@@ -11,6 +11,16 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <label>Full name <input name="name" autocomplete="name" required></label>
     <label>Email address <input name="email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" required></label>
+    {% if config.BETA_INVITATION_REQUIRED %}
+    <label>Beta invitation code
+      <input name="invitation_code" type="text" autocomplete="off" value="{{ request.args.get('invitation') or request.args.get('code') or '' }}" placeholder="Enter your beta invitation code" aria-describedby="beta-invite-help" required>
+    </label>
+    <p id="beta-invite-help" class="helper-text">ZENDOC is currently in invitation-only beta. An invitation code from the platform owner is required.</p>
+    {% else %}
+    <label>Beta invitation code (optional)
+      <input name="invitation_code" type="text" autocomplete="off" value="{{ request.args.get('invitation') or request.args.get('code') or '' }}" placeholder="Enter code if you received an invitation">
+    </label>
+    {% endif %}
     <label>Password <input id="password-field" name="password" type="password" autocomplete="new-password" minlength="8" aria-describedby="password-help" required></label>
     <p id="password-help" class="helper-text">Use at least 8 characters.</p>
     <label class="check-option"><input type="checkbox" id="show-password-toggle"> Show password</label>

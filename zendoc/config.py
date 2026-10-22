@@ -205,6 +205,7 @@ def load_config(base_dir, overrides=None):
         "EKYC_VERIFIED": env_bool("ZENDOC_EKYC_VERIFIED", False),
         "PUBLIC_BASE_URL": os.environ.get("ZENDOC_PUBLIC_BASE_URL", "").strip(),
         "PUBLIC_RELEASE_REQUIRED": env_bool("ZENDOC_PUBLIC_RELEASE_REQUIRED", False),
+        "BETA_INVITATION_REQUIRED": env_bool("ZENDOC_BETA_INVITATION_REQUIRED", env == "production"),
         "SUPPORT_EMAIL": os.environ.get("ZENDOC_SUPPORT_EMAIL", "").strip(),
         "EMAIL_PROVIDER": os.environ.get("ZENDOC_EMAIL_PROVIDER", "none").strip().lower(),
         "EMAIL_VERIFIED": env_bool("ZENDOC_EMAIL_VERIFIED", False),

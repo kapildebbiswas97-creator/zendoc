@@ -36,6 +36,7 @@ def start_user_session(user, remember=False):
     session["authenticated_at"] = now
     session["last_activity_at"] = now
     session["csrf_token"] = secrets.token_urlsafe(32)
+    session["session_version"] = int(_value(user, "session_version", 1) or 1)
     session.permanent = bool(remember)
 
 
@@ -103,6 +104,18 @@ def load_user_and_check_csrf():
         g.session_expired = True
         flash(SESSION_EXPIRED_MESSAGE, "warning")
     elif g.user is not None:
+        # Validate session version - invalidate if password was reset
+        client_version = session.get("session_version", 1)
+        db_version = int(_value(g.user, "session_version", 1) or 1)
+        if int(client_version) != int(db_version):
+            g.login_role = _safe_login_role(session.get("role"))
+            session.clear()
+            g.session_expired = True
+            flash("Your password was changed. Please log in again.", "warning")
+            g.user = None
+            if request.method == "POST" and not request.path.startswith("/api/"):
+                return redirect(url_for("main.login", role=g.login_role))
+            return None
         session["last_activity_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
     if request.method == "POST" and not request.path.startswith("/api/"):
         token = request.form.get("csrf_token")

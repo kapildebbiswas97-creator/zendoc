@@ -38,6 +38,13 @@ from .provider_network import (
     provider_network_metrics,
     update_provider_prospect,
 )
+from .beta_invitation import (
+    create_beta_invitation,
+    list_beta_invitations,
+    redeem_beta_invitation,
+    resolve_beta_invitation,
+    revoke_beta_invitation,
+)
 from .provider_invitation import (
     accept_provider_invitation,
     create_provider_invitation,
@@ -572,6 +579,18 @@ def register(role):
         if len(password) < 8:
             flash("Password must be at least 8 characters.", "error")
             return render_template("register.html", role=role), 400
+
+        invitation_code = request.form.get("invitation_code", "").strip()
+        if current_app.config.get("BETA_INVITATION_REQUIRED") and not invitation_code:
+            flash("A valid beta invitation code is required to create an account.", "error")
+            return render_template("register.html", role=role), 403
+        if invitation_code:
+            try:
+                resolve_beta_invitation(invitation_code, expected_email=email, expected_role=role)
+            except ValueError as exc:
+                flash(str(exc), "error")
+                return render_template("register.html", role=role), 403
+
         try:
             now = now_iso()
             cursor = get_db().execute(
@@ -596,6 +615,8 @@ def register(role):
                 ),
             )
             created_user = get_db().execute("SELECT * FROM users WHERE id=?", (int(cursor.lastrowid),)).fetchone()
+            if invitation_code:
+                redeem_beta_invitation(invitation_code, created_user["id"], email=email, role=role)
             if terms_accepted and privacy_accepted:
                 record_registration_policy_acceptance(created_user["id"], source="web_registration")
             verification_token = None
@@ -864,7 +885,11 @@ def reset_password():
             flash("Invalid or expired password reset token.", "error")
             return render_template("reset_password.html", token=token), 400
         user_id = tok_row["user_id"]
-        get_db().execute("UPDATE users SET password_hash=?, updated_at=? WHERE id=?", (generate_password_hash(password), now_iso(), user_id))
+        # Increment session_version to invalidate all existing browser sessions
+        get_db().execute(
+            "UPDATE users SET password_hash=?, session_version=session_version+1, updated_at=? WHERE id=?",
+            (generate_password_hash(password), now_iso(), user_id)
+        )
         get_db().execute("UPDATE api_tokens SET revoked_at=? WHERE user_id=? AND revoked_at IS NULL", (now_iso(), user_id))
         get_db().commit()
         flash("Password reset successful. Please log in with your new password.", "success")
@@ -2014,6 +2039,7 @@ def admin():
         audits=audits,
         provider_evidence=provider_evidence,
         provider_invitations=list_provider_invitations(),
+        beta_invitations=list_beta_invitations(),
     )
 
 
@@ -2065,6 +2091,93 @@ def create_provider_invitation_web():
     except ValueError as exc:
         flash(str(exc), "error")
     return redirect(url_for("main.admin"))
+
+
+@bp.post("/admin/beta-invitations")
+@owner_required
+def create_beta_invitation_web():
+    try:
+        raw_token, invitation = create_beta_invitation(
+            g.user,
+            email=request.form.get("email"),
+            role=request.form.get("role", "patient"),
+            expires_in_days=int(request.form.get("expires_days") or 7),
+            notes=request.form.get("notes"),
+        )
+        base_url = str(current_app.config.get("PUBLIC_BASE_URL") or "").strip().rstrip("/") or request.url_root.rstrip("/")
+        link = f"{base_url}{url_for('main.register', role=invitation['role'])}?code={raw_token}"
+        flash(
+            f"Beta invitation created for {invitation.get('email') or 'any email'} (code: {raw_token}). Registration link: {link}",
+            "success",
+        )
+    except Exception as exc:
+        flash(f"Failed to create beta invitation: {exc}", "error")
+    return redirect(url_for("main.admin"))
+
+
+@bp.post("/admin/beta-invitations/<int:invitation_id>/revoke")
+@owner_required
+def revoke_beta_invitation_web(invitation_id):
+    try:
+        revoke_beta_invitation(g.user, invitation_id)
+        flash("Beta invitation revoked.", "success")
+    except Exception as exc:
+        flash(f"Failed to revoke beta invitation: {exc}", "error")
+    return redirect(url_for("main.admin"))
+
+
+@bp.get("/api/v1/admin/beta-invitations")
+def api_admin_beta_invitations_list():
+    user, error = require_api_user()
+    if error:
+        return error
+    if not is_owner(user):
+        return jsonify({"error": {"code": 403, "message": "Owner access required."}}), 403
+    return jsonify({"invitations": list_beta_invitations(limit=request.args.get("limit", 100))})
+
+
+@bp.post("/api/v1/admin/beta-invitations")
+def api_admin_beta_invitation_create():
+    user, error = require_api_user()
+    if error:
+        return error
+    if not is_owner(user):
+        return jsonify({"error": {"code": 403, "message": "Owner access required."}}), 403
+    data = request.get_json(silent=True) or {}
+    try:
+        raw_token, invitation = create_beta_invitation(
+            user,
+            email=data.get("email"),
+            role=data.get("role", "patient"),
+            expires_in_days=data.get("expires_in_days", 7),
+            notes=data.get("notes"),
+        )
+        base_url = str(current_app.config.get("PUBLIC_BASE_URL") or "").strip().rstrip("/") or request.url_root.rstrip("/")
+        link = f"{base_url}{url_for('main.register', role=invitation['role'])}?code={raw_token}"
+        return jsonify({
+            "status": "created",
+            "token": raw_token,
+            "registration_link": link,
+            "invitation": invitation,
+        }), 201
+    except ValueError as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
+
+
+@bp.post("/api/v1/admin/beta-invitations/<int:invitation_id>/revoke")
+def api_admin_beta_invitation_revoke(invitation_id):
+    user, error = require_api_user()
+    if error:
+        return error
+    if not is_owner(user):
+        return jsonify({"error": {"code": 403, "message": "Owner access required."}}), 403
+    try:
+        invitation = revoke_beta_invitation(user, invitation_id)
+        return jsonify({"status": "revoked", "invitation": invitation})
+    except LookupError as exc:
+        return jsonify({"error": {"code": 404, "message": str(exc)}}), 404
+    except ValueError as exc:
+        return jsonify({"error": {"code": 400, "message": str(exc)}}), 400
 
 
 @bp.route("/provider-invitation/accept", methods=("GET", "POST"))
@@ -2754,6 +2867,21 @@ def api_register():
         return jsonify({"error": {"code": 409, "message": ACCOUNT_EXISTS_MESSAGE}}), 409
     if len(data.get("password", "")) < 8:
         return jsonify({"error": "Password must be at least 8 characters"}), 400
+
+    invitation_code = str(data.get("invitation_code") or "").strip()
+    if current_app.config.get("BETA_INVITATION_REQUIRED") and not invitation_code:
+        return jsonify({
+            "error": {
+                "code": 403,
+                "message": "A valid beta invitation code is required for registration.",
+            }
+        }), 403
+    if invitation_code:
+        try:
+            resolve_beta_invitation(invitation_code, expected_email=email, expected_role=role)
+        except ValueError as exc:
+            return jsonify({"error": {"code": 403, "message": str(exc)}}), 403
+
     try:
         now = now_iso()
         cursor = get_db().execute(
@@ -2775,6 +2903,8 @@ def api_register():
             ),
         )
         created_user = get_db().execute("SELECT * FROM users WHERE id=?", (int(cursor.lastrowid),)).fetchone()
+        if invitation_code:
+            redeem_beta_invitation(invitation_code, created_user["id"], email=email, role=role)
         if terms_accepted and privacy_accepted:
             record_registration_policy_acceptance(created_user["id"], source="api_registration")
         verification_token = None
@@ -3062,7 +3192,11 @@ def api_reset_password():
     if not tok_row:
         return jsonify({"error": "Invalid or expired reset token"}), 400
     user_id = tok_row["user_id"]
-    get_db().execute("UPDATE users SET password_hash=?, updated_at=? WHERE id=?", (generate_password_hash(password), now_iso(), user_id))
+    # Increment session_version to invalidate all existing browser sessions
+    get_db().execute(
+        "UPDATE users SET password_hash=?, session_version=session_version+1, updated_at=? WHERE id=?",
+        (generate_password_hash(password), now_iso(), user_id)
+    )
     get_db().execute("UPDATE api_tokens SET revoked_at=? WHERE user_id=? AND revoked_at IS NULL", (now_iso(), user_id))
     get_db().commit()
     return jsonify({"status": "password_reset_success"})

@@ -76,6 +76,7 @@ def init_db():
             emergency_contact TEXT,
             verified INTEGER NOT NULL DEFAULT 0,
             active INTEGER NOT NULL DEFAULT 1,
+            session_version INTEGER NOT NULL DEFAULT 1,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         );
@@ -1451,6 +1452,25 @@ def init_db():
         );
         CREATE INDEX IF NOT EXISTS idx_verified_reviews_provider ON verified_reviews(provider_id);
 
+        CREATE TABLE IF NOT EXISTS beta_invitations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            token_hash TEXT NOT NULL UNIQUE,
+            email TEXT,
+            email_normalized TEXT,
+            role TEXT NOT NULL DEFAULT 'patient',
+            notes TEXT,
+            invited_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            expires_at TEXT NOT NULL,
+            redeemed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            redeemed_at TEXT,
+            revoked_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_beta_invitations_token_hash ON beta_invitations(token_hash);
+        CREATE INDEX IF NOT EXISTS idx_beta_invitations_email ON beta_invitations(email_normalized);
+        CREATE INDEX IF NOT EXISTS idx_beta_invitations_expiry ON beta_invitations(expires_at, redeemed_at, revoked_at);
+
         CREATE TABLE IF NOT EXISTS schema_migrations (
             version TEXT PRIMARY KEY,
             applied_at TEXT NOT NULL
@@ -1543,6 +1563,7 @@ def migrate_schema(db):
         "language_preference": "ALTER TABLE users ADD COLUMN language_preference TEXT NOT NULL DEFAULT 'en'",
         "verified": "ALTER TABLE users ADD COLUMN verified INTEGER NOT NULL DEFAULT 0",
         "active": "ALTER TABLE users ADD COLUMN active INTEGER NOT NULL DEFAULT 1",
+        "session_version": "ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 1",
     }.items():
         if column not in user_columns:
             db.execute(ddl)
@@ -2965,6 +2986,60 @@ def migrate_schema(db):
         "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)",
         (MILESTONE_CONNECTED_CARE_VERSION, now_iso()),
     )
+
+    # Production readiness: invitation-only beta registration
+    beta_table_exists = "beta_invitations" in (
+        {row["name"] for row in db.execute("SELECT table_name AS name FROM information_schema.tables WHERE table_schema=current_schema()").fetchall()}
+        if getattr(db, "dialect", "sqlite") == "postgresql"
+        else {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    )
+    if not beta_table_exists:
+        db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS beta_invitations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                token_hash TEXT NOT NULL UNIQUE,
+                email TEXT,
+                email_normalized TEXT,
+                role TEXT NOT NULL DEFAULT 'patient',
+                notes TEXT,
+                invited_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                expires_at TEXT NOT NULL,
+                redeemed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                redeemed_at TEXT,
+                revoked_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_beta_invitations_token_hash ON beta_invitations(token_hash)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_beta_invitations_email ON beta_invitations(email_normalized)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_beta_invitations_expiry ON beta_invitations(expires_at, redeemed_at, revoked_at)")
+    else:
+        beta_cols = table_columns(db, "beta_invitations")
+        if "token_hash" not in beta_cols:
+            db.execute("ALTER TABLE beta_invitations ADD COLUMN token_hash TEXT")
+            db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_beta_invitations_token_hash ON beta_invitations(token_hash)")
+        if "email_normalized" not in beta_cols:
+            db.execute("ALTER TABLE beta_invitations ADD COLUMN email_normalized TEXT")
+            db.execute("CREATE INDEX IF NOT EXISTS idx_beta_invitations_email ON beta_invitations(email_normalized)")
+        if "role" not in beta_cols:
+            db.execute("ALTER TABLE beta_invitations ADD COLUMN role TEXT NOT NULL DEFAULT 'patient'")
+        if "invited_by" not in beta_cols:
+            db.execute("ALTER TABLE beta_invitations ADD COLUMN invited_by INTEGER REFERENCES users(id) ON DELETE SET NULL")
+        if "redeemed_by" not in beta_cols:
+            db.execute("ALTER TABLE beta_invitations ADD COLUMN redeemed_by INTEGER REFERENCES users(id) ON DELETE SET NULL")
+        if "redeemed_at" not in beta_cols:
+            db.execute("ALTER TABLE beta_invitations ADD COLUMN redeemed_at TEXT")
+        if "revoked_at" not in beta_cols:
+            db.execute("ALTER TABLE beta_invitations ADD COLUMN revoked_at TEXT")
+
+    db.execute(
+        "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+        ("production_readiness_beta_invitations_v1", now_iso()),
+    )
+
     db.commit()
 
 
