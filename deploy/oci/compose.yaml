@@ -106,8 +106,9 @@ services:
     env_file:
       - .env
     environment:
-      ZENDOC_TURN_SHARED_SECRET: ${ZENDOC_TURN_SHARED_SECRET:?set ZENDOC_TURN_SHARED_SECRET in deploy/oci/.env}
-      ZENDOC_TURN_EXTERNAL_IP: ${ZENDOC_TURN_EXTERNAL_IP:?set ZENDOC_TURN_EXTERNAL_IP in deploy/oci/.env}
+      # TURN is optional until the realtime profile is enabled; turn-entrypoint.sh fails closed when started without these values.
+      ZENDOC_TURN_SHARED_SECRET: ${ZENDOC_TURN_SHARED_SECRET:-}
+      ZENDOC_TURN_EXTERNAL_IP: ${ZENDOC_TURN_EXTERNAL_IP:-}
       ZENDOC_TURN_REALM: ${ZENDOC_TURN_REALM:-zendoc}
       ZENDOC_TURN_PORT: ${ZENDOC_TURN_PORT:-3478}
       ZENDOC_TURN_MIN_RELAY_PORT: ${ZENDOC_TURN_MIN_RELAY_PORT:-49160}

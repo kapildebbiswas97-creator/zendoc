@@ -239,6 +239,24 @@ jobs:
           -v "$PWD/deploy/oci/Caddyfile:/etc/caddy/Caddyfile:ro"
           caddy:2.9-alpine
           caddy validate --config /etc/caddy/Caddyfile
+      - name: Validate OCI IP staging Caddy configuration
+        run: >
+          docker run --rm
+          -e ZENDOC_DOMAIN=192.0.2.10
+          -e ZENDOC_TLS_EMAIL=ops@example.invalid
+          -v "$PWD/deploy/oci/Caddyfile.ip:/etc/caddy/Caddyfile:ro"
+          caddy:2.11.7-alpine
+          caddy validate --config /etc/caddy/Caddyfile
+      - name: Validate OCI IP staging Compose configuration
+        env:
+          POSTGRES_PASSWORD: ci-compose-placeholder
+          ZENDOC_DOMAIN: 192.0.2.10
+          ZENDOC_TLS_EMAIL: ops@example.invalid
+          ZENDOC_GATEWAY_TOKEN: ci-gateway-placeholder
+          ZENDOC_GIT_COMMIT: 0000000000000000000000000000000000000000
+        run: |
+          cp deploy/oci/.env.example deploy/oci/.env
+          docker compose -f deploy/oci/compose.yaml -f deploy/oci/compose.ip-origin.yaml config --quiet
 
   release-readiness:
     name: Release Gate

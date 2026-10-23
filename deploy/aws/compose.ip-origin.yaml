@@ -1,0 +1,9 @@
+# Use only for SSO-protected staging when no domain is available.
+# The IP certificate uses Let's Encrypt's shortlived profile.
+services:
+  caddy:
+    image: caddy:2.11.7-alpine
+    volumes:
+      - ./Caddyfile.ip:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
