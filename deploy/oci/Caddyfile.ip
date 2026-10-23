@@ -1,0 +1,29 @@
+# Domainless HTTPS for temporary OCI beta staging only.
+# Public requests still pass through ZENDOC's application login and invitation policy.
+{
+  email {$ZENDOC_TLS_EMAIL}
+  # IP-address clients may omit SNI; select this IP's certificate.
+  default_sni {$ZENDOC_DOMAIN}
+}
+
+{$ZENDOC_DOMAIN} {
+  tls {
+    issuer acme {
+      profile shortlived
+    }
+  }
+
+  encode zstd gzip
+
+  # This staging mode serves the Flask app directly at the OCI IP. Remove any
+  # client-supplied gateway markers; this listener does not trust Vercel headers.
+  reverse_proxy web:8000 {
+    header_up -X-Zendoc-Gateway-Token
+    header_up -X-Zendoc-Gateway-Verified
+    header_up -X-Vercel-Forwarded-For
+  }
+
+  header {
+    -Server
+  }
+}

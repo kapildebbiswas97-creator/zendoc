@@ -1,0 +1,9 @@
+# Temporary OCI staging with a short-lived Let's Encrypt IP certificate.
+# Compose this file after compose.yaml from deploy/oci/.
+services:
+  caddy:
+    image: caddy:2.11.7-alpine
+    volumes:
+      - ./Caddyfile.ip:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
