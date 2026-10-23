@@ -33,7 +33,9 @@ Configure a public subnet with internet access; security group inbound rules:
 - **Never** open PostgreSQL TCP **5432**
 - TURN ports only if the optional realtime profile is deliberately deployed later
 
-Use a stable public IP plan and an origin hostname you control (e.g., `origin.example.com`) whose DNS A record resolves to that IP. The origin hostname is not the Vercel-facing website URL. Using a domain isn't required for downloading the repository, but a resolvable TLS hostname is needed for the hardened gateway.\n\nFor **temporary, Vercel-protected staging only** when no domain is available, the EC2 public IPv4 can serve as the HTTPS origin. Set `ZENDOC_DOMAIN` to that IPv4 and use `compose.ip-origin.yaml`; it upgrades only the Caddy service to 2.11.7 and requests Let's Encrypt's short-lived IP certificate profile (about 160 hours), which Caddy renews automatically. Keep Vercel Deployment Protection enabled and configure this origin in **Preview only**. An EC2 auto-assigned public IP changes after stop/start, so this is not a stable production origin. See [Let's Encrypt IP certificates](https://letsencrypt.org/2026/01/15/6day-and-ip-general-availability) and [Caddy's `default_sni` option](https://caddyserver.com/docs/caddyfile/options#default_sni).
+Use a stable public IP plan and an origin hostname you control (e.g., `origin.example.com`) whose DNS A record resolves to that IP. The origin hostname is not the Vercel-facing website URL. Using a domain isn't required for downloading the repository, but a resolvable TLS hostname is needed for the hardened gateway.
+
+For **temporary, Vercel-protected staging only** when no domain is available, the EC2 public IPv4 can serve as the HTTPS origin. Set `ZENDOC_DOMAIN` to that IPv4 and use `compose.ip-origin.yaml`; it upgrades only the Caddy service to 2.11.7 and requests Let's Encrypt's short-lived IP certificate profile (about 160 hours), which Caddy renews automatically. Keep Vercel Deployment Protection enabled and configure this origin in **Preview only**. An EC2 auto-assigned public IP changes after stop/start, so this is not a stable production origin. See [Let's Encrypt IP certificates](https://letsencrypt.org/2026/01/15/6day-and-ip-general-availability) and [Caddy's `default_sni` option](https://caddyserver.com/docs/caddyfile/options#default_sni).
 
 ## 2. Log in and prepare Docker
 
@@ -102,7 +104,9 @@ curl -fsS https://YOUR_AWS_ORIGIN/api/v1/health
 curl -fsS https://YOUR_AWS_ORIGIN/api/v1/ready
 ```
 
-For the temporary IP-origin staging mode, add `-f compose.ip-origin.yaml` to each `docker compose` command in this section and use `https://<EC2_PUBLIC_IPV4>` for both health checks and verification. Do not use an IP certificate in the Production environment.\n\nVerify using the actual reviewed source commit, not the historical main SHA:
+For the temporary IP-origin staging mode, add `-f compose.ip-origin.yaml` to each `docker compose` command in this section and use `https://<EC2_PUBLIC_IPV4>` for both health checks and verification. Do not use an IP certificate in the Production environment.
+
+Verify using the actual reviewed source commit, not the historical main SHA:
 
 ```bash
 cd ~/zendoc
