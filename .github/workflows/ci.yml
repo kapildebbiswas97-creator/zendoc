@@ -254,7 +254,9 @@ jobs:
           ZENDOC_TLS_EMAIL: ops@example.invalid
           ZENDOC_GATEWAY_TOKEN: ci-gateway-placeholder
           ZENDOC_GIT_COMMIT: 0000000000000000000000000000000000000000
-        run: docker compose -f deploy/oci/compose.yaml -f deploy/oci/compose.ip-origin.yaml config --quiet
+        run: |
+          cp deploy/oci/.env.example deploy/oci/.env
+          docker compose -f deploy/oci/compose.yaml -f deploy/oci/compose.ip-origin.yaml config --quiet
 
   release-readiness:
     name: Release Gate
