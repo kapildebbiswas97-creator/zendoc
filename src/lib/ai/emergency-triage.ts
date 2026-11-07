@@ -22,7 +22,7 @@ const EMERGENCY_RED_FLAGS = [
   // Psychiatric crisis
   /\b(suicid(e|al)|kill\s*myself|end\s*my\s*life)\b/i,
   // Anaphylaxis
-  /\b(throat\s*closing|swelling\s*in\s*throat|anaphyla(xis|ctic))\b/i,
+  /\b(throat\s*(is\s*)?closing|swelling\s*(in|of)\s*(the\s*)?throat|anaphyla(xis|ctic))\b/i,
 ];
 
 const YELLOW_FLAGS = [

@@ -1,31 +1,21 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useActionState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { Heart, Lock, Mail, User, Phone, ArrowRight, ShieldCheck } from 'lucide-react';
+import {
+  Heart, Lock, Mail, User, Phone, ArrowRight, AlertCircle, ShieldCheck,
+} from 'lucide-react';
+import { signUpAction, type AuthActionResult } from '@/actions/auth';
+
+const initialState: AuthActionResult | null = null;
 
 export default function RegisterPage() {
-  const router = useRouter();
-  const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    // Simulate registration
-    setTimeout(() => {
-      setLoading(false);
-      router.push('/dashboard');
-    }, 1000);
-  };
+  const [state, formAction, isPending] = useActionState(signUpAction, initialState);
 
   return (
     <div className="min-h-[80vh] flex items-center justify-center px-4 py-12">
       <div className="max-w-md w-full bg-white rounded-2xl border border-slate-200 p-8 shadow-sm space-y-6">
+        {/* Header */}
         <div className="text-center space-y-2">
           <div className="w-12 h-12 rounded-2xl bg-sky-600 text-white flex items-center justify-center font-bold mx-auto shadow-sm">
             <Heart className="w-6 h-6 fill-current" />
@@ -36,63 +26,86 @@ export default function RegisterPage() {
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Error banner */}
+        {state && !state.success && (
+          <div className="flex items-start gap-2 rounded-xl bg-red-50 border border-red-200 p-3 text-sm text-red-700">
+            <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+            <span>{state.error}</span>
+          </div>
+        )}
+
+        <form action={formAction} className="space-y-4">
+          {/* Hidden role field — patient by default */}
+          <input type="hidden" name="role" value="patient" />
+
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Full Name</label>
+            <label className="block text-xs font-semibold text-slate-700 mb-1" htmlFor="fullName">
+              Full Name
+            </label>
             <div className="relative">
               <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
               <input
+                id="fullName"
+                name="fullName"
                 type="text"
                 placeholder="Rahul Sharma"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
                 required
+                autoComplete="name"
                 className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Email Address</label>
+            <label className="block text-xs font-semibold text-slate-700 mb-1" htmlFor="email">
+              Email Address
+            </label>
             <div className="relative">
               <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
               <input
+                id="email"
+                name="email"
                 type="email"
                 placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
                 required
+                autoComplete="email"
                 className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Phone Number</label>
+            <label className="block text-xs font-semibold text-slate-700 mb-1" htmlFor="phone">
+              Phone Number
+            </label>
             <div className="relative">
               <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
               <input
+                id="phone"
+                name="phone"
                 type="tel"
                 placeholder="+91 98301 23456"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
                 required
+                autoComplete="tel"
                 className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Password (Min 10 chars)</label>
+            <label className="block text-xs font-semibold text-slate-700 mb-1" htmlFor="password">
+              Password <span className="text-slate-400 font-normal">(min 10 characters)</span>
+            </label>
             <div className="relative">
               <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
               <input
+                id="password"
+                name="password"
                 type="password"
-                placeholder="Choose strong password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Choose a strong password"
                 required
                 minLength={10}
+                autoComplete="new-password"
                 className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
               />
             </div>
@@ -100,12 +113,17 @@ export default function RegisterPage() {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={isPending}
             className="w-full py-3 rounded-xl bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-semibold text-sm shadow-sm transition flex items-center justify-center gap-2"
           >
-            <span>{loading ? 'Creating Account...' : 'Register'}</span>
+            <span>{isPending ? 'Creating Account…' : 'Create Account'}</span>
             <ArrowRight className="w-4 h-4" />
           </button>
+
+          <div className="flex items-center gap-2 rounded-xl bg-slate-50 border border-slate-100 p-3 text-xs text-slate-500">
+            <ShieldCheck className="w-4 h-4 text-sky-500 shrink-0" />
+            <span>Your data is encrypted at rest. HIPAA-aligned access controls apply.</span>
+          </div>
         </form>
 
         <div className="pt-4 border-t border-slate-100 text-center text-xs text-slate-500">

@@ -1,20 +1,21 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useTransition } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { 
-  Heart, 
-  Search, 
-  Calendar, 
-  FileText, 
-  Bot, 
-  MessageSquare, 
-  ShieldCheck, 
-  Menu, 
+import { usePathname, useRouter } from 'next/navigation';
+import {
+  Heart,
+  Search,
+  Calendar,
+  FileText,
+  Bot,
+  MessageSquare,
+  ShieldCheck,
+  Menu,
   X,
   User,
-  Activity
+  Activity,
+  LogOut,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 
@@ -30,7 +31,20 @@ const NAV_ITEMS = [
 
 export function Navbar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isPending, startTransition] = useTransition();
+
+  const handleSignOut = () => {
+    startTransition(async () => {
+      try {
+        await fetch('/api/auth/signout', { method: 'POST' });
+      } finally {
+        router.push('/login');
+        router.refresh();
+      }
+    });
+  };
 
   return (
     <header className="sticky top-0 z-50 bg-white/95 backdrop-blur border-b border-slate-200">
@@ -71,15 +85,25 @@ export function Navbar() {
             })}
           </nav>
 
-          {/* User Profile / Auth Action */}
-          <div className="hidden sm:flex items-center gap-3">
+          {/* User Profile + Sign Out */}
+          <div className="hidden sm:flex items-center gap-2">
             <Link
               href="/profile"
               className="flex items-center gap-2 text-sm font-medium text-slate-700 hover:text-slate-900 px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 transition"
             >
               <User className="w-4 h-4 text-slate-500" />
-              <span>Rahul S.</span>
+              <span>My Profile</span>
             </Link>
+            <button
+              type="button"
+              onClick={handleSignOut}
+              disabled={isPending}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-slate-600 hover:text-red-600 hover:bg-red-50 border border-slate-200 transition disabled:opacity-50"
+              aria-label="Sign out"
+            >
+              <LogOut className="w-4 h-4" />
+              <span className="hidden md:inline">{isPending ? 'Signing out…' : 'Sign Out'}</span>
+            </button>
           </div>
 
           {/* Mobile menu trigger */}
@@ -120,7 +144,7 @@ export function Navbar() {
               </Link>
             );
           })}
-          <div className="pt-2 border-t border-slate-100">
+          <div className="pt-2 border-t border-slate-100 space-y-1">
             <Link
               href="/profile"
               onClick={() => setMobileMenuOpen(false)}
@@ -129,6 +153,15 @@ export function Navbar() {
               <User className="w-4 h-4" />
               My Health Profile
             </Link>
+            <button
+              type="button"
+              onClick={() => { setMobileMenuOpen(false); handleSignOut(); }}
+              disabled={isPending}
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+            >
+              <LogOut className="w-4 h-4" />
+              {isPending ? 'Signing out…' : 'Sign Out'}
+            </button>
           </div>
         </div>
       )}
