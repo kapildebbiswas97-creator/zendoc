@@ -1,0 +1,8 @@
+# ZENDOC 2.0 Python Worker Dependencies
+flask>=3.0.0
+gunicorn>=21.2.0
+requests>=2.31.0
+pypdf>=4.0.0
+pytesseract>=0.3.10
+Pillow>=10.2.0
+pytest>=8.0.0

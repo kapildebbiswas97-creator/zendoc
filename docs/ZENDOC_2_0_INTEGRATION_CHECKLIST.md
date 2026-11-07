@@ -48,20 +48,43 @@
 
 ---
 
-## 4. Python Worker (Optional — ML / ASR / OCR)
+## 4. Python Worker (Standalone Microservice)
 
 | Item | Status | Action Required |
 |------|--------|----------------|
 | `PYTHON_WORKER_ENABLED` | ⚙️ | Defaults to `false` — set to `true` to activate |
-| Python worker deployed (VM / Cloud Run / Railway) | ❌ | Deploy `zendoc/` Flask app on a persistent host |
-| `PYTHON_WORKER_URL` set | 🔑 | e.g. `https://worker.yourdomain.com` |
-| `PYTHON_WORKER_SECRET` shared secret set | 🔑 | Generate with `openssl rand -hex 32` |
-| Worker `/api/health` endpoint responding | 🔑 | Verify via `GET /api/workers/health` |
-| Whisper model cached on worker host | 🔑 | First ASR request downloads model (~3 GB) |
+| Python worker microservice (`worker/`) | ✅ | Standalone Dockerized Flask service with HMAC-SHA256, Whisper ASR & OCR |
+| Dockerfile & Compose orchestration | ✅ | `worker/Dockerfile` and `docker-compose.worker.yml` with non-root security |
+| Pytest worker test suite | ✅ | 7/7 tests passing (`tests/test_worker_api.py`, `tests/test_smoke.py`) |
+| `PYTHON_WORKER_URL` set | 🔑 | Deploy `worker/` to AWS ECS / Fly.io / Render and set URL |
+| `PYTHON_WORKER_SECRET` shared secret set | 🔑 | Set matching 32-byte secret on Next.js and Worker |
+| Worker `/api/health` endpoint responding | ✅ | Implemented in `worker/app.py` & verified via `/api/workers/health` |
 
 ---
 
-## 5. Payments — Razorpay (Integration Required)
+## 5. Distributed Abuse Prevention & Rate Limiting
+
+| Item | Status | Action Required |
+|------|--------|----------------|
+| Upstash Redis REST integration | ✅ | Built in `src/lib/security/rate-limiter.ts` |
+| Automatic in-memory sliding window fallback | ✅ | Fail-open / graceful fallback verified under network partition |
+| `UPSTASH_REDIS_REST_URL` set | 🔑 | Create free database at console.upstash.com |
+| `UPSTASH_REDIS_REST_TOKEN` set | 🔑 | Copy REST token to Vercel environment variables |
+
+---
+
+## 6. Structured Healthcare Monitoring & Privacy
+
+| Item | Status | Action Required |
+|------|--------|----------------|
+| Structured JSON logger | ✅ | Implemented in `src/lib/monitoring/logger.ts` |
+| Automated PHI de-identification (HIPAA/DPDP) | ✅ | Regex filters redact emails, phone numbers, and Bearer tokens |
+| Operation latency stopwatch | ✅ | High-resolution elapsed timing helper for SLA tracking |
+| Deployment diagnostic health endpoint | ✅ | `GET /api/health` reporting runtime, memory, and subsystem states |
+
+---
+
+## 7. Payments — Razorpay (Integration Required)
 
 | Item | Status | Action Required |
 |------|--------|----------------|

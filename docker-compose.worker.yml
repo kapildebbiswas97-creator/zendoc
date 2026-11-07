@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  zendoc-worker:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    container_name: zendoc-python-worker
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - PYTHONUNBUFFERED=1
+      - PYTHON_WORKER_SECRET=${PYTHON_WORKER_SECRET:-dev-worker-secret-do-not-use-in-production}
+      - WHISPER_MODEL=base
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4096M
+        reservations:
+          cpus: '0.5'
+          memory: 1024M
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
