@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { generateWorkerHmac } from '@/lib/security/worker-auth';
+import { checkDistributedRateLimit } from '@/lib/security/rate-limiter';
 
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024; // 25 MB ceiling
 const ALLOWED_AUDIO_MIMES = new Set([
@@ -23,6 +24,15 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
+  }
+
+  // Rate Limiting: 15 ASR requests per minute per user
+  const rateLimit = await checkDistributedRateLimit(`worker_asr:${user.id}`, 15, 60_000);
+  if (!rateLimit.success) {
+    return NextResponse.json(
+      { error: 'ASR processing rate limit exceeded. Please wait.' },
+      { status: 429 }
+    );
   }
 
   // ── 2. Feature Flag Guard ──────────────────────────────────────────────────

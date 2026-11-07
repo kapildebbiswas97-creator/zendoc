@@ -1,32 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { processAIChat } from '@/lib/ai/model-router';
+import { evaluateEmergencyTriage } from '@/lib/ai/emergency-triage';
 import { checkDistributedRateLimit } from '@/lib/security/rate-limiter';
 
 const MAX_MESSAGE_LENGTH = 10_000;
 
 export async function POST(req: NextRequest) {
-  // ── 1. Distributed Rate Limiting ────────────────────────────────────────────
-  const clientIp =
-    req.headers?.get?.('x-forwarded-for')?.split(',')[0].trim() ||
-    req.headers?.get?.('x-real-ip') ||
-    '127.0.0.1';
-
-  const rateLimit = await checkDistributedRateLimit(clientIp, 10, 60_000);
-  if (!rateLimit.success) {
-    return NextResponse.json(
-      { error: 'Rate limit exceeded. Maximum 10 queries per minute permitted for AI Advisory.' },
-      {
-        status: 429,
-        headers: {
-          'Retry-After': Math.ceil(rateLimit.resetMs / 1000).toString(),
-          'X-RateLimit-Limit': rateLimit.limit.toString(),
-          'X-RateLimit-Remaining': rateLimit.remaining.toString(),
-        },
-      }
-    );
-  }
-
-  // ── 2. Safe JSON Body Parsing ───────────────────────────────────────────────
+  // ── 1. Safe JSON Body Parsing ───────────────────────────────────────────────
   let body: unknown;
   try {
     body = await req.json();
@@ -60,7 +40,50 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // ── 3. Emergency Triage & Clinical Advisory Formulation ─────────────────────
+  // ── 2. Immediate Emergency Triage Check (NEVER Blocked by Rate Limiting) ────
+  // Life-safety invariant: Critical clinical emergencies must NEVER be silenced
+  // by IP or user rate limits. They require 0 external tokens and evaluate locally.
+  const emergencyCheck = evaluateEmergencyTriage(message);
+  if (emergencyCheck.is_emergency) {
+    return NextResponse.json({
+      success: false,
+      is_emergency: true,
+      triage: emergencyCheck,
+      content: `${emergencyCheck.action_advice}\n\nEmergency Numbers: ${emergencyCheck.emergency_numbers.join(', ')}`,
+      suggested_actions: [
+        {
+          title: 'Call Emergency Ambulance (102/108/112)',
+          action_type: 'emergency_call',
+          payload: { numbers: emergencyCheck.emergency_numbers },
+        },
+      ],
+      disclaimer: 'CRITICAL CLINICAL ALERT: Immediate emergency medical evaluation required.',
+      provider: 'emergency_rules_engine',
+    });
+  }
+
+  // ── 3. Distributed Rate Limiting for Non-Emergency Queries ──────────────────
+  const clientIp =
+    req.headers?.get?.('x-forwarded-for')?.split(',')[0].trim() ||
+    req.headers?.get?.('x-real-ip') ||
+    '127.0.0.1';
+
+  const rateLimit = await checkDistributedRateLimit(clientIp, 10, 60_000);
+  if (!rateLimit.success) {
+    return NextResponse.json(
+      { error: 'Rate limit exceeded. Maximum 10 queries per minute permitted for AI Advisory.' },
+      {
+        status: 429,
+        headers: {
+          'Retry-After': Math.ceil(rateLimit.resetMs / 1000).toString(),
+          'X-RateLimit-Limit': rateLimit.limit.toString(),
+          'X-RateLimit-Remaining': rateLimit.remaining.toString(),
+        },
+      }
+    );
+  }
+
+  // ── 4. Clinical Advisory Formulation ────────────────────────────────────────
   try {
     const aiResult = await processAIChat(
       message,

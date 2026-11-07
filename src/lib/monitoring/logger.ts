@@ -21,12 +21,21 @@ export interface StructuredLogEntry {
 const PHI_PATTERNS = [
   // Email pattern
   { regex: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, replacement: '[EMAIL_REDACTED]' },
+  // Payment card numbers (16 digits in 4 groups of 4)
+  { regex: /\b(?:\d{4}[-\s]){3}\d{4}\b/g, replacement: '[CARD_REDACTED]' },
+  // National Identifiers (Aadhaar: 3 groups of 4 digits; SSN: 3-2-4 digits)
+  { regex: /\b\d{4}\s\d{4}\s\d{4}\b/g, replacement: '[AADHAAR_REDACTED]' },
+  { regex: /\b\d{3}-\d{2}-\d{4}\b/g, replacement: '[SSN_REDACTED]' },
   // Phone numbers (e.g. +91 98300 12345, (555) 123-4567, 9876543210)
   { regex: /(?:\+\d{1,3}[\s.-]*)?(?:\(?\d{2,5}\)?[\s.-]*\d{3,5}[\s.-]*\d{3,5}|\(?\d{3,5}\)?[\s.-]*\d{4,5}|\b\d{10}\b)/g, replacement: '[PHONE_REDACTED]' },
   // Bearer tokens / JWTs
   { regex: /Bearer\s+([A-Za-z0-9\-._~+/]+=*)/gi, replacement: 'Bearer [TOKEN_REDACTED]' },
+  // Session cookies / Auth tokens (e.g. sb-*-auth-token=..., access_token=...)
+  { regex: /(sb-[a-z0-9]+-auth-token|refresh_token|access_token|session_token)=[^;\s&]+/gi, replacement: '$1=[TOKEN_REDACTED]' },
   // Passwords in query strings or JSON-like strings
   { regex: /(password|secret|key)["']?\s*[:=]\s*["']?[^"'\s,}]+/gi, replacement: '$1: "[REDACTED]"' },
+  // Base64 document payload buffers (data:image/...;base64,...)
+  { regex: /data:[^;]+;base64,[A-Za-z0-9+/=]{30,}/gi, replacement: '[BINARY_DATA_REDACTED]' },
 ];
 
 /**

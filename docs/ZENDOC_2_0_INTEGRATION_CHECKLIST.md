@@ -67,7 +67,11 @@
 | Item | Status | Action Required |
 |------|--------|----------------|
 | Upstash Redis REST integration | ✅ | Built in `src/lib/security/rate-limiter.ts` |
+| Emergency triage rate-limit bypass | ✅ | Life-safety invariant: Emergency red-flags bypass rate limiting completely |
 | Automatic in-memory sliding window fallback | ✅ | Fail-open / graceful fallback verified under network partition |
+| Route rate limiting: AI Chat (10/min) | ✅ | Configured in `src/app/api/ai/chat/route.ts` |
+| Route rate limiting: Uploads (20/min) | ✅ | Configured in `src/app/api/records/upload/route.ts` |
+| Route rate limiting: Worker ASR/OCR (15/min)| ✅ | Configured in `src/app/api/workers/asr/route.ts` & `ocr/route.ts` |
 | `UPSTASH_REDIS_REST_URL` set | 🔑 | Create free database at console.upstash.com |
 | `UPSTASH_REDIS_REST_TOKEN` set | 🔑 | Copy REST token to Vercel environment variables |
 
@@ -78,7 +82,7 @@
 | Item | Status | Action Required |
 |------|--------|----------------|
 | Structured JSON logger | ✅ | Implemented in `src/lib/monitoring/logger.ts` |
-| Automated PHI de-identification (HIPAA/DPDP) | ✅ | Regex filters redact emails, phone numbers, and Bearer tokens |
+| Automated PHI de-identification (HIPAA/DPDP) | ✅ | Regex filters redact emails, phone numbers, Aadhaar, SSN, cards, tokens |
 | Operation latency stopwatch | ✅ | High-resolution elapsed timing helper for SLA tracking |
 | Deployment diagnostic health endpoint | ✅ | `GET /api/health` reporting runtime, memory, and subsystem states |
 

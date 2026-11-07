@@ -105,4 +105,15 @@ describe('POST /api/ai/chat', () => {
     await POST(req);
     expect(processAIChat).toHaveBeenCalledWith('How much metformin?', ctx);
   });
+
+  it('immediately intercepts acute emergencies and returns critical escalation without LLM delay', async () => {
+    const req = makeRequest({ message: 'I have severe crushing chest pain and shortness of breath' });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.is_emergency).toBe(true);
+    expect(data.disclaimer).toMatch(/CRITICAL CLINICAL ALERT/i);
+    expect(data.provider).toBe('emergency_rules_engine');
+    expect(data.suggested_actions[0].action_type).toBe('emergency_call');
+  });
 });
