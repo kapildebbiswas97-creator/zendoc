@@ -1,6 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { createHash } from 'crypto';
 
 export type UploadResult =
   | { success: true; recordId: string; storagePath: string }
@@ -38,13 +39,17 @@ export async function uploadMedicalRecord(formData: FormData): Promise<UploadRes
       return { success: false, error: 'File exceeds the 25 MB size limit.' };
     }
 
+    // Compute cryptographic SHA-256 integrity hash
+    const arrayBuffer = await file.arrayBuffer();
+    const sha256Hash = createHash('sha256').update(Buffer.from(arrayBuffer)).digest('hex');
+
     // Build a namespaced, collision-resistant storage path
     const ext = file.name.split('.').pop() ?? 'bin';
     const storagePath = `${user.id}/${recordDate}/${crypto.randomUUID()}.${ext}`;
 
     const { error: uploadError } = await supabase.storage
       .from('medical-records')
-      .upload(storagePath, file, {
+      .upload(storagePath, arrayBuffer, {
         contentType: file.type,
         upsert: false,
       });
@@ -56,14 +61,15 @@ export async function uploadMedicalRecord(formData: FormData): Promise<UploadRes
       .from('medical_records')
       .insert({
         patient_id: user.id,
+        uploaded_by: user.id,
         title,
         record_type: recordType,
         source_facility: sourceFacility || null,
-        record_date: recordDate,
         storage_path: storagePath,
         file_size_bytes: file.size,
         mime_type: file.type,
-        is_verified: false,
+        sha256_hash: sha256Hash,
+        provenance: 'USER_REPORTED',
       })
       .select('id')
       .single();

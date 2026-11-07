@@ -18,6 +18,24 @@ export interface AIResponse {
 const MANDATORY_DISCLAIMER = 
   "DISCLAIMER: ZENDOC AI is an educational health advisory tool, NOT a certified medical device, autonomous diagnostic engine, or prescribing authority. Always consult a qualified, licensed healthcare professional for medical emergencies and clinical diagnoses.";
 
+/**
+ * Strips specific medication dosages and ensures length bounds to prevent autonomous prescribing.
+ */
+export function sanitizeAIResponse(response: string): string {
+  if (!response) return '';
+
+  // 1. Omit autonomous medical dosage instructions
+  const dosagePattern = /\b\d+(\.\d+)?\s*(mg|mcg|ml|iu|units?|tablets?|capsules?)\b/gi;
+  let sanitized = response.replace(dosagePattern, '[dosage omitted — consult your prescriber]');
+
+  // 2. Length ceiling (2000 characters)
+  if (sanitized.length > 2000) {
+    sanitized = sanitized.slice(0, 1997) + '...';
+  }
+
+  return sanitized;
+}
+
 export async function processAIChat(
   userQuery: string,
   userContext?: {
@@ -36,7 +54,7 @@ export async function processAIChat(
       content: `${triage.action_advice}\n\nEmergency Numbers: ${triage.emergency_numbers.join(', ')}`,
       suggested_actions: [
         {
-          title: 'Call Emergency Ambulance (102/108)',
+          title: 'Call Emergency Ambulance (102/108/112)',
           action_type: 'emergency_call',
           payload: { numbers: triage.emergency_numbers },
         },
@@ -46,13 +64,14 @@ export async function processAIChat(
   }
 
   // 2. Structured Knowledge & Advisory Formulation
-  const responseText = formulateClinicalAdvisory(userQuery, userContext);
+  const rawResponseText = formulateClinicalAdvisory(userQuery, userContext);
+  const sanitizedContent = sanitizeAIResponse(rawResponseText);
 
   return {
     success: true,
     is_emergency: false,
     triage,
-    content: responseText,
+    content: sanitizedContent,
     suggested_actions: [
       {
         title: 'Find a Specialist Near You',
@@ -70,16 +89,16 @@ export async function processAIChat(
 
 function formulateClinicalAdvisory(
   query: string,
-  context?: { patientName?: string; activeConditions?: string[] }
+  _context?: { patientName?: string; activeConditions?: string[] }
 ): string {
   const q = query.toLowerCase();
 
   if (q.includes('fever') || q.includes('temperature')) {
     return `### Fever Advisory & Guidance
 1. **Hydration**: Ensure adequate fluid intake (water, oral rehydration solutions, clear broths) to prevent dehydration.
-2. **Monitoring**: Track temperature using a digital thermometer every 4â€“6 hours and record readings in your Health Memory vitals tracker.
+2. **Monitoring**: Track temperature using a digital thermometer every 4–6 hours and record readings in your Health Memory vitals tracker.
 3. **Rest**: Prioritize adequate sleep and avoid intense physical exertion.
-4. **Clinical Evaluation**: If fever exceeds 102Â°F (38.9Â°C), persists for more than 48 hours, or is accompanied by a stiff neck, rash, or persistent vomiting, seek medical evaluation immediately.`;
+4. **Clinical Evaluation**: If fever exceeds 102°F (38.9°C), persists for more than 48 hours, or is accompanied by a stiff neck, rash, or persistent vomiting, seek medical evaluation immediately.`;
   }
 
   if (q.includes('headache') || q.includes('migraine')) {

@@ -38,7 +38,10 @@ describe('Healthcare Security & Tenant Isolation Invariants', () => {
   });
 
   it('should immediately revoke access when consent status transitions to REVOKED', () => {
-    const mutableConsent = { ...SYNTHETIC_CONSENTS[0], status: 'REVOKED' as const };
+    const mutableConsent: { grantee_id: string; grantor_id: string; status: string } = {
+      ...SYNTHETIC_CONSENTS[0],
+      status: 'REVOKED',
+    };
     const doctorId = 'doc-001';
     const patientId = 'pat-default';
 

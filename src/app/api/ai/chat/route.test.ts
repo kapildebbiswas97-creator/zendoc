@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // ─── Mock next/server so the test runner doesn't need Next.js ─────────────────
 vi.mock('next/server', () => {
   const json = (body: unknown, init?: { status?: number }) =>
-    ({ _body: body, _status: init?.status ?? 200, json: async () => body });
+    ({ _body: body, status: init?.status ?? 200, json: async () => body } as any);
   return { NextRequest: class {}, NextResponse: { json } };
 });
 
@@ -23,8 +23,13 @@ import { processAIChat } from '@/lib/ai/model-router';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function makeRequest(body: unknown) {
-  return { json: async () => body } as any;
+function makeRequest(body: unknown, headers: Record<string, string> = {}) {
+  return {
+    json: async () => body,
+    headers: {
+      get: (name: string) => headers[name.toLowerCase()] ?? null,
+    },
+  } as any;
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -37,7 +42,7 @@ describe('POST /api/ai/chat', () => {
   it('returns 400 when message field is missing', async () => {
     const req = makeRequest({ context: {} });
     const res = await POST(req);
-    expect(res._status).toBe(400);
+    expect(res.status).toBe(400);
     const data = await res.json();
     expect(data.error).toMatch(/message/i);
   });
@@ -45,13 +50,36 @@ describe('POST /api/ai/chat', () => {
   it('returns 400 when message is not a string', async () => {
     const req = makeRequest({ message: 42 });
     const res = await POST(req);
-    expect(res._status).toBe(400);
+    expect(res.status).toBe(400);
   });
 
   it('returns 400 when message is empty string', async () => {
     const req = makeRequest({ message: '' });
     const res = await POST(req);
-    expect(res._status).toBe(400);
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 when message exceeds 10,000 characters', async () => {
+    const oversizedMessage = 'A'.repeat(10_001);
+    const req = makeRequest({ message: oversizedMessage });
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toMatch(/exceeds maximum length/i);
+  });
+
+  it('returns 400 when JSON body is invalid or malformed', async () => {
+    const malformedReq = {
+      json: async () => {
+        throw new Error('Unexpected token');
+      },
+      headers: { get: () => null },
+    } as any;
+
+    const res = await POST(malformedReq);
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toMatch(/invalid json body/i);
   });
 
   it('calls processAIChat with valid message', async () => {
@@ -66,7 +94,7 @@ describe('POST /api/ai/chat', () => {
   it('returns AI response body on success', async () => {
     const req = makeRequest({ message: 'How do I manage hypertension?' });
     const res = await POST(req);
-    expect(res._status).toBe(200);
+    expect(res.status).toBe(200);
     const data = await res.json();
     expect(data.disclaimer).toContain('ZENDOC AI');
   });

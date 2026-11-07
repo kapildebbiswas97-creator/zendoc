@@ -26,9 +26,9 @@ export async function listHealthMetrics(): Promise<ActionResult<unknown[]>> {
 
     const { data, error } = await supabase
       .from('health_metrics')
-      .select('id, metric_type, value, unit, measured_at, notes, device_source')
+      .select('id, metric_type, value, unit, secondary_value, notes, provenance, recorded_at, measured_at, created_at')
       .eq('patient_id', user.id)
-      .order('measured_at', { ascending: false })
+      .order('recorded_at', { ascending: false })
       .limit(200);
 
     if (error) return { success: false, error: error.message };
@@ -61,9 +61,21 @@ export async function addHealthMetric(
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, error: 'Not authenticated.' };
 
+    const timestamp = parsed.data.measured_at || new Date().toISOString();
+
     const { data, error } = await supabase
       .from('health_metrics')
-      .insert({ patient_id: user.id, ...parsed.data })
+      .insert({
+        patient_id: user.id,
+        metric_type: parsed.data.metric_type,
+        value: parsed.data.value,
+        unit: parsed.data.unit,
+        notes: parsed.data.notes,
+        device_source: parsed.data.device_source,
+        recorded_at: timestamp,
+        measured_at: timestamp,
+        provenance: 'USER_REPORTED',
+      })
       .select('id')
       .single();
 
@@ -84,9 +96,9 @@ export async function listMedicalRecords(): Promise<ActionResult<unknown[]>> {
 
     const { data, error } = await supabase
       .from('medical_records')
-      .select('id, record_type, title, source_facility, record_date, storage_path, file_size_bytes, mime_type, is_verified, created_at')
+      .select('id, record_type, title, source_facility, storage_path, file_size_bytes, mime_type, sha256_hash, provenance, created_at')
       .eq('patient_id', user.id)
-      .order('record_date', { ascending: false })
+      .order('created_at', { ascending: false })
       .limit(100);
 
     if (error) return { success: false, error: error.message };
@@ -140,9 +152,9 @@ export async function listHealthTimeline(): Promise<ActionResult<unknown[]>> {
 
     const { data, error } = await supabase
       .from('health_timeline_events')
-      .select('id, event_type, event_date, title, description, metadata, source, is_significant')
+      .select('id, event_type, title, description, related_record_id, occurred_at, created_at')
       .eq('patient_id', user.id)
-      .order('event_date', { ascending: false })
+      .order('occurred_at', { ascending: false })
       .limit(150);
 
     if (error) return { success: false, error: error.message };

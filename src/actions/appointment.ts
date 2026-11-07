@@ -6,12 +6,11 @@ import { z } from 'zod';
 // ─── Schemas ──────────────────────────────────────────────────────────────────
 
 const AppointmentSchema = z.object({
-  provider_profile_id: z.string().uuid(),
-  facility_id: z.string().uuid().optional(),
-  appointment_type: z.string().min(1),
+  provider_id: z.string().uuid(),
+  appointment_type: z.enum(['in_person', 'telehealth', 'home_visit']).default('in_person'),
   scheduled_at: z.string().datetime(),
-  chief_complaint: z.string().max(500).optional(),
-  consultation_mode: z.enum(['in_person', 'video', 'phone', 'home_visit']).default('in_person'),
+  reason: z.string().max(500).optional(),
+  notes: z.string().max(1000).optional(),
 });
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -31,12 +30,11 @@ export async function listAppointments(): Promise<ActionResult<unknown[]>> {
     const { data, error } = await supabase
       .from('appointments')
       .select(`
-        id, appointment_type, scheduled_at, status, consultation_mode,
-        chief_complaint, notes,
-        provider_profiles ( id, specialisation,
-          profiles ( full_name, avatar_url )
-        ),
-        facilities ( id, name, address_line1, city )
+        id, appointment_type, scheduled_at, status, reason, notes, created_at,
+        provider:provider_id (
+          id, specialty, consultation_fee,
+          profile:id ( full_name, avatar_url )
+        )
       `)
       .eq('patient_id', user.id)
       .order('scheduled_at', { ascending: false })
@@ -56,13 +54,16 @@ export async function bookAppointment(
   formData: FormData
 ): Promise<ActionResult<{ id: string }>> {
   try {
+    const providerId = (formData.get('provider_id') || formData.get('provider_profile_id')) as string;
+    const appointmentType = (formData.get('appointment_type') || formData.get('consultation_mode') || 'in_person') as string;
+    const normalizedType = appointmentType === 'video' ? 'telehealth' : appointmentType;
+
     const raw = {
-      provider_profile_id: formData.get('provider_profile_id') as string,
-      facility_id: formData.get('facility_id') as string | null,
-      appointment_type: formData.get('appointment_type') as string,
+      provider_id: providerId,
+      appointment_type: normalizedType,
       scheduled_at: formData.get('scheduled_at') as string,
-      chief_complaint: formData.get('chief_complaint') as string | null,
-      consultation_mode: formData.get('consultation_mode') as string,
+      reason: (formData.get('reason') || formData.get('chief_complaint')) as string | null,
+      notes: formData.get('notes') as string | null,
     };
 
     const parsed = AppointmentSchema.safeParse(raw);
@@ -78,7 +79,11 @@ export async function bookAppointment(
       .from('appointments')
       .insert({
         patient_id: user.id,
-        ...parsed.data,
+        provider_id: parsed.data.provider_id,
+        appointment_type: parsed.data.appointment_type,
+        scheduled_at: parsed.data.scheduled_at,
+        reason: parsed.data.reason ?? null,
+        notes: parsed.data.notes ?? null,
         status: 'requested',
       })
       .select('id')
@@ -103,7 +108,7 @@ export async function cancelAppointment(
 
     const { error } = await supabase
       .from('appointments')
-      .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
+      .update({ status: 'cancelled' })
       .eq('id', appointmentId)
       .eq('patient_id', user.id); // RLS + explicit ownership check
 

@@ -10,27 +10,47 @@ const EMERGENCY_RED_FLAGS = [
   /\bfacial\s*droop(ing)?\b/i,
   /\bslurred\s*speech\b/i,
   /\bworst\s*headache\s*of\s*(my\s*)?life\b/i,
+  // Seizures & Convulsions
+  /\b(active\s+)?seiz(ure|ing)\b/i,
+  /\bconvulsions?\b/i,
   // Respiratory
   /\b(cannot|can't)\s*breathe\b/i,
   /\bsevere\s*(shortness\s*of\s*breath|difficulty\s*breathing)\b/i,
   /\bturning\s*blue\b/i,
   /\bstridor\b/i,
+  // Choking & Airway Obstruction
+  /\b(choking|airway\s*obstruct(ed|ion))\b/i,
+  // Unconscious & Unresponsive
+  /\b(unconscious(ness)?|unresponsive|not\s*breathing)\b/i,
+  // Drowning
+  /\b(drowning|near[\s-]drowning)\b/i,
   // Hemorrhage
   /\b(massive|uncontrolled|severe)\s*bleeding\b/i,
   /\bvomi?ting\s*blood\b/i,
   /\b(coughing|cough)\s*up\s*blood\b/i,
+  // Severe Burns
+  /\bsevere\s*burn(s)?\b/i,
+  /\b(chemical|electrical)\s*burn(s)?\b/i,
+  // Diabetic Acute Crisis (DKA)
+  /\b(diabetic\s+)?(ketoacidosis|dka)\b/i,
   // Psychiatric crisis
   /\b(suicid(e|al)|kill\s*myself|end\s*my\s*life)\b/i,
-  // Anaphylaxis
+  // Anaphylaxis & Airway Closure
   /\b(throat\s*(is\s*)?closing|swelling\s*(in|of)\s*(the\s*)?throat|anaphyla(xis|ctic))\b/i,
+  /\bcannot\s+swallow\b/i,
+  /\b(face|lip|tongue)\s+(is\s+)?(swelling|swollen)\b/i,
 ];
 
 const YELLOW_FLAGS = [
-  /\b(moderate|persistent)\s*fever\b/i,
+  /\b(moderate|persistent|high|elevated)\s*fever\b/i,
   /\bmild\s*chest\s*tightness\b/i,
   /\bpersistent\s*vomiting\b/i,
   /\bdeep\s*cut\b/i,
   /\bfracture|broken\s*bone\b/i,
+  /\bsevere\s*(abdominal|stomach)\s*pain\b/i,
+  /\b(sudden|severe)\s*back\s*pain\b/i,
+  /\bblood\s*in\s*(the\s*)?(urine|stool)\b/i,
+  /\bhematuria\b/i,
 ];
 
 export function evaluateEmergencyTriage(input: string): TriageEvaluation {

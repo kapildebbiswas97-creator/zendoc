@@ -22,7 +22,7 @@ export async function appendAuditLog(
       actor_id: user?.id ?? null,
       action,
       resource_type: resourceType,
-      resource_id: resourceId ?? null,
+      resource_id: resourceId ?? '',
       metadata: metadata ?? {},
       created_at: new Date().toISOString(),
     });

@@ -18,15 +18,18 @@ export async function grantConsent(
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, error: 'Not authenticated.' };
 
+    const validUntil = expiresAt || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+
     const { data, error } = await supabase
       .from('consent_grants')
       .insert({
         grantor_id: user.id,
         grantee_id: granteeId,
+        purpose: dataCategory || 'CLINICAL_CARE',
+        scope: 'FULL_RECORD',
         data_category: dataCategory,
-        status: 'active',
-        granted_at: new Date().toISOString(),
-        expires_at: expiresAt ?? null,
+        status: 'ACTIVE',
+        valid_until: validUntil,
       })
       .select('id')
       .single();
@@ -48,7 +51,7 @@ export async function revokeConsent(consentId: string): Promise<ActionResult> {
 
     const { error } = await supabase
       .from('consent_grants')
-      .update({ status: 'revoked', revoked_at: new Date().toISOString() })
+      .update({ status: 'REVOKED', revoked_at: new Date().toISOString() })
       .eq('id', consentId)
       .eq('grantor_id', user.id); // only grantor can revoke their own grants
 
@@ -70,11 +73,11 @@ export async function listConsents(): Promise<ActionResult<unknown[]>> {
     const { data, error } = await supabase
       .from('consent_grants')
       .select(`
-        id, data_category, status, granted_at, expires_at, revoked_at,
+        id, purpose, scope, status, valid_until, revoked_at, created_at,
         grantee:grantee_id ( full_name, role )
       `)
       .eq('grantor_id', user.id)
-      .order('granted_at', { ascending: false });
+      .order('created_at', { ascending: false });
 
     if (error) return { success: false, error: error.message };
     return { success: true, data: data ?? [] };

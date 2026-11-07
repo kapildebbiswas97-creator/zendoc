@@ -13,13 +13,13 @@
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` set | 🔑 | Copy from Project Settings → API |
 | `SUPABASE_SERVICE_ROLE_KEY` set (server-only) | 🔑 | Copy from Project Settings → API |
 | `DATABASE_URL` set (pooler connection string) | 🔑 | Copy from Project Settings → Database |
-| Migration SQL applied | 🔑 | Paste `supabase/migrations/20261107000000_zendoc_2_0_core_schema.sql` into SQL Editor |
+| Migration SQL applied | 🔑 | Run `20261107000000_zendoc_2_0_core_schema.sql` followed by `20261108000000_zendoc_2_0_schema_corrections.sql` in SQL Editor |
 | RLS policies verified | 🔑 | Run `SELECT * FROM pg_policies;` in SQL Editor |
 | `medical-records` Storage bucket created | 🔑 | Storage → New Bucket → `medical-records` → Private |
 | Storage bucket RLS policy applied | 🔑 | Restrict to `auth.uid() = owner` |
 | Email confirmation enabled | 🔑 | Auth → Settings → Email Confirmations |
 | Auth redirect URL set | 🔑 | Auth → Settings → Redirect URLs → add `https://your-domain.vercel.app/api/auth/callback` |
-| `profiles` table trigger created | ⚙️ | Add `on auth.users insert` trigger to populate `profiles` automatically |
+| `profiles` table trigger created | ✅ | Authored in `20261108000000_zendoc_2_0_schema_corrections.sql` (`handle_new_user()`) |
 
 ---
 
