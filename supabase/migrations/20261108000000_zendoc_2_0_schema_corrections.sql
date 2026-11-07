@@ -6,16 +6,24 @@
 
 -- 1. Helper function for updated_at timestamps
 CREATE OR REPLACE FUNCTION public.handle_updated_at()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = public, pg_temp
+AS $$
 BEGIN
     NEW.updated_at = NOW();
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
 -- 2. Trigger for auto-creating public.profiles on auth.users sign-up
+-- Hardened with explicit search_path to prevent SECURITY DEFINER search_path hijacking
 CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth, pg_temp
+AS $$
 BEGIN
     INSERT INTO public.profiles (
         id,
@@ -40,7 +48,7 @@ BEGIN
 
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
 
 -- Safe attachment to auth.users if auth schema exists
 DO $$
@@ -139,5 +147,24 @@ BEGIN
     CREATE TRIGGER trg_conversations_updated_at
         BEFORE UPDATE ON public.conversations
         FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+END;
+$$;
+
+-- 6. Storage Bucket Provisioning (Idempotent for Supabase Storage)
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'storage' AND table_name = 'buckets') THEN
+        INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+        VALUES (
+            'medical-records',
+            'medical-records',
+            FALSE,
+            26214400, -- 25 MB
+            ARRAY['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'application/dicom']
+        )
+        ON CONFLICT (id) DO UPDATE SET
+            public = FALSE,
+            file_size_limit = 26214400;
+    END IF;
 END;
 $$;
