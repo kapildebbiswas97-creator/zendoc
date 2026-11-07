@@ -15,7 +15,7 @@
 | `DATABASE_URL` set (pooler connection string) | 🔑 | Copy from Project Settings → Database |
 | Migration SQL applied | 🔑 | Run `20261107000000_zendoc_2_0_core_schema.sql` followed by `20261108000000_zendoc_2_0_schema_corrections.sql` in SQL Editor |
 | RLS policies verified | 🔑 | Run `SELECT * FROM pg_policies;` in SQL Editor |
-| `medical-records` Storage bucket created | 🔑 | Storage → New Bucket → `medical-records` → Private |
+| `medical-records` Storage bucket created | ✅ | Auto-provisioned by migration `20261108000000_zendoc_2_0_schema_corrections.sql` (idempotent `ON CONFLICT DO UPDATE`) |
 | Storage bucket RLS policy applied | 🔑 | Restrict to `auth.uid() = owner` |
 | Email confirmation enabled | 🔑 | Auth → Settings → Email Confirmations |
 | Auth redirect URL set | 🔑 | Auth → Settings → Redirect URLs → add `https://your-domain.vercel.app/api/auth/callback` |
@@ -155,7 +155,7 @@ To go from zero to functional with **live database + auth** (minimum viable):
 ```
 1. supabase.com   → Create project → copy URL + anon key + service role key
 2. Supabase SQL Editor → Paste migration SQL → Run
-3. Supabase Storage → Create bucket "medical-records" (private)
+3. Supabase Storage → bucket "medical-records" auto-created by migration (private, 25MB, restricted MIME types)
 4. Supabase Auth → Settings → Add Vercel redirect URL
 5. vercel.com → Import repo → Set env vars → Deploy
 ```
