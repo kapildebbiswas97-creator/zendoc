@@ -20,3 +20,10 @@ ZENDOC_DATA/
 
 # Generated local Neo.mjs workspace. Keep isolated until reviewed.
 neo-workspace/
+
+# Rebuild artifacts
+.next/
+node_modules/
+test-results/
+*.tsbuildinfo
+next-env.d.ts
