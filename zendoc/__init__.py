@@ -107,10 +107,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 def _normalize_hosted_environment():
-    """Fail toward production security when the app is running on Render."""
+    """Fail toward production security on hosted runtimes unless configured."""
     if os.environ.get("ZENDOC_ENV"):
         return
-    if any(
+    if os.environ.get("VERCEL") or any(
         os.environ.get(key)
         for key in (
             "RENDER",

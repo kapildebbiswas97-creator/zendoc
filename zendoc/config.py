@@ -138,6 +138,7 @@ def load_config(base_dir, overrides=None):
     app_version = str(
         (overrides or {}).get("APP_VERSION")
         or os.environ.get("ZENDOC_APP_VERSION")
+        or os.environ.get("VERCEL_GIT_COMMIT_SHA")
         or os.environ.get("RENDER_GIT_COMMIT", "")
     ).strip()
 
