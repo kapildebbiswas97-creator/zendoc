@@ -214,7 +214,9 @@ def load_config(base_dir, overrides=None):
         ).strip(),
         "VIDEO_PROVIDER": os.environ.get("ZENDOC_VIDEO_PROVIDER", "none"),
         "YOUTUBE_API_KEY": os.environ.get("ZENDOC_YOUTUBE_API_KEY", ""),
-        "REQUIRE_DURABLE_DATABASE": env_bool("ZENDOC_REQUIRE_DURABLE_DATABASE", False),
+        "REQUIRE_DURABLE_DATABASE": env_bool(
+            "ZENDOC_REQUIRE_DURABLE_DATABASE", env == "production"
+        ),
         "BACKUP_VERIFIED": env_bool("ZENDOC_BACKUP_VERIFIED", False),
         "STORAGE_PROVIDER": os.environ.get("ZENDOC_STORAGE_PROVIDER", "local").strip().lower(),
         "STORAGE_VERIFIED": env_bool("ZENDOC_STORAGE_VERIFIED", False),
