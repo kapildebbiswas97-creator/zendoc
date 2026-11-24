@@ -49,7 +49,13 @@ def resolve_database_config(base_dir, env, testing=False, overrides=None):
         # A developer's DATABASE_URL must never redirect an isolated test run.
         database_url = ""
 
-    default_path = Path(base_dir) / "instance" / "zendoc.db"
+    # Vercel's deployed source tree is read-only. Use /tmp only for the
+    # function's ephemeral local fallback; production durability still requires
+    # DATABASE_URL (enforced by the public-release checks).
+    if os.environ.get("VERCEL"):
+        default_path = Path(os.environ.get("TMPDIR", "/tmp")) / "zendoc" / "instance" / "zendoc.db"
+    else:
+        default_path = Path(base_dir) / "instance" / "zendoc.db"
     configured_path = str(
         overrides.get("DATABASE")
         or os.environ.get("ZENDOC_DATABASE_PATH", "")
@@ -140,9 +146,22 @@ def load_config(base_dir, overrides=None):
         "RELEASE_CHANNEL": release_channel,
         "APP_VERSION": app_version,
         "SECRET_KEY": secret_key or "development-only-secret-key",
-        "UPLOAD_FOLDER": str(base_dir / "uploads"),
+        "UPLOAD_FOLDER": str(
+            (Path(os.environ.get("TMPDIR", "/tmp")) / "zendoc" / "uploads")
+            if os.environ.get("VERCEL")
+            else (base_dir / "uploads")
+        ),
         "DATABASE_BACKUP_DIR": str(
-            Path(os.environ.get("ZENDOC_DATABASE_BACKUP_DIR", str(base_dir / "instance" / "backups"))).resolve()
+            Path(
+                os.environ.get(
+                    "ZENDOC_DATABASE_BACKUP_DIR",
+                    str(
+                        (Path(os.environ.get("TMPDIR", "/tmp")) / "zendoc" / "instance" / "backups")
+                        if os.environ.get("VERCEL")
+                        else (base_dir / "instance" / "backups")
+                    ),
+                )
+            ).resolve()
         ),
         "MAX_CONTENT_LENGTH": int(os.environ.get("ZENDOC_MAX_UPLOAD_BYTES", str(10 * 1024 * 1024))),
         "SESSION_COOKIE_NAME": "zendoc_session",
