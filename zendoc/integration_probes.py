@@ -34,7 +34,7 @@ from .model_router import (
 from .official_connectors import connector_readiness, fetch_data_gov_resource
 from .payments import payment_gateway_status
 from .places_provider import configured_places_provider, places_configuration_status
-from .record_storage import S3CompatibleRecordStorage, get_record_storage
+from .record_storage import S3CompatibleRecordStorage, VercelBlobRecordStorage, get_record_storage
 from .security import assert_owner
 from .turn_credentials import dynamic_turn_ice_servers
 
@@ -193,6 +193,16 @@ def _probe_object_storage(actor: Any) -> dict:
     storage = get_record_storage()
     status = storage.status()
     if not isinstance(storage, S3CompatibleRecordStorage):
+        if isinstance(storage, VercelBlobRecordStorage):
+            return _result(
+                "integration_required",
+                "vercel_blob_round_trip_verification_required",
+                {
+                    "provider": status.get("provider"),
+                    "storage_status": status.get("status"),
+                    "durable_ready": status.get("durable_ready"),
+                },
+            )
         return _result(
             "integration_required",
             "durable_object_storage_not_configured",

@@ -14,6 +14,8 @@ from pathlib import Path
 from flask import current_app, send_file, send_from_directory
 from werkzeug.utils import secure_filename
 
+from .vercel_blob_store import VercelBlobStore
+
 
 MAX_COMMUNITY_MEDIA_BYTES = 25 * 1024 * 1024
 ALLOWED_MEDIA_TYPES = {
@@ -310,6 +312,58 @@ class S3CommunityMediaStorage:
         }
 
 
+class VercelBlobCommunityMediaStorage:
+    """Private media storage delivered only through ZENDOC's access checks."""
+
+    name = "vercel_blob"
+
+    def __init__(self):
+        self.store = VercelBlobStore("community-media/")
+
+    def save(self, upload, *, allowed_media_types=None) -> StoredCommunityMedia:
+        allowed = allowed_media_types or ALLOWED_MEDIA_TYPES
+        mime_type, original_name = validate_community_upload(upload, allowed_media_types=allowed)
+        body = upload.stream.read(MAX_COMMUNITY_MEDIA_BYTES + 1)
+        if not body:
+            raise ValueError("Uploaded community media is empty.")
+        if len(body) > MAX_COMMUNITY_MEDIA_BYTES:
+            raise ValueError("Community media must be 25 MiB or smaller.")
+        key = f"community-media/{secrets.token_hex(20)}{EXTENSIONS[mime_type]}"
+        pathname, size = self.store.save(key, body, mime_type)
+        return StoredCommunityMedia(
+            provider=self.name,
+            storage_key=pathname,
+            original_filename=original_name,
+            mime_type=mime_type,
+            media_kind=allowed[mime_type],
+            size_bytes=size,
+        )
+
+    def delete(self, storage_key: str):
+        self.store.delete(storage_key)
+
+    def read_bytes(self, storage_key: str, *, max_bytes: int = MAX_COMMUNITY_MEDIA_BYTES) -> bytes:
+        limit = max(1, min(int(max_bytes), MAX_COMMUNITY_MEDIA_BYTES))
+        body, _content_type = self.store.read(storage_key, limit)
+        return body
+
+    def response(self, storage_key: str, *, mime_type: str, download_name: str):
+        body, stored_mime_type = self.store.read(storage_key, MAX_COMMUNITY_MEDIA_BYTES)
+        return send_file(
+            BytesIO(body),
+            mimetype=mime_type or stored_mime_type or "application/octet-stream",
+            as_attachment=False,
+            download_name=download_name,
+            max_age=0,
+        )
+
+    def status(self) -> dict:
+        status = self.store.status()
+        status["durable_public_ready"] = bool(status["status"] == "configured_unverified" and current_app.config.get("STORAGE_VERIFIED"))
+        status["delivery"] = "authenticated_application_route"
+        return status
+
+
 class UnavailableCommunityMediaStorage:
     def __init__(self, provider: str):
         self.name = provider
@@ -342,6 +396,8 @@ def get_community_media_storage():
     provider = str(current_app.config.get("STORAGE_PROVIDER") or "local").strip().lower()
     if provider == "local":
         return LocalCommunityMediaStorage()
+    if provider in {"vercel_blob", "vercel-blob"}:
+        return VercelBlobCommunityMediaStorage()
     if provider in {"s3", "s3_compatible", "r2"}:
         return S3CommunityMediaStorage()
     return UnavailableCommunityMediaStorage(provider)

@@ -337,6 +337,12 @@ def validate_startup_config(app):
                 endpoint_url = str(app.config.get("S3_ENDPOINT_URL") or "").strip()
                 if endpoint_url and not endpoint_url.lower().startswith("https://"):
                     public_missing.append("HTTPS ZENDOC_S3_ENDPOINT_URL")
+            if storage_provider in {"vercel_blob", "vercel-blob"} and not (
+                os.environ.get("BLOB_STORE_ID")
+                or os.environ.get("BLOB_READ_WRITE_TOKEN")
+                or os.environ.get("VERCEL_BLOB_READ_WRITE_TOKEN")
+            ):
+                public_missing.append("private Vercel Blob store connection")
             if not bool(app.config.get("STORAGE_VERIFIED")):
                 public_missing.append("ZENDOC_STORAGE_VERIFIED=true")
             if connected_mode != "LIVE":

@@ -1,0 +1,400 @@
+/* ZENDOC product expansion: community, commerce, payments and wellness.
+   Layout-only additions inherit the existing ZENDOC color/theme variables. */
+
+.stories-strip,
+.people-strip {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  padding: 4px 2px 10px;
+  scroll-snap-type: x proximity;
+}
+
+.story-card,
+.compact-person {
+  min-width: min(280px, 82vw);
+  max-width: 340px;
+  padding: 16px;
+  border: 1px solid var(--border, #dce4e2);
+  border-radius: 18px;
+  background: var(--surface, #fff);
+  scroll-snap-align: start;
+}
+
+.story-card {
+  display: grid;
+  gap: 8px;
+}
+
+.compact-person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.compact-person form {
+  margin-left: auto;
+}
+
+.community-feed {
+  display: grid;
+  gap: 18px;
+  max-width: 820px;
+  margin-inline: auto;
+}
+
+.community-post {
+  display: grid;
+  gap: 14px;
+}
+
+.community-post .form-actions form,
+.community-post details form {
+  margin: 0;
+}
+
+.comment-stack {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--surface-muted, rgba(127, 127, 127, 0.08));
+}
+
+.comment-stack p {
+  margin: 0;
+}
+
+.comment-composer {
+  display: flex;
+  gap: 10px;
+  align-items: end;
+}
+
+.comment-composer input {
+  flex: 1;
+}
+
+.community-post details {
+  min-width: 120px;
+}
+
+.community-post details[open] {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--border, #dce4e2);
+  border-radius: 14px;
+}
+
+.community-post details form {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+@media (max-width: 720px) {
+  .comment-composer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .story-card,
+  .compact-person {
+    min-width: 78vw;
+  }
+}
+
+
+.community-media {
+  display: block;
+  width: 100%;
+  max-height: 520px;
+  object-fit: contain;
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.community-media--story {
+  max-height: 360px;
+}
+
+
+/* Social-first Community polish: visual only; moderation/privacy rules remain server-side. */
+.story-card--create {
+  align-content: center;
+  justify-items: center;
+  text-align: center;
+  text-decoration: none;
+  min-width: 150px;
+}
+
+.story-create-ring {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border: 2px solid currentColor;
+  border-radius: 999px;
+  font-size: 30px;
+  font-weight: 700;
+}
+
+.community-composer {
+  position: relative;
+  overflow: hidden;
+}
+
+.community-composer textarea {
+  min-height: 120px;
+  font-size: 1rem;
+}
+
+.community-media-picker {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px dashed var(--border, #dce4e2);
+  border-radius: 16px;
+  cursor: pointer;
+}
+
+.community-feed-controls {
+  align-items: stretch;
+}
+
+.community-feed .community-post {
+  border-radius: 22px;
+}
+
+.community-media--reel {
+  max-height: 680px;
+  aspect-ratio: 9 / 16;
+  object-fit: contain;
+  margin-inline: auto;
+}
+
+@media (min-width: 721px) {
+  .community-media--reel {
+    max-width: 430px;
+  }
+}
+
+@media (max-width: 720px) {
+  .stories-strip {
+    margin-inline: -12px;
+    padding-inline: 12px;
+  }
+
+  .community-feed {
+    gap: 12px;
+  }
+
+  .community-feed .community-post {
+    border-radius: 18px;
+  }
+
+  .community-media--reel {
+    width: 100%;
+    max-height: 70vh;
+  }
+}
+
+
+/* Find Care embedded map. Tiles are browser-loaded only for the visible viewport;
+   result markers remain usable when the external tile background is unavailable. */
+.finder-map-panel {
+  display: grid;
+  gap: 14px;
+  margin: 18px 0;
+}
+
+.finder-map-panel[hidden] {
+  display: none;
+}
+
+.finder-map-head {
+  align-items: flex-start;
+}
+
+.finder-map-head h3 {
+  margin: 2px 0 6px;
+}
+
+.finder-map-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.finder-map-actions .secondary-action {
+  min-height: 38px;
+}
+
+.finder-map-actions .finder-map-zoom {
+  min-width: 42px;
+  padding-inline: 10px;
+  font-size: 20px;
+}
+
+.finder-map {
+  position: relative;
+  width: 100%;
+  height: clamp(320px, 48vw, 500px);
+  min-height: 320px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background:
+    linear-gradient(90deg, rgba(127, 127, 127, .08) 1px, transparent 1px),
+    linear-gradient(rgba(127, 127, 127, .08) 1px, transparent 1px),
+    var(--surface-soft, #f8fafc);
+  background-size: 32px 32px;
+  isolation: isolate;
+}
+
+.finder-map-tiles,
+.finder-map-markers {
+  position: absolute;
+  inset: 0;
+}
+
+.finder-map-tiles {
+  z-index: 1;
+  overflow: hidden;
+}
+
+.finder-map-markers {
+  z-index: 3;
+  pointer-events: none;
+}
+
+.finder-map-tile {
+  position: absolute;
+  width: 256px;
+  height: 256px;
+  max-width: none;
+  user-select: none;
+  pointer-events: none;
+}
+
+.finder-map-marker {
+  position: absolute;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  min-height: 34px;
+  padding: 0;
+  transform: translate(-50%, -50%);
+  border: 3px solid var(--surface);
+  border-radius: 999px;
+  background: var(--warning, #946200);
+  box-shadow: 0 4px 12px rgba(16, 24, 40, .25);
+  font-size: 12px;
+  line-height: 1;
+  pointer-events: auto;
+  z-index: 1;
+}
+
+.finder-map-marker:hover,
+.finder-map-marker:focus-visible {
+  transform: translate(-50%, -50%) scale(1.12);
+  z-index: 4;
+}
+
+.finder-map-marker--verified {
+  background: var(--success);
+}
+
+.finder-map-marker--origin {
+  width: 38px;
+  min-width: 38px;
+  height: 38px;
+  min-height: 38px;
+  background: var(--primary);
+  font-size: 18px;
+  z-index: 2;
+}
+
+.finder-map-status {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 4;
+  max-width: min(520px, calc(100% - 20px));
+  margin: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 800;
+  box-shadow: 0 2px 8px rgba(16, 24, 40, .08);
+}
+
+.finder-map-attribution {
+  position: absolute;
+  right: 7px;
+  bottom: 7px;
+  z-index: 4;
+  padding: 4px 7px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  font-size: 11px;
+}
+
+.finder-map-attribution a {
+  color: var(--ink);
+}
+
+.finder-map--tiles-unavailable .finder-map-tiles {
+  display: none;
+}
+
+.finder-map-selected {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-soft, #f8fafc);
+}
+
+.finder-map-selected[hidden] {
+  display: none;
+}
+
+.finder-map-selected span {
+  color: var(--muted);
+}
+
+.finder-map-selected .secondary-action {
+  margin-left: auto;
+}
+
+@media (max-width: 720px) {
+  .finder-map {
+    height: 390px;
+  }
+
+  .finder-map-actions {
+    width: 100%;
+  }
+
+  .finder-map-actions .secondary-action:first-child {
+    flex: 1;
+  }
+
+  .finder-map-selected {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .finder-map-selected .secondary-action {
+    width: 100%;
+    margin-left: 0;
+  }
+}

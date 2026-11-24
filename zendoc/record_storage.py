@@ -13,6 +13,7 @@ from pathlib import Path
 from flask import current_app, send_file, send_from_directory
 
 from .external_execution_guard import require_live_external_connector
+from .vercel_blob_store import VercelBlobStore
 
 
 @dataclass(frozen=True)
@@ -210,6 +211,56 @@ class S3CompatibleRecordStorage:
         }
 
 
+class VercelBlobRecordStorage:
+    """Private durable medical-record storage on Vercel Blob."""
+
+    name = "vercel_blob"
+    prefix = "medical-records/"
+
+    def __init__(self):
+        self.store = VercelBlobStore(self.prefix)
+
+    def save(self, upload, original_filename: str) -> StoredRecord:
+        limit = 10_485_760
+        body = upload.stream.read(limit + 1)
+        if not body:
+            raise ValueError("Uploaded medical record is empty.")
+        if len(body) > limit:
+            raise ValueError("Medical records must be 10 MiB or smaller.")
+        key = f"{self.prefix}{secrets.token_hex(16)}-{Path(original_filename).name}"
+        pathname, size = self.store.save(
+            key,
+            body,
+            str(getattr(upload, "mimetype", "") or "application/octet-stream"),
+        )
+        return StoredRecord(self.name, pathname, size)
+
+    def delete(self, storage_key: str):
+        self.store.delete(storage_key)
+
+    def read_bytes(self, storage_key: str, *, max_bytes: int = 1_048_576) -> bytes:
+        try:
+            max_bytes = int(max_bytes)
+        except (TypeError, ValueError) as error:
+            raise ValueError("max_bytes must be an integer.") from error
+        if max_bytes < 1 or max_bytes > 10_485_760:
+            raise ValueError("max_bytes must be between 1 byte and 10 MiB.")
+        body, _content_type = self.store.read(storage_key, max_bytes)
+        return body
+
+    def response(self, storage_key: str, download_name: str):
+        body, content_type = self.store.read(storage_key, 10_485_760)
+        return send_file(
+            BytesIO(body),
+            as_attachment=True,
+            download_name=download_name,
+            mimetype=content_type or "application/octet-stream",
+        )
+
+    def status(self) -> dict:
+        return self.store.status()
+
+
 class UnavailableExternalRecordStorage:
     def __init__(self, provider: str):
         self.name = provider
@@ -237,6 +288,8 @@ def get_record_storage():
     provider = str(current_app.config.get("STORAGE_PROVIDER") or "local").strip().lower()
     if provider == "local":
         return LocalRecordStorage()
+    if provider in {"vercel_blob", "vercel-blob"}:
+        return VercelBlobRecordStorage()
     if provider in {"s3", "s3_compatible", "r2"}:
         return S3CompatibleRecordStorage()
     return UnavailableExternalRecordStorage(provider)

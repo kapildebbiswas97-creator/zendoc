@@ -91,6 +91,13 @@ def get_capability_registry() -> dict:
             "ZENDOC_S3_SECRET_ACCESS_KEY",
         )
     )
+    blob_provider = storage_provider in {"vercel_blob", "vercel-blob"}
+    blob_configured = blob_provider and bool(
+        _env("BLOB_STORE_ID")
+        or _env("BLOB_READ_WRITE_TOKEN")
+        or _env("VERCEL_BLOB_READ_WRITE_TOKEN")
+    )
+    durable_storage_configured = s3_configured or blob_configured
     real_evaluation_enabled = _env_bool("ZENDOC_MODEL_EVALUATION_REAL_ENABLED")
     storage_verified = _env_bool("ZENDOC_STORAGE_VERIFIED")
     affiliate_templates_configured = any(
@@ -157,12 +164,12 @@ def get_capability_registry() -> dict:
             "description": "Health-only posts, stories, comments, reactions, follows, saved posts, reporting, blocking, author deletion and authenticated media access.",
         },
         "community_media_public_durability": {
-            "status": STATUS_BETA if s3_configured and storage_verified else STATUS_INTEGRATION_REQUIRED,
+            "status": STATUS_BETA if durable_storage_configured and storage_verified else STATUS_INTEGRATION_REQUIRED,
             "label": "Durable Public Community Media",
             "description": (
-                "S3-compatible storage is configured and operator-verified."
-                if s3_configured and storage_verified
-                else "Local media works for development; public durable video/image storage requires configured and verified object storage."
+                f"{storage_provider} storage is configured and operator-verified."
+                if durable_storage_configured and storage_verified
+                else "Local media works for development; hosted durable video/image storage requires a connected provider and a verified save/read/delete round trip."
             ),
         },
         "health_shop_discovery": {
@@ -594,21 +601,21 @@ def get_capability_registry() -> dict:
         "object_storage": {
             "status": (
                 STATUS_WORKING
-                if s3_configured and storage_verified
+                if durable_storage_configured and storage_verified
                 else STATUS_BETA
-                if s3_configured
+                if durable_storage_configured
                 else STATUS_INTEGRATION_REQUIRED
-                if s3_provider
+                if s3_provider or blob_provider
                 else STATUS_WORKING
             ),
-            "label": "Object Storage (S3-compatible)",
+            "label": "Durable Object Storage",
             "description": (
                 f"Provider '{storage_provider}' is configured and operator-verified for durable object storage."
-                if s3_configured and storage_verified
+                if durable_storage_configured and storage_verified
                 else f"Provider '{storage_provider}' is configured; run real save/read/delete verification before calling it durable."
-                if s3_configured
+                if durable_storage_configured
                 else f"Provider '{storage_provider}' is selected but required S3-compatible credentials are incomplete."
-                if s3_provider
+                if s3_provider or blob_provider
                 else "Local file storage works for development; hosted persistence requires verified durable object storage."
             ),
         },
